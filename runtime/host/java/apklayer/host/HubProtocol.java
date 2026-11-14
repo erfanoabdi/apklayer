@@ -39,6 +39,7 @@ final class HubProtocol {
             CONFIRM_CREDENTIAL = 58,  // {title, description, challenge} -> whether the person confirmed with the login password (HubLockScreen.confirm)
             MICROPHONE_MUTE = 59,  // {on} -> the microphone mute after the request (HubCallAudio: AudioService.setMicrophoneMute and its broadcast)
             BLUETOOTH_PIN = 60;  // {address, name, pairing variant, key} -> the PIN or passkey the person typed for a pairing BlueZ asked about ("yes" to a comparison), null when refused (HubBluetooth.pin)
+    static final int TOAST_SLOT = 99;  // {duration ms}: returns when the caller's toast may go on screen (one at a time over the instance, in call order: HubDirectory.toastSlot)
     static final int RESTART_ON_DEATH = 62;  // {intent}: the caller's window process is ending; the hub starts that activity in a new one once the app shows no other window (HubActivities)
     static final int RUNNING_PROCESSES = 61;  // {} -> count, then {pid, process name, headless} per running process of the caller's app (getRunningAppProcesses, killProcess)
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running

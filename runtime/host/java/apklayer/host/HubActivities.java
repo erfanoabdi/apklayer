@@ -94,7 +94,7 @@ final class HubActivities {
     /**
      * As ActivityManagerService when a process dies under its top activity: the next activity of the task is started again in a new process. Here a task
      * spans the app's window processes only loosely, so it waits until none of them shows a window (FCL's crash screen in ":crash" stays on top of the
-     * launcher until it is closed). shortcut: no saved instance state, only the activity right below the top; upgrade with a hub-side task record.
+     * launcher until it is closed). The activity's saved instance state rides in the intent (ActivityTask.SAVED_STATE); shortcut: only the activity right below the top.
      */
     void restartIfAlone(String name) {
         List<String> due;
