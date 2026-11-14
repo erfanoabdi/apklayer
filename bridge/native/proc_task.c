@@ -134,6 +134,12 @@ const char *apklayer_proc_map_name(const char *host, char *out, size_t size)
         const char *libs = strstr(host, "/android-libs/"), *base = strrchr(host, '/');
         if (libs && base && strstr(base, ".so")) { snprintf(out, size, "/system/lib64/%s", base + 1); result = out; }
         else if ((libs = runtime_file(host))) { snprintf(out, size, "%s", libs); result = out; }
+        else {  /* the desktop's libraries (glibc, Mesa, X/Wayland, ICU...) and apklayer's own host libraries: no Android name exists, so no name at all */
+            static const char *const desktop[] = {"/usr/", "/lib/", "/lib64/", "/opt/", "/snap/", "/nix/", NULL};
+            int anonymous = strstr(host, "/lib/apklayer/") || strstr(host, "/apklayer/native/");
+            for (int i = 0; desktop[i]; i++) anonymous |= !strncmp(host, desktop[i], strlen(desktop[i]));
+            if (anonymous) result = "";
+        }
     }
     errno = saved;
     return result;

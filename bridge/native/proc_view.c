@@ -434,6 +434,10 @@ static int proc_filter(int fd)
             char mapped[PATH_MAX], plain[PATH_MAX];
             snprintf(plain, sizeof plain, "%.*s", (int)strcspn(path, "\n"), path);
             const char *android = *plain ? apklayer_proc_map_name(plain, mapped, sizeof mapped) : NULL;
+            if (android && !*android) {
+                fprintf(buffer, "%lx-%lx %s 00000000 00:00 0\n", start, end, perms);
+                continue;
+            }
             if (android) {
                 fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu %s\n", start, end, perms, offset, major, minor, inode, android);
                 continue;
