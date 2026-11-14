@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-14: Build ABI of a bridged app (CPU_ABI, CPU_ABI2, SUPPORTED_ABIS)
+- Real Android (AOSP Build.java, static init): `CPU_ABI = SUPPORTED_64_BIT_ABIS[0]` (a 64-bit process), `CPU_ABI2 = [1]` or "", all from `ro.product.cpu.abilist*` of the DEVICE; the app's own ABI never enters Build.* (it is `ApplicationInfo.primaryCpuAbi`). So a houdini/ndk_translation x86_64 device answers CPU_ABI x86_64 to an arm64 app. Fennec's GeckoLoader writes `MOZ_ANDROID_CPU_ABI=` + `Build.CPU_ABI` (smali), so on real hardware it would look up `x86_64/greprefs.js` too: no device-side fix exists; we keep 54be7b3f's deliberate deviation (CPU_ABI = app ABI).
+- Change: for a bridged app SUPPORTED_ABIS and SUPPORTED_64_BIT_ABIS list arm64-v8a first (x86_64 second), CPU_ABI2 is "" (as an arm64 device); other processes unchanged. hello-arm64 logs `abi consistent` (CPU_ABI == primaryCpuAbi == SUPPORTED_ABIS[0]); native-bridge fails on MIXED.
+- Tested on the x86 PC: native-bridge, native-bridge-vulkan, native pass; corpus VLC and Telegram draw (both launches); SimpleX draws (flaky first-frame "uniform" with and without the change, known runner race); Rethink DNS SIGSEGV on this HEAD with and without the CPU_ABI change (A/B with appAbi() = ABI): not caused by it, open. PGR: no APK on the Mac/PC, not run.
+
 ## 2026-11-14: JDK 25 + AOT cache: paper study (no Linux JDK 25 locally, owner: no downloads; nothing measured)
 - Looked for a Linux glibc aarch64 JDK 25: none (Mac: macOS-only Homebrew/KeyStore-Explorer builds; ~/los24/prebuilts/jdk/jdk25 linux-arm64/x86 are musl builds that cannot run on Ubuntu; Parallels/UTM/PC/apt caches: JDK 21 only). Parallels was 100% full (593 MB free) on 2026-11-14.
 - Checked on the Mac's JDK 25 (25.0.4.1) with ASM 9.9: `JdkPatch` and `JdkMembers` compile (needs `--add-exports java.base/sun.net.util`, as meson already passes) and generate all 23 patched java.base classes from JDK 25's own classes (the generator reads the running JDK, so nothing to port); `--patch-module java.base=<out>` boots on 25.
