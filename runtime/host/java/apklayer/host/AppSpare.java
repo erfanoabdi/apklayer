@@ -30,6 +30,8 @@ public final class AppSpare {
 
     private static volatile boolean taken;
 
+    static boolean taken() { return taken; }
+
     /** Zygote's preloaded classes: the framework and JDK classes apps load after this point (resources/preloaded-classes, tools/gen/preload-list.py),
      *  loaded, not initialized, while the spare waits; stops when a launch takes it. */
     private static void preload() {
@@ -45,6 +47,7 @@ public final class AppSpare {
         } catch (Exception unreadable) { System.out.println("[apklayer] spare: no preloaded classes: " + unreadable); }
         System.out.println("[apklayer] spare: preloaded " + loaded + " classes (" + missing + " not found) in " + (System.nanoTime() - t0) / 1000000 + " ms"
                 + (taken ? ", stopped by the launch" : ""));
+        if (!taken) CdsDump.trainSpare();  // JDK 25 without a cache: this spare is the training run
     }
 
     /** A target's lines: -D options (set as the JVM's properties), then the APK and the classes jar (returned). */

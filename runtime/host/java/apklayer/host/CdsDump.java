@@ -27,14 +27,27 @@ final class CdsDump {
     /** The first activity is up (ActivityTask): a component host or the hub never writes the archive, it would lack every window class. */
     static synchronized void afterStart() {
         String file = System.getProperty("apklayer.cdsdump");
-        if (file == null || asked) return;
+        if (file == null || asked || file.endsWith(".aot")) return;  // an AOT cache is trained by the idle spare only (trainSpare)
         asked = true;
-        Thread t = new Thread(() -> dump(Path.of(file)), "cds-dump");
+        Thread t = new Thread(() -> dump(Path.of(file), false), "cds-dump");
         t.setDaemon(true);
         t.start();
     }
 
-    private static void dump(Path file) {
+    /** JDK 25: the idle spare (AppSpare) trains the AOT cache headless, so no user launch has to: it links its classes and ends (the configuration is
+     *  written at its exit). A launch that takes the spare meanwhile just runs (it records for nothing, no more). One attempt per instance (an earlier
+     *  create's log stays). The spare the hub starts is not sandboxed, so a sandboxed instance gets its cache too (cli/sandbox.cpp strips the recording
+     *  from sandboxed JVMs). */
+    static void trainSpare() {
+        String file = System.getProperty("apklayer.cdsdump");
+        if (file == null || !file.endsWith(".aot") || !ManagementFactory.getRuntimeMXBean().getInputArguments().contains("-XX:AOTMode=record")) return;
+        try (DirectoryStream<Path> tried = Files.newDirectoryStream(Path.of(file).getParent(), "*.aot.log")) {
+            if (tried.iterator().hasNext()) return;
+        } catch (Exception noDirectoryYet) { /* none made */ }
+        dump(Path.of(file), true);
+    }
+
+    private static void dump(Path file, boolean spare) {
         try {
             Thread.sleep(DELAY_MS);
             for (String entry : System.getProperty("java.class.path").split(":")) {  // a non-empty directory makes the dump exit the VM
@@ -53,6 +66,7 @@ final class CdsDump {
                 long start = System.nanoTime();
                 int linked = linkCustomClasses();
                 if (exiting()) { System.out.println("[apklayer] cds: no archive: the JVM is ending"); return; }
+                if (spare && AppSpare.taken()) return;  // a launch took the spare: it trains
                 if (file.getFileName().toString().endsWith(".aot")) { aotCreateAndExit(file, linked); return; }
                 ManagementFactory.getPlatformMBeanServer().invoke(new ObjectName("com.sun.management:type=DiagnosticCommand"), "vmCds",
                         new Object[] {new String[] {"dynamic_dump", tmp.toString()}}, new String[] {String[].class.getName()});

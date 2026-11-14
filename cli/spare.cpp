@@ -220,6 +220,10 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::s
     fcntl(pair[1], F_SETFD, 0);
     Spawn jvm;
     jvm.argv = argv;
+    // JDK 25 without an AOT cache: this idle spare records, and trains headless (CdsDump.trainSpare); the key above has no part of it, so a launch can still take it
+    for (const std::string& a : argv)
+        if (a.rfind("-Dapklayer.cdsdump=", 0) == 0 && a.size() > 4 && a.compare(a.size() - 4, 4, ".aot") == 0 && !exists(a.substr(19)))
+            jvm.argv.insert(jvm.argv.begin() + 1, {"-XX:AOTMode=record", "-XX:AOTConfiguration=" + a.substr(19) + "conf." + std::to_string(getpid())});
     jvm.argv.push_back("--spare");
     jvm.env = ne.env;
     jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);

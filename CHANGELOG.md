@@ -3,6 +3,13 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-14: JDK 25 AOT cache trained by the idle spare, not the first launch; sandbox; packages name JDK 21 or 25
+- cli/spare.cpp runAppSpare: on a JDK 25 image without a cache the spare JVM gets `-XX:AOTMode=record -XX:AOTConfiguration=<cache>conf.<pid>` itself (cli/env.cpp cdsArgs only adds `-Dapklayer.cdsdump=<cache>` now: no pid in the argv, so the spare key matches launches also while no cache exists; before, the conf path's pid made every first spare stale). AppSpare calls CdsDump.trainSpare after its class preload when no launch took it: links the custom-loader classes and ends with a normal exit, the detached create JVM makes the cache (a launch that takes the spare meanwhile just runs; one attempt per instance, an `.aot.log` stops another). No launch trains or ends any more (CdsDump.afterStart ignores `.aot`).
+- Sandbox: cli/sandbox.cpp sandboxSpawn strips the recording options and the cdsdump property from every sandboxed JVM on 25 (the hub's HubHost.afterStart would have exited the hub to write the configuration; apps could not write the read-only state directory); the hub-started spare is not sandboxed and trains.
+- Packages: debian/control `openjdk-21-jdk-headless | openjdk-25-jdk-headless` and the jre pair, rpm/apklayer.spec `(temurin-21-jdk or temurin-25-jdk)`; the flatpak stays on the openjdk21 extension (one extension per manifest). 21 stays first (findJava's order).
+- tests/vm/cds-dump.sh on 25: `apklayer app-spare` (no launch), wait for the holder and create JVM, then the same checks (3)(4).
+- Cold-start items (Hyphenator nInit, hub boot wait): nothing small found by reading, left in docs/PLAN.md.
+
 ## 2026-11-14: jmethodID == Executable.artMethod (runtime identity item 4, ARM64)
 - The guest's jmethodIDs are the synthetic ArtMethod entries: arena + `ApklayerArt.of`, wrappers for the three id-returning functions (jni_guest_surface.c), input swap in the generated libart thunks (art-jni.py column, libart_jni.c). Probe `hello-identity` `jmethodID.equalsArtMethod=yes stable=1 callThrough=parseInt=42 length=2`, access flags at +4 and index at +8 read at the id. jfieldID unchanged (no ArtField table). UTM own tree `~/apklayer-jids`: identity-matrix, providers, gpu PASS (gpu failed once with 124 while 3 groups ran at once, passed alone). Tree and prebuilts copy removed.
 ## 2026-11-14: blank WebView pages on the 0.4.18 arm64 host (PGR registration page)
