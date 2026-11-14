@@ -1,6 +1,7 @@
 // cli/util.cpp spawn(): a detached process without a log file does not hold the launcher's stdout (`flatpak run apklayer | cat` waited for it).
-// Build: g++ -std=c++17 -I cli tests/native/detach-stdout.cpp cli/util.cpp -o detach-stdout
+// Build: g++ -std=c++17 -I cli tests/native/detach-stdout.cpp cli/util.cpp cli/unit.cpp -o detach-stdout
 #include <cstdio>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <unistd.h>
@@ -8,7 +9,7 @@
 using namespace apklayer;
 int main() {
     int p[2];
-    if (pipe(p) != 0) return 2;
+    if (pipe2(p, O_CLOEXEC) != 0) return 2;  // only fd 1 (the dup) may reach the child
     dup2(p[1], 1);  // the launcher's stdout is the pipe
     Spawn s;
     s.argv = {"sleep", "30"};
