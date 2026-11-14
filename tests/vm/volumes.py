@@ -20,6 +20,8 @@ from instance import ENV, INSTANCE, OUT, stop  # noqa: E402
 
 STEPS = ['mounted broadcast', 'volume callback', 'volume listed', 'MEDIA_CHECKING broadcast', 'secondary external files dir', 'mediastore volume', 'mount scan', 'drive file indexed', 'internal file indexed',
          'internal file dropped', 'MEDIA_EJECT broadcast', 'MEDIA_UNMOUNTED broadcast', 'MEDIA_REMOVED broadcast', 'volume gone', 'callback on removal', 'link removed',
+         'eject ended the holder', 'eject unmounted',
+         'MEDIA_BAD_REMOVAL broadcast', 'bad_removal callback',
          'catchup present volume', 'catchup present drive scanned', 'catchup present internal file', 'catchup status',
          'catchup gone volume', 'catchup gone mediastore volume', 'catchup gone internal file']
 SUDO = ['sudo', '-A'] if os.environ.get('SUDO_ASKPASS') else ['sudo', '-n']
@@ -105,6 +107,29 @@ def hotplug(line, lines):
     elif '[hotplug] unmount' in line: unmount(); detach()
 
 
+# a process of this instance with the drive's image mapped (MediaProvider's Skia mapping of a scanned image): StorageManager.unmount must end it
+HOLD = 'import sys, mmap; f = open(sys.argv[1], "rb"); m = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ); print("held", flush=True); sys.stdin.read()'
+holder = None
+
+
+def eject(line, lines):
+    """The app calls StorageManager.unmount (hello.eject) itself: the script only holds a file open and mounts the drive."""
+    global holder
+    if '[hotplug] ready' in line: mount()
+    elif '[hotplug] unmount' in line:
+        holder = subprocess.Popen([sys.executable, '-c', HOLD, str(point / 'DCIM/pre.png')], env=dict(ENV, APKLAYER_INSTANCE=INSTANCE), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        print('holder: ' + holder.stdout.readline().decode().strip(), flush=True)
+    elif '[hotplug] PASS MEDIA_UNMOUNTED broadcast' in line:  # before the instance's stop could end the holder
+        lines.append('[hotplug] %s eject ended the holder' % ('PASS' if holder.poll() is not None else 'FAIL'))
+        lines.append('[hotplug] %s eject unmounted' % ('PASS' if subprocess.run(['mountpoint', '-q', str(point)]).returncode else 'FAIL'))
+
+
+def pulled(line, lines):
+    """The device vanishes while mounted: the loop device is released first (cleared with the last unmount), then the mount goes."""
+    if '[hotplug] ready' in line: mount()
+    elif '[hotplug] unmount' in line: detach(); unmount()
+
+
 def status(line, lines):
     if '[hotplug] status' not in line: return
     shown = subprocess.run(['bin/apklayer', 'status'], env=ENV, capture_output=True, text=True).stdout
@@ -126,7 +151,12 @@ try:
     (point / 'DCIM/pre.png').write_bytes(png())
     unmount()
     subprocess.run(['bin/apklayer', 'permissions', 'grant', 'hello.files', 'android.permission.READ_MEDIA_IMAGES'], env=ENV, capture_output=True)
-    lines += app('-Dhello.hotplug=1', hotplug)
+    lines += app('-Dhello.hotplug=1 -Dhello.eject=1', eject)
+    if holder and holder.poll() is None: holder.kill()
+    unmount()
+    detach()
+    attach()
+    lines += app('-Dhello.hotplug=1 -Dhello.pull=1', pulled)
     # while stopped: the drive plugged in, a picture written on internal storage (the hot plug run may have stopped before its removal)
     unmount()
     detach()

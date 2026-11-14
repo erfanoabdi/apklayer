@@ -79,6 +79,71 @@ final class HubVolumes {
         System.out.println("[apklayer-hub] volumes: udisksctl monitor ended");
     }
 
+    /**
+     * StorageManager.unmount: as vold's unmount, the processes of this instance with files open or mapped on the drive end first (KillProcessesUsingPath:
+     * MediaProvider keeps a scanned image mapped until a GC and would make the unmount fail busy), then udisks unmounts it, lazily when it is still busy
+     * (other instances' processes in other trees see the drive too). The broadcasts and callbacks follow from the udisks monitor as for any unmount.
+     */
+    synchronized boolean eject(String id) {
+        VolumeInfo volume = mounted.values().stream().filter(v -> v.id.equals(id)).findFirst().orElse(null);
+        if (volume == null) return false;
+        String point = HostVolumes.Removable.mountPoint(volume);
+        String device = source(point);
+        if (device == null) return false;
+        for (int pid : holders(point)) {
+            System.out.println("[apklayer-hub] eject " + id + ": ending pid " + pid + " (files open on " + point + ")");
+            ProcessHandle.of(pid).ifPresent(ProcessHandle::destroyForcibly);
+        }
+        return run("udisksctl", "unmount", "-b", device) || run("udisksctl", "unmount", "-f", "-b", device);
+    }
+
+    private static boolean run(String... command) {
+        try { return new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start().waitFor() == 0; }
+        catch (IOException | InterruptedException failure) { return false; }
+    }
+
+    /** The device mounted at {@code point}, from the mount table. */
+    private static String source(String point) {
+        try {
+            for (String line : Files.readAllLines(Path.of("/proc/self/mounts"))) {
+                String[] f = line.split(" ");
+                if (f.length > 1 && f[1].replace("\\040", " ").equals(point)) return f[0];
+            }
+        } catch (IOException none) { /* no table */ }
+        return null;
+    }
+
+    /**
+     * The processes of this instance (the same APKLAYER_INSTANCE in the environment; the default instance has none, then an apklayer process: its command
+     * line names apklayer) with a file open, a working directory or a mapping under {@code point}; never the hub itself.
+     */
+    private static List<Integer> holders(String point) {
+        List<Integer> found = new java.util.ArrayList<>();
+        String instance = System.getenv("APKLAYER_INSTANCE");
+        try (java.util.stream.Stream<Path> procs = Files.list(Path.of("/proc"))) {
+            for (Path proc : (Iterable<Path>) procs::iterator) {
+                String name = proc.getFileName().toString();
+                if (!name.chars().allMatch(Character::isDigit) || Integer.parseInt(name) == ProcessHandle.current().pid()) continue;
+                try {
+                    String env = "\0" + new String(Files.readAllBytes(proc.resolve("environ")), java.nio.charset.StandardCharsets.ISO_8859_1);
+                    boolean ours = instance != null ? env.contains("\0APKLAYER_INSTANCE=" + instance + "\0")
+                            : !env.contains("\0APKLAYER_INSTANCE=") && new String(Files.readAllBytes(proc.resolve("cmdline")), java.nio.charset.StandardCharsets.ISO_8859_1).contains("apklayer");
+                    if (ours && uses(proc, point)) found.add(Integer.parseInt(name));
+                } catch (IOException | RuntimeException unreadable) { /* another user's, or gone */ }
+            }
+        } catch (IOException none) { /* no /proc */ }
+        return found;
+    }
+
+    private static boolean uses(Path proc, String point) throws IOException {
+        try (java.util.stream.Stream<Path> fds = Files.list(proc.resolve("fd"))) {
+            for (Path fd : (Iterable<Path>) fds::iterator) try { if (Files.readSymbolicLink(fd).toString().startsWith(point + "/")) return true; } catch (IOException gone) { /* closed meanwhile */ }
+        }
+        try (java.util.stream.Stream<String> maps = Files.lines(proc.resolve("maps"), java.nio.charset.StandardCharsets.ISO_8859_1)) {
+            return maps.anyMatch(line -> line.contains(" " + point + "/"));
+        }
+    }
+
     /** The mounted volumes (primary and drives) for the boot's ACTION_MEDIA_MOUNTED (HubBootBroadcasts), as vold mounts them at a device's boot. */
     List<VolumeInfo> mountedVolumes() {
         return HostVolumes.list().stream().filter(v -> (v.getType() == VolumeInfo.TYPE_EMULATED || v.getType() == VolumeInfo.TYPE_PUBLIC) && v.isMountedReadable()).toList();

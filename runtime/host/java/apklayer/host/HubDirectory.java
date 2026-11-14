@@ -598,6 +598,11 @@ final class HubDirectory extends Binder {
                 if (set) callAudio.setCommunicationDevice(caller, device);
                 reply.writeNoException(); reply.writeTypedObject(callAudio.communicationDevice(), 0); return true;
             }
+            case HubProtocol.EJECT_VOLUME -> {
+                Peer caller = caller(); String id = request.readString(); request.enforceNoDataAvail();
+                if (!packages.uidHolds(caller.appUid(), android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)) throw new SecurityException("StorageManager.unmount needs MOUNT_UNMOUNT_FILESYSTEMS");
+                reply.writeNoException(); reply.writeBoolean(volumes.eject(id)); return true;
+            }
             case HubProtocol.MICROPHONE_MUTE -> {
                 Peer caller = caller(); boolean on = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(callAudio.setMicrophoneMute(caller, on)); return true;
