@@ -70,7 +70,7 @@ system-apps/        the providers, DocumentsUI and webview.apk for the first run
 Install (what apklayer-manager does): unpack into `~/.local/share/apklayer/runtime/R/` (`$XDG_DATA_HOME` is honoured) and point the symlink
 `runtime/current` at `R`; by hand: `mkdir -p ~/.local/share/apklayer/runtime/R && tar --zstd -xf apklayer-runtime-<cpu>-R.tar.zst -C ~/.local/share/apklayer/runtime/R && ln -sfn R ~/.local/share/apklayer/runtime/current`.
 The installed CLI takes `runtime/current` (else `runtime/R` of its `versions`) as its native dir: on first use, and again after each package or runtime update, it runs
-`tools/setup-runtime.sh` (`tools/release/setup-runtime.sh`, under a lock) which links the package's half in (with its library mapping), puts the JNI shim into the framework jars
+`<share>/tools/setup-runtime.sh` (installed from `tools/release/setup-runtime.sh`; run under a lock) which links the package's half in (with its library mapping), puts the JNI shim into the framework jars
 and instruments the framework once (a few minutes). Without the bundle, commands that start Android code say where it is missing.
 Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still override every path; a source tree keeps working as before (no `versions` at its root).
 
