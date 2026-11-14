@@ -1,4 +1,4 @@
-// The host's GPUs (DRM devices with a render node) and the one an instance runs on (docs/history/PLAN-2026-11-10.md "GPU per instance").
+// The host's GPUs (DRM devices with a render node, and KMS-only devices with a card node: vkms, the software path) and the one an instance runs on (docs/history/PLAN-2026-11-10.md "GPU per instance").
 #pragma once
 
 #include <string>
@@ -10,15 +10,17 @@ namespace apklayer {
 
 struct Gpu {
     std::string id;            // stable identity: the /dev/dri/by-path name (pci-0000:03:00.0), else the sysfs device path (no by-path: vgem, some SoCs)
-    std::string node;          // /dev/dri/renderD<n> (the number can change between boots: never stored)
+    std::string node;          // /dev/dri/renderD<n>, or card<n> for a cardOnly device (the number can change between boots: never stored)
     std::string device;        // sysfs device directory (realpath)
     std::string driver;        // kernel driver (i915, amdgpu, virtio-pci...)
     std::string vendorDevice;  // PCI vendor:device ("" off PCI)
     bool compositor = false;   // the desktop compositor renders on it (its linux-dmabuf main device)
+    bool cardOnly = false;     // no render node (vkms): its card node allocates dumb buffers and Mesa renders on the CPU, for a host without a GPU
 };
 
 std::vector<Gpu> listGpus(const Layout& layout);
-// The instance's GPU: APKLAYER_GPU, else <instance root>/gpu, else the compositor's, else the first. nullptr: no render node at all.
+// The instance's GPU: APKLAYER_GPU, else <instance root>/gpu, else the compositor's, else a real GPU, else a software (cardOnly) device, else the first.
+// nullptr: no DRM device at all.
 const Gpu* instanceGpu(const std::vector<Gpu>& gpus, const Instance& instance);
 std::string gpuChoiceFile(const Instance& instance);
 // gpus: every GPU (id, node, driver, vendor:device, compositor, chosen for this instance, name); gpu set <id|node> | unset
