@@ -31,11 +31,7 @@ final class HubStartedServices {
         if (!caller.name().equals(info.packageName) && !info.exported) throw new SecurityException("Service is not exported");
         packages.enforceServicePermission(caller.name(), info);
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
-        // a service declared in a process of its own (android:process, isolatedProcess: microG's McsService in ":persistent") runs in that process's
-        // host, keyed as a bind keys it (HubServices.ownProcess); the package's process would refuse it
-        String process = info.processName != null ? info.processName : info.packageName;
-        boolean own = (info.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(info.packageName);
-        String key = HubDirectory.key(info.packageName, own ? info.name : null);
+        String key = processKey(info);
         HubDirectory.Peer target = directory.peer(key);
         if (target != null) return deliver(target, explicit, explicit);
         // the process is not running: launched, and the start delivered once it is up, while the caller goes on (ActivityManagerService queues
@@ -50,6 +46,14 @@ final class HubStartedServices {
         later.setDaemon(true);
         later.start();
         return explicit.getComponent();
+    }
+
+    /** A service declared in a process of its own (android:process, isolatedProcess: microG's McsService in ":persistent") runs in that process's
+     *  host, keyed as a bind keys it (HubServices.ownProcess); the package's process would refuse it. */
+    private static String processKey(ServiceInfo info) {
+        String process = info.processName != null ? info.processName : info.packageName;
+        boolean own = (info.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(info.packageName);
+        return HubDirectory.key(info.packageName, own ? info.name : null);
     }
 
     private ComponentName deliver(HubDirectory.Peer target, Intent explicit, Intent delivered) {
@@ -70,7 +74,9 @@ final class HubStartedServices {
         if (!caller.name().equals(info.packageName) && !info.exported) throw new SecurityException("Service is not exported");
         packages.enforceServicePermission(caller.name(), info);
         ComponentName name = new ComponentName(info.packageName, info.name);
-        HubDirectory.Peer target = directory.peer(info.packageName);
+        // the process that runs it, as for a start: the package's main process does not have a ":persistent" service and sent the stop back here
+        // (Play services' stopService of one at BOOT_COMPLETED recursed until a StackOverflowError ended its main process)
+        HubDirectory.Peer target = directory.peer(processKey(info));
         synchronized (started) { started.remove(name); }
         if (target == null) return false;
         boolean stopped = HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_STOP, request -> request.writeTypedObject(new Intent().setComponent(name), 0), reply -> reply.readBoolean());
