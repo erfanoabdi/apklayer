@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: start-up: the network and battery monitors no longer block the app's start (UiBench, Parallels, 5 runs each)
+- `-Dapklayer.perf` showed 2.2 s between "application created" and "runtime started": `HostNetwork.install` and `HostBattery.install` each started their monitor process (`ip monitor`, `udevadm monitor`) inline, and a process launch in the app JVM takes ~1.1 s here. The monitors now start on their own daemon threads (one resync after they are up); new marks `runtime: <step>` in `AppEnvironment.startRuntime`.
+- First frame (shell), ms, before -> after: cold 4318 4242 4114 4785 4469 (mean 4386) -> 1971 2720 2076 6398 4160 (mean 3465; the two slow runs waited 3.0-4.4 s for the hub: load, not this change; median 4318 -> 2720); warm 3293 3005 3005 3022 3159 (mean 3097) -> 1455 978 890 1117 851 (mean 1058). Groups startup, activities, devices, broadcasts pass.
+- Not changed: JNI_OnLoad (its libraries are loaded eagerly for the module identity) and the hub wait (docs/PLAN.md "Startup and memory").
+
 ## 2026-11-15: Termux: group names, getprop, hardware punctuation (own tree on Parallels, Termux 0.118.3, userspace binder)
 - `id -gn`/`ls -l` printed the number for the app gid: bionic_translation 0080 (`bionic_getgrgid[_r]`, as 0065 does for the uid). The uid name `u0_a0` already worked (0065); `/system/bin/sh` worked unsandboxed.
 - `/system/bin/getprop` did not exist, and Android's own (toolbox, a link `getprop`) printed nothing in a guest child: the property store is found through `XDG_RUNTIME_DIR` + `APKLAYER_INSTANCE` and the preload's saved runtime variables lacked the first (exec_preload.c), so the child opened an empty area. Added to the list; `tools/stage root` copies `system/bin/toolbox` + `getprop` from the LineageOS tree (prebuilts repo needs them: not pushed by this agent).

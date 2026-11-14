@@ -380,15 +380,16 @@ final class AppEnvironment {
         NativeLoader.nameProcess(System.getProperty("apklayer.processname", app.getPackageName()));
         NativeLoader.killIfExitStalls();
         if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
-        HostContentService.install();
-        HostNetwork.install(app);
-        HostBattery.install(app);
+        HostContentService.install(); StartTrace.mark("runtime: HostContentService");
+        HostNetwork.install(app); StartTrace.mark("runtime: HostNetwork");
+        HostBattery.install(app); StartTrace.mark("runtime: HostBattery");
         // no doze on the desktop: an app is never held back by battery optimization
         org.robolectric.Shadows.shadowOf((android.os.PowerManager) app.getSystemService(android.content.Context.POWER_SERVICE)).setIgnoringBatteryOptimizations(app.getPackageName(), true);
-        HostStorage.install(app);
+        HostStorage.install(app); StartTrace.mark("runtime: HostStorage");
         HostProviders.install(app);  // Android's security providers and TLS (Conscrypt); without it HostTrust's host-aware default trust manager (Chromium, X509TrustManagerExtensions)
-        HostLocation.install(app);
-        HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build
+        StartTrace.mark("runtime: HostProviders");
+        HostLocation.install(app); StartTrace.mark("runtime: HostLocation");
+        HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build StartTrace.mark("runtime: system config");
 
         // Simulator.start(): real draws and animations, a paused Choreographer driven by the loop.
         ShadowView.setUseRealViewAnimations(true);
@@ -397,7 +398,7 @@ final class AppEnvironment {
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(15));
         ShadowLog.setCaptureLogsEnabled(false);
         if (Boolean.getBoolean("apklayer.logcat")) ShadowLog.stream = System.out; // debug: the app's android.util.Log lines
-        NativeMedia.ensureInitialized();
+        NativeMedia.ensureInitialized(); StartTrace.mark("runtime: NativeMedia");
     }
 
     private AppEnvironment() {}

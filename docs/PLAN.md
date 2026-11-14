@@ -67,7 +67,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - JDK 25: flatpak still names JDK 21; findJava prefers an installed 21 over 25.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
-- Cold-start costs: Hyphenator `nInit`, cold `JNI_OnLoad` ~150 ms, hub boot wait of 4-8 s.
+- Cold-start costs: Hyphenator `nInit`, cold `JNI_OnLoad` ~150 ms (its libraries are loaded eagerly for the module identity), and the hub boot wait: the app's keystore step (HostKeyStore.lockScreen) waits for the hub's gatekeeper enrollment on every cold start (1.3-4.4 s on Parallels); doing it on a thread would let an early `isDeviceSecure()` see false.
+- Starting any process from the app JVM (ProcessBuilder: `ip monitor`, `udevadm monitor`) took ~1.1 s each on Parallels (cause not found: exec_preload, jspawnhelper or the proc views); the two monitors now start on their own threads, other launches still pay it.
 - SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?

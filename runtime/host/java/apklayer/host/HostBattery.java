@@ -66,17 +66,19 @@ final class HostBattery {
     }
 
     private static void watch(Runnable changed, String name) {
-        try {
-            Process monitor = new ProcessBuilder(HostProcess.dying("udevadm", "monitor", "--udev", "--subsystem-match=power_supply")).redirectErrorStream(true).start();
-            Thread thread = new Thread(() -> {
-                try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
-                    for (String line; (line = in.readLine()) != null; ) if (line.contains("power_supply")) changed.run();
-                } catch (IOException ended) { /* stopped with the JVM */ }
-            }, name);
-            thread.setDaemon(true);
-            thread.start();
-            Runtime.getRuntime().addShutdownHook(new Thread(monitor::destroy));
-        } catch (IOException noUdev) { System.out.println("[apklayer] battery: no udevadm, the state is read once"); }
+        // on its own thread: a process launch in the app JVM takes ~1.1 s, which was on the start-up path
+        Thread thread = new Thread(() -> {
+            Process monitor;
+            try { monitor = new ProcessBuilder(HostProcess.dying("udevadm", "monitor", "--udev", "--subsystem-match=power_supply")).redirectErrorStream(true).start(); }
+            catch (IOException noUdev) { System.out.println("[apklayer] battery: no udevadm, the state is read once"); return; }
+            try { Runtime.getRuntime().addShutdownHook(new Thread(monitor::destroy)); } catch (IllegalStateException shuttingDown) { monitor.destroy(); return; }
+            changed.run();  // a change while the monitor was starting
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
+                for (String line; (line = in.readLine()) != null; ) if (line.contains("power_supply")) changed.run();
+            } catch (IOException ended) { /* stopped with the JVM */ }
+        }, name);
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private static synchronized void applyProperties(Application app, State next) {
