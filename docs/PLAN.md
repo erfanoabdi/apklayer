@@ -108,7 +108,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - The NVIDIA tester's box with the INSTALL.md checklist.
 - Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
-- Shared spare, cold component hosts, broker gaps (chmod, utimes, symlink, xattrs, renameat2, mkstemp, scandir).
+- Shared spare, cold component hosts, broker gaps in the granted home (utimes, xattrs, renameat2 flags, mkstemp/scandir opens; chmod, symlink, link done).
 - Isolated processes run as the app uid; drive access is all or nothing.
 
 ## Packaging and releases
