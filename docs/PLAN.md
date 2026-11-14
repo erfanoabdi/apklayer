@@ -123,7 +123,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 ## Manager
 - Apps installed before 2026-11-04 need a reinstall for permissions.
 - No permission step in `ui.sh`. Hardware page: no live GNSS/camera test.
-- Per-app settings force a cold start.
 - Binder devices of a removed instance stay until reboot.
 
 ## Hardware
