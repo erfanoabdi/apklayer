@@ -18,7 +18,7 @@
 
 const char *apklayer_own_data_env(void);
 long apklayer_app_uid(void);
-long apklayer_android_spelling(char *buf, long n);
+long apklayer_android_spelling(char *buf, long n, long size);
 const char *apklayer_proc_jdk_root(void);  /* proc_view.c: the JDK's directory (libjvm's maps line), "" when unknown */
 
 static long raw(long nr, long a, long b, long c, long d)
@@ -127,7 +127,7 @@ const char *apklayer_proc_map_name(const char *host, char *out, size_t size)
     int saved = errno;
     const char *result = NULL;
     snprintf(out, size, "%s", host);
-    long n = apklayer_android_spelling(out, (long)strlen(out));
+    long n = apklayer_android_spelling(out, (long)strlen(out), (long)size - 1);
     out[n] = 0;
     if (strcmp(out, host)) result = out;
     else {

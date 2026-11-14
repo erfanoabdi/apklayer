@@ -261,7 +261,7 @@ final class AppEnvironment {
     }
 
     /**
-     * The ApplicationInfo an app is shown, with its installed code under Android's names (/data/app/~~apklayer/<package>-apklayer/base.apk, split_*.apk, lib/<abi>), which the
+     * The ApplicationInfo an app is shown, with its installed code under Android's names (/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/<package>-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk, split_*.apk, lib/<abi>), which the
      * path layer maps back (bridge/native/paths.c own_apk_path). A copy: the framework's own ApplicationInfo keeps the host paths it opens resources and classes by. Off unless
      * APKLAYER_APK_PATHS=android is set for the process (untested against resource loading in a running app), and only in a process whose own-data mapping is set.
      */
@@ -269,7 +269,7 @@ final class AppEnvironment {
         if (info == null || info.packageName == null || !"android".equals(System.getenv("APKLAYER_APK_PATHS")) || !NativeLoader.ownDataMapped()) return info;
         String apps = System.getProperty("apklayer.apps"), pkg = System.getProperty("apklayer.package");
         if (apps == null || !info.packageName.equals(pkg) || info.sourceDir == null || !info.sourceDir.startsWith(apps + "/" + pkg + "/")) return info;
-        String dir = "/data/app/~~apklayer/" + pkg + "-apklayer";
+        String dir = "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" + pkg + "-Zl3q8XvKc0bYtqN2dHkP5Q==";
         android.content.pm.ApplicationInfo copy = new android.content.pm.ApplicationInfo(info);
         copy.sourceDir = copy.publicSourceDir = dir + "/base.apk";
         if (info.splitSourceDirs != null) {

@@ -567,21 +567,21 @@ static bool from_root(const char *r, char **path)
  * path (<root>/app, <root>/device); Android code reads /data/user/0/<pkg> and /data/user_de/0/<pkg> there, as getFilesDir returned them (Tencent ACE,
  * mmkv and crash reporters compare the two). Rewritten in place, never longer than the host path (the caller's buffer holds n bytes); the new
  * length is returned, n when the path is not below the app's data directories. */
-static long own_data_spelling(char *buf, long n)
+static long own_data_spelling(char *buf, long n, long size)
 {
     const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
     if (!o || !o->dir || !o->device || n <= 0) return n;
-    if (o->apps) {   /* the installed code: <apps>/base.apk, split_*.apk and lib/x as /data/app/~~apklayer/<pkg>-apklayer/..., lib/<abi>/x. Only when it fits: the caller's buffer holds n bytes */
+    if (o->apps) {   /* the installed code: <apps>/base.apk, split_*.apk and lib/x as /data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/<pkg>-Zl3q8XvKc0bYtqN2dHkP5Q==/..., lib/<abi>/x. Only when it fits: the caller's buffer holds n bytes */
         long k = (long)strlen(o->apps);
         if (n >= k && !strncmp(buf, o->apps, (size_t)k) && (n == k || buf[k] == '/')) {
             char spelled[PATH_MAX];
             const char *rest = buf + k;
             int restn = (int)(n - k), m;
             if (restn >= 4 && !strncmp(rest, "/lib", 4) && (restn == 4 || rest[4] == '/'))
-                m = snprintf(spelled, sizeof spelled, "/data/app/~~apklayer/%s-apklayer/lib%s%.*s", o->pkg, sizeof(void *) == 8 ? "/arm64" : "/arm", restn - 4, rest + 4);
+                m = snprintf(spelled, sizeof spelled, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/%s-Zl3q8XvKc0bYtqN2dHkP5Q==/lib%s%.*s", o->pkg, sizeof(void *) == 8 ? "/arm64" : "/arm", restn - 4, rest + 4);
             else
-                m = snprintf(spelled, sizeof spelled, "/data/app/~~apklayer/%s-apklayer%.*s", o->pkg, restn, rest);
-            if (m > 0 && m < (int)sizeof spelled && m <= n) { memcpy(buf, spelled, (size_t)m); return m; }
+                m = snprintf(spelled, sizeof spelled, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/%s-Zl3q8XvKc0bYtqN2dHkP5Q==%.*s", o->pkg, restn, rest);
+            if (m > 0 && m < (int)sizeof spelled && m <= size) { memcpy(buf, spelled, (size_t)m); return m; }
             return n;
         }
     }
@@ -593,7 +593,7 @@ static long own_data_spelling(char *buf, long n)
         char spelled[PATH_MAX];
         int m = snprintf(spelled, sizeof spelled, "%s%s", androids[i], o->pkg);
         long rest = n - k;
-        if (m < 0 || m + rest > (long)sizeof spelled || m > k) return n;  /* never longer than the host path: the caller's buffer has n bytes */
+        if (m < 0 || m + rest > (long)sizeof spelled || m + rest > size) return n;  /* never past the caller's buffer */
         memcpy(buf + m, buf + k, (size_t)rest);
         memcpy(buf, spelled, (size_t)m);
         return m + rest;
@@ -601,14 +601,14 @@ static long own_data_spelling(char *buf, long n)
     return n;
 }
 
-long apklayer_android_spelling_own_data(char *buf, long n) { return own_data_spelling(buf, n); }  /* paths_preload.c: realpath */
+long apklayer_android_spelling_own_data(char *buf, long n, long size) { return own_data_spelling(buf, n, size); }  /* paths_preload.c: realpath, getcwd */
 
 /* A file the overlay served (under the instance's or the shared Android root) spelled as Android's again, in place (readlink's buffer, n bytes,
  * no terminator): what /proc/self/fd/N links to. bionic's realpath (O_PATH, then readlink of the fd) in translated code reads it, and the guest
  * linker matches the result against its config's /system sections. Returns the new length. */
-long apklayer_android_spelling(char *buf, long n)
+long apklayer_android_spelling(char *buf, long n, long size)
 {
-    n = own_data_spelling(buf, n);
+    n = own_data_spelling(buf, n, size);
     const char *roots[2] = { own_env, root() };
     for (int i = 0; i < 2; i++) {
         long k = roots[i] ? (long)strlen(roots[i]) : 0;
