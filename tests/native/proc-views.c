@@ -4,6 +4,7 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
