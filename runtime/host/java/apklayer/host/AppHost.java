@@ -421,7 +421,7 @@ public final class AppHost implements Runnable {
     /** Activity.recreate() from the app (NewPipe's onResume): the configuration-change relaunch with every change unhandled; Robolectric's own leaves the new window unattached and NPEs in windowFocusChanged. */
     static void recreate(Activity a) {
         AppHost host = running;
-        if (host == null) return;
+        if (host == null || a.isDestroyed()) return;
         for (ActivityController<? extends Activity> c : stack) {
             if (c.get() != a) continue;
             ActivityController<? extends Activity> top = stack.peek();
@@ -435,6 +435,8 @@ public final class AppHost implements Runnable {
             System.out.println("[apklayer] Activity.recreate(): " + a.getClass().getName());
             return;
         }
+        // asked while the activity is still launching (onResume runs before ActivityTask pushes it): ActivityThread runs it after the resume
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> recreate(a), 50);
     }
 
     /**
