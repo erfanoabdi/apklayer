@@ -131,7 +131,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Script store clients in the corpus (Aurora, Telegram: HTTPS needs scripted onboarding input).
 - Flaky: webview-input under load; native-media AVC (~1 in 2 on Parallels); audio-silent on the x86 PC.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
-- Fresh test trees: meson downloads `bionic_translation` (use a local copy).
 
 ## Needs hardware or a person
 - NVIDIA/AMD: Vulkan presentation, host ES1.
