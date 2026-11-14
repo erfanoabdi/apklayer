@@ -258,7 +258,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         String path = NativeLoader.findLibrary(name);
         // apklayer patch: the app's own library under Android's spelling (/data/app/~~tag/<pkg>-tag/lib/<abi>/), which the path layer maps back (paths.c own_apk_path)
         String apps = System.getProperty("apklayer.apps"), pkg = System.getProperty("apklayer.package");
-        if (path == null || apps == null || pkg == null || !NativeLoader.ownDataMapped() || !path.startsWith(apps + "/" + pkg + "/lib/")) return path;
+        if (path == null || apps == null || pkg == null || System.getProperty("apklayer.ownDataMapped") == null || !path.startsWith(apps + "/" + pkg + "/lib/")) return path;
         String abi = switch (HostBuild.appAbi()) { case "arm64-v8a" -> "arm64"; case "armeabi-v7a" -> "arm"; default -> "x86_64"; };
         return "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" + pkg + "-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/" + abi + path.substring((apps + "/" + pkg + "/lib").length());
     }
