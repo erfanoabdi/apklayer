@@ -211,6 +211,22 @@ static char *drive_spelling(const char *path, const char *storage, size_t n, cha
     return copy;
 }
 
+/* The working directory under its Android name: an app is started in its install directory (cli/run.cpp), which the path layer spells /data/app/~~apklayer/<pkg>-apklayer
+ * (paths.c own_apk_path and its reverse); getcwd and get_current_dir_name would otherwise name the host's path. The real directory is unchanged: relative opens still
+ * resolve in it, and chdir back to the spelled name maps there. In place (the spelling is never longer than the host path). */
+char *getcwd(char *buf, size_t size)
+{
+    char *r = ((char *(*)(char *, size_t))REAL(getcwd))(buf, size);
+    if (r) { long len = (long)strlen(r), spelled = apklayer_android_spelling_own_data(r, len); if (spelled < len) r[spelled] = 0; }
+    return r;
+}
+char *get_current_dir_name(void)
+{
+    char *r = ((char *(*)(void))REAL(get_current_dir_name))();
+    if (r) { long len = (long)strlen(r), spelled = apklayer_android_spelling_own_data(r, len); if (spelled < len) r[spelled] = 0; }
+    return r;
+}
+
 /* A resolved path below the storage directory is spelled as Android's again (/storage/...): callers compare it with the volume paths. */
 char *realpath(const char *path, char *resolved)
 {

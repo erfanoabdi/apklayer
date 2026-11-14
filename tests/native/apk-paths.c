@@ -63,6 +63,16 @@ int main(int argc, char **argv) {
     printf("lib reads back as: %s\n", got);
     assert(strstr(got, "/lib/arm64/libgame.so") != NULL || n > (ssize_t)strlen("/data/app/~~apklayer/" PKG "-apklayer/lib/arm64/libgame.so"));
     close(fd);
+    snprintf(host, sizeof host, "%s/apklayer/apps/" PKG, tmp);                         /* the app's working directory is its install directory */
+    assert(chdir(host) == 0);
+    char *cwd = getcwd(NULL, 0);
+    assert(cwd && !strcmp(cwd, "/data/app/~~apklayer/" PKG "-apklayer"));
+    free(cwd);
+    char fixed[PATH_MAX];
+    assert(getcwd(fixed, sizeof fixed) && !strcmp(fixed, "/data/app/~~apklayer/" PKG "-apklayer"));
+    assert(access("base.apk", F_OK) == 0);                                            /* the real directory is unchanged: relative opens resolve in it */
+    assert(chdir(fixed) == 0 && access("base.apk", F_OK) == 0);                       /* and the spelled name maps back */
+    assert(chdir("/") == 0);
     char cmd[800];
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmp);
     assert(!strncmp(tmp, "/tmp/apklayer-apk-paths-", 24) && system(cmd) == 0);
