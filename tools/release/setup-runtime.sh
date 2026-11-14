@@ -17,15 +17,23 @@ for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an upd
 done
 tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
-(cd "$tmp" && unzip -q "$half/native-runtime.jar" 'native/linux/*' 'dalvik/system/*' 'com/android/org/conscrypt/*' && for j in "$native"/aosp/android-all/*.jar; do
+echo "apklayer: 1/3 patching the framework jars" >&2
+patch_jar() {
+    j="$1"
     if command -v zip >/dev/null; then zip -q -r -O "$j.new" "$j" dalvik com native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so
     else cp "$j" "$j.new" && "$(dirname "$(realpath "$(command -v "${APKLAYER_JAVA:-java}")")")/jar" uf "$j.new" native/linux dalvik com; fi  # no zip (Ubuntu Touch): the click's JDK has jar
     mv -f "$j.new" "$j"
     # the unpatched NativeCryptoJni (371 bytes) fails to load Conscrypt: every WebView https load fails (the 0.4.18 bundle)
     c=com/android/org/conscrypt/NativeCryptoJni.class
     [ "$(unzip -p "$j" $c | wc -c)" = "$(wc -c < $c)" ] || { echo "apklayer: $j lacks the patched $c" >&2; exit 1; }
-done)
+}
+# one job per jar (independent files); the first failure fails the script
+(cd "$tmp" && unzip -q "$half/native-runtime.jar" 'native/linux/*' 'dalvik/system/*' 'com/android/org/conscrypt/*' && pids="" &&
+    for j in "$native"/aosp/android-all/*.jar; do patch_jar "$j" & pids="$pids $!"; done && for p in $pids; do wait "$p" || exit 1; done)
 # the framework jars instrumented once (apklayer.tools.PreInstrument), which app JVMs take while they are newer than their inputs (cli/env.cpp)
+echo "apklayer: 2/3 instrumenting the framework and building the JDK image (in parallel)" >&2
+{ sh "$share/tools/jdk-image.sh" "${APKLAYER_JAVA:-java}" "$native" || echo "apklayer: no JDK image (class data sharing) for the runtime" >&2; } &  # independent of the instrumenting
+jdk_pid=$!
 out="$native/aosp/android-all-instrumented" done_jar=""
 rm -rf "$out" && mkdir -p "$out"
 entries() { unzip -lv "$1" | awk 'NR > 3 { print $1, $7, $8 }'; }  # size, CRC and name of every entry
@@ -34,5 +42,6 @@ for j in "$native"/aosp/android-all/*.jar; do  # the SDK provider names the jar 
     "${APKLAYER_JAVA:-java}" -cp "$native/native-runtime.jar:$native/aosp/host-classes.jar:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar" apklayer.tools.PreInstrument "$j" "$out/$(basename "$j")"
     done_jar="$j"
 done
-sh "$share/tools/jdk-image.sh" "${APKLAYER_JAVA:-java}" "$native" || echo "apklayer: no JDK image (class data sharing) for the runtime" >&2
+wait "$jdk_pid"
+echo "apklayer: 3/3 done" >&2
 touch -r "$half/native-runtime.jar" "$native/.setup"
