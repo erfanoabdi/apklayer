@@ -207,7 +207,7 @@ public final class AppHost implements Runnable {
         AppEnvironment.installSystemPackage(app);
         // the manifest providers were created before Application.onCreate (ShadowHostInstrumentation)
         if (System.getProperty("apklayer.webviewprovider") != null) { // Android's RuntimeInit installs a handler that logs and kills the process; Chromium's JniAndroid calls it
-            Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { AppEnvironment.logFatal(thread, failure); Runtime.getRuntime().halt(10); });
+            Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); System.out.flush(); Runtime.getRuntime().halt(10); });
         }
         if (System.getProperty("apklayer.webviewprovider") != null) org.robolectric.Shadows.shadowOf(app.getPackageManager()).setSystemFeature(android.content.pm.PackageManager.FEATURE_WEBVIEW, true);
         StartTrace.mark("system package installed");

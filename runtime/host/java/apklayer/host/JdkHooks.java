@@ -24,16 +24,6 @@ final class JdkHooks {
     /** Class.getDeclaredFields for app callers (the fields of the loader classes, Robolectric's). */
     public static volatile java.util.function.BiFunction<Class<?>, java.lang.reflect.Field[], java.lang.reflect.Field[]> fields;
 
-    /** Android's uncaught-exception pre-handler (Thread.setUncaughtExceptionPreHandler, RuntimeInit.LoggingHandler): runs before the thread's
-     *  and the default handler, so an app's handler that kills its process (Play services') does not hide the exception. */
-    public static volatile Thread.UncaughtExceptionHandler preHandler;
-
-    /** Called first by the patched Thread.dispatchUncaughtException. */
-    static void uncaught(Thread thread, Throwable failure) {
-        Thread.UncaughtExceptionHandler hook = preHandler;
-        if (hook != null) try { hook.uncaughtException(thread, failure); } catch (Throwable ignored) { }
-    }
-
     static void checkMethod(Class<?> owner, String name) throws NoSuchMethodException {
         java.util.function.BiPredicate<Class<?>, String> hook = methodHidden;
         if (hook == null) return;
