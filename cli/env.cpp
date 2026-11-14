@@ -311,6 +311,13 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // Robolectric's native runtime: its library per JVM, its fonts and ICU data once (robolectric patch 0001), in the instance's state directory (disk)
                                   "-Djava.io.tmpdir=" + inst.tmpDir(),
                                   "-Dapklayer.storage=" + inst.storageDir};  // volumes: Internal storage (emulated/0 below), Home, Linux root
+    // per-JVM memory (CHANGELOG 2026-11-14, Parallels): (1) a startup spike (ICU reads, class loading: ~150 MB of garbage) grows NewPipe's old generation to
+    // 240 MB; after the Full GC that frees it SerialGC gave back a tenth of the excess per GC (ShrinkHeapInSteps) and kept 70% free: shrink at once, to 20-30%
+    // free (app JVM 722 -> 573 MB PSS at its first frame). (2) Two C1 compiler threads instead of the default (their arenas: ~15 MB). Start times within
+    // noise. APKLAYER_JVM_MEM=default: the JVM's own sizing. shortcut: the same on every device; an app whose live heap passes ~500 MB sees more Full GCs
+    // while it grows: measure on the phones (docs/PLAN.md)
+    if (getenvOr("APKLAYER_JVM_MEM", "") != "default")
+        a.insert(a.begin() + 1, {"-XX:-ShrinkHeapInSteps", "-XX:MinHeapFreeRatio=20", "-XX:MaxHeapFreeRatio=30", "-XX:CICompilerCount=2"});
     // HotSpot's libjsig: a native library's fault handler (the native bridge's recovery, an app's own) is chained behind the JVM's, which
     // calls it for faults that are not its own (bionic_translation 0042); a spare-born process gets its route only later, so every JVM has it
     std::string image = getenvOr("APKLAYER_CDS", "") == "off" ? "" : jdkImage(l, ne.java);
