@@ -227,15 +227,15 @@ static void deviceGraphicsEnv(const Instance& instance, Env& env, const std::str
 // GL extensions hidden from Android code (APKLAYER_GL_HIDE="GL_KHR_texture_compression_astc_ldr ...", from the environment or
 // ~/.config/apklayer/env): libGLESv2.so maps to bridge/native/gles_filter.c's library, which answers the extension queries without them,
 // through a cfg.d in the instance's directory first in XDG_DATA_DIRS (the runtime's own cfg.d maps libGLESv2.so to the host's directly).
-// A driver can advertise a format it decodes wrongly (NVIDIA's ASTC, PGR's home scene): the engine then takes its fallback.
+// A driver can advertise a format it decodes wrongly (NVIDIA's ASTC, PGR's home scene): the engine then takes its fallback. The library is mapped
+// always (it also caps GL_MAX_TEXTURE_IMAGE_UNITS at 16: virgl claims 32 and Unciv's shaders then kill the context).
 static void glesFilterEnv(const Instance& instance, Env& env, const std::string& native) {
-    auto hide = env.find("APKLAYER_GL_HIDE");
     std::string lib = join(native, "libapklayer_gles.so");
-    if (hide == env.end() || trim(hide->second).empty() || !exists(lib)) return;
+    if (!exists(lib)) return;
     std::string share = join(instance.root, "gles-filter/share");
     makeDirs(join(share, "bionic_translation/cfg.d"));
     writeFile(join(share, "bionic_translation/cfg.d/gles-filter.cfg"),
-              "# APKLAYER_GL_HIDE: the host's GLES with those extensions hidden (cli/env.cpp glesFilterEnv)\n"
+              "# the host's GLES with APKLAYER_GL_HIDE's extensions hidden and at most 16 fragment samplers (cli/env.cpp glesFilterEnv)\n"
               "libGLESv2.so " + lib + "\nlibGLESv3.so " + lib + "\n");
     env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
 }

@@ -12,7 +12,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- Unciv draws black on UTM (virgl). Theory: shaders with more than 16 samplers. Next: log the cap, or use apitrace.
 - volumes-sandbox "catchup present internal file" fails 1 in 5 runs.
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize.
