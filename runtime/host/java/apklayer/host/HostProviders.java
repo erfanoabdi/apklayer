@@ -45,7 +45,16 @@ final class HostProviders {
         }
         // SunJSSE's XDHKeyExchange casts the key pair of KeyPairGenerator "XDH" to java.security.interfaces.XEC*: Conscrypt's X25519 keys are not, so the JDK's SunEC serves XDH/X25519 (last in the order)
         for (Object key : new ArrayList<>(conscrypt.keySet())) if (key.toString().contains("XDH") || key.toString().contains("X25519")) conscrypt.remove(key);
-        if (have.get("SunEC") != null) order.add(have.get("SunEC"));
+        // ... served under Conscrypt's name, so Security.getProviders() stays Android's list (SunEC itself is not registered)
+        Provider ec = have.get("SunEC");
+        if (ec != null) for (String type : new String[] {"KeyPairGenerator", "KeyAgreement", "KeyFactory"}) for (String alg : new String[] {"XDH", "X25519"}) {
+            Provider.Service real = ec.getService(type, alg);
+            if (real == null) continue;
+            conscrypt.putService(new Provider.Service(conscrypt, type, alg, real.getClassName(), null, null) {
+                @Override public Object newInstance(Object parameter) throws java.security.NoSuchAlgorithmException { return real.newInstance(parameter); }
+                @Override public boolean supportsParameter(Object parameter) { return real.supportsParameter(parameter); }
+            });
+        }
         // libcore's security.properties: the JDK's defaults (SunX509 key managers, PKCS12) name algorithms Android's providers do not have
         Security.setProperty("ssl.KeyManagerFactory.algorithm", "PKIX");
         Security.setProperty("ssl.TrustManagerFactory.algorithm", "PKIX");
