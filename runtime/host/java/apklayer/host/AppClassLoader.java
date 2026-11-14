@@ -160,8 +160,11 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
 
     /** Class.forName asked: the JVM's own linking of an app class (which names java.lang.invoke classes) is not a lookup by the app. */
     private static boolean byForName() {
-        return WALK.walk(frames -> frames.map(f -> f.getClassName() + "." + f.getMethodName()).anyMatch(s -> s.equals("java.lang.Class.forName")
-                || s.equals("java.lang.Class.forName0")));
+        // the nearest frame outside the loaders must be Class.forName itself: a class's static initializer that runs under a forName (and links
+        // apklayer.host.Reflect) has the forName further down the stack
+        return WALK.walk(frames -> frames.dropWhile(f -> f.getClassName().startsWith("apklayer.host.AppClassLoader") || f.getClassName().startsWith("dalvik.system.")
+                || f.getClassName().equals("java.lang.ClassLoader") || f.getClassName().startsWith("jdk.internal.loader.") || f.getClassName().startsWith("java.lang.BootClassLoader"))
+                .findFirst().map(f -> f.getClassName().equals("java.lang.Class") && f.getMethodName().startsWith("forName")).orElse(false));
     }
 
     /**
