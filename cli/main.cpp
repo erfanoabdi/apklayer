@@ -34,7 +34,7 @@ int usage() {
           "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
-          "  setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]  first run and runtime updates in one command (the manager runs it):\n"
+          "  setup [--check] [--update] [--bundle <file|file://|URL>] [--microg | --gapps] [--fdroid]  first run and runtime updates in one command (the manager runs it):\n"
           "                         binder check, the Android runtime (releases.json; --bundle or APKLAYER_RUNTIME_BUNDLE offline), the device providers of a Halium\n"
           "                         device (Ubuntu Touch: default instance \"ut\"), the system apps, optional microG and F-Droid; prints `step <id> <state> <detail>`\n"
           "                         lines; --check changes nothing\n"

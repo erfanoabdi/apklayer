@@ -1,4 +1,4 @@
-// `apklayer setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]` (cli/setup.cpp)
+// `apklayer setup [--check] [--update] [--bundle <file|file://|URL>] [--microg | --gapps] [--fdroid]` (cli/setup.cpp; --gapps: cli/gapps.cpp)
 #pragma once
 
 #include "layout.h"

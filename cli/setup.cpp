@@ -1,6 +1,6 @@
 // `apklayer setup`: the first run and the runtime updates, in one command (the manager is a front-end that runs it and reads its lines).
 // Idempotent: it does what is missing or stale. Output, one per line, tab separated:
-//   step <id> <state> <detail>      id: binder java runtime providers system-apps webview microg fdroid; state: todo running done failed skipped
+//   step <id> <state> <detail>      id: binder java runtime providers system-apps webview microg gapps fdroid; state: todo running done failed skipped
 //   progress <0..1 or -1>           the running step's download
 //   latest <version> <runtime version> <date>   (--check, when releases.json was read)
 #include "setup.h"
@@ -18,6 +18,7 @@
 #include "datamove.h"
 #include "env.h"
 #include "fetch.h"
+#include "gapps.h"
 #include "halium.h"
 #include "providers.h"
 #include "releases.h"
@@ -86,7 +87,7 @@ std::string javaProblem(const Layout& layout) {
 }
 
 struct Options {
-    bool check = false, update = false, microg = false, fdroid = false;
+    bool check = false, update = false, microg = false, gapps = false, fdroid = false;
     std::string bundle;    // a file, file:// or URL of the runtime bundle: no releases.json lookup
     std::string moveData;  // --move-data <dir>: only that
 };
@@ -130,11 +131,13 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         if (args[i] == "--check") o.check = true;
         else if (args[i] == "--update") o.update = true;
         else if (args[i] == "--microg") o.microg = true;
+        else if (args[i] == "--gapps") o.gapps = true;
         else if (args[i] == "--fdroid") o.fdroid = true;
         else if (args[i] == "--bundle" && i + 1 < args.size()) o.bundle = args[++i];
         else if (args[i] == "--move-data" && i + 1 < args.size()) o.moveData = args[++i];
-        else die("setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid] | setup --move-data <dir>");
+        else die("setup [--check] [--update] [--bundle <file|file://|URL>] [--microg | --gapps] [--fdroid] | setup --move-data <dir>");
     }
+    if (o.microg && o.gapps) { step("gapps", "failed", "microG and Google's apps are the same packages: choose one"); return 1; }
     if (!o.moveData.empty()) {
         std::string e = moveData(layout, o.moveData);
         step("data", e.empty() ? "done" : "failed", e.empty() ? "apklayer's data is in " + o.moveData + " (" + join(layout.dataHome, "apklayer") + " links to it)" : e);
@@ -213,6 +216,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     step("runtime", "running", "Setting up version " + have + " (a few minutes after an update)");
     fresh.requireRuntime();
     if (!fresh.setUpBundle(false)) { step("runtime", "failed", "Setting up the runtime in " + fresh.native + " failed: apklayer setup in a terminal shows why"); return 1; }
+    applyGappsConfig(fresh);  // Google's allowlists, when its apps are installed: a new runtime's android-root has none
     step("runtime", "done", "Version " + have);
 
     // 3. the instance's providers: automatic (a Halium device's graphics, camera and vibrator are the device's), nothing to write
@@ -256,6 +260,10 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         step(id, e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
     };
     if (o.microg) extra("microg", envOr("APKLAYER_MICROG_INDEX", "https://microg.org/fdroid/repo/index-v1.json"), {"com.google.android.gms", "com.android.vending"});
+    if (o.gapps) {
+        std::string e = installGapps(fresh, instance, [](const std::string& detail) { step("gapps", "running", detail); }, progress);
+        step("gapps", e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
+    }
     if (o.fdroid) extra("fdroid", envOr("APKLAYER_FDROID_INDEX", "https://f-droid.org/repo/index-v1.json"), {"org.fdroid.fdroid"});
     return anyFailed ? 1 : 0;
 }

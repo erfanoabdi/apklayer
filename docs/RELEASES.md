@@ -134,11 +134,11 @@ downloads nothing. The code that looks releases.json up, downloads with a SHA256
 compiled into both the CLI and the manager.
 
 ```
-apklayer [--instance ID] setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]
+apklayer [--instance ID] setup [--check] [--update] [--bundle <file|file://|URL>] [--microg | --gapps] [--fdroid]
 apklayer setup --move-data <dir>
 ```
 
-Output, tab separated: `step <id> <state> <detail>` (ids: binder, java, runtime, providers, system-apps, microg, fdroid; states: todo, running, done,
+Output, tab separated: `step <id> <state> <detail>` (ids: binder, java, runtime, providers, system-apps, microg, gapps, fdroid; states: todo, running, done,
 failed, skipped), `progress <0..1|-1>`, and with `--check` (which changes nothing) `latest <version> <runtime version> <date>`. Idempotent: the runtime
 is fetched when none is installed (`--update`: when the release has a newer one), the system apps the runtime changed since the last setup (each APK's sha256 in `~/.local/share/apklayer/system-apps.sha256`; replaced with their data kept; `setup-done` marks the first setup).
 Space: the bundle downloads into `runtime/.downloads` (the runtime's file system, one place to check), and before a download or an unpack

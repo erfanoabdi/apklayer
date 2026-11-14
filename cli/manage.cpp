@@ -52,7 +52,7 @@ bool stackRunning(const Instance& inst) {
 
 // what may name an instance: a binder device suffix and a directory name, never one of the data home's own directories
 bool validInstanceId(const std::string& id) {
-    if (id.empty() || id.size() > 32 || id == "apps" || id == "0") return false;
+    if (id.empty() || id.size() > 32 || id == "apps" || id == "runtime" || id == "google-apps" || id == "0") return false;
     for (char c : id) if (!(isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_')) return false;
     return true;
 }
