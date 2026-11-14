@@ -60,7 +60,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Call audio: oldest `MODE_IN_COMMUNICATION` requester wins.
 - Keystore: only pam_unix passwords, never locked.
 - libcore: `sun.misc.Cleaner`, `fstat(fd)`, SharedMemory `PROT_EXEC`/`PROT_NONE`.
-- Termux: under the sandbox, `getpwuid` names, no `/system/bin/sh` or `getprop`.
+- Termux under `APKLAYER_SANDBOX=1`: app uid/gid names, `/system/bin/sh` and `getprop` work unsandboxed (tests/corpus/termux-sys.py, 2026-11-15); not run with the sandbox on. `getprop` needs `system/bin/toolbox` + link in the prebuilts' android-root (`tools/stage root` now copies it; the prebuilts repo does not have it yet).
 - Direct buffer `array()` writes are lost. Only the default-route interface is a network.
 
 ## Startup and memory
