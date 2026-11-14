@@ -390,6 +390,12 @@ long syscall(long nr, ...)
 #endif
     ) return apklayer_proc_fd((int)r);
     if (nr == SYS_prctl) { long v; if (r >= 0 && apklayer_proc_prctl_view((int)a[0], &v)) return v; }
+    /* the raw getcwd syscall (bionic's getcwd in translated code ends here, not in glibc's): the directory under its Android name when it fits the caller's buffer.
+     * The kernel's answer is the length including the NUL */
+    if (nr == SYS_getcwd && r > 0 && a[0]) {
+        long len = r - 1, spelled = apklayer_android_spelling_own_data((char *)a[0], len, (long)a[1] - 1);
+        if (spelled != len) { ((char *)a[0])[spelled] = 0; return spelled + 1; }
+    }
     return nr == SYS_readlinkat ? proc_link(path, (char *)a[2], r, (size_t)a[3]) : r;
 }
 
