@@ -269,7 +269,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     /** The app's code directory under Android's name (as ApplicationInfo shows it), or null when the own-data mapping is off. */
     private static String androidDir() {
         String pkg = System.getProperty("apklayer.package");
-        if (pkg == null || System.getProperty("apklayer.apps") == null || System.getProperty("apklayer.ownDataMapped") == null || "host".equals(System.getenv("APKLAYER_APK_PATHS"))) return null;
+        if (pkg == null || System.getProperty("apklayer.apps") == null || "host".equals(System.getenv("APKLAYER_APK_PATHS"))) return null;  // display only (the loader is made before the own-data mapping): the URLs still read the host files
         return "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" + pkg + "-Zl3q8XvKc0bYtqN2dHkP5Q==";
     }
 
