@@ -42,8 +42,8 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - weston's VNC output stalls with no client connected.
 
 ## Camera
-- Sensor timestamps. All streams scaled from the largest. NDK libcamera2ndk is a stub.
-- Portrait desktop monitor: needs a "mounted on the display" setting.
+- Sensor timestamps: the shutter time is the request's CLOCK_MONOTONIC time, not the frame's `timestamp_ns` (goldfish session change). All streams scaled from the largest. NDK libcamera2ndk is a stub.
+- Portrait desktop monitor: `mount=[NAME:]DEGREES` exists on the pipewire backend (`providers set camera pipewire mount=90`); a manager/`apklayer config` entry and the right degrees per monitor direction are open.
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
