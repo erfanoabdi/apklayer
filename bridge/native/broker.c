@@ -92,17 +92,19 @@ int apklayer_broker_openat(int dirfd, const char *path, int flags, int mode, int
 
 int apklayer_broker_open(const char *path, int flags, int mode, int failed) { return apklayer_broker_openat(AT_FDCWD, path, flags, mode, failed); }
 
-/* mkdir, unlink, rmdir, access (x: the mode) and rename (to: its second path) in the granted home; failed: the caller's result, 0 in its place
+/* mkdir, unlink, rmdir, access, chmod (x: the mode), rename and link (to: its second path), symlink (to: the content) in the granted home; failed: the caller's result, 0 in its place
  * when apklayerd did it, else failed with its errno */
 int apklayer_broker_change(const char *op, int dirfd, const char *path, int dirfd2, const char *to, int x, int failed)
 {
     char full[4096], full2[4096], request[8400];
     if (failed == 0 || (errno != EACCES && errno != EPERM) || !getenv("APKLAYER_BROKER_HOME") || !absolute(dirfd, path, full, sizeof full) || !in_home(full))
         return failed;
-    if (to && (!absolute(dirfd2, to, full2, sizeof full2) || !in_home(full2))) return failed;
+    int sym = !strcmp(op, "symlink");  /* its second argument is the link's content, no path of the home */
+    if (to && sym) snprintf(full2, sizeof full2, "%s", to);
+    else if (to && (!absolute(dirfd2, to, full2, sizeof full2) || !in_home(full2))) return failed;
     int saved = errno, len;
     if (to) len = snprintf(request, sizeof request, "%s%c%s%c%s%c", op, 0, full, 0, full2, 0);
-    else if (!strcmp(op, "mkdir") || !strcmp(op, "access")) len = snprintf(request, sizeof request, "%s%c%s%c%d%c", op, 0, full, 0, x, 0);
+    else if (!strcmp(op, "mkdir") || !strcmp(op, "access") || !strcmp(op, "chmod")) len = snprintf(request, sizeof request, "%s%c%s%c%d%c", op, 0, full, 0, x, 0);
     else len = snprintf(request, sizeof request, "%s%c%s%c", op, 0, full, 0);
     int rc = len > 0 && len < (int)sizeof request ? ask(request, len, NULL) : -1;
     if (rc == 0) return 0;

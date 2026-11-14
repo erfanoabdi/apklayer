@@ -3,6 +3,7 @@
 
 #include "binder.h"
 #include "desktop.h"
+#include "fetch.h"
 
 #include <algorithm>
 #include <cctype>
@@ -147,6 +148,14 @@ int instanceCommand(const Layout& l, const std::string& action, const std::strin
         printf("created\t%s\n", inst.root.c_str());
         if (binderReady(inst.root, id)) puts("binder\tok");
         else printf("binder\tmissing\t%s\n", binderSetupCommand(id).c_str());  // only with the kernel binder (apklayer binder kernel)
+        // a new instance has the WebView provider as any other (setup installs it for the instance it ran with): when the runtime ships it and none is installed yet
+        const std::string webview = manager::runtimeRoot() + "/current/system-apps/webview.apk";
+        if (exists(webview) && !exists(join(l.appsDir, "com.android.webview/classes.jar"))) {
+            Spawn s;
+            s.argv = {l.cliBinary(), "--instance", id, "install", "--system", webview};
+            s.env = currentEnv();
+            if (runAndWait(s) != 0) fprintf(stderr, "apklayer: the WebView provider is not installed in %s (apklayer --instance %s install --system %s)\n", id.c_str(), id.c_str(), webview.c_str());
+        }
         return 0;
     }
     if (action != "remove") die("instance create|remove <id>");

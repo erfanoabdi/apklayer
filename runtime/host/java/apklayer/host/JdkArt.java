@@ -15,7 +15,8 @@ import java.util.List;
  * compiled_code_ u64 @24); a class's methods are one LengthPrefixedArray (u32 length, data aligned to 8, so element 0 at +8), direct methods
  * first, then virtual ones, so adjacent methods differ by 32. Only java.base API plus jdk.internal.misc.Unsafe (this class runs in java.base,
  * also before the host starts: {@link #enabled} is set by GuestTraces.install).
- * shortcut: tables are never freed (a class unloaded leaks 8+32n bytes), data_/entry_point are 0 (no libart code to point at) and
+ * On arm64 the tables live in the JNI arena and the entries ARE the guest's jmethodIDs: data_ holds the JVM's own id (jni_guest_surface.c binds it).
+ * shortcut: tables are never freed (a class unloaded leaks 8+32n bytes), entry_point is 0 (no libart code to point at) and
  * declaring_class_ is the class's identity hash, not a heap reference; upgrade with the libart ELF work (docs/PLAN.md runtime identity 11).
  */
 public final class JdkArt {
@@ -44,7 +45,8 @@ public final class JdkArt {
             direct.sort(null);
             virtual.sort(null);
             long size = 8 + 32L * (direct.size() + virtual.size());
-            long base = U.allocateMemory(size);
+            long base = alloc(size);
+            if (base == 0) return null;
             U.setMemory(base, size, (byte) 0);
             U.putInt(base, direct.size() + virtual.size());
             List<String> keys = new ArrayList<>(direct);
@@ -57,9 +59,24 @@ public final class JdkArt {
             }
             t = new Object[]{base, keys};
             Object[] raced = TABLES.putIfAbsent(c, t);
-            if (raced != null) { U.freeMemory(base); return raced; }
+            if (raced != null) return raced;  // the loser's table stays unused in the arena (or malloc): a rare leak
             return t;
         } finally { building.remove(); }
+    }
+
+    private static long arenaNext, arenaEnd;
+
+    /** The arm64 guest's jmethodIDs are these entries (bridge/native/jni_guest_surface.c maps a 256 MB arena, apklayer.art.arena = its hex base): bump allocation there; else malloc. */
+    private static synchronized long alloc(long size) {
+        if (arenaNext == 0) {
+            String a = System.getProperty("apklayer.art.arena");
+            if (a != null) { arenaNext = Long.parseUnsignedLong(a, 16); arenaEnd = arenaNext + (1L << 28); }
+        }
+        if (arenaNext == 0) return U.allocateMemory(size);
+        long at = arenaNext;
+        if (at + size > arenaEnd) return 0;  // full: the id stays the JVM's
+        arenaNext = (at + size + 7) & ~7L;
+        return at;
     }
 
     private static String key(Executable e) {
@@ -75,11 +92,19 @@ public final class JdkArt {
         try { return U.objectFieldOffset(c, field); } catch (Throwable t) { return -1; }
     }
 
+    /** The table entry of a Method/Constructor that never ran its constructor (the JVM's own ToReflectedMethod builds them), 0 when there is none. */
+    public static long of(Executable e) {
+        if (ART_METHOD < 0) return 0;
+        if (U.getLong(e, ART_METHOD) == 0) init(e);
+        return U.getLong(e, ART_METHOD);
+    }
+
     /** End of a Method/Constructor constructor: fill artMethod from the class's table (the temporary objects made while it is built keep 0). */
     public static void init(Executable e) {
         if (!enabled || ART_METHOD < 0 || building.get() != null) return;
         try {
             Object[] t = table(e.getDeclaringClass());
+            if (t == null) return;
             @SuppressWarnings("unchecked") int i = ((List<String>) t[1]).indexOf(key(e));
             if (i < 0) return;
             long at = (Long) t[0] + 8 + 32L * i;

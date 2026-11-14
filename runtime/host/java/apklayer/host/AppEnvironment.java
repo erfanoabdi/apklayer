@@ -92,6 +92,9 @@ final class AppEnvironment {
         provideExternalStorage();
         provideNativeLibraryDir();
         if (!describing) initAppOpsWithoutApplication();
+        // MediaStore before any app code: initializing the nested MediaStore.Images.Media first crashed the JVM (SIGSEGV in ConstantPool::klass_at_impl
+        // from Class.getDeclaringClass0, which Robolectric's ShadowMap calls while the outer class is not loaded yet)
+        if (!describing) try { Class.forName("android.provider.MediaStore"); } catch (ClassNotFoundException | LinkageError e) { /* the app's first use then loads it */ }
         StartTrace.mark("data dirs, storage, library dir");
         // before the application exists: the hub attaches in Application.onCreate's place (ShadowHostInstrumentation) and replaces it with the installed MediaProvider
         if (!ownsMediaAuthority) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", new HostMediaStub());

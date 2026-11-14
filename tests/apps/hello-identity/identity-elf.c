@@ -17,7 +17,7 @@
 #define OWN_MACHINE EM_X86_64
 #endif
 
-struct modules { struct buf *b; int count, foreign, unreadable, nosoname; char list[24576]; };
+struct modules { struct buf *b; int count, foreign, unreadable, nosoname; char list[24576], other[8192]; };
 
 static int module(struct dl_phdr_info *info, size_t size, void *data)
 {
@@ -51,6 +51,7 @@ static int module(struct dl_phdr_info *info, size_t size, void *data)
     char item[512];
     snprintf(item, sizeof item, "%s[%d,%s];", info->dlpi_name && info->dlpi_name[0] ? info->dlpi_name : "(main)", machine, soname);
     strncat(m->list, item, sizeof m->list - strlen(m->list) - 1);
+    if (!info->dlpi_name || strncmp(info->dlpi_name, "/system/lib64/", 14)) strncat(m->other, item, sizeof m->other - strlen(m->other) - 1);
     return 0;
 }
 
@@ -71,6 +72,7 @@ static void addresses(struct buf *b, JNIEnv *env)
     JavaVM *vm = NULL;
     (*env)->GetJavaVM(env, &vm);
     put(b, "dladdr.jni.GetEnv", "%s", where(vm ? (void *)(*vm)->GetEnv : NULL, w, sizeof w));
+    put(b, "dladdr.jni.invokeTable", "%s", where(vm ? (void *)*vm : NULL, w, sizeof w));  /* ART's is a local const: no symbol, libart.so */
     /* every function of both tables (JNI 1.6: up to GetObjectRefType) lives in libart.so, as ART's (a check: expect all of them) */
     void **jni = (void **)*env, **invoke = (void **)*vm;
     int in_art = 0, total = 0;
@@ -197,6 +199,7 @@ JNIEXPORT jstring JNICALL Java_hello_identity_Main_elf(JNIEnv *env, jclass cls)
     put(&b, "phdr.unreadableHeader", "%d", m.unreadable);
     put(&b, "phdr.noSoname", "%d", m.nosoname);
     put(&b, "phdr.modules", "%s", m.list);
+    put(&b, "phdr.modules.other", "%s", m.other);  /* what is not under /system/lib64: the list above is cut off */
     addresses(&b, env);
     libraries(&b);
     static const char *const art[] = {"JNI_GetCreatedJavaVMs", "JNI_CreateJavaVM", "_ZN3art7Runtime9instance_E", "art_quick_to_interpreter_bridge",

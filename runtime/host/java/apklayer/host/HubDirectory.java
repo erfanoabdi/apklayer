@@ -14,6 +14,10 @@ import android.app.IServiceConnection;
 
 /** Instance-owned process directory. Identities come from the kernel Binder caller. */
 final class HubDirectory extends Binder {
+    /** NotificationManagerService's one toast queue: a fair slot per toast on screen, freed when its duration is over (a process that dies holding it frees it the same way). */
+    private static final java.util.concurrent.Semaphore TOASTS = new java.util.concurrent.Semaphore(1, true);
+    private static final java.util.concurrent.ScheduledExecutorService TOAST_TIMER = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> { Thread t = new Thread(r, "toast-slot"); t.setDaemon(true); return t; });
+
     /** A broadcast from the system itself (battery, power): no sender permissions apply. */
     private static final Peer SYSTEM = new Peer(-1, 1000, "android", null, null, true, 1000, null, "system");
     void sendSystem(Intent intent, boolean sticky) {
@@ -469,6 +473,12 @@ final class HubDirectory extends Binder {
                     for (var component : filters.entrySet()) { reply.writeString(component.getKey()); reply.writeTypedList(component.getValue()); }
                 }
                 return true;
+            }
+            case HubProtocol.TOAST_SLOT -> {
+                caller(); long ms = request.readLong(); request.enforceNoDataAvail();
+                try { if (TOASTS.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS)) TOAST_TIMER.schedule((Runnable) TOASTS::release, ms + 300, java.util.concurrent.TimeUnit.MILLISECONDS); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                reply.writeNoException(); return true;
             }
             case HubProtocol.RESTART_ON_DEATH -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();

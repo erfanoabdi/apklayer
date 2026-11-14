@@ -122,6 +122,11 @@ public final class AppHost implements Runnable {
                 hostState(flags);
             }
         });
+        input.textCommit = s -> { // characters without an Android keycode go to the focused field as IME text (Chromium takes no ACTION_MULTIPLE)
+            if (HostWindows.focusedEditor() == null) return false;
+            text.ime(0, 0, s, "");
+            return true;
+        };
         scriptRunner = new ScriptRunner(input, java.util.Map.of(
                 "clipin", text::clipboardIn, // the system selection changed
                 "clipcopy", text::clipboardCopy, // the app copies text itself
@@ -138,6 +143,8 @@ public final class AppHost implements Runnable {
                     input.onHostEvent(new int[] {0, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
                     input.onHostEvent(new int[] {1, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
                 },
+                // uchar:<code point>: a key press the shell sends without an Android keycode (a non-US character)
+                "uchar", c -> input.onHostEvent(new int[] {12, 0, 0, Integer.parseInt(c), 0}),
                 "notify", t -> { // notify:<title>[,<id>[,<importance>[,ongoing]]]: as if the app posted a notification
                     String[] p = t.split(",");
                     int id = p.length > 1 ? Integer.parseInt(p[1]) : 1, importance = p.length > 2 ? Integer.parseInt(p[2]) : android.app.NotificationManager.IMPORTANCE_DEFAULT;

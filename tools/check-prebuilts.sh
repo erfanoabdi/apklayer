@@ -8,6 +8,8 @@ case $(uname -m) in
     x86_64) lock=$repo/deps/android-tree-files-x86_64.lock ;;
     *) lock=$repo/deps/android-tree-files.lock ;;  # its paths are the VM's (android-arm64/lib64), the prebuilts' arm64/android-libs/lib64
 esac
+# an x86_64 home needs these folders too (the x86 PC's lead home had neither: no system apps, no gfxstream); a note only
+[ "$(uname -m)" != x86_64 ] || for d in x86_64/system-apps common/gfxstream; do [ -d "$p/$d" ] || echo "check-prebuilts: note: $p has no $d (copy it from the prebuilts branch)" >&2; done
 list=$(mktemp); trap 'rm -f "$list"' EXIT
 awk '!/^#/ && NF >= 3 { f = $3; sub(/^android-arm64\/lib64\//, "arm64/android-libs/lib64/", f); if (f ~ /^(x86_64|arm64)\/android-libs\/lib64\//) print $1, f }' "$lock" |
     while read -r sum f; do [ -f "$p/$f" ] && printf '%s  %s\n' "$sum" "$f"; done > "$list" || true

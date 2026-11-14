@@ -243,6 +243,7 @@ int maliit_pollfds(struct pollfd *p);
 void maliit_dispatch(struct pollfd *p);
 void maliit_enable(struct window *w, int enable);  /* maliit.c: the host keyboard without zwp_text_input_v3 (enable 2: show it again, 4: hide it) */
 void maliit_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* the field's text around the cursor */
+void text_input_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* textinput.c: set_surrounding_text */
 void text_input_send(struct window *w, int before, int after, const char *commit, const char *preedit);  /* textinput.c: one MSG_IME */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
 void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd);  /* with fd (SCM_RIGHTS) unless it is < 0 */

@@ -59,6 +59,8 @@ grep -aq "\[sandbox\] private read private" "$out.home" && grep -aq "\[sandbox\]
     [ "$written" = "$(id -un)" ] || { echo "FAIL: home-access on: the broker did not read the private file, list its folder or write as the user ($written)"; ok=0; }
 grep -aq "\[sandbox\] change mkdir=true write=true rename=true delete=true rmdir=true access=true" "$out.home" ||
     { echo "FAIL: home-access on: the broker did not mkdir, write, rename, delete or answer access in a 0700 folder"; ok=0; }
+grep -aq "\[sandbox\] change2 chmod=ok symlink=true link=true" "$out.home" ||
+    { echo "FAIL: home-access on: the broker did not chmod, symlink or link in a 0700 folder"; ok=0; }
 grep -aq "\[sandbox\] intent hello.SANDBOX extra=fromspare" "$out.spare" && [ "$spared" -ge 1 ] && [ $consumed2 = 1 ] ||
     { echo "FAIL: the intent-file launch did not take the app spare with its intent ($spared)"; ok=0; }
 grep -aq "\[sandbox\] private denied" "$out" || { echo "FAIL: home-access off: the private file was readable"; ok=0; }

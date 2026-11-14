@@ -16,7 +16,7 @@ final class ImeCheck implements Check {
         InputMethodManager imm = context.getSystemService(InputMethodManager.class);
         String chosen = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
         String seen = "installed " + imm.getInputMethodList().stream().map(InputMethodInfo::getId).toList() + ", enabled "
-                + imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).toList() + ", default " + chosen;
+                + imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).toList() + ", default " + chosen + " (location_mode " + Settings.Secure.getString(context.getContentResolver(), "location_mode") + ")";
         Check.require(imm.getInputMethodList().stream().map(InputMethodInfo::getId).anyMatch(id::equals), id + " not installed: " + seen);
         Check.require(imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).anyMatch(id::equals), id + " not enabled: " + seen);
         Check.require(id.equals(chosen), seen);

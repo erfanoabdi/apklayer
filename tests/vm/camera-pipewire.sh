@@ -14,6 +14,12 @@ trap 'kill $fixture 2>/dev/null' EXIT
 list=$(CAMERA_WAIT=apklayer-test-camera,apklayer-test-mjpeg b/bridge/hals/camera/camera-pipewire-test) || { echo "$list"; exit 1; }
 echo "$list"
 echo "$list" | grep -q '^apklayer-test-mjpeg: .* MJPG 1280x720, first byte 255' || { echo "FAIL the MJPEG-only camera"; exit 1; }
+# mount=[NAME:]DEGREES turns the orientation of the named camera only
+mounted=$(CAMERA_WAIT=apklayer-test-camera,apklayer-test-mjpeg b/bridge/hals/camera/camera-pipewire-test mount=apklayer-test-mjpeg:90) || { echo "$mounted"; exit 1; }
+orient() { echo "$1" | sed -n "s/^camera [^ ]* \"$2\" .*orientation \([0-9]*\),.*/\1/p"; }
+o0=$(orient "$list" apklayer-test-mjpeg); o1=$(orient "$mounted" apklayer-test-mjpeg)
+[ "$o1" = "$(( (o0 + 90) % 360 ))" ] && [ "$(orient "$mounted" apklayer-test-camera)" = "$(orient "$list" apklayer-test-camera)" ] || { echo "FAIL mount: $o0 -> $o1"; exit 1; }
+echo "mount ok: apklayer-test-mjpeg orientation $o0 -> $o1"
 [ "${CAMERA_APP:-0}" = 1 ] || exit 0
 out=$APKLY_STATE/camera-pipewire.out
 bin/apklayer stop >/dev/null 2>&1

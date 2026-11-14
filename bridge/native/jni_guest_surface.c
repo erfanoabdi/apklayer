@@ -15,11 +15,14 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 int apklayer_jni_guest_caller(JNIEnv *env, const void *pc);  /* jni_system_route.c */
 void apklayer_art_load(JavaVM *vm, void *jni_table, void *invoke_table);  /* jni_art.c */
+unsigned long apklayer_art_arena;  /* base of the 256 MB synthetic-ArtMethod arena (0: none), read by jni_art.c */
+#define ART_ARENA_SIZE (1UL << 28)  /* libart_jni.c's range check shifts by 28 */
 
 static jniNativeInterface next;  /* the table under this layer */
 static jvmtiEnv *ti;
@@ -115,6 +118,36 @@ static jclass JNICALL guest_find_class(JNIEnv *env, const char *name)
     return NULL;
 }
 
+/* --- jmethodID: the synthetic ArtMethod pointer (java.lang.reflect.ApklayerArt, Executable.artMethod) is the id the guest sees. The functions that
+ * return an id hand out the synthetic pointer and bind the JVM's id in its data_ (+16); libart_jni.c's thunks swap it back on the way in. --- */
+
+static jclass art_class;  /* java.lang.reflect.ApklayerArt (JdkArt.java), a global ref */
+static jmethodID art_of;  /* static long of(Executable): its table entry (Method objects the JVM makes itself, as ToReflectedMethod does, never ran the constructor) */
+
+static jmethodID art_id(JNIEnv *env, jobject reflected, jmethodID real)
+{
+    if (!real || !art_of || !reflected) return real;
+    unsigned long a = (unsigned long)next.CallStaticLongMethod(env, art_class, art_of, reflected);
+    if (next.ExceptionCheck(env)) { next.ExceptionClear(env); return real; }
+    if (a - apklayer_art_arena >= ART_ARENA_SIZE) return real;  /* no table entry for it (enabled late, or the arena is full) */
+    *(jmethodID *)(a + 16) = real;
+    return (jmethodID)a;
+}
+
+static jmethodID art_id_of(JNIEnv *env, jclass c, jmethodID real, jboolean is_static)
+{
+    if (!real || !art_of) return real;
+    jobject r = next.ToReflectedMethod(env, c, real, is_static);
+    if (!r) { next.ExceptionClear(env); return real; }
+    jmethodID id = art_id(env, r, real);
+    next.DeleteLocalRef(env, r);
+    return id;
+}
+
+static jmethodID JNICALL guest_get_method_id(JNIEnv *env, jclass c, const char *name, const char *sig) { return art_id_of(env, c, next.GetMethodID(env, c, name, sig), JNI_FALSE); }
+static jmethodID JNICALL guest_get_static_method_id(JNIEnv *env, jclass c, const char *name, const char *sig) { return art_id_of(env, c, next.GetStaticMethodID(env, c, name, sig), JNI_TRUE); }
+static jmethodID JNICALL guest_from_reflected_method(JNIEnv *env, jobject m) { return art_id(env, m, next.FromReflectedMethod(env, m)); }
+
 /* --- JavaVM: AttachCurrentThread names the native thread --- */
 
 static struct JNIInvokeInterface_ invoke;
@@ -148,11 +181,14 @@ static int host_module(const void *pc)
     return dladdr(pc, &info) != 0;  /* glibc-loaded: the JVM, this shim, host libraries */
 }
 
+extern void *apklayer_art_jni_table;  /* jni_art.c */
+
 static jint attach(JavaVM *vm, void **penv, void *args, int daemon, const void *pc)
 {
     void *existing = NULL;
     int fresh = invoke_next->GetEnv(vm, &existing, JNI_VERSION_1_6) == JNI_EDETACHED;
     jint r = daemon ? invoke_next->AttachCurrentThreadAsDaemon(vm, penv, args) : invoke_next->AttachCurrentThread(vm, penv, args);
+    if (r == JNI_OK && fresh && apklayer_art_jni_table) *(void **)*(void **)penv = apklayer_art_jni_table;  /* a fresh JNIEnv: functions = libart.so's table */
     if (r == JNI_OK && fresh && !host_module(pc)) name_attached(*(JNIEnv **)penv);
     return r;
 }
@@ -173,6 +209,23 @@ int apklayer_jni_guest_surface(JNIEnv *env, JavaVM *vm, jvmtiEnv *jvmti, jniNati
     current_thread = next.GetStaticMethodID(env, thread, "currentThread", "()Ljava/lang/Thread;");
     thread_name = next.GetMethodID(env, thread, "getName", "()Ljava/lang/String;");
     if (!current_thread || !thread_name) return -1;
+#if defined(__aarch64__)  /* x86_64: the guest's table is the translator's */
+    void *arena = mmap(NULL, ART_ARENA_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    jclass system = next.FindClass(env, "java/lang/System"), art = next.FindClass(env, "java/lang/reflect/ApklayerArt");
+    jmethodID set_property = system ? next.GetStaticMethodID(env, system, "setProperty", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;") : NULL;
+    if (art) { art_class = next.NewGlobalRef(env, art); art_of = next.GetStaticMethodID(env, art, "of", "(Ljava/lang/reflect/Executable;)J"); }  /* JdkIdentityPatch adds it */
+    if (arena != MAP_FAILED && set_property && art_of) {
+        char hex[32];
+        snprintf(hex, sizeof hex, "%lx", (unsigned long)arena);
+        jstring key = next.NewStringUTF(env, "apklayer.art.arena"), value = next.NewStringUTF(env, hex);
+        next.CallStaticObjectMethod(env, system, set_property, key, value);
+        apklayer_art_arena = (unsigned long)arena;
+        table->GetMethodID = guest_get_method_id;
+        table->GetStaticMethodID = guest_get_static_method_id;
+        table->FromReflectedMethod = guest_from_reflected_method;
+    }
+    if (next.ExceptionCheck(env)) next.ExceptionClear(env);
+#endif
     table->GetVersion = guest_version;
     table->FindClass = guest_find_class;
 
