@@ -24,7 +24,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR dies after 31 s to 3 min under the x86 translator. Cause unknown (CHANGELOG "ACE: what the runs of the day say").
 - Next: more runs per setup, the unread config files, `libanort.so`.
-- Server (headless, software GL): the registration webview is a blank white page.
+- Webview HTTPS fails when Conscrypt does not load: add a `HostTrust` fallback with Chromium's 5-argument `checkServerTrusted`.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
 - The 0006 allocator check refuses valid chunks at a retired heap's end (accept the fencepost pair).
 
@@ -113,7 +113,8 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Isolated processes run as the app uid; drive access is all or nothing.
 
 ## Packaging and releases
-- Next release: `tools/release/versions` needs `runtime=0.4.19`.
+- Next release: `tools/release/versions` needs `runtime=0.4.19`; check that `NativeCryptoJni.class` in the android-all jars is 1343 bytes (0.4.18's has the unpatched 371-byte class: Conscrypt fails to load, every webview https load fails).
+- A new instance has no WebView provider: install `webview.apk` into it (`install --system`) or do it at instance creation.
 - Click: Share/"Open with"; "Choose file…" from the manager; update check offers debs only.
 - Updates outside the manager leave running instances on old programs.
 - Flatpak: launcher portal dialog; `flatpak run` keeps a pipe on stdout.
