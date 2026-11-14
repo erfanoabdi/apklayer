@@ -365,7 +365,7 @@ static int task_filter(int fd, int cloexec, int kind, long tid, long foreign)
 
 /* The ELF behind /proc/self/exe: Android's app_process64 stand-in, a static executable of this machine's architecture that only exits (a reader
  * finds an ELF64 of the right class and machine, as in the real binary; it has no symbols). Returns its size. */
-static size_t app_process_standin(unsigned char *out)
+size_t apklayer_app_process_elf(unsigned char *out)
 {
 #if defined(__aarch64__)
     static const unsigned char code[] = {0xa8, 0x0b, 0x80, 0xd2, 0x00, 0x00, 0x80, 0xd2, 0x01, 0x00, 0x00, 0xd4};  /* mov x8,#93; mov x0,#0; svc #0 */
@@ -396,7 +396,7 @@ static int proc_filter(int fd)
     long tid = 0, foreign = 0;
     int kind = proc_file_of(fd, &tid, &foreign);
     if (!kind || kind == 3) return fd;
-    if (kind == 11) { unsigned char elf[128]; size_t size = app_process_standin(elf); return proc_replace(fd, cloexec, "app_process64", (const char *)elf, size); }
+    if (kind == 11) { unsigned char elf[128]; size_t size = apklayer_app_process_elf(elf); return proc_replace(fd, cloexec, "app_process64", (const char *)elf, size); }
     if (kind == 12) {  /* an app's SELinux context, as on a device and as the translator's 0018 spells it (c<id & 255>,c<256 + id / 256>,c512,c768) */
         long id = apklayer_app_uid() % 100000 - 10000;
         char ctx[80];
