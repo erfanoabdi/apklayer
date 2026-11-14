@@ -49,6 +49,9 @@ final class HostProviders {
         Security.setProperty("keystore.type", "BKS");
         for (Provider p : Security.getProviders()) Security.removeProvider(p.getName());
         for (Provider p : order) Security.addProvider(p);
+        // libcore's HttpsURLConnection verifies host names with okhttp's verifier; the JDK's default one refuses every name (it relies on its own TLS stack's check)
+        try { javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier(com.android.okhttp.internal.tls.OkHostnameVerifier.INSTANCE); }
+        catch (Throwable none) { System.err.println("[apklayer] warning: default hostname verifier: " + none); }
         if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] security providers: " + order.stream().map(Provider::getName).toList());
     }
 
