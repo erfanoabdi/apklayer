@@ -19,7 +19,7 @@ final class ImeCheck implements Check {
                 + imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).toList() + ", default " + chosen + " (location_mode " + Settings.Secure.getString(context.getContentResolver(), "location_mode") + ")";
         Check.require(imm.getInputMethodList().stream().map(InputMethodInfo::getId).anyMatch(id::equals), id + " not installed: " + seen);
         Check.require(imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).anyMatch(id::equals), id + " not enabled: " + seen);
-        Check.require(chosen == null || id.equals(chosen), seen);  // null: the provider hides the setting from a targetSdk 34 app (as ENABLED_INPUT_METHODS); the hub log line "default input method" is the check (tests/vm/system-apps.sh)
+        Check.require(id.equals(chosen), seen);
         return seen;
     }
 }
