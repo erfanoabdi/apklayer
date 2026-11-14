@@ -103,6 +103,11 @@ static int bad_handler(const struct sigaction *old)
     if (f) fclose(f);
     return bad;
 }
+JNIEXPORT jstring JNICALL Java_hello_arm64_Main_probeEnv(JNIEnv *env, jclass c)
+{
+    (void)c; const char *v = getenv("MOZ_LOG"), *w = getenv("MOZ_LOG_FILE");
+    return (*env)->NewStringUTF(env, v ? (w ? v : "nofile") : "unset");
+}
 JNIEXPORT jstring JNICALL Java_hello_arm64_Main_oldHandlers(JNIEnv *env, jclass c)
 {
     (void)c;

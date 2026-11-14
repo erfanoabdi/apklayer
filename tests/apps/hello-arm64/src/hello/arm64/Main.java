@@ -26,6 +26,7 @@ public class Main extends Activity {
     private static native String cpuProfile();
     private static native String fidelity();
     private static native String oldHandlers();
+    private static native String probeEnv();
 
     static int twice(int v) { return 2 * v; }
 
@@ -80,6 +81,7 @@ public class Main extends Activity {
         log("errno " + (errno == 222 ? "ok" : "WRONG " + errno));
         int fault = fault();  // a guest null read its own SIGSEGV handler recovers from: the JVM lives on
         log("guest fault " + (fault == 1 ? "recovered" : "FAIL " + fault));
+        log("env MOZ_LOG " + probeEnv());
         String handlers = oldHandlers();  // the previous actions sigaction reports are SIG_DFL, SIG_IGN or code (a chained crash handler calls them)
         log("old handlers " + (handlers.isEmpty() ? "ok" : "WRONG" + handlers));
         int stack = ownStack();  // pthread_getattr_np(pthread_self()) of this JVM thread: its own guest stack
