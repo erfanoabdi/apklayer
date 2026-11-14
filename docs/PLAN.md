@@ -46,8 +46,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
-- text-input-v3 has no show/hide request. Enter labels are words, not icons.
-- Untested: `input-desktop` IBus surrounding text (flameshot aborts on Parallels); WebView surrounding text has no assertion.
+- text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 - Lomiri greeter: only the first uinput tap registers.
 
