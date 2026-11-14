@@ -28,3 +28,5 @@ x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e300
 2026-11-13 x86 staging correction: ActivityManager.cpp is built into libactivitymanager_aidl, not libbinder. Added final libactivitymanager_aidl.so (d6613286c945bbb95f86b3a7229382a9bde62658dbb272d1d9f2a6bff5058ecc, 85384 bytes) from the same completed private-host-control build; live x86 deployment is deferred until the active regression runner ends. ARM staging must include this module too.
 
 2026-11-13 Vulkan probe: libapklayer_vktest from main cc9a6a40 (the capability assertion reads private APKLAYER_VULKAN_PRESENT through HostEnvironment.h), arm64 95d85c0d539d8837a11fe3adc909c0a3e840e3725cafc617a535de2d78f072b0 (52304 bytes), x86_64 4e1f3c30a217953ed7113fdde22167468e473145a5c15a456eb18bc23c6a9fca (52320 bytes); Soong intermediates of incremental gsi_arm64 / gsi_x86_64 builds. vulkan passes on UTM and the x86 PC.
+
+2026-11-14 Conscrypt: libjavacrypto and libssl (arm64 and x86_64) for the AndroidOpenSSL provider, from the LineageOS tree builds logged in main CHANGELOG; hashes are the lock rows of main 04753d62.
