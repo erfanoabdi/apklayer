@@ -29,6 +29,9 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 
+#ifndef SYS_SECCOMP
+#define SYS_SECCOMP 1  /* si_code of a seccomp trap (asm-generic/siginfo.h) */
+#endif
 #define WINDOW_SIZE (1UL << 32)
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
 

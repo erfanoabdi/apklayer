@@ -12,7 +12,8 @@ modules out of an app callback's dl_iterate_phdr; glibc/JVM-only symbols are not
 the app namespace (the JVM, the shim, Android's platform libraries and their unwinders) keep every view and every name.
 
 diff --git a/linker/app_view.c b/linker/app_view.c
---- a/linker/app_view.c
+new file mode 100644
+--- /dev/null
 +++ b/linker/app_view.c
 @@ -0,0 +1,161 @@
 +/* apklayer patch: the app namespace's view of the process, as Android's linker gives an app (libnativeloader's classloader namespace).
@@ -177,7 +178,8 @@ diff --git a/linker/app_view.c b/linker/app_view.c
 +	return si && si->app_ns;
 +}
 diff --git a/linker/app_view.h b/linker/app_view.h
---- a/linker/app_view.h
+new file mode 100644
+--- /dev/null
 +++ b/linker/app_view.h
 @@ -0,0 +1,13 @@
 +/* apklayer patch: the app namespace's view (app_view.c) */

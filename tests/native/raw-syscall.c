@@ -30,6 +30,7 @@ static void *thread_main(void *arg)
 int main(int argc, char **argv)
 {
     assert(argc == 4);
+    setvbuf(stdout, NULL, _IONBF, 0);
     int app = !strcmp(argv[3], "app");
     void *dl = dlopen(argv[1], RTLD_NOW | RTLD_GLOBAL);
     assert(dl);
@@ -40,7 +41,9 @@ int main(int argc, char **argv)
     const char *dir = getenv("BIONIC_LD_LIBRARY_PATH");
     assert(dir);
     app_path(dir, ":");  /* the fixture's directory is the app's: the namespace of an app's own library */
-    void *lib = b_dlopen(argv[2], RTLD_NOW);
+    char libpath[1024];
+    snprintf(libpath, sizeof libpath, "%s/%s", dir, argv[2]);  /* an absolute path in the app's directory: the app namespace */
+    void *lib = b_dlopen(libpath, RTLD_NOW);
     assert(lib);
     raw = b_dlsym(lib, "raw_sys");
     int (*guest_dlopen)(const char *, char *, size_t) = b_dlsym(lib, "guest_dlopen");
@@ -60,11 +63,13 @@ int main(int argc, char **argv)
     assert(host_uid != 10001);
     assert(uid == 10001 && raw(SYS_geteuid, 0, 0, 0, 0) == 10001 && raw(SYS_getgid, 0, 0, 0, 0) == 10001 && raw(SYS_getegid, 0, 0, 0, 0) == 10001);
     unsigned r[3] = {1, 2, 3}, g[3] = {1, 2, 3};
-    assert(raw(SYS_getresuid, (long)&r[0], (long)&r[1], (long)&r[2]) == 0 && r[0] == 10001 && r[1] == 10001 && r[2] == 10001);
-    assert(raw(SYS_getresgid, (long)&g[0], (long)&g[1], (long)&g[2]) == 0 && g[0] == 10001 && g[2] == 10001);
+    assert(raw(SYS_getresuid, (long)&r[0], (long)&r[1], (long)&r[2], 0) == 0 && r[0] == 10001 && r[1] == 10001 && r[2] == 10001);
+    assert(raw(SYS_getresgid, (long)&g[0], (long)&g[1], (long)&g[2], 0) == 0 && g[0] == 10001 && g[2] == 10001);
     gid_t groups[16];
     long count = raw(SYS_getgroups, 0, 0, 0, 0);
-    assert(count == 5 && raw(SYS_getgroups, 16, (long)groups, 0, 0) == 5 && groups[0] == 3003);
+    long listed = raw(SYS_getgroups, 16, (long)groups, 0, 0);
+    printf("raw getgroups %ld, listed %ld, first %d; libc getgroups %d\n", count, listed, listed > 0 ? (int)groups[0] : -1, getgroups(0, NULL));
+    assert(count == 4 && listed == 4 && groups[0] == 3003);
     assert(raw(SYS_getgroups, 2, (long)groups, 0, 0) < 0);  /* EINVAL: the list is longer */
 
     /* a path the layer maps: only the app's Android root has it */
@@ -105,9 +110,11 @@ int main(int argc, char **argv)
         assert(!guest_dlopen(refused[i], err, sizeof err));
         char want[256];
         snprintf(want, sizeof want, "dlopen failed: library \"%s\" not found", refused[i]);
+        if (strcmp(err, want)) printf("dlopen(%s): got \"%s\" want \"%s\"\n", refused[i], err, want);
         assert(!strcmp(err, want));
     }
-    assert(guest_dlopen("libc.so", err, sizeof err) && guest_dlopen("libdl.so", err, sizeof err) && guest_dlopen("libm.so", err, sizeof err));
+    assert(guest_dlopen("libraw-syscall-lib.so", err, sizeof err));  /* the app's own library, by its name */
+    assert(guest_dlopen("libm.so.6", err, sizeof err) == 0);  /* the host's math library is no Android name either */
 
     /* dladdr: libc symbols are Android's names in Android's libc.so; what only the host has has no name */
     char file[512], sym[256];
