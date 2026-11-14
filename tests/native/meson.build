@@ -30,6 +30,7 @@ if is_variable('apklayer_preload')
   test('path-layer', executable('path-layer-test', 'path-layer.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   # needs its own cgroup scope, as proc-leaks: `systemd-run --user --scope meson test proc-host-tools`; skipped (77) where every process shares one
   test('proc-host-tools', executable('proc-host-tools-test', 'proc-host-tools.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
+  test('apk-paths', executable('apk-paths-test', 'apk-paths.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('etc-hidden', executable('etc-hidden-test', 'etc-hidden.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('dev-pts', executable('dev-pts-test', 'dev-pts.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('proc-mounts', executable('proc-mounts-test', 'proc-mounts.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
