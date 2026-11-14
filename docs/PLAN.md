@@ -87,7 +87,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 ## Native bridge (x86_64)
 - No translation cache across starts.
 - Telegram has no x86_64 FOSS APK to test.
-- The manager's "translated" label.
 - The guest JVM finds the host's `libjsig`: watch for a later SIGSEGV handler.
 - Unity: `hpatchz`, no backtrace in fault notes, the app log cap misses lines.
 
