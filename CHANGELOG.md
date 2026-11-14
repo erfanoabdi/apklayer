@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: libcore fstat(fd) is the real one; setup-runtime.sh 21 s -> 10 s
+- `Os.fstat(fd)` stats `/proc/self/fd/<fd>` (mode, size, uid real; EBADF for a closed one); `files` and `system-apps` (MediaProvider scan) pass with it on Parallels.
+- `tools/release/setup-runtime.sh`: jars patched one job per jar, the JDK image built beside the instrumenting, "1/3..3/3" progress lines. Fresh dir on Parallels (12 cores): 21 s -> 10 s; the 75 s on a phone is mostly the single PreInstrument JVM (cores) and jlink.
+
 ## 2026-11-15: Droid-ify index sync completes: the JDK no longer denies SHA-1 signed jars
 - After the RSASSA-PSS fix, f-droid.org and izzysoft downloaded but Droid-ify threw "index.jar must be signed by a single code signer" (JarFile.getCodeSigners empty: `jdk.jar.disabledAlgorithms` has `SHA1 denyAfter 2019-01-01`, Android has no such rule). HostProviders sets the property without the SHA1 entry. UTM, own tree, APKLAYER_LOGCAT=1: the sync fills the 59 MB database in about a minute, the Explore tab lists the apps, no `ScreenFragment.getToolbar` NPE. docs/PLAN.md line removed.
 
