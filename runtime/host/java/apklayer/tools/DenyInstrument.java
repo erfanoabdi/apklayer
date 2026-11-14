@@ -241,6 +241,17 @@ public final class DenyInstrument {
                             super.visitInsn(Opcodes.POP);
                             return;
                         }
+                        // Runtime.maxMemory is the heap growth limit of the device (dalvik.vm.heapgrowthlimit), not the host's -Xmx
+                        if (opcode == Opcodes.INVOKEVIRTUAL && owner.equals("java/lang/Runtime") && mname.equals("maxMemory") && mdesc.equals("()J")) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/GuestLoaders", "maxMemory", "(Ljava/lang/Runtime;)J", false);
+                            return;
+                        }
+                        // the system class loader of an app is a PathClassLoader
+                        if (opcode == Opcodes.INVOKESTATIC && owner.equals("java/lang/ClassLoader") && mname.equals("getSystemClassLoader")
+                                && mdesc.equals("()Ljava/lang/ClassLoader;")) {
+                            super.visitMethodInsn(opcode, "apklayer/host/GuestLoaders", mname, mdesc, false);
+                            return;
+                        }
                         // Unsafe.getUnsafe(): ART allows any caller, HotSpot only boot classes
                         if (opcode == Opcodes.INVOKESTATIC && owner.equals("sun/misc/Unsafe") && mname.equals("getUnsafe")) {
                             super.visitMethodInsn(opcode, "apklayer/host/UnsafeAccess", mname, mdesc, false);

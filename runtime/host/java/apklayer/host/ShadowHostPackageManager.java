@@ -71,6 +71,11 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     private android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
         if (info == null) return null;
         installedPaths(info.applicationInfo);
+        // the app's own data directories as Context.getApplicationInfo names them (/data/user/0/<pkg>): Termux exports PackageManager's dataDir to its shell
+        if (info.applicationInfo != null && info.packageName != null && info.packageName.equals(System.getProperty("apklayer.package"))) {
+            info.applicationInfo = new android.content.pm.ApplicationInfo(info.applicationInfo);
+            AppEnvironment.stableDataDirs(info.applicationInfo);
+        }
         if (info.splitNames == null && info.applicationInfo != null) info.splitNames = info.applicationInfo.splitNames;
         android.content.pm.SigningDetails details = HostCertificate.details(info.packageName);
         android.content.pm.Signature fake = fakeSignature(info.packageName);

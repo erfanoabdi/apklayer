@@ -13,6 +13,7 @@ public class Main extends Activity {
     static native String art(java.lang.reflect.Method a, java.lang.reflect.Method b, java.lang.reflect.Field f1, java.lang.reflect.Field f2,
                              long artA, long artB, int modifiersA);
     static native String jniThread();
+    private String hidden() { return "no"; }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);

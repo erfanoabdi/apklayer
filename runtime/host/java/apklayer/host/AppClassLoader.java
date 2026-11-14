@@ -50,13 +50,115 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         try {
             Class<?> pathLoader = parent.loadClass("dalvik.system.PathClassLoader");
             definingLoader = (ClassLoader) pathLoader.getConstructor(String.class, String.class, ClassLoader.class)
-                    .newInstance("", System.getProperty("apklayer.libdir", ""), parent);
+                    .newInstance("", System.getProperty("apklayer.libdir", ""), bootParent(parent));
+            dexElements(definingLoader, jars);
             java.lang.reflect.Method attach = pathLoader.getDeclaredMethod("setApklayerDelegate", ClassLoader.class, Function.class);
             attach.setAccessible(true);
             attach.invoke(definingLoader, this, (Function<String, String>) this::findLibrary);
         } catch (ReflectiveOperationException failure) {
             throw new IllegalStateException("Cannot create the app's PathClassLoader", failure);
         }
+    }
+
+    /**
+     * Android's PathClassLoader has java.lang.BootClassLoader as its parent (libcore ClassLoader.BootClassLoader); the patched java.base has one
+     * (JdkBootLoader) that asks the sandbox for the platform's classes, without the host's own. Without the patch the sandbox stays the parent.
+     */
+    private static ClassLoader bootParent(ClassLoader sandbox) {
+        try {
+            Class<?> boot = Class.forName("java.lang.BootClassLoader");
+            java.lang.reflect.Method get = boot.getDeclaredMethod("getInstance");
+            get.setAccessible(true);
+            ClassLoader instance = (ClassLoader) get.invoke(null);
+            java.lang.reflect.Field delegate = boot.getDeclaredField("delegate"), hidden = boot.getDeclaredField("hidden");
+            delegate.setAccessible(true);
+            hidden.setAccessible(true);
+            delegate.set(null, sandbox);
+            hidden.set(null, (java.util.function.Predicate<Class<?>>) c -> hiddenName(c.getName()));
+            return instance;
+        } catch (ReflectiveOperationException | RuntimeException unpatched) {
+            System.err.println("[apklayer] no BootClassLoader parent: " + unpatched + " " + unpatched.getCause());
+            return sandbox;
+        }
+    }
+
+    /**
+     * dexElements and the library directories as a device's loader shows them: the base.apk with a DexFile (its cookie a long[2], as ART's), the
+     * app's library directory and the system's. The DexFile is never opened (the classes come from the host index): an instance without a native
+     * open, so reading `dexElements` finds what the device has, but its dex methods have nothing behind them.
+     */
+    private static void dexElements(ClassLoader loader, Path[] jars) {
+        try {
+            Path apk = jars[jars.length - 1];
+            if (!apk.toString().endsWith(".apk")) return;
+            Class<?> base = loader.getClass().getSuperclass();
+            java.lang.reflect.Field pathList = base.getDeclaredField("pathList");
+            pathList.setAccessible(true);
+            Object list = pathList.get(loader);
+            ClassLoader platform = loader.getClass().getClassLoader();
+            Class<?> dexFileClass = platform.loadClass("dalvik.system.DexFile"), elementClass = platform.loadClass("dalvik.system.DexPathList$Element");
+            Object dex = UnsafeAccess.getUnsafe().allocateInstance(dexFileClass);
+            for (String name : new String[] {"mCookie", "mInternalCookie"}) {
+                java.lang.reflect.Field f = dexFileClass.getDeclaredField(name);
+                f.setAccessible(true);
+                f.set(dex, new long[] {0x7f0000000000L, 0x7f0000001000L});
+            }
+            java.lang.reflect.Field fileName = dexFileClass.getDeclaredField("mFileName");
+            fileName.setAccessible(true);
+            UnsafeAccess.getUnsafe().putObject(dex, UnsafeAccess.getUnsafe().objectFieldOffset(fileName), apk.toString());
+            java.lang.reflect.Constructor<?> make = elementClass.getConstructor(dexFileClass, java.io.File.class);
+            Object element = make.newInstance(dex, apk.toFile());
+            Object elements = java.lang.reflect.Array.newInstance(elementClass, 1);
+            java.lang.reflect.Array.set(elements, 0, element);
+            java.lang.reflect.Field target = list.getClass().getDeclaredField("dexElements");
+            target.setAccessible(true);
+            target.set(list, elements);
+            String abi = HostBuild.appAbi(), lib = abi.equals("armeabi-v7a") ? "lib" : "lib64";
+            java.util.List<java.io.File> dirs = new java.util.ArrayList<>();
+            String libdir = System.getProperty("apklayer.libdir", "");
+            if (!libdir.isEmpty()) dirs.add(new java.io.File(libdir));
+            dirs.add(new java.io.File(apk + "!/lib/" + abi));
+            java.util.List<java.io.File> system = new java.util.ArrayList<>();
+            for (String d : new String[] {"/system/" + lib, "/system/system_ext/" + lib, "/system/product/" + lib}) system.add(new java.io.File(d));
+            for (Object[] set : new Object[][] {{"nativeLibraryDirectories", dirs}, {"systemNativeLibraryDirectories", system}}) {
+                java.lang.reflect.Field field = list.getClass().getDeclaredField((String) set[0]);
+                field.setAccessible(true);
+                field.set(list, set[1]);
+            }
+        } catch (ReflectiveOperationException | RuntimeException keep) {
+            System.err.println("[apklayer] dexElements not set: " + keep + " " + keep.getCause());
+        }
+    }
+
+    /** What an app's lookup must not find: the host's own packages and the JDK's classes Android has none of. */
+    private static boolean hiddenName(String name) {
+        return name.startsWith("org.robolectric.") || name.startsWith("apklayer.") && !appHelper(name);
+    }
+
+    /** The converter's targets in the app's classes (DenyInstrument): resolved by the app's own loader. */
+    private static boolean appHelper(String name) {
+        return name.startsWith("apklayer.relocated.") || name.startsWith("apklayer.loader.") || switch (name) {
+            case "apklayer.host.Reflect", "apklayer.host.GuestSystemProperties", "apklayer.host.GuestEnvironment", "apklayer.host.NativeLoader",
+                 "apklayer.host.Services", "apklayer.host.UnsafeAccess", "apklayer.host.GuestLoaders", "apklayer.host.AppClassLoader" -> true;
+            default -> false;
+        };
+    }
+
+    private static final java.util.Set<String> JDK_ONLY = java.util.Set.of("java.lang.Module", "java.lang.StackWalker", "java.lang.ProcessHandle",
+            "java.lang.Record", "java.lang.invoke.LambdaForm", "java.lang.invoke.DirectMethodHandle", "java.lang.invoke.StringConcatFactory",
+            "sun.misc.Signal", "jdk.internal.loader.ClassLoaders");
+
+    private static boolean jdkOnly(String name) {
+        return JDK_ONLY.contains(name) || name.startsWith("java.lang.management.") || name.startsWith("com.sun.management.") || name.startsWith("sun.management.")
+                || name.startsWith("java.lang.ProcessHandle");
+    }
+
+    private static final StackWalker WALK = StackWalker.getInstance();
+
+    /** Class.forName asked: the JVM's own linking of an app class (which names java.lang.invoke classes) is not a lookup by the app. */
+    private static boolean byForName() {
+        return WALK.walk(frames -> frames.map(f -> f.getClassName() + "." + f.getMethodName()).anyMatch(s -> s.equals("java.lang.Class.forName")
+                || s.equals("java.lang.Class.forName0")));
     }
 
     /**
@@ -83,6 +185,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         if (name.startsWith("[")) return Class.forName(name.replace('/', '.'), false, definingLoader);  // ART's loaders answer array names (Chromium's JNI asks)
         name = name.replace('/', '.');  // ... and binary names with slashes (Paddleboat)
+        if (hiddenName(name) || (jdkOnly(name) || name.startsWith("apklayer.")) && byForName()) throw new ClassNotFoundException(name);  // not on Android's boot class path
         // No lock of ours is held while the parent loads: a thread in the sandbox's loadClass (holding its lock) may be defining an app class here through
         // apply, whose superclass then comes through this method; apply itself copes with two threads defining one class.
         Class<?> c = libraries == null || name.startsWith("java.") ? null : libraries.apply(name);

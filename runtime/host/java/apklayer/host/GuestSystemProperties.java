@@ -14,6 +14,13 @@ public final class GuestSystemProperties {
         static volatile Properties properties = newProperties(null);
     }
 
+    /** ART's boot class path on a device (Android 13 measured with tests/identity; ANDROID BOOTCLASSPATH). */
+    private static final String BOOT_CLASS_PATH = "/apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:"
+            + "/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:"
+            + "/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:"
+            + "/system/framework/voip-common.jar:/system/framework/ims-common.jar:/apex/com.android.i18n/javalib/core-icu4j.jar:"
+            + "/apex/com.android.conscrypt/javalib/conscrypt.jar:/apex/com.android.wifi/javalib/framework-wifi.jar";
+
     private static Properties fixedProperties() {
         Properties p = new Properties();
         // ART receives application -D options, not the hosting JVM's implementation options.
@@ -43,6 +50,19 @@ public final class GuestSystemProperties {
         int uid = android.os.Process.myUid();
         p.setProperty("user.name", "u" + (uid / 100000) + "_a" + (uid % 100000 - 10000));
         p.setProperty("user.dir", "/");
+        // libcore's System.initUnchangeableSystemProperties / RuntimeInit.initialize and the ICU, zlib and OpenSSL versions the runtime reports
+        p.setProperty("java.library.path", "/system/" + lib + ":/system/system_ext/" + lib + ":/system/product/" + lib);
+        p.setProperty("java.boot.class.path", BOOT_CLASS_PATH);
+        java.util.Locale locale = java.util.Locale.getDefault();
+        p.setProperty("user.language", locale.getLanguage().isEmpty() ? "en" : locale.getLanguage());
+        p.setProperty("user.region", locale.getCountry().isEmpty() ? "US" : locale.getCountry());
+        p.setProperty("http.agent", "Dalvik/2.1.0 (Linux; U; Android " + android.os.Build.VERSION.RELEASE + "; " + android.os.Build.MODEL + " Build/" + android.os.Build.ID + ")");
+        try {
+            p.setProperty("android.icu.library.version", android.icu.util.VersionInfo.ICU_VERSION.getVersionString(2, 2));
+            p.setProperty("android.icu.unicode.version", android.icu.lang.UCharacter.getUnicodeVersion().getVersionString(2, 2));
+        } catch (LinkageError | RuntimeException noIcu) { /* absent */ }
+        p.setProperty("android.openssl.version", "OpenSSL 1.1.1 (compatible; BoringSSL)");
+        p.setProperty("android.zlib.version", "1.3.1");
         for (String[] pair : AndroidHardcodedSystemProperties.STATIC_PROPERTIES) {
             if (pair[1] == null) p.remove(pair[0]);
             else p.setProperty(pair[0], pair[1]);

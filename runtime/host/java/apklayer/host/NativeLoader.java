@@ -138,8 +138,10 @@ public final class NativeLoader {
 
     private static void loadLibrary(String name, ClassLoader loader) {
         String path = bridge() != null && new File(System.getProperty("apklayer.libdir", ""), "lib" + name + ".so").isFile() ? bridgeLibrary(name) : findLibrary(name);
-        if (path == null) throw new UnsatisfiedLinkError("no " + name + " in "
-                + System.getProperty("apklayer.libdir", "") + " (ABI not in the APK?)");
+        if (path == null) {  // ART's text (nativeloader's dlopen of the bare name); where it was looked for goes to our log
+            System.err.println("[apklayer] loadLibrary: no lib" + name + ".so in " + System.getProperty("apklayer.libdir", "") + " (ABI not in the APK?)");
+            throw new UnsatisfiedLinkError("dlopen failed: library \"" + System.mapLibraryName(name) + "\" not found");
+        }
         load(path, loader);
     }
 
