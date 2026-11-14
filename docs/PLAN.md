@@ -41,7 +41,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 
 ## Camera
 - Sensor timestamps: the shutter time is the request's CLOCK_MONOTONIC time, not the frame's `timestamp_ns` (goldfish session change). All streams scaled from the largest. NDK libcamera2ndk is a stub.
-- Portrait desktop monitor: `mount=[NAME:]DEGREES` exists on the pipewire backend (`providers set camera pipewire mount=90`); a manager/`apklayer config` entry and the right degrees per monitor direction are open.
+- Portrait desktop monitor: `mount=[NAME:]DEGREES` exists on the pipewire backend (`providers set camera pipewire mount=90`); `apklayer config set camera-mount [NAME:]DEGREES` sets it (the manager lists it); the right degrees per monitor direction are open.
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
@@ -119,7 +119,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Binder devices of a removed instance stay until reboot.
 
 ## Hardware
-- Vibrator effects. GNSS fd leak, x86_64 `libapklayer_gnss`.
+- Vibrator effects. x86_64 `libapklayer_gnss`.
 - USB: attach with no hub, interface filters, one chooser for several apps, sandbox node access.
 - Bluetooth: pairing paths, Sailfish agent, several clients per server socket, PendingIntent scans.
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
