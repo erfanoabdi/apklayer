@@ -25,7 +25,7 @@ host_jar = custom_target('host-classes.jar',
   command: [javac_jar, '@OUTPUT@', '@PRIVATE_DIR@', '--cp', ':'.join([sim_classes, robolectric, framework, dex2jvm_jar.full_path()]),
     '--extract', simulator, 'org/robolectric/simulator/FrameListener.class', 'org/robolectric/simulator/ScreenUpdateHandler.class',
     '--resources', meson.current_source_dir() / 'host/resources',
-    '--javac=--add-exports=java.base/sun.net.util=ALL-UNNAMED', '--javac=--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED',
+    '--javac=--add-exports=java.base/sun.net.util=ALL-UNNAMED', '--javac=--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED', '--javac=--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED',
     '--javac=--add-exports=java.base/sun.security.x509=ALL-UNNAMED', '--javac=-sourcepath', '--javac=' + meson.current_source_dir() / 'patches',
     '--javac=-implicit:none', meson.current_source_dir() / 'host/java'],
   install: true, install_dir: native_dir / 'aosp')

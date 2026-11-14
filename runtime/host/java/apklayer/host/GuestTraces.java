@@ -125,6 +125,7 @@ public final class GuestTraces {
             set(hooks, "npe", (java.util.function.UnaryOperator<String>) GuestMessages::npe);
             set(hooks, "methodHidden", (java.util.function.BiPredicate<Class<?>, String>) GuestHiddenApi::hidden);
             set(hooks, "fields", (java.util.function.BiFunction<Class<?>, java.lang.reflect.Field[], java.lang.reflect.Field[]>) GuestHiddenApi::fields);
+            Class.forName("java.lang.reflect.ApklayerArt").getField("enabled").setBoolean(null, true);
             renameSystemThreads();
         } catch (ReflectiveOperationException | RuntimeException absent) {
             System.err.println("[apklayer] identity hooks not installed (java.base without the identity patch): " + absent);
