@@ -121,3 +121,19 @@ if is_variable('c_bio') and is_variable('apklayer_preload')
       'APKLAYER_OWN_DATA=hello.spawn:10001:/tmp/hello.spawn', 'ENV_HOST_ONLY=private', 'PATH=/host-path-must-not-be-searched'],
     suite: 'bionic', timeout: 30)
 endif
+
+# guest code on native arm64 (bionic_translation 0071/0072): raw `svc` syscalls answered through the process views, and the app namespace's
+# dlopen/dladdr/dl_iterate_phdr (the library has no libc; the bionic linker loads it in the app namespace). Skipped (77) off arm64.
+if is_variable('apklayer_preload') and is_variable('dl_bio')
+  raw_syscall_lib = shared_module('raw-syscall-lib', 'raw-syscall-lib.c', link_args: ['-nostdlib'], c_args: ['-fno-stack-protector'])
+  raw_syscall_test = executable('raw-syscall-test', 'raw-syscall.c', dependencies: [dependency('dl'), dependency('threads')])
+  foreach mode : ['app', 'off']
+    raw_env = ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(dl_bio.full_path()),
+      'BIONIC_LD_LIBRARY_PATH=' + meson.current_build_dir(), 'APKLAYER_ANDROID_ROOT=' + meson.project_source_root() / 'bridge/native/android-root',
+      'APKLAYER_OWN_DATA=hello.raw:10001,3003,9997,20001,50001:/tmp/hello.raw']
+    if mode == 'off'
+      raw_env += ['APKLAYER_RAW_SYSCALL_VIEW=off']
+    endif
+    test('raw-syscall-' + mode, raw_syscall_test, args: [dl_bio, 'libraw-syscall-lib.so', mode], depends: raw_syscall_lib, env: raw_env, suite: 'bionic', timeout: 30)
+  endforeach
+endif

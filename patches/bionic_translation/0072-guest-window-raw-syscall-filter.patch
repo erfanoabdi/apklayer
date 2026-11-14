@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 14 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: libraries in a window the host's raw-syscall filter recognises; SIGSYS stays unblocked
+
+apklayer patch (docs/PATCHES.md). The linker takes the address range of each library it loads from the optional
+apklayer_guest_window_take (the preload, bridge/native/raw_syscall.c): one 4 GiB window. A seccomp filter there turns the syscalls
+that carry identity into SIGSYS when the instruction pointer is in the window, and the preload's handler answers them through
+the process views (uid, /proc projections). Absent hook or NULL: the kernel's choice, as before. SIGSYS joins the signals a
+bionic thread cannot block (APK_SYNC_SIGNALS): a blocked seccomp trap ends the process.
+
+diff --git a/libc/libc.c b/libc/libc.c
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -72,7 +72,7 @@
+ 	return syscall(SYS_gettid);
+ }
+ 
+-#define APK_SYNC_SIGNALS ((1UL << (SIGSEGV - 1)) | (1UL << (SIGBUS - 1)) | (1UL << (SIGILL - 1)) | (1UL << (SIGFPE - 1)))
++#define APK_SYNC_SIGNALS ((1UL << (SIGSEGV - 1)) | (1UL << (SIGBUS - 1)) | (1UL << (SIGILL - 1)) | (1UL << (SIGFPE - 1)) | (1UL << (SIGSYS - 1)))  /* SIGSYS: apklayer patch 0072, the raw-syscall filter's trap (a blocked SIGSYS kills the process) */
+ static int apk_sigmask(int thread, int how, const unsigned long *set, unsigned long *oset) /* apklayer patch: see docs/PATCHES.md */
+ {
+ 	sigset_t in, out;
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1217,6 +1217,8 @@
+ 	return 0;
+ }
+ 
++extern void *apklayer_guest_window_take(size_t) __attribute__((weak));
++
+ static int apkenv_alloc_mem_region(soinfo *si)
+ {
+ 	if (si->base) {
+@@ -1228,8 +1230,11 @@
+ 	   allocator.
+ 	*/
+ 
+-	void *base = mmap(NULL, si->size, PROT_NONE,
+-			  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++	/* apklayer patch (0072): the libraries this linker loads sit in one address window the host's raw-syscall filter recognises (the
++	 * preload's apklayer_guest_window_take, absent or NULL: the kernel's choice) */
++	void *hint = apklayer_guest_window_take ? apklayer_guest_window_take(si->size) : NULL;
++	void *base = mmap(hint, si->size, PROT_NONE,
++			  MAP_PRIVATE | MAP_ANONYMOUS | (hint ? MAP_FIXED : 0), -1, 0);
+ 	if (base == MAP_FAILED) {
+ 		DL_ERR("%5d mmap of library '%s' failed: %d (%s)\n",
+ 		       apkenv_pid, si->name,
