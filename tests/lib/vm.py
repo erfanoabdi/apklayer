@@ -38,10 +38,10 @@ def push():
     assert tar.wait() == 0 and remote.returncode == 0, 'pushing the tree failed'
     # bionic_translation (untracked, tests/vm/README.md): a local checkout is copied once, so that the VM's meson never downloads it
     bt = Path(os.environ.get('APKLAYER_BIONIC_TRANSLATION') or REPO / 'subprojects/bionic_translation')
-    if bt.is_dir():
+    d = ROOT + '/subprojects/bionic_translation'
+    if bt.is_dir() and ssh('[ -d %s ]' % d).returncode != 0:
         tar = subprocess.Popen(['tar', '-c', '-f', '-', '--no-xattrs', '-C', str(bt), '.'], stdout=subprocess.PIPE, env=dict(os.environ, COPYFILE_DISABLE='1'))
-        d = ROOT + '/subprojects/bionic_translation'
-        remote = ssh('[ -d %s ] || { mkdir -p %s && tar xmf - -C %s; }' % (d, d, d), stdin=tar.stdout)
+        remote = ssh('mkdir -p %s && tar xmf - -C %s' % (d, d), stdin=tar.stdout)
         assert tar.wait() == 0 and remote.returncode == 0, 'copying bionic_translation failed'
 
 
