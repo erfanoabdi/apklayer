@@ -141,7 +141,7 @@ int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap)
     return n;
 }
 
-/* Android's liblog writes to logd, which does not exist here; its own logger hook sends warnings and worse to stderr, all
+/* Android's liblog writes to logd, which does not exist here; its own logger hook sends info and worse to stderr (Unity's graphics API lines are INFO), all
  * of it with APKLAYER_RUNTIME_DEBUG, so a LOG_ALWAYS_FATAL message is not lost. Call after the process can load liblog. */
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
@@ -151,7 +151,7 @@ struct android_log_message { size_t size; int32_t buffer_id; int32_t priority; c
 static int log_fd = 2;
 static void stderr_logger(const struct android_log_message *m)
 {
-    if (m->priority >= 5 || getenv("APKLAYER_RUNTIME_DEBUG")) dprintf(log_fd, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
+    if (m->priority >= 4 || getenv("APKLAYER_RUNTIME_DEBUG")) dprintf(log_fd, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
     const char *dump = getenv("APKLAYER_DUMP_ON"); /* debug: the first log line containing this text prints the JVM's thread dump and exits */
     if (dump && strstr(m->message, dump)) {
         if (getenv("APKLAYER_DUMP_ABORT")) abort(); /* with -Dapklayer.runtimetrace=true: the native call chain instead */

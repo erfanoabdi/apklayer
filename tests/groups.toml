@@ -365,9 +365,13 @@ run = ["python3 -u tests/vm/vulkan-present.py"]
 needs = ["org.godotengine.editor.v4"]
 run = ["python3 -u tests/vm/godot-vulkan.py"]
 
+[logs]  # the launch's app log and its size cap (cli/logs.cpp, cli/logcap.h)
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/logs.py", "g++ -std=c++17 -I cli tests/native/log-cap.cpp -o /tmp/log-cap-$APKLAYER_INSTANCE && /tmp/log-cap-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/log-cap-$APKLAYER_INSTANCE; exit $r"]
+
 [input]
 apps = ["hello-input", "hello-system"]  # hello.system's Ime: the Android input method bound to hello.input's field (ime-bind)
-run = ["cc -o b/utf16-offsets tests/vm/utf16-offsets.c && b/utf16-offsets", "python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/symbol-keys.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
+run = ["cc -o b/utf16-offsets tests/vm/utf16-offsets.c && b/utf16-offsets", "python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/symbol-keys.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py"]
 
 [magnifier]
 apps = ["hello-input"]
