@@ -100,7 +100,16 @@ bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const 
 std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, const std::string& package) {
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
-    if (isStale(join(dir, "info.properties"))) fprintf(stderr, "apklayer: %s was converted by an older converter ABI; run `apklayer reconvert %s` (its data stays) for the current runtime identity\n", package.c_str(), package.c_str());
+    if (isStale(join(dir, "info.properties"))) {
+        // converted by an older converter ABI: convert it again once (in a child: a failing install die()s), then go on; a failure keeps the old install and says so
+        fprintf(stderr, "apklayer: %s was converted by an older converter ABI: converting it again\n", package.c_str());
+        fflush(stdout);
+        pid_t child = fork();
+        if (child == 0) { reconvert(l, inst, package); fflush(stdout); _exit(0); }
+        int st = -1;
+        if (child < 0 || waitpid(child, &st, 0) != child || !WIFEXITED(st) || WEXITSTATUS(st) != 0)
+            fprintf(stderr, "apklayer: could not convert %s again; run `apklayer reconvert %s` (its data stays) for the current runtime identity\n", package.c_str(), package.c_str());
+    }
     ensureUid(l, dir);
     std::string data = appDataDir(l, inst, package);
     if (!sandboxOn()) reclaim(data);  // the sandbox ran it as the app's own uid; without it the app runs as the user
