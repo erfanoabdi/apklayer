@@ -78,7 +78,7 @@ nativejar|platformres|applog|processname|isolated|componenthost|layerstack|displ
 
 ## Vendored: not apklayer's
 
-`runtime/dex2jvm/` (upstream, unchanged, docs/THIRD_PARTY.md) has its own `DEX2JVM_*` converter switches (the converter's experiments and test knobs).
+`runtime/dex2jvm/` (upstream, unchanged, docs/THIRD_PARTY.md) keeps only the `DEX2JVM_*` switches of its `Options` class (SYNTHETIC_PREFIX, REDIRECT_UNSAFE/EXIT, THREADS, LOG_TAG, PARSED_MARKER, LIBRARY, TEST_FAIL_CLASS: set by tests/vm/dex2jvm-stub.sh). Its ~25 other experiment/debug/force knobs (FRAME_*, *_DEBUG, *_FORCE, SPLIT_*, MONITOR_COVER*, NARROW_TRY, SUPER_IFACE*, INIT_REPOINT, ...) were read but set nowhere: removed 2026-11-14, their code is hard-coded to the default.
 Build-time only: `APKLAYER_PREBUILTS`, `_SLINT`, `_ARCH`, `_VARIANT`, `_PRODUCT`, `_MAVEN`, `_DEPS_LOCAL`, `_ORB`, `_SAILFISH_CACHE`, `_CLICK_JAVA`.
 
 ## Removed (2026-11-14)

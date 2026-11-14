@@ -12,13 +12,14 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- volumes-sandbox "catchup present internal file" fails 1 in 5 runs.
+- volumes and volumes-sandbox fail in a fresh tree (UTM, Parallels) at "volume listed" and "mediastore volume": MediaStore never learns the volume (not the sandbox, not the providers). The 1-in-5 catchup race is not reproduced.
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize.
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 when `debug.apklayer.log=1`.
 - Termux: a failed exec in a forked child may still hang in `exit()` (fix untested).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
+- Droid-ify: NPE in `ScreenFragment.getToolbar` (fragment view not created; same family as NewPipe's recreate NPE).
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR dies after 31 s to 3 min under the x86 translator. Cause unknown (CHANGELOG "ACE: what the runs of the day say").
@@ -96,7 +97,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Process attributes: main thread id, `ANDROID_SOCKET_zygote`, property count 219 of 635.
 - Termux: `TERMUX_APP__DATA_DIR` is a host path.
 - Launch leftovers: btload child `environ`, `#!/bin/sh` through the generic exec path.
-- Apps converted before converter ABI 9: no automatic reconvert.
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with the INSTALL.md checklist.
@@ -128,7 +128,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 
 ## Tests and tooling
 - Finish `tools/stage` in Python and fold `tools/release/*` into Meson.
-- Script store clients in the corpus (Aurora, F-Droid). Recheck HTTPS in Droid-ify, F-Droid, Aurora, Telegram.
+- Script store clients in the corpus (Aurora, Telegram: HTTPS needs scripted onboarding input to test).
 - Flaky: webview-input under load; native-media AVC (~1 in 2 on Parallels); audio-silent on the x86 PC.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 - Fresh test trees: meson downloads `bionic_translation` (use a local copy).
