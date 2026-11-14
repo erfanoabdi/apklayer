@@ -15,20 +15,22 @@ import org.objectweb.asm.commons.SimpleRemapper;
 /**
  * The runtime-identity part of the java.base patch (run by {@link JdkPatch}): java.lang.ApklayerHooks and java.lang.BootClassLoader from their
  * templates (JdkHooks, JdkBootLoader), and the JDK methods that answer through the hooks: a Throwable's frames, another thread's frames,
- * Thread.getAllStackTraces, NullPointerException.getMessage, and the messages HotSpot gives the index, cast and arithmetic exceptions it throws.
+ * Thread.getAllStackTraces, annotation enum values (by field), NullPointerException.getMessage, and the messages HotSpot gives the index, cast and arithmetic exceptions it throws.
  */
 final class JdkIdentityPatch {
     private JdkIdentityPatch() {}
 
     static final String HOOKS = "java/lang/ApklayerHooks";
     static final String ART = "java/lang/reflect/ApklayerArt";
+    static final String ENUMS = "sun/reflect/annotation/ApklayerEnums";
     private static final String FRAMES = "([Ljava/lang/StackTraceElement;)[Ljava/lang/StackTraceElement;";
 
     static void write(Path dir) throws Exception {
-        SimpleRemapper names = new SimpleRemapper(java.util.Map.of("apklayer/host/JdkHooks", HOOKS, "apklayer/host/JdkBootLoader", "java/lang/BootClassLoader", "apklayer/host/JdkArt", ART));
+        SimpleRemapper names = new SimpleRemapper(java.util.Map.of("apklayer/host/JdkHooks", HOOKS, "apklayer/host/JdkBootLoader", "java/lang/BootClassLoader", "apklayer/host/JdkArt", ART, "apklayer/host/JdkAnnotationEnums", ENUMS));
         copy("apklayer/host/JdkHooks", HOOKS, names, dir);
         copy("apklayer/host/JdkBootLoader", "java/lang/BootClassLoader", names, dir);
         copy("apklayer/host/JdkArt", ART, names, dir);
+        copy("apklayer/host/JdkAnnotationEnums", ENUMS, names, dir);
         for (String c : new String[]{"Method", "Constructor"}) artInit(dir, "java/lang/reflect/" + c, "Ljava/lang/reflect/Executable;");
         // a Throwable's frames, made once from its backtrace: through the hook before they are kept
         patch(dir, "java/lang/Throwable", (owner, name, desc, mv) -> name.equals("getOurStackTrace") ? new MethodVisitor(Opcodes.ASM9, mv) {
@@ -47,6 +49,13 @@ final class JdkIdentityPatch {
         message(dir, "java/lang/ClassCastException", JdkHooks.CAST);
         message(dir, "java/lang/ArithmeticException", JdkHooks.ARITHMETIC);
         message(dir, "java/lang/NoSuchMethodException", JdkHooks.METHOD);
+        // an annotation's enum element is the static field it names, as on ART (R8-renamed enums: valueOf by that name fails)
+        patch(dir, "sun/reflect/annotation/AnnotationParser", (owner, name, desc, mv) -> !name.equals("parseEnumValue") ? mv : new MethodVisitor(Opcodes.ASM9, mv) {
+            @Override public void visitMethodInsn(int op, String o, String n, String d, boolean itf) {
+                if (op == Opcodes.INVOKESTATIC && o.equals("java/lang/Enum") && n.equals("valueOf")) super.visitMethodInsn(op, ENUMS, "enumConstant", d, false);
+                else super.visitMethodInsn(op, o, n, d, itf);
+            }
+        });
         // Class.getMethod / getDeclaredMethod ask the hidden-API policy first; getDeclaredFields filters for app callers
         patch(dir, "java/lang/Class", (owner, name, desc, mv) -> {
             if ((name.equals("getMethod") || name.equals("getDeclaredMethod")) && desc.startsWith("(Ljava/lang/String;[Ljava/lang/Class;)")) return new MethodVisitor(Opcodes.ASM9, mv) {
