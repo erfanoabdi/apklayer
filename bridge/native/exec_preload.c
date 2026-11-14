@@ -278,10 +278,47 @@ int execve(const char *path, char *const argv[], char *const envp[])
 
 int execv(const char *path, char *const argv[]) { return execve(path, argv, environ); }
 
+/* Android's /bin is a link to /system/bin (bionic's shell path is /bin/sh where that exists, and the host has its own): a guest's
+ * /bin/<name> is /system/bin/<name>. NULL: the path as it is. */
+static const char *guest_bin(const char *path, char *buf, size_t size)
+{
+    if (!path || strncmp(path, "/bin/", 5) || (size_t)snprintf(buf, size, "/system%s", path) >= size) return path;
+    return buf;
+}
+
 /* Berberis supplies the exact guest environment; rewrite keeps its private loader controls separate. */
 int apklayer_execve_guest(const char *path, char *const argv[], char *const envp[])
 {
-    return execve(path, argv, envp);
+    char bin[PATH_MAX];
+    return execve(guest_bin(path, bin, sizeof bin), argv, envp);
+}
+
+/* A guest's posix_spawn (bionic_translation 0069: its system, popen and posix_spawn[p]), as a guest execve: the mapped path, its
+ * permission check, a script with a mapped interpreter, an Android program through btload. Returns the error, as posix_spawn. */
+int apklayer_spawn_guest(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
+                         char *const argv[], char *const envp[])
+{
+    static __thread int depth;  /* a script's interpreter may be a script: the kernel's limit */
+    int (*real)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]) = REAL(posix_spawn);
+    char bin[PATH_MAX], **sa;
+    struct command c;
+    struct target t;
+    path = guest_bin(path, bin, sizeof bin);
+    target(&t, path, envp);
+    if (faccessat(AT_FDCWD, t.path, X_OK, AT_EACCESS) < 0) return target_done(&t, errno);
+    if (depth < 4 && (sa = script_argv(t.path, path, argv))) {
+        depth++;
+        int r = apklayer_spawn_guest(pid, sa[0], actions, attr, sa, envp);
+        depth--;
+        free(sa);
+        return target_done(&t, r);
+    }
+    int rewritten = rewrite(path, argv, t.envp, envp, &c);
+    if (rewritten < 0) return target_done(&t, errno);
+    if (!rewritten) return target_done(&t, real(pid, t.path, actions, attr, argv, t.envp));
+    int r = real(pid, c.btload, actions, attr, c.argv, c.envp);
+    release(&c);
+    return target_done(&t, r);
 }
 
 /* a name without a slash is searched in PATH: host programs, left to glibc */

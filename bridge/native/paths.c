@@ -257,6 +257,21 @@ static int cgroup_read(long pid, char *out, size_t n)
     return 0;
 }
 
+/* apklayer's own tooling that shares the app's scope: the `apklayer run` wrapper and the CLI it started live in the app's systemd scope next to the app's JVMs, and
+ * their command lines name the host (`/usr/lib/apklayer/cli/apklayer --no-daemon --instance default run <package>`). Android shows an app its own processes only: the
+ * app's JVMs (java) stay, the host's tools (an executable named apklayer*) do not. Raw syscall: the wrappers call this. */
+static int host_tool_process(long pid)
+{
+    char path[48], exe[PATH_MAX];
+    snprintf(path, sizeof path, "/proc/%ld/exe", pid);
+    long n = syscall(SYS_readlinkat, AT_FDCWD, path, exe, sizeof exe - 1);
+    if (n <= 0) return 0;
+    exe[n] = 0;
+    const char *base = strrchr(exe, '/');
+    base = base ? base + 1 : exe;
+    return !strncmp(base, "apklayer", 8);
+}
+
 /* whether /proc/<pid> (the digits at *name, ended by '/' or the end) is a process of another app or of the desktop */
 int apklayer_proc_pid_hidden(const char *name)
 {
@@ -270,6 +285,7 @@ int apklayer_proc_pid_hidden(const char *name)
     char mine[1024], theirs[1024];
     busy = 1;
     int hidden = !cgroup_read(getpid(), mine, sizeof mine) && strstr(mine, "/") && (cgroup_read(pid, theirs, sizeof theirs) || strcmp(mine, theirs));
+    if (!hidden && pid != getpid()) hidden = host_tool_process(pid);  /* same scope: the app's own JVMs stay, the host's tools go */
     busy = 0;
     return hidden;
 }
@@ -347,6 +363,7 @@ int apklayer_proc_hidden_at(int dirfd, const char *path)
 {
     if (apklayer_proc_map_hidden && apklayer_proc_map_hidden(dirfd, path)) return 1;
     if (!path || path[0] == '/' || dirfd == AT_FDCWD) return apklayer_proc_hidden(path);
+    if (!*path) return 0;  /* AT_EMPTY_PATH: the open descriptor itself (glibc's fstat is fstatat(fd, "", AT_EMPTY_PATH)), no name to hide */
     char abs[PATH_MAX];
     if (strlen(path) + 7 >= sizeof abs || !apklayer_proc_is_dir(dirfd)) return 0;
     snprintf(abs, sizeof abs, "/proc/%s", path);
