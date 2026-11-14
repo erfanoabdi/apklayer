@@ -61,7 +61,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - No screen for `APP_NOTIFICATION_SETTINGS`. Channel groups stay per process.
 - `getWindowInsets`, `attachWindowContextToDisplayArea`.
 - Shared libraries: `sharedLibraryFiles/Infos`, HIDL libraries, `<uses-native-library>`, resources.
-- Storage: no scoped-storage rules, no secondary external dir, volume states not sent.
+- Storage: no scoped-storage rules; BAD_REMOVAL/UNMOUNTABLE not sent. getExternalFilesDirs' secondary dir and MEDIA_CHECKING are in but unverified: the `volumes` group's "volume listed" fails on UTM even without them.
 - Every instance scans every drive. Eject can fail "busy" while MediaProvider maps an image.
 - Call audio: oldest `MODE_IN_COMMUNICATION` requester wins.
 - Keystore: only pam_unix passwords, never locked, a cancelled prompt leaves its dialog.

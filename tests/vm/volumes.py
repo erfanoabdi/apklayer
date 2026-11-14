@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 from instance import ENV, INSTANCE, OUT, stop  # noqa: E402
 
-STEPS = ['mounted broadcast', 'volume callback', 'volume listed', 'files dirs secondary', 'mediastore volume', 'mount scan', 'drive file indexed', 'internal file indexed',
+STEPS = ['mounted broadcast', 'checking broadcast', 'volume callback', 'volume listed', 'files dirs secondary', 'mediastore volume', 'mount scan', 'drive file indexed', 'internal file indexed',
          'internal file dropped', 'MEDIA_EJECT broadcast', 'MEDIA_UNMOUNTED broadcast', 'MEDIA_REMOVED broadcast', 'volume gone', 'callback on removal', 'link removed',
          'catchup present volume', 'catchup present drive scanned', 'catchup present internal file', 'catchup status',
          'catchup gone volume', 'catchup gone mediastore volume', 'catchup gone internal file']

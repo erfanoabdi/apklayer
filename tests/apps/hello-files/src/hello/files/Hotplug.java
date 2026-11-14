@@ -23,16 +23,18 @@ import java.util.concurrent.TimeUnit;
  */
 final class Hotplug {
     private Hotplug() {}
+    private static volatile boolean sawChecking;
     private static final LinkedBlockingQueue<String> EVENTS = new LinkedBlockingQueue<>(), CALLBACKS = new LinkedBlockingQueue<>();
 
     static void start(Activity activity) {
         IntentFilter filter = new IntentFilter();
-        for (String action : new String[] {Intent.ACTION_MEDIA_MOUNTED, Intent.ACTION_MEDIA_EJECT, Intent.ACTION_MEDIA_UNMOUNTED, Intent.ACTION_MEDIA_REMOVED}) filter.addAction(action);
+        for (String action : new String[] {Intent.ACTION_MEDIA_CHECKING, Intent.ACTION_MEDIA_MOUNTED, Intent.ACTION_MEDIA_EJECT, Intent.ACTION_MEDIA_UNMOUNTED, Intent.ACTION_MEDIA_REMOVED}) filter.addAction(action);
         filter.addDataScheme("file");
         activity.getApplicationContext().registerReceiver(new BroadcastReceiver() {
             @Override public void onReceive(Context c, Intent i) {
                 StorageVolume v = i.getParcelableExtra(StorageVolume.EXTRA_STORAGE_VOLUME, StorageVolume.class);
                 say("event " + i.getAction() + " " + i.getData() + " volume=" + (v == null ? null : v.getUuid() + "/" + v.getState() + "/removable=" + v.isRemovable()));
+                if (Intent.ACTION_MEDIA_CHECKING.equals(i.getAction())) sawChecking = true;
                 EVENTS.add(i.getAction() + " " + i.getData().getPath() + " " + (v == null ? "" : v.getState()));
             }
         }, filter, Context.RECEIVER_EXPORTED);
@@ -58,7 +60,8 @@ final class Hotplug {
         if (mounted == null) return;
         String path = mounted.split(" ")[1], uuid = new File(path).getName();
         String callback;
-        do callback = CALLBACKS.poll(10, TimeUnit.SECONDS); while (callback != null && !callback.startsWith(uuid + " "));
+        do callback = CALLBACKS.poll(10, TimeUnit.SECONDS); while (callback != null && !callback.equals(uuid + " mounted"));
+        check("checking broadcast", sawChecking);
         check("volume callback", (uuid + " mounted").equals(callback));
         StorageVolume volume = storage.getStorageVolumes().stream().filter(v -> uuid.equals(v.getUuid())).findFirst().orElse(null);
         check("volume listed", volume != null && volume.isRemovable() && "mounted".equals(volume.getState()) && path.equals(volume.getDirectory().getPath()));
