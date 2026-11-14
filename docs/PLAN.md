@@ -87,9 +87,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Unity: `hpatchz`, no backtrace in fault notes, the app log cap misses lines.
 
 ## Runtime identity (nothing blocking)
-- `/home` and `/tmp` stay visible (host app dirs below them).
-- Modules: `dl_iterate_phdr` lists 270 of 320; libc exports `bionic_*` names.
-- x86: `HWCAP2` is 0, exe name `/system/bin/arm64/app_process64`, `dladdr` names, `/proc/net/unix`.
+- Modules: `dl_iterate_phdr` lists 279 of 320 (arm64); the staged graphics stack (libEGL, libGLESv*, libvulkan) stalls the app at start when loaded eagerly. libc exports `bionic_*` names: `libc.so` is the mapping itself, so a stand-in with Android's names cannot be the same file.
+- x86: `HWCAP2` is 0, exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the translated guest only; readable on arm64 and for the host user; cause not found).
 - Process attributes: main thread id; property count 231 of 635 (Waydroid's full list is not in `tests/identity/results`).
 - Termux: `TERMUX_APP__DATA_DIR` is a host path.
 - Launch leftovers: btload child `environ`, `#!/bin/sh` through the generic exec path.

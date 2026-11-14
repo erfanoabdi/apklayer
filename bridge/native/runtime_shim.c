@@ -486,7 +486,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     for (const char *const *name = (const char *const[]){"libjavacore.so", "libnativehelper.so", "libandroidicu.so", "libicui18n.so", "libicuuc.so", "libicu.so",
                                                         "libstatssocket.so", "libpackagelistparser.so", "libpcre2.so", "libziparchive.so", "liblzma.so",
                                                         "libaaudio.so", "libOpenSLES.so", "libwilhelm.so", "libvintf.so", "libselinux.so", "libwebviewchromium_plat_support.so",
-                                                        "libstagefright_http_support.so", "libEGL.so", "libGLESv1_CM.so", "libGLESv2.so", "libGLESv3.so", "libvulkan.so", NULL}; *name; name++)
+                                                        "libstagefright_http_support.so", NULL}; *name; name++)
         bionic_dlopen(*name, 2 /* RTLD_NOW */);
     { extern void apklayer_install_path_layer(void); apklayer_install_path_layer(); } /* libc_bio is loaded now: Android paths (/system, /vendor...) as btload does */
     apklayer_log_to_stderr();
