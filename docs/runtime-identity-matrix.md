@@ -144,7 +144,7 @@ History of the totals: first measurement 29 match, 13 partial, 73 mismatch, 1 n/
 | comm / prctl(PR_GET_NAME) / stat field 2 | hello.identity | **fixed**: hello.identity in comm, stat, status Name (the process leader's comm projects to the cmdline process name, last 15 bytes as AndroidRuntime::setArgv0) | same | match | M | proc view (proc_task.c); the real thread keeps `java` |
 | cgroup | `0::/` (Waydroid; phone: `0::/uid_10xxx/pid_N`) | **fixed**: `0::/uid_10000/pid_<pid>` (cgroups.json v2 shape; the filter's own hidden-process check reads the real line) | same | match | M | proc view |
 | attr/current (SELinux) | AppArmor (Waydroid); phone: `u:r:untrusted_app:s0:c...` | `unconfined` | `u:r:untrusted_app:s0:c0,c256,c512,c768` | match: **fixed 2026-11-14** on ARM64 (proc_view.c reads `u:r:untrusted_app:s0:c<id>,c256,c512,c768`, as x86); untested on the phones | M (Unity reads it) | proc view (done) |
-| loginuid / wchan | 4294967295 / 0 | 1000 / futex_do_wait | same | mismatch | L | proc view |
+| loginuid / wchan | 4294967295 / 0 | **loginuid fixed** (4294967295, Umask 0077 in status); wchan still futex_do_wait | same | partial | L | proc view |
 | /proc/1/cmdline | /system/bin/init second_stage (container); phone: EACCES/ENOENT | ENOENT | ENOENT | match (phone) | M | - |
 | /proc/version, uname | host kernel (Waydroid) | host kernel, nodename `UTM-Virtual-Machine` | nodename `Erfan-Hi10-Max` | partial (rerun: nodename localhost; kernel version string and sysname/release are the host's) | M (uname in dex of Telegram, Unciv, Device Info) | bionic patch (uname nodename/version) + translator |
 | /proc/net/unix | readable (Waydroid) ; phone: EACCES since Android 10 | readable | EACCES | partial | L | proc view |

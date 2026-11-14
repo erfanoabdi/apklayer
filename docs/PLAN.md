@@ -99,7 +99,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - maps: anon names (`scudo`, `libc_malloc`, `stack_and_tls`) via `prctl(PR_SET_VMA)`.
 - Modules: `dl_iterate_phdr` lists 270 of 320; libc exports `bionic_*` names.
 - x86: `HWCAP2` is 0, exe name `/system/bin/arm64/app_process64`, `dladdr` names, `/proc/net/unix`.
-- Process attributes: main thread id, `loginuid`, `Umask`, `ANDROID_SOCKET_zygote`, property count 219 of 635.
+- Process attributes: main thread id, `ANDROID_SOCKET_zygote`, property count 219 of 635.
 - Termux: `TERMUX_APP__DATA_DIR` is a host path.
 - Launch leftovers: btload child `environ`, `#!/bin/sh` through the generic exec path.
 - Apps converted before converter ABI 9: no automatic reconvert.
