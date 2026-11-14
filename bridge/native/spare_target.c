@@ -26,7 +26,7 @@ static void set_launch_env(const char *text)
             if (n < sizeof entry) {
                 memcpy(entry, line + sizeof prefix - 1, n);
                 entry[n] = 0;
-                if ((eq = strchr(entry, '='))) { *eq = 0; setenv(entry, eq + 1, 1); if (!strcmp(entry, "APKLAYER_CWD") && chdir(eq + 1)) {} }
+                if ((eq = strchr(entry, '='))) { *eq = 0; setenv(entry, eq + 1, 1); }
             }
         }
         if (!end) break;
