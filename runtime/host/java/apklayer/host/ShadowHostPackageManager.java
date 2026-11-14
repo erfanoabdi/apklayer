@@ -75,6 +75,7 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         if (info.applicationInfo != null && info.packageName != null && info.packageName.equals(System.getProperty("apklayer.package"))) {
             info.applicationInfo = new android.content.pm.ApplicationInfo(info.applicationInfo);
             AppEnvironment.stableDataDirs(info.applicationInfo);
+            info.applicationInfo = AppEnvironment.androidApkPaths(info.applicationInfo);
         }
         if (info.splitNames == null && info.applicationInfo != null) info.splitNames = info.applicationInfo.splitNames;
         android.content.pm.SigningDetails details = HostCertificate.details(info.packageName);

@@ -3,22 +3,18 @@ Subject: [PATCH] linker: an app's dlsym answers as Android's linker would (host-
 diff --git a/linker/app_view.c b/linker/app_view.c
 --- a/linker/app_view.c
 +++ b/linker/app_view.c
-@@ -114,6 +114,8 @@
- 
- extern long apklayer_android_spelling_own_data(char *buf, long n, long size) __attribute__((weak));  /* the preload: paths.c */
+@@ -114,4 +114,6 @@
  
 +extern long apklayer_android_spelling_own_data(char *buf, long n, long size) __attribute__((weak));  /* the preload: paths.c */
 +
  /* host-only symbols that RTLD_DEFAULT does not find on Android */
  bool apkenv_app_symbol_hidden(const char *symbol)
  {
-@@ -154,6 +156,7 @@
+@@ -154,4 +156,5 @@
  	}
  	if (glibc_loaded) return false;
  	snprintf(buf, size, "%s", host_path);  /* a bionic-loaded library that is not the platform's: the app's own */
 +	if (apklayer_android_spelling_own_data && size > 1) buf[apklayer_android_spelling_own_data(buf, (long)strlen(buf), (long)size - 1)] = 0;  /* its /data/app/... name */
- 	if (apklayer_android_spelling_own_data && size > 1) buf[apklayer_android_spelling_own_data(buf, (long)strlen(buf), (long)size - 1)] = 0;  /* its /data/app/... name */
- 	if (apklayer_android_spelling_own_data && size > 1) buf[apklayer_android_spelling_own_data(buf, (long)strlen(buf), (long)size - 1)] = 0;  /* its /data/app/... name */
  	return true;
 diff --git a/linker/dlfcn.c b/linker/dlfcn.c
 --- a/linker/dlfcn.c
