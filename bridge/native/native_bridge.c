@@ -58,6 +58,7 @@ static const uint64_t kAppNamespaceType = 1 | 0x10000000;
 static struct NativeBridgeCallbacks *nb;
 static struct native_bridge_namespace_t *app_ns;
 static jvmtiEnv *ti;
+void apklayer_jni_trace_install(JNIEnv *env, jvmtiEnv *jvmti);  /* jni_trace.c */
 
 /* The translated libc owns its environment and errno; CriticalNative wrappers have ordinary C arguments. */
 static char *(*guest_env_get)(const char *);
@@ -253,6 +254,7 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env
     else if (!nb->initialize(&runtime_cbs, cache, isa)) snprintf(err, sizeof err, "%s: initialize(%s) failed", bridge, isa);
     else {
         wrap_register_natives();
+        apklayer_jni_trace_install(env, ti);  /* APKLAYER_JNI_TRACE=1 only (jni_trace.c) */
         char *pub = public_libraries();
         struct native_bridge_namespace_t *system = nb->getExportedNamespace("system");
         app_ns = nb->createNamespace("classloader-namespace", NULL, libdir, kAppNamespaceType, libdir, system);
