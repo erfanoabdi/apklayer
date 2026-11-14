@@ -14,7 +14,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 ## Bugs (open)
 - PGR (Punishing: Gray Raven, Unity): its first-run Notice dialog (KuroSDK) was laid out for 1024x768 beside an 814x456 window, its accept button below the window. Current runs on the NVIDIA PC (2026-11-11) give every PGR window the real size (3440x1440, after 8e089188's display density) and no Process.killProcess; the dialog itself shows only on a first run, which needs a fresh install (clearing the tester's data would lose the account and the 43 GB download): check on a fresh instance.
 - Ubuntu Touch spread (per-launch shell, 2026-11-10, CHANGELOG): run groups input, multi-app, mobile on Parallels for the shell/CLI change;
-  a drawer launch that finds its app already running (relaunch) starts and ends a shell of its own for nothing.
+  a drawer launch that finds its app already running (relaunch) starts and ends a shell of its own for nothing. Fix (needs the phone to verify; `startLomiriAppShell` only runs in a `lomiri-app-launch--` unit): in cli/main.cpp skip `startLomiriAppShell` when `windowLaunch(l, inst, package)` (cli/run.cpp, expose it) finds a running window JVM; then `relaunch()` raises through `l.shellSocket()`, not the running app's own `shell-<pid>.sock`, so the raise needs that socket too (read it from the run.<pid> record).
 - Toasts queue per process, not across the instance's apps (NotificationManagerService has one queue).
 - A restarted launcher gets no saved instance state (HubActivities.restartIfAlone shortcut; FCL after the game quits).
 - Native bridge: pthread_sigqueue with a guest pthread record is not mapped.
@@ -23,8 +23,8 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
 - An installer run once hung after its self update waiting on `apklayer.stack.ready` with no stack (not reproduced).
 - Phone with the deb: after 4-5 NewPipe launches `HubStartup.connect` blocked in `pingBinder` (swap full); restarting the instance cleared it.
-- volumes-sandbox "catchup present internal file" failed once in five (scan sent, not indexed in 30 s).
-- Unciv is black on UTM (Mesa 26, virgl and zink; draws on Parallels): an apitrace capture replayed elsewhere to find the call.
+- volumes-sandbox "catchup present internal file" failed once in five (scan sent, not indexed in 30 s). Not reproduced 2026-11-14: a fresh Parallels tree has no sandbox host setup, and its non-sandbox `volumes` run did not see the drive mounted while stopped ("catchup present volume" FAIL, hub "0 mounted" at start; the default tree passes). Suspects: the scan broadcast (HubMediaWatch.send) reaches MediaProvider's process before it is ready (the hub does not wait for it), or MediaProvider's own first scan after a start overlaps the single-file scan.
+- Unciv is black on UTM (Mesa 26, virgl and zink; draws on Parallels): rechecked 2026-11-14: GLES 3.2 context, no GL or shader error in the app log. Known cause (tests/vm/gles-sampler-limit.c): virgl claims 32 fragment samplers, TextureArraySpriteBatch's shader with more than 16 kills the context. Capping GL_MAX_TEXTURE_IMAGE_UNITS to 16 in libapklayer_gles (env var, filter mapped) was tried and stayed black: unverified that Unciv read the capped value (not logged), so the cap is not in the tree; next: log the cap's hit, else capture with apitrace.
 
 ## Graphics
 - Present fences signal at the hand-over to the shell, not the real present (needs a kernel fence the composer can signal; then wp_presentation).
