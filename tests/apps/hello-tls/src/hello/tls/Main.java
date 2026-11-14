@@ -43,6 +43,15 @@ public final class Main extends Activity {
                 try (javax.net.ssl.SSLSocket sock = (javax.net.ssl.SSLSocket) SSLContext.getDefault().getSocketFactory().createSocket("example.com", 443)) {
                     sock.startHandshake(); report(true, "socket handshake with example.com: " + sock.getSession().getProtocol() + " peerHost=" + sock.getSession().getPeerHost());
                 } catch (Exception e) { report(false, "socket handshake with example.com: " + e); }
+                for (String host : new String[] {"f-droid.org", "github.com"}) {  // what the handshake negotiated and which chain the server sent (a CDN edge may answer differently)
+                    try (javax.net.ssl.SSLSocket sock = (javax.net.ssl.SSLSocket) SSLContext.getDefault().getSocketFactory().createSocket(host, 443)) {
+                        sock.startHandshake();
+                        javax.net.ssl.SSLSession s = sock.getSession();
+                        StringBuilder chain = new StringBuilder();
+                        for (java.security.cert.Certificate c : s.getPeerCertificates()) chain.append(" [").append(((java.security.cert.X509Certificate) c).getSubjectX500Principal().getName()).append(']');
+                        report(true, "handshake with " + host + ": " + s.getProtocol() + " " + s.getCipherSuite() + " chain" + chain);
+                    } catch (Exception e) { report(false, "handshake with " + host + ": " + e); }
+                }
                 // the default trust manager's host-aware check, as Chromium's X509Util calls it (Conscrypt's, or HostTrust's when Conscrypt is not loaded)
                 try (javax.net.ssl.SSLSocket sock = (javax.net.ssl.SSLSocket) SSLContext.getDefault().getSocketFactory().createSocket("example.com", 443)) {
                     sock.startHandshake();
@@ -52,6 +61,7 @@ public final class Main extends Activity {
                     report(!new android.net.http.X509TrustManagerExtensions(x).checkServerTrusted(chain, "UNKNOWN", "example.com").isEmpty(), "X509TrustManagerExtensions.checkServerTrusted(chain, authType, host)");
                 } catch (Exception e) { report(false, "X509TrustManagerExtensions.checkServerTrusted: " + e); }
                 try { java.security.KeyPairGenerator g = java.security.KeyPairGenerator.getInstance("XDH"); g.initialize(new java.security.spec.NamedParameterSpec("X25519")); report(g.generateKeyPair().getPublic() != null, "XDH X25519 key pair via NamedParameterSpec (" + g.getProvider().getName() + ")"); } catch (Exception e) { report(false, "XDH X25519 key pair: " + e); }
+                try { report(java.security.Signature.getInstance("RSASSA-PSS") != null, "RSASSA-PSS signature (SunJSSE's rsa_pss_* schemes: RSA-certificate servers need them for TLS 1.3)"); } catch (Exception e) { report(false, "RSASSA-PSS signature: " + e); }
                 expectFail("https://expired.badssl.com/", "expired certificate");
                 expectFail("https://self-signed.badssl.com/", "self-signed certificate");
                 expectFail("https://wrong.host.badssl.com/", "wrong host name");

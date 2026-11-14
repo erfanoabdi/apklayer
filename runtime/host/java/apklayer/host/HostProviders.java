@@ -37,7 +37,7 @@ final class HostProviders {
         Provider sun = have.get("SUN");
         have.put(conscrypt.getName(), conscrypt);
         if (sun != null) have.put("CertPathProvider", new CertPath(sun));
-        try { have.put("HarmonyJSSE", new HarmonyJsse(have.get("SunEC"))); } catch (Throwable none) { System.err.println("[apklayer] warning: HarmonyJSSE: " + none); }
+        try { have.put("HarmonyJSSE", new HarmonyJsse(have.get("SunEC"), have.get("SunRsaSign"))); } catch (Throwable none) { System.err.println("[apklayer] warning: HarmonyJSSE: " + none); }
         List<Provider> order = new ArrayList<>();
         for (String name : new String[] {"AndroidNSSP", "AndroidOpenSSL", "CertPathProvider", "AndroidKeyStoreBCWorkaround", "BC", "HarmonyJSSE", "AndroidKeyStore"}) {
             Provider p = have.get(name);
@@ -72,12 +72,14 @@ final class HostProviders {
         }
     }
 
-    /** HarmonyJSSE (libcore's JSSEProvider, final: its services are forwarded) that also serves SunEC's XDH/X25519, so that SunEC stays out of Security.getProviders() (Android has none). */
+    /** HarmonyJSSE (libcore's JSSEProvider, final: its services are forwarded) that also serves SunEC's XDH/X25519 and SunRsaSign's RSASSA-PSS, so that they stay out of Security.getProviders() (Android has none).
+     *  SunJSSE (an app's own TLS stack) offers the rsa_pss_* signature schemes only if RSASSA-PSS resolves: without it a server with an RSA certificate (f-droid.org) cannot do TLS 1.3 and answers handshake_failure. */
     static final class HarmonyJsse extends Provider {
-        HarmonyJsse(Provider ec) {
+        HarmonyJsse(Provider ec, Provider rsa) {
             super("HarmonyJSSE", "1.0", new com.android.org.conscrypt.JSSEProvider().getInfo());
             java.util.List<Provider.Service> real = new ArrayList<>(new com.android.org.conscrypt.JSSEProvider().getServices());
             if (ec != null) for (String type : new String[] {"KeyPairGenerator", "KeyAgreement", "KeyFactory"}) for (String alg : new String[] {"XDH", "X25519"}) real.add(ec.getService(type, alg));
+            if (rsa != null) for (String type : new String[] {"Signature", "KeyFactory", "KeyPairGenerator", "AlgorithmParameters"}) real.add(rsa.getService(type, "RSASSA-PSS"));
             for (Provider.Service r : real) {
                 if (r == null) continue;
                 putService(new Provider.Service(this, r.getType(), r.getAlgorithm(), r.getClassName(), null, null) {
