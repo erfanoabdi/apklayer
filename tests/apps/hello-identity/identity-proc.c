@@ -25,6 +25,9 @@ static void maps(struct buf *b)
     size_t size;
     char *text = slurp("/proc/self/maps", &size);
     if (!text) { put(b, "maps", "ERR %d", errno); return; }
+    /* the full view, to read what the app sees: only when its data directory holds a file of this name (tests/identity) */
+    FILE *dump = fopen("/data/user/0/hello.identity/files/maps-dump.txt", "r+");
+    if (dump) { fwrite(text, 1, size, dump); fclose(dump); }
     int lines = 0, rwx = 0, named = 0, anon = 0;
     char rwx_names[2048] = "";
     unsigned long rwx_kb = 0;

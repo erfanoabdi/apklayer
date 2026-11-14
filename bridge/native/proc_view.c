@@ -467,6 +467,8 @@ static int proc_filter(int fd)
             if (len && !strncmp(path, jdk, len) && path[len] == '/') {
                 if (strstr(path + len, "/lib/server/libjvm.so"))
                     fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /apex/com.android.art/%s/libopenjdkjvm.so\n", start, end, perms, offset, major, minor, inode, sizeof(void *) == 8 ? "lib64" : "lib");
+                else if (!strcmp(path + len, "/bin/java\n"))  /* the launcher is the app's executable, as app_process64 is on Android */
+                    fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /system/bin/app_process64\n", start, end, perms, offset, major, minor, inode);
                 else fprintf(buffer, "%lx-%lx %s 00000000 00:00 0\n", start, end, perms);
                 continue;
             }
