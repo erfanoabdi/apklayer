@@ -63,8 +63,8 @@ final class AppEnvironment {
             Thread.currentThread().setName("main");  // the sandbox's "SDK 36 Main Thread", and its group "SDK 36"
             try {
                 java.lang.reflect.Field groupName = ThreadGroup.class.getDeclaredField("name");
-                sun.misc.Unsafe unsafe = UnsafeAccess.getUnsafe();
-                unsafe.putObject(Thread.currentThread().getThreadGroup(), unsafe.objectFieldOffset(groupName), "main");
+                groupName.setAccessible(true);  // (not through Unsafe: see AppClassLoader.dexElements)
+                groupName.set(Thread.currentThread().getThreadGroup(), "main");
             } catch (ReflectiveOperationException | RuntimeException keep) { /* the group keeps its name */ }
             int target = ApkSdk.target(apk.toFile());
             if (target > 0) { dalvik.system.VMRuntime.getRuntime().setTargetSdkVersion(target); GuestHiddenApi.target(target); }

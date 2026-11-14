@@ -19,6 +19,14 @@ public class Main extends Activity {
         super.onCreate(state);
         Out.put("meta.abi", android.os.Build.SUPPORTED_ABIS[0] + " " + System.getProperty("os.arch"));
         Out.put("meta.sdk", android.os.Build.VERSION.SDK_INT + " " + android.os.Build.FINGERPRINT);
+        // where the app's data lives by each route (Termux exports PackageManager's dataDir as TERMUX_APP__DATA_DIR)
+        Out.probe("java.appinfo.context", () -> getApplicationInfo().dataDir);
+        Out.probe("java.appinfo.pm", () -> getPackageManager().getApplicationInfo(getPackageName(), 0).dataDir);
+        Out.probe("java.appinfo.pmFlags", () -> getPackageManager().getApplicationInfo(getPackageName(), android.content.pm.PackageManager.ApplicationInfoFlags.of(0)).dataDir);
+        Out.probe("java.appinfo.pmPackageInfo", () -> getPackageManager().getPackageInfo(getPackageName(), 0).applicationInfo.dataDir);
+        Out.probe("java.appinfo.installed", () -> { for (android.content.pm.ApplicationInfo a : getPackageManager().getInstalledApplications(0)) if (a.packageName.equals(getPackageName())) return a.dataDir; return "absent"; });
+        Out.probe("java.appinfo.getDataDir", () -> getDataDir().getPath());
+        Out.probe("java.appinfo.filesDir", () -> getFilesDir().getPath());
         JavaProbes.run(Main.class);
         ArtProbes.run();
         try {

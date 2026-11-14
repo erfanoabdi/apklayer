@@ -166,6 +166,9 @@ final class JavaProbes {
             String[] lines = w.toString().split("\n");
             return lines.length + " lines: " + lines[0] + " / " + lines[1].trim() + " / " + lines[lines.length - 1].trim();
         });
+        Out.probe("java.reflect.unsafeGetUnsafe", () -> sun.misc.Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null) != null);  // HiddenApiBypass's first step
+        Out.probe("java.reflect.unsafeMethods", () -> { Method[] all = sun.misc.Unsafe.class.getDeclaredMethods(); int n = 0; for (Method m : all) if (m.getName().startsWith("get")) n++; return all.length + " methods, " + n + " get*, class loader " + sun.misc.Unsafe.class.getClassLoader(); });
+        Out.probe("java.reflect.unsafeNames", () -> { java.util.TreeSet<String> s = new java.util.TreeSet<>(); for (Method m : sun.misc.Unsafe.class.getDeclaredMethods()) if (m.getName().startsWith("get") && !m.getName().startsWith("getInt") && !m.getName().startsWith("getL") && !m.getName().startsWith("getB") && !m.getName().startsWith("getO") && !m.getName().startsWith("getS") && !m.getName().startsWith("getC") && !m.getName().startsWith("getD") && !m.getName().startsWith("getF")) s.add(m.getName()); return s.toString(); });
         Out.probe("java.stack.callerOfStatic", () -> {
             Class<?> vmstack = Class.forName("dalvik.system.VMStack");
             Method m = vmstack.getDeclaredMethod("getCallingClassLoader");

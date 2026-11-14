@@ -115,6 +115,12 @@ try:
                     subprocess.run(['bin/apklayer', 'install', str(apk)], env=ENV, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
                     # Acknowledge the CLI install in the app's own files, without exposing the host package store.
                     ready = line.split(' ', 3)[3]
+                    prefix = '/data/user/0/%s/' % package
+                    if ready.startswith(prefix) and not Path(ready).parent.exists() and ENV.get('APKLAYER_SANDBOX', os.environ.get('APKLAYER_SANDBOX')) != '1':
+                        # the app names its files by Android's path (getFilesDir): the harness outside the app reaches the same directory by its host path
+                        info = subprocess.run(['bin/apklayer', 'info', package], env=ENV, capture_output=True, text=True).stdout
+                        data = dict(l.split('\t', 1) for l in info.splitlines() if '\t' in l).get('dataDir')
+                        if data: ready = str(Path(data) / 'app' / ready[len(prefix):])
                     if ENV.get('APKLAYER_SANDBOX', os.environ.get('APKLAYER_SANDBOX')) == '1':
                         subprocess.run(['bin/apklayer', 'sandbox-exec', package, '--', 'touch', ready], env=ENV, check=True)
                     else:

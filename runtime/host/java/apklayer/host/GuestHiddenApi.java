@@ -12,17 +12,18 @@ import org.robolectric.annotation.internal.DoNotInstrument;
  * Scope: the runtime's own classes (dalvik.system.VMRuntime and VMDebug members Android 13 blocks for apps: the probes of tests/apps/hello-identity),
  * the fields of the loader classes, Robolectric's `__robo_data__`, and `Runtime.version()` (libcore removed it). This is not the framework's
  * hiddenapi-flags database: the rest of the framework's non-SDK members stay reachable (docs/runtime-identity-matrix.md). The caller must be the app:
- * code of an app's PathClassLoader; the framework and the host see everything. Like ART, `VMRuntime.setHiddenApiExemptions` (which an app only
- * reaches by a bypass) turns the policy off for the signatures it names ("L" for everything), see {@link #exempt}.
+ * code of an app's PathClassLoader; the framework and the host see everything. Like ART, `VMRuntime.setHiddenApiExemptions` turns the policy off
+ * for the signatures it names ("L" for everything), see {@link #exempt}. Android blocks that method from apps, which reach it by walking ART's
+ * ArtMethod array through Unsafe (HiddenApiBypass: Termux, Aurora); that walk is answered empty here (ApklayerUnsafe: the layout is HotSpot's) and
+ * the library then falls back to plain reflection, so the method stays visible: the one deliberate difference from the device.
  */
 @DoNotInstrument
 public final class GuestHiddenApi {
     private GuestHiddenApi() {}
 
     private static final Set<String> VMRUNTIME = Set.of("vmVersion", "isCheckJniEnabled", "isNativeDebuggable", "isJavaDebuggable", "getTargetSdkVersion",
-            "getTargetHeapUtilization", "setTargetHeapUtilization", "properties", "bootClassPath", "classPath", "setHiddenApiExemptions",
-            "setTargetSdkVersion", "registerNativeAllocation", "registerNativeFree", "clearGrowthLimit", "startJitCompilation", "disableJitCompilation");
-    private static final Set<String> VMDEBUG = Set.of("getVmFeatureList", "dumpHprofData", "startMethodTracing", "stopMethodTracing", "getRuntimeStat", "getRuntimeStats");
+            "getTargetHeapUtilization", "properties", "bootClassPath", "classPath");  // measured on Android 13 for a target-34 app
+    private static final Set<String> VMDEBUG = Set.of("getVmFeatureList");
 
     private static final List<String> exemptions = new CopyOnWriteArrayList<>();
     private static volatile int target = 10000;

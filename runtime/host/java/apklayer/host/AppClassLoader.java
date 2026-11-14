@@ -97,7 +97,10 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
             Object list = pathList.get(loader);
             ClassLoader platform = loader.getClass().getClassLoader();
             Class<?> dexFileClass = platform.loadClass("dalvik.system.DexFile"), elementClass = platform.loadClass("dalvik.system.DexPathList$Element");
-            Object dex = UnsafeAccess.getUnsafe().allocateInstance(dexFileClass);
+            // allocated without a constructor (the native open): not through sun.misc.Unsafe, whose first use makes the JDK hide Unsafe.getUnsafe from reflection (HiddenApiBypass looks it up first)
+            java.lang.reflect.Constructor<?> blank = sun.reflect.ReflectionFactory.getReflectionFactory().newConstructorForSerialization(dexFileClass, Object.class.getDeclaredConstructor());
+            blank.setAccessible(true);
+            Object dex = blank.newInstance();
             for (String name : new String[] {"mCookie", "mInternalCookie"}) {
                 java.lang.reflect.Field f = dexFileClass.getDeclaredField(name);
                 f.setAccessible(true);
@@ -105,7 +108,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
             }
             java.lang.reflect.Field fileName = dexFileClass.getDeclaredField("mFileName");
             fileName.setAccessible(true);
-            UnsafeAccess.getUnsafe().putObject(dex, UnsafeAccess.getUnsafe().objectFieldOffset(fileName), apk.toString());
+            fileName.set(dex, apk.toString());
             java.lang.reflect.Constructor<?> make = elementClass.getConstructor(dexFileClass, java.io.File.class);
             Object element = make.newInstance(dex, apk.toFile());
             Object elements = java.lang.reflect.Array.newInstance(elementClass, 1);

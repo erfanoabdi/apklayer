@@ -277,27 +277,10 @@ User requested: fix ART internals, Java runtime clues, process identity and othe
 
      The x86 translator already hides these. Give the app an Android namespace view in bionic_translation.
   5. **Raw syscalls on native ARM64 bypass the views.** `svc #0` getuid returns the host uid 1000, and openat of maps shows libjvm without libart. This needs syscall interception for app code: a seccomp SIGSYS trap or syscall user dispatch limited to app text. x86 translation is already consistent. Design first.
-  6. **Java stack traces and threads.**
-     - 19 host frames (`$$robo$$`, org.robolectric, apklayer.host) under onCreate;
-     - the main thread is "SDK 36 Main Thread" (id 16) instead of `main` (id 2);
-     - Thread.getAllStackTraces exposes HotSpot/apklayer threads;
-     - **bug:** `Method.invoke` of an app package-private method throws IllegalAccessException from `apklayer.host.Reflect`.
-
-     Java shadow.
-  7. **Class visibility and loader chain.**
-     - Hide org.robolectric.*, apklayer.*, and JDK-only java.lang.Module/StackWalker/management/`Runtime.version()` (it leaks the Ubuntu JDK string) from app lookups.
-     - Add the missing libcore classes: Daemons, VMClassLoader, BootClassLoader, AndroidHardcodedSystemProperties, Transformers, sun.misc.Cleaner.
-     - Make the parent chain PathClassLoader -> BootClassLoader -> null, with the system loader a PathClassLoader.
-     - Fill DexPathList (the base.apk element, the native library directories at `/data/app/...`) and drop the `__robo_data__` fields.
-
-     Java shadow (boot-parent identity, DexPathList metadata).
-  8. **Security providers and TLS.** The list is SUN/SunJSSE/ApklayerTrust, where Android has AndroidNSSP/AndroidOpenSSL/... with AndroidOpenSSL as the SSLContext default. Present Conscrypt first, under Android's names. Java shadow.
-  9. **Properties.**
-     - Native: dalvik.vm.heapsize, heapgrowthlimit and isa.*, persist.sys.dalvik.vm.lib.2, ro.vndk.version and init.svc.* are missing. `ro.dalvik.vm.native.bridge` names `libberberis_arm64.so` on x86 (a device names libndk_translation.so or 0).
-     - Java: http.agent, user.language/region, android.icu/openssl/zlib versions and java.boot.class.path are missing.
-     - Runtime.maxMemory is 7.5 GB (ARM64) where a phone gives heapgrowthlimit (192 MB).
-
-     Property defaults + Java shadow + launcher (-Xmx).
+  6. **Java stack traces and threads.** Done 2026-11-14 (CHANGELOG): `Method.invoke` of package-private/private members, 0 host frames, `main` thread and group, ART service thread names (GuestTraces, Reflect.invokeAs). Left: the main thread id is not 2; the JVM's real thread names stay in /proc (item 3); `Thread.getAllStackTraces` lacks FinalizerWatchdogDaemon/HeapTaskDaemon/Jit/Profile Saver.
+  7. **Class visibility and loader chain.** Done for lookups, parent chain and dexElements (AppClassLoader, JdkBootLoader). Left: `String.class`/framework classes' `getClassLoader()` (null / sandbox, Android: BootClassLoader); `Object.class.getResource` gives jrt:; the libcore overlay classes (Daemons, VMClassLoader, Transformers, sun.misc.Cleaner) are still absent; host paths in the loader (`findLibrary`, nativeLibraryDirectories, the APK element) need a `/data/app/...` path mapping in the path layer.
+  8. **Security providers and TLS.** NOT done: AndroidOpenSSL is the framework's Conscrypt, its native `libjavacrypto.so` is not staged (prebuilts, `inst`); renaming JDK providers would fake crypto. Needs libjavacrypto (from the LineageOS build, `com.android.conscrypt` apex) staged, `com.android.org.conscrypt.OpenSSLProvider` inserted first with the SSLContext default, and TLS/https tests of the corpus.
+  9. **Properties.** Java side done (java.boot.class.path, user.language/region, http.agent, icu/openssl/zlib versions; Runtime.maxMemory = dalvik.vm.heapgrowthlimit, 256 MB, uncapped in the JVM). Native: dalvik.vm.* defaults added to pixel5-extra.prop; still missing: dalvik.vm.isa.*.variant, ro.vndk.version, init.svc.*; `ro.dalvik.vm.native.bridge` names `libberberis_arm64.so` on x86.
   10. **Process attributes and environment.**
       - dumpable 1, no_new_privs 0, seccomp 0 and AT_SECURE 0 (Android: 0/1/2/1);
       - the parent is the apklayer CLI (Android: zygote64), and the main thread is not the pid;
@@ -313,8 +296,8 @@ User requested: fix ART internals, Java runtime clues, process identity and othe
       - AttachCurrentThread leaves comm unchanged.
 
       Translator/bionic patch JNI wrapper.
-  12. **Exception messages.** Rewrite to ART text: NPE, AIOOBE/SIOOBE, CCE, ArrayStoreException, ArithmeticException, NoSuchMethodException, and UnsatisfiedLinkError (`dlopen failed: library "x" not found`). Java shadow.
-  13. **Hidden-API policy for target SDK >= 28.** Blocked VMRuntime/VMDebug members are open today, and `getTargetSdkVersion` returns 10000. Apply the blocklist on app reflection and return the app's real target SDK. Java shadow.
+  12. **Exception messages.** Done 2026-11-14 for NPE (without the return/field type), array, AIOOBE/SIOOBE, CCE, arithmetic, NSME, ULE. Left: ArrayStoreException ("cannot be stored in an array of type"), `ArrayList.get` IndexOutOfBounds ("Index: 5, Size: 3") and other libcore texts, StackOverflowError depth (21-47k frames, ART 65k).
+  13. **Hidden-API policy for target SDK >= 28.** Partly done: real target SDK from the manifest (VMRuntime shadow), the runtime classes' blocked members hidden from app reflection (GuestHiddenApi, measured Android 13 list). Left: the framework's hiddenapi-flags database (out/soong/hiddenapi in the LineageOS tree) as the policy, with the Android exemption semantics; `setHiddenApiExemptions` is deliberately still visible because HiddenApiBypass (Termux) cannot walk ART structures here.
   14. **ART structures (largest, last).**
       - A real libart.so ELF at its maps path: a file with .dynsym/.symtab, ART symbols bound to shims, code matching memory.
       - Executable.artMethod and Class/Field/Thread ART fields backed by a synthetic ArtMethod/ArtField table: 32-byte ArtMethods with access flags @4, data_ = JNI function, entry point in "libart", jmethodID == artMethod, 16-byte ArtFields.
