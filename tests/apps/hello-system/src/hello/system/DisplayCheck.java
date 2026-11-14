@@ -34,6 +34,11 @@ final class DisplayCheck implements Check {
         Check.require(mode.getPhysicalWidth() == real.widthPixels && mode.getPhysicalHeight() == real.heightPixels, "mode differs from the size: " + seen);
         // the screen, however it is asked for (Display.getRealSize and the maximum window metrics: WindowConfiguration's max bounds)
         Check.require(size.x == real.widthPixels && size.y == real.heightPixels && max.width() == real.widthPixels && max.height() == real.heightPixels, "screen sizes differ: " + seen);
+        // a window context on the display (attachWindowContextToDisplayArea answers its display) and its metrics with the insets (getWindowInsets)
+        Context windowContext = context.createDisplayContext(display).createWindowContext(android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null);
+        android.view.WindowMetrics metrics = windowContext.getSystemService(android.view.WindowManager.class).getMaximumWindowMetrics();
+        Check.require(windowContext.getDisplay().getDisplayId() == display.getDisplayId() && metrics.getWindowInsets() != null && metrics.getWindowInsets().getInsets(android.view.WindowInsets.Type.systemBars()) != null
+                && metrics.getBounds().equals(max), "window context: display " + windowContext.getDisplay().getDisplayId() + " bounds " + metrics.getBounds() + " insets " + metrics.getWindowInsets());
         return seen;
     }
 }
