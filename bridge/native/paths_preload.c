@@ -100,7 +100,6 @@ long apklayer_android_spelling(char *buf, long n);
 long apklayer_android_spelling_own_data(char *buf, long n);  /* paths.c: only the app's own data directory's host path -> /data/user/0/<pkg> (realpath, getcwd) */
 /* /proc links (an fd, the executable) to a file the overlay served read as its Android path (paths.c) */
 long apklayer_proc_link_view(const char *path, char *buf, long n, size_t size);  /* proc_task.c: exe and fd links as an Android app process shows them */
-int apklayer_proc_prctl_view(int option, long *result);
 static ssize_t proc_link(const char *path, char *buf, ssize_t r, size_t size)
 {
     if (r > 0 && path && !strncmp(path, "/proc/", 6)) { r = apklayer_android_spelling(buf, r); r = apklayer_proc_link_view(path, buf, r, size); }
