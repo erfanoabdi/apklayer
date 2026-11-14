@@ -734,7 +734,7 @@ long apklayer_android_spelling(char *buf, long n, long size)
 /* apklayer patch: what Android code (bionic_translation's libc) sees: the exact directories /home and /tmp are absent (Android has neither), files below them stay
  * (the app's data and apks are host paths below /home). Only this guest hook hides them: the JVM and the glibc wrappers keep the host view, so Files.createDirectories
  * on a path below /home never meets an ENOENT parent. APKLAYER_ETC_VIEW=host turns it off. */
-static bool guest_path_overrides(char **path)
+bool apklayer_guest_path_overrides(char **path)
 {
     const char *p = *path;
     if (p && (!strncmp(p, "/home", 5) || !strncmp(p, "/tmp", 4)) && __atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) {
@@ -749,7 +749,7 @@ static bool guest_path_overrides(char **path)
 void apklayer_install_path_layer(void)
 {
     void (*set)(bool (*)(char **)) = dlsym(RTLD_DEFAULT, "libc_bio_set_apply_path_overrides_func");
-    if (set) set(guest_path_overrides);
+    if (set) set(apklayer_guest_path_overrides);
     push_app_uid();
     {   /* this process's exec environment where another process of the app can read it (its /proc/<pid>/environ view, proc_task.c) */
         extern int apklayer_proc_publish_environment(void) __attribute__((weak));

@@ -233,6 +233,7 @@ static const char *exe_view(long pid, const char *real)
         if (read_small(path, program, sizeof program) > 0 && program[0] == '/') return program;
         return NULL;
     }
+    if (!strcmp(base, "app_process64") && strstr(real, "/arm64/")) return "/system/bin/app_process64";  /* the translator's guest program (x86_64 hosts): the arm64 directory is not Android's */
     if (pid == getppid() && !strncmp(base, "apklayer", 8)) return "/system/bin/app_process64";  /* the CLI that started the JVM: zygote64's */
 #if defined(__aarch64__)  /* translated (x86_64) code gets the translator's /system/bin/arm64/app_process64 */
     if (!strcmp(base, "java")) return "/system/bin/app_process64";

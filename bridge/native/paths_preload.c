@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
+bool apklayer_guest_path_overrides(char **path);  /* paths.c: the same, with /home and /tmp absent (Android code's view) */
 int apklayer_proc_fd(int fd);
 int apklayer_proc_prctl_view(int option, long *result);  /* proc_task.c; declared before the syscall() wrapper uses it (gcc 15: implicit declarations are errors) */
 long apklayer_proc_getdents64(int fd, void *buf, size_t count);
@@ -449,7 +450,8 @@ long syscall(long nr, ...)
     if (at) PROC_GONE((int)a[0], path);
     if (link) PROC_GONE((int)a[1], path);
     if (two) PROC_GONE((int)a[2], path2);
-    MAP(m, path && path[0] == '/' ? path : NULL);
+    char *m = (path && path[0] == '/') ? (char *)path : NULL;  /* raw syscalls come from a native bridge's guest: Android's view */
+    bool m_alloc = m && apklayer_guest_path_overrides(&m);
     MAP(m2, path2 && path2[0] == '/' ? path2 : NULL);
     if (m) a[link ? 2 : first ? 0 : 1] = (long)m;
     if (m2) a[3] = (long)m2;
