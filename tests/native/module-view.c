@@ -56,7 +56,7 @@ int main(int argc, char **argv)
     /* The original fixture is outside the synthetic JDK root. */
     assert(strlen(argv[2]) < sizeof names[2]); strcpy(names[2], argv[2]);
     int filtered = getenv("APKLAYER_OWN_DATA") && !getenv("APKLAYER_PROC_VIEW");
-    const char *art = sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libart.so" : "/apex/com.android.art/lib/libart.so";
+    const char *art = sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libopenjdkjvm.so" : "/apex/com.android.art/lib/libopenjdkjvm.so";
     void *handles[3];
     for (int i = 0; i < 3; i++) {
         if (i < 2) copy_library(argv[2], names[i]);

@@ -24,7 +24,7 @@ static void check(FILE *f, int filtered)
         if (start == (unsigned long)a || start == (unsigned long)b) {
             assert(end == start + 4096 && !strcmp(perms, "r--p") && offset == 0); ranges++;
         }
-        art += strstr(line, sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libart.so" : "/apex/com.android.art/lib/libart.so") != NULL;
+        art += strstr(line, sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libopenjdkjvm.so" : "/apex/com.android.art/lib/libopenjdkjvm.so") != NULL;
         jvm += strstr(line, "/lib/server/libjvm.so") != NULL;
         other += strstr(line, "/lib/libjava.so") != NULL;
     }
@@ -121,7 +121,7 @@ static void check_numa(void *other, int filtered)
             FILE *f = api == 0 ? fopen(paths[alias], "r") : fdopen(api == 1 ? open(paths[alias], O_RDONLY) : syscall(SYS_openat, AT_FDCWD, paths[alias], O_RDONLY, 0), "r");
             numa_rows(f, other, actual);
             for (int i = 0; i < 3; i++) {
-                if (filtered && i == 0) assert(strstr(actual[i], "/libart.so") && !strstr(actual[i], "/libjvm.so"));
+                if (filtered && i == 0) assert(strstr(actual[i], "/libopenjdkjvm.so") && !strstr(actual[i], "/libjvm.so"));
                 else if (filtered && i == 1) assert(!strstr(actual[i], " file="));
                 else assert(!strcmp(raw[i], actual[i]));
                 char expected[2048]; strcpy(expected, raw[i]); strip_numa_file(expected); strip_numa_file(actual[i]);
@@ -131,7 +131,7 @@ static void check_numa(void *other, int filtered)
     }
     int dir = open("/proc/self", O_RDONLY | O_DIRECTORY); assert(dir >= 0);
     numa_rows(fdopen(openat(dir, "numa_maps", O_RDONLY), "r"), other, actual); close(dir);
-    assert(!filtered || (strstr(actual[0], "/libart.so") && !strstr(actual[1], " file=")));
+    assert(!filtered || (strstr(actual[0], "/libopenjdkjvm.so") && !strstr(actual[1], " file=")));
 }
 
 int main(void)
