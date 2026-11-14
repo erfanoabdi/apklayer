@@ -24,6 +24,16 @@ grep -qx NoDisplay=true "$entry" || { echo "FAIL the drawer switch did not hide 
 "$m" --screenshot "$shots/ui-3c-drawer.png" --size 400x840 --app "$pkg" --click "Show in app drawer" --wait-refresh 1
 ! grep -qx NoDisplay=true "$entry" || { echo "FAIL the drawer switch did not show $pkg"; exit 1; }
 echo "ok   the app detail's drawer switch hides and shows its launcher"
+# the app detail's Permissions card: the first runtime (dangerous) permission's switch flips its grant (an app without one: skipped)
+perm=$("$cli" permissions "$pkg" 2>/dev/null | awk -F'\t' '$2 == "dangerous" { print $1, $3; exit }') || true
+if [ -n "$perm" ]; then
+    name=${perm% *} was=${perm#* } title=${name##*.}
+    title="$(echo "${title:0:1}" | tr a-z A-Z)$(echo "${title:1}" | tr A-Z a-z | tr _ ' ')"
+    "$m" --screenshot "$shots/ui-3d-permission.png" --size 1100x1600 --app "$pkg" --click "Allow $title" --wait-refresh 1
+    now=$("$cli" permissions "$pkg" | awk -F'\t' -v n="$name" '$1 == n { print $3 }')
+    [ "$now" != "$was" ] || { echo "FAIL the Permissions switch did not change $name (still $was)"; exit 1; }
+    echo "ok   the app detail's permission switch changed $name ($was -> $now)"
+fi
 "$m" --screenshot "$shots/ui-4-uninstall.png" --size 400x840 --app "$pkg" --click "Uninstall…" --click Uninstall --wait-refresh 1
 check "" "uninstalled after the confirmation"
 spare="$APKLAYER_INSTANCE-ui"
