@@ -37,6 +37,7 @@ static int proc_file_kind(const char *leaf)
     if (!strcmp(leaf, "stat")) return 8;
     if (!strcmp(leaf, "cgroup")) return 9;
     if (!strcmp(leaf, "cmdline")) return 10;
+    if (!strcmp(leaf, "attr/current")) return 12;
     return 0;
 }
 
@@ -58,7 +59,7 @@ static int proc_file_of(int fd, long *tid, long *foreign)
     unsigned long pid, id;
     char leaf[16];
     int end = 0;
-    if (sscanf(path, "/proc/%lu/%15s%n", &pid, leaf, &end) == 2 && end && !path[end] && !strchr(leaf, '/')) {
+    if (sscanf(path, "/proc/%lu/%15s%n", &pid, leaf, &end) == 2 && end && !path[end] && (!strchr(leaf, '/') || !strcmp(leaf, "attr/current"))) {
         snprintf(task, sizeof task, "/proc/self/task/%lu", pid);
         *tid = (long)pid;
         if (access(task, F_OK) == 0) return proc_file_kind(leaf);
@@ -396,6 +397,12 @@ static int proc_filter(int fd)
     int kind = proc_file_of(fd, &tid, &foreign);
     if (!kind || kind == 3) return fd;
     if (kind == 11) { unsigned char elf[128]; size_t size = app_process_standin(elf); return proc_replace(fd, cloexec, "app_process64", (const char *)elf, size); }
+    if (kind == 12) {  /* an app's SELinux context, as on a device and as the translator's 0018 spells it (c<id & 255>,c<256 + id / 256>,c512,c768) */
+        long id = apklayer_app_uid() % 100000 - 10000;
+        char ctx[80];
+        int n = snprintf(ctx, sizeof ctx, "u:r:untrusted_app:s0:c%ld,c%ld,c512,c768", id & 255, 256 + ((id >> 8) & 255)) + 1;  /* with its NUL, as the kernel returns it */
+        return foreign || id < 0 ? fd : proc_replace(fd, cloexec, "attr_current", ctx, (size_t)n);
+    }
     if (foreign || kind >= 7) return task_filter(fd, cloexec, kind, tid, foreign);
     if (kind == 5) {
         const char *(*initial)(size_t *) = dlsym(RTLD_DEFAULT, "libc_bio_initial_environment");

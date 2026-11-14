@@ -19,10 +19,8 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - A restarted launcher gets no saved instance state (HubActivities.restartIfAlone shortcut; FCL after the game quits).
 - Native bridge: pthread_sigqueue with a guest pthread record is not mapped.
 - Fennec 158 on x86 translation (CHANGELOG part 9): fixed so far: Build.CPU_ABI (part 7) and the Gecko main thread's `pthread_join` on a stale thread record (binary_translation 0029, needs the new libberberis_arm64 9786502a in the prebuilts). Now the page is fetched (GET /page) and its inline script runs in the content process, but its `fetch('/rendered')` never reaches the parent: the parent's main thread sleeps in a guest futex wait (FUTEX_WAIT_BITSET word 6, no later wake) after ~15 s while its IPC I/O thread receives the child's PHttpChannel constructor (3012 bytes); a lost wake-up of the parent main thread's event queue. gecko-page.py on x86 still fails (no beacon); ARM passes. Next: which guest condvar/mutex that is and why its signal does not wake it (kemu atomics, futex wake path of libapklayer-preload).
-- The boot broadcast may wake every app with a boot receiver at once (each a JVM; 14 receivers on Parallels): check, it is ordered since 2026-11-08.
 - FCL: after a window resize no new frame reached the shell (window looked frozen); not diagnosed.
 - An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
-- `--spare` JVM still running after `apklayer stop` (4 in ~120 stops, not reproduced since): candidate fix, a second records pass after the hub.
 - An installer run once hung after its self update waiting on `apklayer.stack.ready` with no stack (not reproduced).
 - Phone with the deb: after 4-5 NewPipe launches `HubStartup.connect` blocked in `pingBinder` (swap full); restarting the instance cleared it.
 - volumes-sandbox "catchup present internal file" failed once in five (scan sent, not indexed in 30 s).
@@ -33,9 +31,6 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Swap interval 0: lower near-empty frame rate (waits for a free gbm buffer); an attach that waited drops that buffer's release fence (EglAttach.cpp).
 - Host-ES1 path (Gles1.cpp) untested: needs NVIDIA or a Mesa with -Dgles1=enabled.
 - Vulkan presentation untested on AMD (NVIDIA passes vulkan-present since a3e931cd); the probe takes any GPU, not the instance's.
-- The probe's cached answer ($XDG_RUNTIME_DIR/apklayer-host-vulkan, until the next login) outlives a package update: on the NVIDIA PC the
-  0.4.18 CLI's "-" (no Vulkan) stayed after the update to a3e931cd, so Endfield had no Vulkan until the file was deleted (2026-11-12).
-  Key the cache to the CLI's version (or drop it on update).
 - android.hardware.vulkan.level declared 0; Play feature list lacks multitouch, sensor.*, opengles.aep, vulkan.* where the host has them.
 - GPU per instance: build and test the Vulkan device filter (DeviceSelect.h); copy fallback when a buffer import fails; the VA plugin's device choice; LINEAR on Intel.
 - OTR2 on the PC at 2448x1374 ~30 fps (bound by GPU or its translated thread); Swappy's other inputs untested; the swap bpftrace trace does not load on the PC.
@@ -248,9 +243,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 ## Runtime identity (open, rerun of 2026-11-14)
 
 Goal: what an app sees matches Android (Java, native inspection, ART internals). Do not equate maps labels with ART compatibility. Comparison: `docs/runtime-identity-matrix.md` (first run 29 match, 13 partial, 73 mismatch; rerun on main fecb75f5: 57 / 29 / 28; raw key equality ARM64 207 and x86 212 of 464, was 142 and 169). Probes `tests/apps/hello-identity`, tools and results `tests/identity/`, group `identity-matrix`. Open, most real-app impact first:
-1. Host paths in native views: the app's own files in maps/fd links (`/home/.../apps/<pkg>/lib/*.so`, base.apk) and the loader (`findLibrary`, nativeLibraryDirectories, APK element) need a `/data/app/<pkg>-x/` path-layer mapping; `/proc/self/exe` opened as a file is still the JDK `java` ELF; `/proc/<pid>/environ` of a process that publishes no guest environment (JVM, forked helper) shows host variables, and the x86 guest exec environment carries QT_* variables.
+1. Host paths in native views: the app's own files in maps/fd links (`/home/.../apps/<pkg>/lib/*.so`, base.apk) and the loader (`findLibrary`, nativeLibraryDirectories, APK element) need a `/data/app/<pkg>-x/` path-layer mapping; `/proc/self/exe` opened as a file is still the JDK `java` ELF; `/proc/<pid>/environ` of a process that publishes no guest environment (JVM, forked helper) shows host variables (QT_* now stripped in cli/env.cpp nativeEnv; WAYLAND_DISPLAY, XDG_RUNTIME_DIR and the rest stay: the JVM needs them).
 2. `dlsym(RTLD_DEFAULT, "JNI_GetCreatedJavaVMs")` still resolves on ARM64 (answer is right); JNIEnv functions do not resolve to libart.so in `dladdr`.
-3. Process attributes: AT_SECURE is 0; uname nodename and attr/current leak the desktop on ARM64; x86 AT_PLATFORM null and HWCAP2 0 (translator); TMPDIR/BOOTCLASSPATH unset; main thread is not the pid; cpuinfo is the host's on ARM64; raw-syscall filter does not cover stat owner ids, getdents64, prctl, sysinfo, x86, or kernels without seccomp.
+3. Process attributes: x86 AT_PLATFORM null and HWCAP2 0 (translator, `runtime/arm64/init_kernel_args.cc`: needs a stack string and a HWCAP2 matching the emulated features); TMPDIR unset (Android sets it in ActivityThread); main thread is not the pid (the JDK launcher's thread; known limit); cpuinfo is the host's on ARM64; raw-syscall filter does not cover stat owner ids, getdents64, prctl, sysinfo, x86, or kernels without seccomp.
 4. Java loaders and threads: `String.class`/framework `getClassLoader()` (Android: BootClassLoader); `Object.class.getResource` gives jrt:; libcore overlay classes (Daemons, VMClassLoader, Transformers, sun.misc.Cleaner) absent; main thread id is not 2; `Thread.getAllStackTraces` lacks some ART daemons.
 5. Exception texts: ArrayStoreException, `ArrayList.get` IndexOutOfBounds and other libcore texts; StackOverflowError depth (21-47k, ART 65k); Proxy class name, MethodHandle class.
 6. Hidden-API: the framework's hiddenapi-flags database as the policy; `setHiddenApiExemptions` stays visible because HiddenApiBypass (Termux) cannot walk ART structures here.

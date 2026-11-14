@@ -197,6 +197,19 @@ static void spawn_checks(const char *self) {
     (void)self;
 }
 
+/* A vfork child's exec leaves the preload's depth/guest_launch as it set them in the shared memory: eight script launches in a row
+ * (vfork+exec, posix_spawn) must each still be adapted (#!/bin/sh is Android's, which sets ANDROID_SH). */
+static void script_series(void) {
+    int (*guest_exec)(const char *, char *const[], char *const[]) = need(RTLD_DEFAULT, "apklayer_execve_guest");
+    char *argv[] = {"spawn-adapt", NULL};
+    for (int i = 0; i < 8; i++) {
+        pid_t pid = vfork();
+        if (!pid) { guest_exec("/system/bin/spawn-adapt", argv, environ); _exit(127); }
+        CHECK(pid > 0 && EXITED(wait_child(pid), 0));
+        CHECK(b_spawn(&pid, "/system/bin/spawn-adapt", NULL, NULL, argv, environ) == 0 && EXITED(wait_child(pid), 0));
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 5 && !strcmp(argv[1], "--child")) {  /* a guest program: the environment it was given */
@@ -217,6 +230,7 @@ int main(int argc, char **argv)
         snprintf(shell, sizeof shell, "#!/bin/sh\nANDROID_SH=1; export ANDROID_SH\n"
                  "case \"$1\" in /system/*) f=\"$1\"; shift; exec /bin/sh \"%s$f\" \"$@\";; esac\nexec /bin/sh \"$@\"\n", root);
         write_file("system/bin/sh", shell, 0755);
+        write_file("system/bin/spawn-adapt", "#!/bin/sh\ntest \"$ANDROID_SH\" = 1\n", 0755);
         write_file("system/bin/spawn-script", "exit 9\n", 0755);
         write_file("data/spawn-out", "", 0644);
         ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1); CHECK(n > 0); exe[n] = 0;
@@ -251,6 +265,7 @@ int main(int argc, char **argv)
     system_checks();
     popen_checks();
     spawn_checks(argv[0]);
+    script_series();
     CHECK(!nftw(root, remove_entry, 16, FTW_DEPTH | FTW_PHYS));
     puts("PASS native guest spawn: system signals/status, popen r/w/r+/e with pclose and fclose, concurrent popen/system, "
          "posix_spawn attributes/file actions/CLOEXEC_DEFAULT, guest environment and PATH, /system/bin/sh, status 127");
