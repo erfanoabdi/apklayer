@@ -9,7 +9,7 @@ if is_variable('c_bio')
       args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
   endforeach
   # a chaining bionic crash handler ends the process (0046); JVM_get_signal_action exported as libjsig's
-  test('fault-chain', executable('fault-chain-test', 'fault-chain.c', dependencies: [native_dl], export_dynamic: true),
+  test('fault-chain', executable('fault-chain-test', 'fault-chain.c', dependencies: [native_dl], export_dynamic: true, c_args: ['-fno-omit-frame-pointer']),
     args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
   # the dl* entries as namespace bypasses read them: first bl -> __loader_* (0049; androidnsbypass in FCL/Pojav)
   test('loader-entry', executable('loader-entry-test', 'loader-entry.c', dependencies: [native_dl]),
