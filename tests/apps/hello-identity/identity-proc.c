@@ -3,6 +3,7 @@
 #include "identity.h"
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -204,6 +205,14 @@ static void links(struct buf *b)
         target[r] = 0;
         if (!strncmp(names[i], "ns/", 3)) { char *br = strchr(target, '['); if (br) strcpy(br, "[N]"); }
         put(b, key, "%s", target);
+    }
+    {   /* the file behind the exe link: an ELF of the app's ABI (Android: app_process64), not the JDK's java */
+        unsigned char head[20] = {0};
+        int fd = open("/proc/self/exe", O_RDONLY | O_CLOEXEC);
+        ssize_t got = fd < 0 ? -1 : read(fd, head, sizeof head);
+        if (fd >= 0) close(fd);
+        if (got < 20) put(b, "exe.file", "ERR %s", fd < 0 ? strerror(errno) : "short");
+        else put(b, "exe.file", "%s machine=%u", memcmp(head, "\177ELF", 4) ? "not ELF" : "ELF", head[18] | head[19] << 8);
     }
     DIR *d = opendir("/proc/self/fd");
     if (!d) { put(b, "fd", "ERR %s", strerror(errno)); return; }
