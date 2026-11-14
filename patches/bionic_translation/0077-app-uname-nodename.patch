@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 14 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: uname() of an app names the Android nodename; the app environment has BOOTCLASSPATH
+
+apklayer patch (docs/PATCHES.md). glibc's uname returns the desktop's host name (UTM-Virtual-Machine, the owner's PC); an Android app
+reads "localhost" (the raw uname syscall already does, bridge/native/raw_syscall.c). Only once the process knows its app uid
+(libc_bio_set_app_uid); services keep the host's. init exports BOOTCLASSPATH and DEX2OATBOOTCLASSPATH to every app process: the
+initial app environment (0067) now has both (Android 13's boot jars, as Waydroid's apps read them).
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -172,6 +172,14 @@
+ uid_t bionic_geteuid(void) { return app_uid >= 0 ? (uid_t)app_uid : geteuid(); }
+ gid_t bionic_getgid(void) { return app_uid >= 0 ? (gid_t)app_uid : getgid(); }
+ gid_t bionic_getegid(void) { return app_uid >= 0 ? (gid_t)app_uid : getegid(); }
++
++#include <sys/utsname.h>
++int bionic_uname(struct utsname *u)
++{
++	int r = uname(u);
++	if (r == 0 && app_uid >= 0) strcpy(u->nodename, "localhost");
++	return r;
++}
+ 
+ /* apklayer patch: the passwd entry of an app uid. glibc knows only the desktop's users, so getpwuid(getuid()) of an app (its Android
+  * uid, above) was NULL, and Unity's libunity read pw_dir from it (PGR died at start, SIGSEGV at 0x20 on UnityMain). bionic answers an
+diff --git a/libc/libc-environment.cpp b/libc/libc-environment.cpp
+--- a/libc/libc-environment.cpp
++++ b/libc/libc-environment.cpp
+@@ -219,6 +219,11 @@
+ }
+ 
+ /* system/core/rootdir/init.environ.rc.in and bionic/libc/include/paths.h. */
++#define APK_BOOTCLASSPATH \
++  "/apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:" \
++  "/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:" \
++  "/system/framework/ext.jar:/system/framework/framework-atb-backward-compatibility.jar:/apex/com.android.i18n/javalib/core-icu4j.jar:" \
++  "/apex/com.android.conscrypt/javalib/conscrypt.jar:/apex/com.android.media/javalib/updatable-media.jar"
+ static const char *const android_defaults[] = {
+   "ANDROID_BOOTLOGO=1", "ANDROID_ROOT=/system", "ANDROID_ASSETS=/system/app",
+   "ANDROID_DATA=/data", "ANDROID_STORAGE=/storage", "ANDROID_ART_ROOT=/apex/com.android.art",
+@@ -226,6 +231,7 @@
+   "ANDROID_I18N_ROOT=/apex/com.android.i18n", "ANDROID_TZDATA_ROOT=/apex/com.android.tzdata",
+   "EXTERNAL_STORAGE=/sdcard", "ASEC_MOUNTPOINT=/mnt/asec",
+   "PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/apex/com.android.virt/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin",
++  "BOOTCLASSPATH=" APK_BOOTCLASSPATH, "DEX2OATBOOTCLASSPATH=" APK_BOOTCLASSPATH,
+   nullptr
+ };
+ 
