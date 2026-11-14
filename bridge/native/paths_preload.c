@@ -35,7 +35,7 @@ int apklayer_binder_route_exists(const char *path);
 /* the sandbox's file broker (broker.c): an fd for a refused open the user may make, else the caller's result */
 int apklayer_broker_open(const char *path, int flags, int mode, int failed);
 int apklayer_broker_openat(int dirfd, const char *path, int flags, int mode, int failed);
-/* mkdir, unlink, rmdir, rename, access in the granted home: 0 in place of the caller's failed result when apklayerd did it */
+/* mkdir, unlink, rmdir, rename, access, chmod, symlink, link in the granted home: 0 in place of the caller's failed result when apklayerd did it */
 int apklayer_broker_change(const char *op, int dirfd, const char *path, int dirfd2, const char *to, int x, int failed);
 #define CHANGE(r, op, dirfd, p, x) r = apklayer_broker_change(op, dirfd, p, AT_FDCWD, NULL, x, r)
 #ifndef AT_STATX_SYNC_TYPE
@@ -136,7 +136,7 @@ int remove(const char *path) { MAP(m, path); int r = ((int (*)(const char *))REA
     if (r != 0 && (errno == EACCES || errno == EPERM)) { int e = errno; CHANGE(r, "unlink", AT_FDCWD, m, 0); if (r != 0 && errno == EISDIR) { errno = e; CHANGE(r, "rmdir", AT_FDCWD, m, 0); } }
     DONE(m); return r; }
 WRAP(int, chdir, (const char *path), (const char *), m)
-WRAP(int, chmod, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
+int chmod(const char *path, mode_t mode) { MAP(m, path); int r = ((int (*)(const char *, mode_t))REAL(chmod))(m, mode); CHANGE(r, "chmod", AT_FDCWD, m, (int)mode); DONE(m); return r; }
 WRAP(int, chown, (const char *path, uid_t u, gid_t g), (const char *, uid_t, gid_t), m, u, g)
 WRAP(int, lchown, (const char *path, uid_t u, gid_t g), (const char *, uid_t, gid_t), m, u, g)
 WRAP(int, truncate, (const char *path, off_t n), (const char *, off_t), m, n)
@@ -147,7 +147,8 @@ WRAP(int, statvfs64, (const char *path, struct statvfs64 *s), (const char *, str
 WRAP(int, statfs, (const char *path, struct statfs *s), (const char *, struct statfs *), m, s)
 WRAP(int, statfs64, (const char *path, struct statfs64 *s), (const char *, struct statfs64 *), m, s)
 /* a link to another process's /proc entry would be followed by the kernel past the path layer: not made (the target is no path of this app's view) */
-int symlink(const char *target, const char *path) { if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } MAP(m, path); int r = ((int (*)(const char *, const char *))REAL(symlink))(target, m); DONE(m); return r; }
+int symlink(const char *target, const char *path) { if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } MAP(m, path); int r = ((int (*)(const char *, const char *))REAL(symlink))(target, m);
+    r = apklayer_broker_change("symlink", AT_FDCWD, m, AT_FDCWD, target, 0, r); DONE(m); return r; }
 int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     void *f = REAL(fstatat64); int r = f ? ((int (*)(int, const char *, struct stat64 *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
 int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
@@ -182,11 +183,13 @@ int mkdirat(int dirfd, const char *path, mode_t mode) { AT(m, path); int r = ((i
     CHANGE(r, "mkdir", dirfd, m_use, (int)mode); DONE(m); return r; }
 int unlinkat(int dirfd, const char *path, int flags) { AT(m, path); int r = ((int (*)(int, const char *, int))REAL(unlinkat))(dirfd, m_use, flags);
     CHANGE(r, (flags & AT_REMOVEDIR) ? "rmdir" : "unlink", dirfd, m_use, 0); DONE(m); return r; }
-WRAPAT(int, fchmodat, (int dirfd, const char *path, mode_t mode, int flags), (int, const char *, mode_t, int), dirfd, use, mode, flags)
+int fchmodat(int dirfd, const char *path, mode_t mode, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+    int r = ((int (*)(int, const char *, mode_t, int))REAL(fchmodat))(dirfd, use, mode, flags); if (!flags) CHANGE(r, "chmod", dirfd, use, (int)mode); DONE(m); return r; }
 WRAPAT(int, utimensat, (int dirfd, const char *path, const struct timespec t[2], int flags), (int, const char *, const struct timespec *, int), dirfd, use, t, flags)
 int rename(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(rename))(a, b);
     r = apklayer_broker_change("rename", AT_FDCWD, a, AT_FDCWD, b, 0, r); DONE(a); DONE(b); return r; }
-int link(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(link))(a, b); DONE(a); DONE(b); return r; }
+int link(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(link))(a, b);
+    r = apklayer_broker_change("link", AT_FDCWD, a, AT_FDCWD, b, 0, r); DONE(a); DONE(b); return r; }
 /* A removable drive's /storage/<uuid> is a link in the storage directory to the desktop's mount (HostVolumes.Removable): a path that resolved
  * into that mount is spelled through the link again (/storage/<uuid>/..., or /mnt/media_rw/<uuid>/... as asked), as vold's mounts are.
  * Returns r, or a new string when resolved was NULL. */

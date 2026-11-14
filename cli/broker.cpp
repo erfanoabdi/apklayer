@@ -127,7 +127,7 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
     return fd;
 }
 
-// The granted home's and drives' other operations, as the user: mkdir, unlink, rmdir, rename, access. 0 or -errno.
+// The granted home's and drives' other operations, as the user: mkdir, unlink, rmdir, rename, access, chmod, symlink, link. 0 or -errno.
 int changeFor(const Layout& l, const std::vector<std::string>& r, uid_t hostUid, const Instance& inst) {
     std::string package = peerPackage(l, hostUid);
     if (package.empty()) return -EACCES;
@@ -136,17 +136,19 @@ int changeFor(const Layout& l, const std::vector<std::string>& r, uid_t hostUid,
     if (home.roots.empty()) return -EACCES;
     std::string name, name2;
     const std::string& op = r[0];
-    int dir = home.parent(r[1], op == "access", &name);  // never through a link as the last name: the link itself is what goes
+    int dir = home.parent(r[1], op == "access" || op == "chmod", &name);  // never through a link as the last name: the link itself is what goes
     if (dir < 0) return dir;
     int rc = -EINVAL;
     if (op == "mkdir" && r.size() == 3) rc = mkdirat(dir, name.c_str(), atoi(r[2].c_str()) & 07777);
     else if (op == "unlink" && r.size() == 2) rc = unlinkat(dir, name.c_str(), 0);
     else if (op == "rmdir" && r.size() == 2) rc = unlinkat(dir, name.c_str(), AT_REMOVEDIR);
     else if (op == "access" && r.size() == 3) rc = faccessat(dir, name.c_str(), atoi(r[2].c_str()) & 7, 0);
-    else if (op == "rename" && r.size() == 3) {
+    else if (op == "chmod" && r.size() == 3) rc = fchmodat(dir, name.c_str(), atoi(r[2].c_str()) & 07777, 0);
+    else if (op == "symlink" && r.size() == 3) rc = symlinkat(r[2].c_str(), dir, name.c_str());
+    else if ((op == "rename" || op == "link") && r.size() == 3) {
         int to = home.parent(r[2], false, &name2);
         if (to < 0) { close(dir); return to; }
-        rc = renameat(dir, name.c_str(), to, name2.c_str());
+        rc = op == "link" ? linkat(dir, name.c_str(), to, name2.c_str(), 0) : renameat(dir, name.c_str(), to, name2.c_str());
         int err = errno;
         close(to);
         errno = err;
@@ -177,7 +179,7 @@ void reply(int conn, int fd, int err) {
 }  // namespace
 
 bool brokerRequest(const std::vector<std::string>& request) {
-    static const char* ops[] = {"open", "mkdir", "unlink", "rmdir", "rename", "access"};
+    static const char* ops[] = {"open", "mkdir", "unlink", "rmdir", "rename", "access", "chmod", "symlink", "link"};
     for (const char* op : ops) if (!request.empty() && request[0] == op) return true;
     return false;
 }
