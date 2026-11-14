@@ -260,6 +260,27 @@ final class AppEnvironment {
         return path;
     }
 
+    /**
+     * The ApplicationInfo an app is shown, with its installed code under Android's names (/data/app/~~apklayer/<package>-apklayer/base.apk, split_*.apk, lib/<abi>), which the
+     * path layer maps back (bridge/native/paths.c own_apk_path). A copy: the framework's own ApplicationInfo keeps the host paths it opens resources and classes by. Off unless
+     * APKLAYER_APK_PATHS=android is set for the process (untested against resource loading in a running app), and only in a process whose own-data mapping is set.
+     */
+    static android.content.pm.ApplicationInfo androidApkPaths(android.content.pm.ApplicationInfo info) {
+        if (info == null || info.packageName == null || !"android".equals(System.getenv("APKLAYER_APK_PATHS")) || !NativeLoader.ownDataMapped()) return info;
+        String apps = System.getProperty("apklayer.apps"), pkg = System.getProperty("apklayer.package");
+        if (apps == null || !info.packageName.equals(pkg) || info.sourceDir == null || !info.sourceDir.startsWith(apps + "/" + pkg + "/")) return info;
+        String dir = "/data/app/~~apklayer/" + pkg + "-apklayer";
+        android.content.pm.ApplicationInfo copy = new android.content.pm.ApplicationInfo(info);
+        copy.sourceDir = copy.publicSourceDir = dir + "/base.apk";
+        if (info.splitSourceDirs != null) {
+            copy.splitSourceDirs = java.util.Arrays.stream(info.splitSourceDirs).map(f -> dir + "/" + new java.io.File(f).getName()).toArray(String[]::new);
+            copy.splitPublicSourceDirs = copy.splitSourceDirs;
+        }
+        if (info.nativeLibraryDir != null)
+            copy.nativeLibraryDir = dir + "/lib/" + switch (HostBuild.appAbi()) { case "arm64-v8a" -> "arm64"; case "armeabi-v7a" -> "arm"; default -> "x86_64"; };
+        return copy;
+    }
+
     /** The data directories an ApplicationInfo of the app names, by their real paths (stableDataPath). */
     static void stableDataDirs(android.content.pm.ApplicationInfo info) {
         if (info == null) return;

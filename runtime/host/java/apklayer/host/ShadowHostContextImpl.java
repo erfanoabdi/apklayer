@@ -162,7 +162,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
             info.primaryCpuAbi = HostBuild.appAbi();
         }
         if (info != null && real.getPackageName().equals(info.packageName)) { AppEnvironment.markSystem(info); HostSharedLibraries.record(info); AppEnvironment.stableDataDirs(info); }
-        return info;
+        return AppEnvironment.androidApkPaths(info);  // a copy with Android's names for the code paths when APKLAYER_APK_PATHS=android
     }
     /** The app's data directory by its real path (AppEnvironment.stableDataPath): its files, databases and caches keep their paths from launch to launch. */
     @Implementation protected java.io.File getDataDir() {
