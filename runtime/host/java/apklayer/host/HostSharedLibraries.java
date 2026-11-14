@@ -168,6 +168,19 @@ final class HostSharedLibraries {
         info.sharedLibraryFiles = all.toArray(new String[0]);
     }
 
+    /** Another installed app's libraries as PackageManagerService records them in its ApplicationInfo (read from its manifest once per APK version). */
+    static void recordOther(android.content.pm.ApplicationInfo info, java.io.File apk) {
+        Resolved resolved = OTHERS.computeIfAbsent(apk.getPath() + "@" + apk.lastModified(), key -> {
+            int target = ApkSdk.target(apk);
+            return resolve(used(apk, target), HostAppLibraries.uses(apk), usedNative(apk, target));
+        });
+        if (resolved.infos().isEmpty()) return;
+        info.sharedLibraryInfos = new ArrayList<>(resolved.infos());
+        info.sharedLibraryFiles = resolved.jars().stream().map(Path::toString).toArray(String[]::new);
+    }
+
+    private static final Map<String, Resolved> OTHERS = new java.util.concurrent.ConcurrentHashMap<>();
+
     /**
      * Before any class of the app loads: the libraries' jars join the app's class loader and its ApplicationInfo.sharedLibraryFiles (LoadedApk and
      * apps read them; ResourcesManager skips .jar files). A required library the runtime lacks is reported: the app may still run without it.
