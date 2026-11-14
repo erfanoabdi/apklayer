@@ -1,0 +1,33 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: the guest's auxv has AT_PLATFORM "aarch64"
+
+The auxv InitKernelArgs gives the guest linker had no AT_PLATFORM: getauxval(AT_PLATFORM) answered null, where Android's kernel gives "aarch64"
+(docs/runtime-identity-matrix.md, process attributes). The string is copied onto the guest stack, as the kernel does, and /proc/self/auxv
+(0005) serves the same entry. AT_HWCAP2 stays absent (reads 0), deliberately: of the arm64 HWCAP2 features berberis translates RNDR and I8MM
+instructions, but its ID registers (interpreter.h kIdAa64Isar0/1El1) and the cpuinfo Features line (0010) report them absent, and HWCAP2
+must agree with both. Module libberberis_arm64.
+
+diff --git a/guest_loader/arm64/guest_loader_arch.cc b/guest_loader/arm64/guest_loader_arch.cc
+--- a/guest_loader/arm64/guest_loader_arch.cc
++++ b/guest_loader/arm64/guest_loader_arch.cc
+@@ -70,6 +70,12 @@
+   // init_progname; the riscv64 path also doesn't set it, but providing the
+   // executable path here matches what the kernel would set on a real exec().
+   const char* execfn = (argc > 0 && argv[0] != nullptr) ? argv[0] : "<guest>";
++  // apklayer patch (0031): AT_PLATFORM "aarch64" on the guest stack, as the kernel gives it (getauxval(AT_PLATFORM) is null on a stock Berberis).
++  // AT_HWCAP2 stays absent (reads 0): the ID registers and /proc/cpuinfo report the HWCAP2 features berberis can translate (RNDR, I8MM) as absent.
++  static constexpr char kPlatform[] = "aarch64";
++  guest_sp -= sizeof(kPlatform);
++  memcpy(ToHostAddr<char>(guest_sp), kPlatform, sizeof(kPlatform));
++  const GuestAddr platform = guest_sp;
+   const uint64_t auxv[] = {
+       AT_HWCAP,      kArm64ValueHwcap,
+       AT_RANDOM,     ToGuestAddr(random_bytes),
+@@ -86,6 +92,7 @@
+       AT_GID,        getgid(),
+       AT_EGID,       getegid(),
+       AT_EXECFN,     reinterpret_cast<uint64_t>(execfn),
++      AT_PLATFORM,   platform,
+       AT_NULL,
+   };
+

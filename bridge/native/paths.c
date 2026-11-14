@@ -186,6 +186,13 @@ void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const 
     }
     __atomic_store_n(&own_data, o, __ATOMIC_RELEASE);  /* every thread's file calls read it: published whole, an earlier one stays allocated (a reader may hold it) */
     push_app_uid();
+    {   /* ActivityThread's Os.setenv("TMPDIR", cache dir): the app's own, not a host tool's (this runs only once the process knows its package) */
+        int (*set)(const char *, const char *, int) = dlsym(RTLD_DEFAULT, "bionic_setenv");
+        char *cache = NULL, *tmp = NULL;
+        if (set && asprintf(&cache, "%s/cache", o->dir) >= 0) mkdir(cache, 0771);
+        if (set && asprintf(&tmp, "/data/user/0/%s/cache", pkg) >= 0) set("TMPDIR", tmp, 1);
+        free(cache); free(tmp);
+    }
     {   /* AT_EXECFN names the JDK's java in the stack's string: an app process reads app_process64 (proc_task.c, the preload's) */
         extern void apklayer_proc_rewrite_execfn(void) __attribute__((weak));
         if (apklayer_proc_rewrite_execfn) apklayer_proc_rewrite_execfn();

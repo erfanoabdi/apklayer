@@ -71,6 +71,7 @@ static void addresses(struct buf *b, JNIEnv *env)
     JavaVM *vm = NULL;
     (*env)->GetJavaVM(env, &vm);
     put(b, "dladdr.jni.GetEnv", "%s", where(vm ? (void *)(*vm)->GetEnv : NULL, w, sizeof w));
+    put(b, "dladdr.jni.invokeTable", "%s", where(vm ? (void *)*vm : NULL, w, sizeof w));  /* ART's is a local const: no symbol, libart.so */
     /* every function of both tables (JNI 1.6: up to GetObjectRefType) lives in libart.so, as ART's (a check: expect all of them) */
     void **jni = (void **)*env, **invoke = (void **)*vm;
     int in_art = 0, total = 0;
