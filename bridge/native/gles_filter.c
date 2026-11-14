@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -18,6 +19,11 @@
 #define GL_NUM_COMPRESSED_TEXTURE_FORMATS 0x86A2
 #define GL_COMPRESSED_TEXTURE_FORMATS 0x86A3
 #define MAX_HIDDEN 32
+#define GL_MAX_TEXTURE_IMAGE_UNITS 0x8872
+#define GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS 0x8B4C
+#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
+#define GL_COMPILE_STATUS 0x8B81
+#define GL_LINK_STATUS 0x8B82
 
 typedef const unsigned char *(*get_string_fn)(unsigned);
 typedef const unsigned char *(*get_stringi_fn)(unsigned, unsigned);
@@ -30,11 +36,15 @@ static char *hidden[MAX_HIDDEN];
 static int nhidden;
 static bool hide_astc;  /* an ASTC extension is hidden: its formats too */
 static pthread_once_t once = PTHREAD_ONCE_INIT;
+static bool debug;  /* APKLAYER_RUNTIME_DEBUG: log the sampler limits an app reads, shader build failures and GL errors after draws */
+static void *host_gl;
 
 static void init(void)
 {
     void *gl = dlopen("libGLESv2.so.2", RTLD_NOW | RTLD_NOLOAD);
     if (!gl) gl = dlopen("libGLESv2.so.2", RTLD_NOW);
+    host_gl = gl;
+    debug = getenv("APKLAYER_RUNTIME_DEBUG") != NULL;
     if (gl) {
         host_get_string = (get_string_fn)dlsym(gl, "glGetString");
         host_get_stringi = (get_stringi_fn)dlsym(gl, "glGetStringi");
@@ -115,7 +125,7 @@ const unsigned char *glGetStringi(unsigned name, unsigned index)
 
 static bool astc_format(int f) { return (f >= 0x93B0 && f <= 0x93BD) || (f >= 0x93D0 && f <= 0x93DD) || (f >= 0x93C0 && f <= 0x93C9) || (f >= 0x93E0 && f <= 0x93E9); }
 
-void glGetIntegerv(unsigned pname, int *data)
+static void filtered_integerv(unsigned pname, int *data)
 {
     pthread_once(&once, init);
     if (!host_get_integerv) return;
@@ -143,4 +153,65 @@ void glGetIntegerv(unsigned pname, int *data)
         return;
     }
     host_get_integerv(pname, data);
+}
+
+void glGetIntegerv(unsigned pname, int *data)
+{
+    filtered_integerv(pname, data);
+    /* virgl claims 32 fragment samplers and a shader using more than 16 kills its context (tests/vm/gles-sampler-limit.c) */
+    if (data && (pname == GL_MAX_TEXTURE_IMAGE_UNITS || pname == GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS) && *data > 16) *data = 16;
+    if (debug && data && (pname == GL_MAX_TEXTURE_IMAGE_UNITS || pname == GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS || pname == GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS))
+        fprintf(stderr, "[gles] app reads 0x%x = %d\n", pname, *data);
+}
+
+/* debug-only wrappers (forwarded untouched without APKLAYER_RUNTIME_DEBUG) */
+#define HOST(name, sig) static sig; pthread_once(&once, init); if (!f && host_gl) f = dlsym(host_gl, name)
+typedef unsigned (*get_error_fn)(void);
+typedef void (*iv_fn)(unsigned, unsigned, int *);
+typedef void (*infolog_fn)(unsigned, int, int *, char *);
+
+static void log_build(unsigned obj, bool program)
+{
+    static iv_fn getiv[2]; static infolog_fn infolog[2];
+    if (!getiv[program]) { getiv[program] = (iv_fn)dlsym(host_gl, program ? "glGetProgramiv" : "glGetShaderiv"); infolog[program] = (infolog_fn)dlsym(host_gl, program ? "glGetProgramInfoLog" : "glGetShaderInfoLog"); }
+    int ok = 1; char log[1024] = "";
+    getiv[program](obj, program ? GL_LINK_STATUS : GL_COMPILE_STATUS, &ok);
+    infolog[program](obj, sizeof log, NULL, log);
+    if (!ok || log[0]) fprintf(stderr, "[gles] %s %u %s: %s\n", program ? "program" : "shader", obj, ok ? "ok" : "FAILED", log);
+}
+
+void glCompileShader(unsigned s)
+{
+    HOST("glCompileShader", void (*f)(unsigned));
+    if (f) f(s);
+    if (debug) log_build(s, false);
+}
+
+void glLinkProgram(unsigned p)
+{
+    HOST("glLinkProgram", void (*f)(unsigned));
+    if (f) f(p);
+    if (debug) log_build(p, true);
+}
+
+static void log_error(const char *what)
+{
+    static get_error_fn err; static int logged;
+    if (!err) err = (get_error_fn)dlsym(host_gl, "glGetError");
+    unsigned e = err();
+    if (e && logged++ < 40) fprintf(stderr, "[gles] %s: glGetError 0x%x\n", what, e);
+}
+
+void glDrawArrays(unsigned mode, int first, int count)
+{
+    HOST("glDrawArrays", void (*f)(unsigned, int, int));
+    if (f) f(mode, first, count);
+    if (debug) log_error("glDrawArrays");
+}
+
+void glDrawElements(unsigned mode, int count, unsigned type, const void *indices)
+{
+    HOST("glDrawElements", void (*f)(unsigned, int, unsigned, const void *));
+    if (f) f(mode, count, type, indices);
+    if (debug) log_error("glDrawElements");
 }
