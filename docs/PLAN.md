@@ -129,7 +129,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 ## Tests and tooling
 - Finish `tools/stage` in Python and fold `tools/release/*` into Meson.
 - Script store clients in the corpus (Aurora, Telegram: HTTPS needs scripted onboarding input).
-- Flaky: webview-input under load; native-media AVC (~1 in 2 on Parallels); audio-silent on the x86 PC.
+- Flaky, not reproduced (2026-11-15: 5 runs each, unloaded: webview-input, native-media AVC on Parallels, audio-silent on the x86 PC): waits made condition-based (webview-input quiet spell, AVC output deadline); watch for a recurrence with its log.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
