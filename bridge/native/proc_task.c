@@ -303,6 +303,7 @@ const char *apklayer_proc_status_line(const char *line)
     if (!strncmp(line, "NoNewPrivs:", 11)) return "NoNewPrivs:\t1\n";
     if (!strncmp(line, "Seccomp:", 8)) return "Seccomp:\t2\n";
     if (!strncmp(line, "Seccomp_filters:", 16)) return "Seccomp_filters:\t1\n";
+    if (!strncmp(line, "Umask:", 6)) return "Umask:\t0077\n";  /* zygote's */
     if (!strncmp(line, "CapBnd:", 7)) return "CapBnd:\t0000000000000000\n";
     return NULL;
 }

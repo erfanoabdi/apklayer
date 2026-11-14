@@ -29,6 +29,7 @@ static void check(FILE *f, int filtered)
             }
             assert(found==count); groups++;
         }
+        if (!strncmp(line, "Umask:", 6) && filtered) assert(!strcmp(line, "Umask:\t0077\n"));
         if (!strncmp(line, "Tgid:", 5)) { assert(atoi(line+5)==getpid()); pid++; }
     }
     assert(!ferror(f) && seen==2 && pid==1 && groups==1);
@@ -46,5 +47,9 @@ int main(void)
     }
     int dir=open("/proc/self", O_RDONLY|O_DIRECTORY); assert(dir>=0);
     int fd=openat(dir,"status",O_RDONLY); assert(fd>=0); check(fdopen(fd,"r"),filtered); close(dir);
+    if (filtered) {
+        char id[32] = ""; FILE *l = fopen("/proc/self/loginuid", "r");
+        assert(l && fgets(id, sizeof id, l) && !strcmp(id, "4294967295")); fclose(l);
+    }
     puts("PASS status: own PID, all UID/GID columns and supplementary groups, stdio/syscall/openat and thread aliases");
 }
