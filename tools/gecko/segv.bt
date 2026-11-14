@@ -1,0 +1,37 @@
+// Fennec's SIGSEGV loop: guest handlers run for SIGSEGV and the guest svcs that re-raise it (first N each).
+uprobe:@BRIDGE@:_ZN8berberis18ProcessGuestSignalEPNS_11GuestThreadEPKNS_15Guest_sigactionEP7siginfo
+/comm == "Gecko" && @pg < 12/
+{
+  @pg++;
+  $sa = (uint64)arg1; $si = (uint64)arg2;
+  printf("DELIVER tid %d sig %d code %d addr 0x%lx handler 0x%lx flags 0x%lx\n", tid, *(int32 *)($si), *(int32 *)($si + 8),
+         *(uint64 *)($si + 16), *(uint64 *)($sa), *(uint64 *)($sa + 8));
+}
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+/comm == "Gecko"/
+{
+  $s = (uint64)arg0;
+  $nr = *(uint64 *)($s + 0x40);
+  if (@sv < 12 && ($nr == 240 || $nr == 131 || $nr == 130 || $nr == 129 || $nr == 134 || $nr == 135 || $nr == 226)) {
+    @sv++;
+    printf("SVC tid %d nr %d x0 0x%lx x1 0x%lx x2 0x%lx x3 0x%lx pc 0x%lx x30 0x%lx sp 0x%lx x29 0x%lx\n", tid, $nr,
+           *(uint64 *)($s + 0x00), *(uint64 *)($s + 0x08), *(uint64 *)($s + 0x10), *(uint64 *)($s + 0x18),
+           *(uint64 *)($s + 0x100), *(uint64 *)($s + 0xf0), *(uint64 *)($s + 0xf8), *(uint64 *)($s + 0xe8));
+    $fp = *(uint64 *)($s + 0xe8);
+    $i = 0;
+    while ($i < 10) {
+      if ($fp == 0) { break; }
+      printf("   frame 0x%lx\n", *(uint64 *)($fp + 8));
+      $fp = *(uint64 *)($fp);
+      $i++;
+    }
+  }
+}
+
+tracepoint:signal:signal_generate
+/args->sig == 11 && comm == "Gecko" && @gen < 6/
+{
+  @gen++;
+  printf("GENERATE tid %d -> %d code %d errno %d result %d\n", tid, args->pid, args->code, args->errno, args->result);
+}
