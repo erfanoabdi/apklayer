@@ -3,6 +3,7 @@
  * Run with APKLAYER_OWN_DATA ("app"): the views; with APKLAYER_PROC_VIEW=host ("host") and without it ("service"): the kernel's values. */
 #define _GNU_SOURCE
 #include <assert.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
@@ -67,16 +68,14 @@ int main(void)
                              {"MyGameThread", "MyGameThread"}};
     for (size_t i = 0; i < sizeof probes / sizeof *probes; i++) pthread_create(&probes[i].id, NULL, named, (void *)probes[i].thread);
     usleep(300000);
-    char found[256], names[sizeof probes / sizeof *probes][64];
+    char names[sizeof probes / sizeof *probes][64];
     int seen = 0;
     /* every task of the process by its listing: the thread named x is found by its (projected or real) comm */
-    char path[64];
-    snprintf(path, sizeof path, "/proc/self/task");
-    FILE *ls = popen("ls /proc/self/task", "r");
-    assert(ls);
+    DIR *task = opendir("/proc/self/task");
+    assert(task);
     long tids[64]; int n = 0;
-    while (fgets(found, sizeof found, ls) && n < 64) tids[n++] = atol(found);
-    pclose(ls);
+    for (struct dirent *e; (e = readdir(task)) && n < 64;) if (e->d_name[0] != '.') tids[n++] = atol(e->d_name);
+    closedir(task);
     for (int i = 0; i < n; i++) {
         char comm[64];
         comm_of(tids[i], comm, sizeof comm);

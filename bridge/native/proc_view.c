@@ -311,9 +311,10 @@ static int task_filter(int fd, int cloexec, int kind, long tid, long foreign)
     if (foreign) {
         if (kind == 5) {  /* another Android program of the app: its exec environment (proc_task.c) */
             int env = apklayer_proc_foreign_environment(foreign);
+            if (env < 0) return fd;  /* a process that publishes none (the JVM, a forked helper): the kernel's bytes, as before (tests/native/proc-environment.c) */
             size_t size = 0;
-            char *text = env < 0 ? strdup("") : slurp_fd(env, &size);  /* a process that publishes none (the JVM): the host's environment is not shown */
-            if (env >= 0) close(env);
+            char *text = slurp_fd(env, &size);
+            close(env);
             int result = text ? proc_replace(fd, cloexec, "environ", text, size) : fd;
             free(text);
             return result;
