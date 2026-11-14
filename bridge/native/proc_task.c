@@ -60,7 +60,7 @@ static const struct { const char *host; int exact; const char *android; } jvm_th
     {"VM Periodic Tas", 1, "Runtime worker"}, {"Monitor Deflati", 1, "Runtime worker"}, {"Native Heap Tri", 1, "Runtime worker"},
     {"Notification Th", 1, "Runtime worker"}, {"Cleaner-", 0, "Runtime worker"}, {"process reaper", 0, "Runtime worker"},
     {"Attach Listener", 1, "Runtime worker"}, {"GC Thread#", 0, "Runtime worker"}, {"G1 ", 0, "Runtime worker"}, {"VM Wait", 0, "Runtime worker"},
-    {"Sweeper thread", 1, "Runtime worker"}, {"JFR ", 0, "Runtime worker"}, {"SDK ", 0, "Runtime worker"}, {"AWT-", 0, "Runtime worker"},
+    {"Sweeper thread", 1, "Runtime worker"}, {"JFR ", 0, "Runtime worker"}, {"SDK ", 0, "Runtime worker"}, {"ForkJoinPool", 0, "Runtime worker"}, {"Thread-", 0, "Runtime worker"}, {"AWT-", 0, "Runtime worker"},
     {"Java2D", 0, "Runtime worker"},
 };
 
@@ -133,6 +133,7 @@ const char *apklayer_proc_map_name(const char *host, char *out, size_t size)
     else {
         const char *libs = strstr(host, "/android-libs/"), *base = strrchr(host, '/');
         if (libs && base && strstr(base, ".so")) { snprintf(out, size, "/system/lib64/%s", base + 1); result = out; }
+        else if (strstr(host, "/robolectric-nativeruntime-assets/") && base && strstr(host, "/fonts/")) { snprintf(out, size, "/system/fonts/%s", base + 1); result = out; }
         else if ((libs = runtime_file(host))) { snprintf(out, size, "%s", libs); result = out; }
         else {  /* the desktop's libraries (glibc, Mesa, X/Wayland, ICU...) and apklayer's own host libraries: no Android name exists, so no name at all */
             static const char *const desktop[] = {"/usr/", "/lib/", "/lib64/", "/opt/", "/snap/", "/nix/", NULL};
