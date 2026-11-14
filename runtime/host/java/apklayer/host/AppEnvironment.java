@@ -364,7 +364,7 @@ final class AppEnvironment {
         // no doze on the desktop: an app is never held back by battery optimization
         org.robolectric.Shadows.shadowOf((android.os.PowerManager) app.getSystemService(android.content.Context.POWER_SERVICE)).setIgnoringBatteryOptimizations(app.getPackageName(), true);
         HostStorage.install(app);
-        HostTrust.install();  // the default trust manager with the host-aware check Android's callers (Chromium, X509TrustManagerExtensions) need
+        HostProviders.install(app);  // Android's security providers and TLS (Conscrypt); without it HostTrust's host-aware default trust manager (Chromium, X509TrustManagerExtensions)
         HostLocation.install(app);
         HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {
