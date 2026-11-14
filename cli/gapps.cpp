@@ -18,7 +18,7 @@ namespace {
 struct Zip { std::string url, sha256; };
 Zip zipFor(const std::string& cpu) {
     const std::string base = "https://sourceforge.net/projects/litegapps/files/litegapps/";
-    if (cpu == "arm64") return {base + "arm64/37/lite/2026-10-01/LiteGapps-arm64-17.0-20261001-official.zip/download", "cef8224d3451b03e9e640fd489492b4a664e98c1c704dc0cd83bc6244e00820c"};
+    if (cpu == "arm64") return {base + "arm64/37/lite/2026-10-12/LiteGapps-arm64-17.0-20261012-official.zip/download", "f7e3a2097fad2e2f739c6708333d15fa9bc2cf7971a9041a6a621b4f3c8a1e37"};
     if (cpu == "amd64") return {base + "x86_64/37/lite/2026-10-01/LiteGapps-x86_64-17.0-20261001-official.zip/download", "61e891cbb826b7fbdc8839ac925de323147dba66c39b8ae34f1e9c3a12fc21fa"};
     return {};
 }
