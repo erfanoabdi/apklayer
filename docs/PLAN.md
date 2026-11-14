@@ -129,7 +129,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Binder devices of a removed instance stay until reboot.
 
 ## Hardware
-- Providers: pick the best backend by `probe()`. Fronts skip the plugin ABI check.
 - Vibrator effects. GNSS fd leak, x86_64 `libapklayer_gnss`.
 - USB: attach with no hub, interface filters, one chooser for several apps, sandbox node access.
 - Bluetooth: pairing paths, Sailfish agent, several clients per server socket, PendingIntent scans.
