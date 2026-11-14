@@ -16,8 +16,13 @@ struct Asset {
 struct Release {
     std::string version, date, notesUrl, runtimeVersion;
     int converterAbi = 0, dataFormat = 0;
-    Asset deb, runtime;  // for this host's codename and CPU (empty when the release has none)
+    Asset deb, click, runtime;  // for this host's codename and CPU (empty when the release has none); the click is Ubuntu Touch's (arm64 only)
+    // the package this host updates with: the click where apklayer runs from one (packageFormat), else the deb
+    const Asset& package(const std::string& format) const { return format == "click" ? click : deb; }
 };
+
+// "click" when the program at exe lives in a click (/opt/click.ubuntu.com/), else "deb"
+std::string packageFormat(const std::string& exe);
 
 // $APKLAYER_RELEASES_URL, else the project's page
 std::string releasesUrl();

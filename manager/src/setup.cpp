@@ -34,7 +34,12 @@ Setup::State probe(const Cli& cli) {
     for (const auto& row : cli.rows({"list", "--tsv"})) if (field(row, 8) == "1") s.stale.push_back(row);
     std::string file = downloadsDir() + "/releases.json";
     s.error = download(releasesUrl(), file, nullptr);
-    if (s.error.empty()) s.release = parseLatest(readText(file), osCodename(), cpuNames(), s.error);
+    if (s.error.empty()) {
+        s.release = parseLatest(readText(file), osCodename(), cpuNames(), s.error);
+        char exe[4096] = "";
+        ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+        s.release.deb = s.release.package(packageFormat(n > 0 ? std::string(exe, n) : ""));  // release.deb is this host's package: the click on Ubuntu Touch
+    }
     return s;
 }
 
@@ -132,7 +137,7 @@ void Setup::runUpdate(Cli cli, std::shared_ptr<State> s) {
         e = fetch(s->release.deb.url, s->release.deb.sha256, file, [&](double p) { report(what, p); });
         if (e.empty()) {
             report("Installing apklayer " + s->release.version + " (it asks for your password)", -1);
-            Result r = installDeb(file);
+            Result r = file.size() > 6 && file.compare(file.size() - 6, 6, ".click") == 0 ? installClick(file) : installDeb(file);
             if (r.status != 0) e = "The package was not installed: " + summary(r);
         }
         unlink(file.c_str());

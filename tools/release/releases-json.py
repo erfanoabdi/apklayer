@@ -16,11 +16,13 @@ def asset(name):
         return {"url": base + name, "sha256": hashlib.file_digest(f, "sha256").hexdigest()}
 
 
-debs, runtime = {}, {}
+debs, clicks, runtime = {}, {}, {}
 cpu_arch = {"arm64": "arm64", "x86_64": "amd64"}  # bundles are named by the prebuilts' CPU, keyed by Debian architecture like the debs
 for name in sorted(os.listdir(dist)):
     if m := re.fullmatch(rf"apklayer_{re.escape(version)}-1[~.]([a-z]+)1_([a-z0-9]+)\.deb", name):  # the release job names them with . for ~
         debs.setdefault(m[1], {})[m[2]] = asset(name)
+    elif m := re.fullmatch(rf"apklayer\.erfanoabdi_{re.escape(version)}_([a-z0-9]+)\.click", name):  # the manager's update on Ubuntu Touch
+        clicks[m[1]] = asset(name)
     elif m := re.fullmatch(rf"apklayer-runtime-([a-z0-9_]+)-{re.escape(versions['runtime'])}\.tar\.zst", name):
         # the CLI checks the free space before it downloads (common/fetch.cpp runtimeRoom): the bundle and its unpacked contents
         unpacked = subprocess.run(["sh", "-c", 'zstd -dcq -- "$0" | wc -c', os.path.join(dist, name)], capture_output=True, text=True, check=True).stdout
@@ -29,7 +31,7 @@ assert debs and runtime, f"no debs or runtime bundle for {version} in {dist}"
 
 entry = {"version": version, "date": datetime.date.today().isoformat(), "notes_url": f"https://github.com/{repo}/releases/tag/v{version}",
          "converter_abi": int(versions["converter_abi"]), "data_format": int(versions["data_format"]),
-         "runtime": {"version": versions["runtime"], "prebuilts": prebuilts, "assets": runtime}, "debs": debs}
+         "runtime": {"version": versions["runtime"], "prebuilts": prebuilts, "assets": runtime}, "debs": debs, "clicks": clicks}
 data = json.load(open(path)) if os.path.exists(path) else {"latest": "", "releases": []}
 data["releases"] = [entry] + [r for r in data["releases"] if r["version"] != version]
 data["releases"].sort(key=lambda r: tuple(int(x) for x in r["version"].split(".")), reverse=True)
