@@ -18,7 +18,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * A drive plugged in while the app runs (hello.hotplug; tests/vm/volumes.py mounts and removes it): the volume broadcasts and callbacks, the volume in
  * getStorageVolumes and MediaStore, the drive's files indexed at mount (DCIM/pre.png, put there before), files written afterwards on the drive and on
- * internal storage indexed (and a deleted one dropped), then after the removal the eject, unmounted and removed broadcasts and the volume gone.
+ * internal storage indexed (and a deleted one dropped), then (hello.eject: StorageManager.unmount while the runner holds a file of the drive open; hello.pull: the
+ * device pulled out while mounted) after the removal the eject, unmounted and removed broadcasts and the volume gone.
  * Prints `[hotplug] PASS|FAIL <step>`, `[hotplug] ready` (mount the drive now), `[hotplug] unmount` (remove it now), `[hotplug] DONE`.
  */
 final class Hotplug {
@@ -91,8 +92,16 @@ final class Hotplug {
         check("internal file dropped", appears(context, MediaStore.VOLUME_EXTERNAL_PRIMARY, pictures.getName(), false));
         CALLBACKS.clear();
         say("unmount");
+        if (System.getProperty("hello.eject") != null) {  // the runner holds a file of the drive open as one of this instance's processes: Eject must end it and unmount
+            Thread.sleep(1000);  // the holder started
+            StorageManager.class.getMethod("unmount", String.class).invoke(storage, "public:" + uuid);
+        }
         for (String state : new String[] {Intent.ACTION_MEDIA_EJECT + " " + path + " ejecting", Intent.ACTION_MEDIA_UNMOUNTED + " " + path + " unmounted", Intent.ACTION_MEDIA_REMOVED + " " + path + " removed"})
             check(state.split(" ")[0].replace("android.intent.action.", "") + " broadcast", state.equals(EVENTS.poll(60, TimeUnit.SECONDS)));
+        if (System.getProperty("hello.pull") != null) {  // the device went away while mounted: vold's BAD_REMOVAL first, then the usual end
+            check("MEDIA_BAD_REMOVAL broadcast", SEEN.contains(Intent.ACTION_MEDIA_BAD_REMOVAL + " " + path));
+            check("bad_removal callback", CALLBACKS.contains(uuid + " bad_removal"));
+        }
         check("volume gone", storage.getStorageVolumes().stream().noneMatch(v -> uuid.equals(v.getUuid())) && !MediaStore.getExternalVolumeNames(context).contains(media));
         check("callback on removal", CALLBACKS.contains(uuid + " removed"));
         check("link removed", !new File(path).exists());

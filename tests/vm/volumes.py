@@ -20,8 +20,11 @@ from instance import ENV, INSTANCE, OUT, stop  # noqa: E402
 
 STEPS = ['mounted broadcast', 'volume callback', 'volume listed', 'MEDIA_CHECKING broadcast', 'secondary external files dir', 'mediastore volume', 'mount scan', 'drive file indexed', 'internal file indexed',
          'internal file dropped', 'MEDIA_EJECT broadcast', 'MEDIA_UNMOUNTED broadcast', 'MEDIA_REMOVED broadcast', 'volume gone', 'callback on removal', 'link removed',
+         'eject ended the holder', 'eject unmounted',
+         'MEDIA_BAD_REMOVAL broadcast', 'bad_removal callback',
          'catchup present volume', 'catchup present drive scanned', 'catchup present internal file', 'catchup status',
          'catchup gone volume', 'catchup gone mediastore volume', 'catchup gone internal file']
+SANDBOX = os.environ.get('APKLAYER_SANDBOX') == '1'
 SUDO = ['sudo', '-A'] if os.environ.get('SUDO_ASKPASS') else ['sudo', '-n']
 LABEL = 'APKHOT' + INSTANCE[-2:].upper()
 image, point = OUT / 'hotplug.img', Path('/media') / os.environ.get('USER', 'user') / LABEL
@@ -45,6 +48,18 @@ def detach():
     global device
     if device: root('losetup', '-d', device, check=False)
     device = None
+
+
+RULE = Path('/etc/polkit-1/rules.d/49-apklayer-volumes-%s.rules' % INSTANCE)
+
+
+def polkit(allow):
+    """The drive here is mounted by root (sudo), where the desktop's udisks mounts it for the user: udisksctl unmount (the hub's Eject) of it needs polkit's
+    unmount-others, not given to an ssh session. For the eject run only: this rule, removed again."""
+    if allow:
+        root('sh', '-c', "printf '%%s\\n' 'polkit.addRule(function(a, s) { if (a.id == \"org.freedesktop.udisks2.filesystem-unmount-others\" && s.user == \"%s\") return polkit.Result.YES; });' > %s" % (os.environ.get('USER', 'user'), RULE))
+    else:
+        root('rm', '-f', str(RULE), check=False)
 
 
 def mount():
@@ -105,6 +120,31 @@ def hotplug(line, lines):
     elif '[hotplug] unmount' in line: unmount(); detach()
 
 
+# a process of this instance with the drive's image mapped (MediaProvider's Skia mapping of a scanned image): StorageManager.unmount must end it
+HOLD = 'import sys, mmap; f = open(sys.argv[1], "rb"); m = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ); print("held", flush=True); sys.stdin.read()'
+holder = None
+
+
+def eject(line, lines):
+    """The app calls StorageManager.unmount (hello.eject) itself: the script only holds a file open and mounts the drive."""
+    global holder
+    if '[hotplug] ready' in line: mount()
+    elif '[hotplug] unmount' in line:
+        if SANDBOX: return  # the sandboxed hub does not find the script's process (not understood: PLAN); the lazy unmount ends the drive's use
+        holder = subprocess.Popen([sys.executable, '-c', HOLD, str(point / 'DCIM/pre.png')], env=dict(ENV, APKLAYER_INSTANCE=INSTANCE), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        print('holder: ' + holder.stdout.readline().decode().strip(), flush=True)
+    elif '[hotplug] PASS MEDIA_UNMOUNTED broadcast' in line:  # before the instance's stop could end the holder
+        if holder: lines.append('[hotplug] %s eject ended the holder' % ('PASS' if holder.poll() is not None else 'FAIL'))
+        lines.append('[hotplug] %s eject unmounted' % ('PASS' if subprocess.run(['mountpoint', '-q', str(point)]).returncode else 'FAIL'))
+        detach()  # the drive is pulled out after its eject
+
+
+def pulled(line, lines):
+    """The device vanishes while mounted: the loop device is released first (cleared with the last unmount), then the mount goes."""
+    if '[hotplug] ready' in line: mount()
+    elif '[hotplug] unmount' in line: detach(); unmount()
+
+
 def status(line, lines):
     if '[hotplug] status' not in line: return
     shown = subprocess.run(['bin/apklayer', 'status'], env=ENV, capture_output=True, text=True).stdout
@@ -126,7 +166,14 @@ try:
     (point / 'DCIM/pre.png').write_bytes(png())
     unmount()
     subprocess.run(['bin/apklayer', 'permissions', 'grant', 'hello.files', 'android.permission.READ_MEDIA_IMAGES'], env=ENV, capture_output=True)
-    lines += app('-Dhello.hotplug=1', hotplug)
+    polkit(True)
+    lines += app('-Dhello.hotplug=1 -Dhello.eject=1', eject)
+    polkit(False)
+    if holder and holder.poll() is None: holder.kill()
+    unmount()
+    detach()
+    attach()
+    lines += app('-Dhello.hotplug=1 -Dhello.pull=1', pulled)
     # while stopped: the drive plugged in, a picture written on internal storage (the hot plug run may have stopped before its removal)
     unmount()
     detach()
@@ -144,10 +191,12 @@ try:
     lines += app(jopts + '-Dhello.catchup.drive=0', lambda line, lines: None, budget)
 finally:
     stop()
+    polkit(False)
     unmount()
     detach()
     image.unlink(missing_ok=True)
     picture.unlink(missing_ok=True)
 passed = {l.split('[hotplug] PASS ')[1].strip() for l in lines if '[hotplug] PASS ' in l}
+STEPS = [t for t in STEPS if not (SANDBOX and t == 'eject ended the holder')]
 for step in STEPS: print('%s %s' % ('PASS' if step in passed else 'FAIL', step))
 sys.exit(0 if all(s in passed for s in STEPS) else 1)

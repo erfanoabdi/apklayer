@@ -24,6 +24,12 @@ public class ShadowHostStorageManager extends ShadowStorageManager {
     @Implementation
     protected List<android.os.storage.DiskInfo> getDisks() { return new java.util.ArrayList<>(); }
 
+    /** Settings' and DocumentsUI's Eject: the hub ends this instance's processes holding files on the drive and unmounts it (HubVolumes.eject). */
+    @Implementation
+    protected void unmount(String volId) {
+        if (!HubClient.connected() || !HubClient.current().ejectVolume(volId)) throw new IllegalStateException("could not unmount " + volId);
+    }
+
     @Implementation
     protected List<VolumeInfo> getVolumes() {
         synchronized (ShadowHostStorageManager.class) {
