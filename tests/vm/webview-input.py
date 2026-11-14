@@ -64,6 +64,10 @@ try:
                     if STEPS[step][1]: instance.inject(PKG, *STEPS[step][1])
                     if STEPS[step][1][:1] == ['press:%d,%d' % AT]: pressed[0] = time.monotonic()
                     step += 1
+    # the shell got the field's text and cursor from the WebView's InputConnection (HostTextBridge.followWebSurrounding): "xyz" with the cursor at its end
+    shell_log = (Path(instance.LOGDIR) / 'shell.log').read_text(errors='replace')
+    assert '[shell] text input surrounding cursor 3 anchor 3 of 3 bytes' in shell_log, 'no WebView surrounding text in the shell log:\n' + '\n'.join(
+        l for l in shell_log.splitlines() if 'surrounding' in l)
     print('PASS keys and IME text in a WebView text field during a long press selection toolbar', flush=True)
 finally:
     instance.stop()
