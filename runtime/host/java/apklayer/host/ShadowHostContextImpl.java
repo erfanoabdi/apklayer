@@ -164,6 +164,17 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         if (info != null && real.getPackageName().equals(info.packageName)) { AppEnvironment.markSystem(info); HostSharedLibraries.record(info); AppEnvironment.stableDataDirs(info); }
         return AppEnvironment.androidApkPaths(info);  // a copy with Android's names for the code paths when APKLAYER_APK_PATHS=android
     }
+    /** The app's APK and resource paths as getApplicationInfo shows them: Android's names with APKLAYER_APK_PATHS=android, otherwise exactly the framework's own value. */
+    @Implementation protected String getPackageCodePath() {
+        String own = real("getPackageCodePath");
+        android.content.pm.ApplicationInfo info = getApplicationInfo(), shown = AppEnvironment.androidApkPaths(info);
+        return shown != info && shown.sourceDir != null ? shown.sourceDir : own;
+    }
+    @Implementation protected String getPackageResourcePath() {
+        String own = real("getPackageResourcePath");
+        android.content.pm.ApplicationInfo info = getApplicationInfo(), shown = AppEnvironment.androidApkPaths(info);
+        return shown != info && shown.publicSourceDir != null ? shown.publicSourceDir : own;
+    }
     /** The app's data directory by its real path (AppEnvironment.stableDataPath): its files, databases and caches keep their paths from launch to launch. */
     @Implementation protected java.io.File getDataDir() {
         java.io.File dir = real("getDataDir");
