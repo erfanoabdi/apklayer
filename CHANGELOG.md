@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: input-desktop and webview-input assert surrounding text; Enter labels checked
+- `input-desktop` (Parallels): flameshot hangs or aborts on GNOME 46, so the test finds the window by the shell's own `pointer enter content at X,Y` (probe point minus that, screen size from Mutter's DisplayConfig) and ends with the app's own capture; ticks spaced for the ~2 s uinput calls; the IBus test engine now calls `get_surrounding_text()` in enable/focus-in (without that request IBus never sends the text): `ENGINE surrounding 你好 2 2` passes (UTF-16 -> UTF-8 offsets in `utf16.h` were right). `instance.capture` (desktop) tries flameshot through Xwayland.
+- `webview-input`: the shell log must show `text input surrounding cursor 3 anchor 3 of 3 bytes` for the typed `xyz` (HostTextBridge.followWebSurrounding passes unchanged).
+- Enter key labels: text-input-v3 has no enter-key-hint (`content_type` carries hint and purpose only; the label/icon is the on-screen keyboard's own choice, GNOME's OSK takes purpose and hints). So icons exist only where we talk to the keyboard ourselves: Maliit's `actionKey` (maliit.c), which still gets words. Nothing to send on the text-input path.
+- Also: `HubProtocol.NOTIFICATION_SETTINGS` and `EJECT_VOLUME` were both 64 (merge clash, host classes did not compile): 65.
+
 ## 2026-11-15: libcore fstat(fd) is the real one; setup-runtime.sh 21 s -> 10 s
 - `Os.fstat(fd)` stats `/proc/self/fd/<fd>` (mode, size, uid real; EBADF for a closed one); `files` and `system-apps` (MediaProvider scan) pass with it on Parallels.
 - `tools/release/setup-runtime.sh`: jars patched one job per jar, the JDK image built beside the instrumenting, "1/3..3/3" progress lines. Fresh dir on Parallels (12 cores): 21 s -> 10 s; the 75 s on a phone is mostly the single PreInstrument JVM (cores) and jlink.
