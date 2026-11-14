@@ -25,7 +25,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Next: more runs per setup, the unread config files, `libanort.so`.
 - Webview HTTPS fails when Conscrypt does not load: add a `HostTrust` fallback with Chromium's 5-argument `checkServerTrusted`.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
-- The 0006 allocator check refuses valid chunks at a retired heap's end (accept the fencepost pair).
 
 ## Graphics
 - Present fences signal at hand-over, not at the real present.
