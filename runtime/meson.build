@@ -62,7 +62,7 @@ framework_patched = custom_target('framework-patched.jar', input: [framework, ov
   command: [jar_put, '@INPUT0@', '@OUTPUT@',
     'dalvik/system/PathClassLoader.class=@@INPUT1@', 'dalvik/system/BaseDexClassLoader.class=@@INPUT1@',
     'dalvik/system/BaseDexClassLoader$Reporter.class=@@INPUT1@', 'dalvik/system/BaseDexClassLoader$ResourceEnumeration.class=@@INPUT1@',
-    'com/android/org/conscrypt/NativeCryptoJni.class=@@INPUT1@', 'com/android/org/conscrypt/OpenSSLECGroupContext.class=@@INPUT1@'])
+    'com/android/org/conscrypt/NativeCryptoJni.class=@@INPUT1@', 'com/android/org/conscrypt/OpenSSLECGroupContext.class=@@INPUT1@', 'com/android/org/conscrypt/OpenSSLXDHKeyPairGenerator.class=@@INPUT1@'])
 
 if get_option('android_runtime')
   subdir('android-all')
