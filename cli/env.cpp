@@ -133,7 +133,7 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
         if (stat(entry.c_str(), &st) == 0) key += entry + std::to_string(st.st_size) + "." + std::to_string(st.st_mtime) + ":";
     }
     char name[32];
-    // JDK 25: the AOT cache (JEP 483) instead of the dynamic archive. The first launches record (-XX:AOTMode=record: the configuration is written at a normal
+    // JDK 25: the AOT cache (JEP 483) instead of the dynamic archive. The idle spare records (-XX:AOTMode=record: the configuration is written at a normal
     // JVM exit, which CdsDump makes after its training) and CdsDump starts the create step in a JVM of its own; a missing or mismatched cache is no error
     // (AOTMode auto: the JVM runs on without it)
     std::string rel = readFile(join(dirName(dirName(realPath(a[0]))), "release")).value_or("");
@@ -147,10 +147,9 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
             glob_t old{};  // the configurations of the JVMs that recorded and ended after the cache was made
             if (glob((jsa + "conf.*").c_str(), 0, nullptr, &old) == 0) for (size_t i = 0; i < old.gl_pathc; i++) unlink(old.gl_pathv[i]);
             globfree(&old);
-        } else {  // every JVM of the instance records (which one trains is known only at its first activity): a configuration file each, a JVM truncates it at its start
-            static int count = 0;
+        } else {  // no cache yet: only the idle spare records and trains (cli/spare.cpp runAppSpare adds the recording, CdsDump.trainSpare), never a user's launch
             makeDirs(dirName(jsa));
-            a.insert(a.end(), {"-XX:AOTMode=record", "-XX:AOTConfiguration=" + jsa + "conf." + std::to_string(getpid()) + "." + std::to_string(count++), "-Dapklayer.cdsdump=" + jsa});
+            a.push_back("-Dapklayer.cdsdump=" + jsa);
         }
         return;
     }

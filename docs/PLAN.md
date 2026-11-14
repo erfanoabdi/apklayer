@@ -68,11 +68,9 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Direct buffer `array()` writes are lost. Only the default-route interface is a network.
 
 ## Startup and memory
-- JDK 25: the packages still name JDK 21. The first launch is the AOT training run.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
 - Cold-start costs: Hyphenator `nInit`, cold `JNI_OnLoad` ~150 ms, hub boot wait of 4-8 s.
-- A sandboxed instance cannot write its CDS archive.
 - SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
