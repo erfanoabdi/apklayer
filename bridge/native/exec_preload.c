@@ -452,7 +452,16 @@ static int apklayer_spawn_guest_in(pid_t *pid, const char *path, const posix_spa
 }
 
 /* a name without a slash is searched in PATH: host programs, left to glibc */
+static int execvpe_in(const char *file, char *const argv[], char *const envp[]);
 int execvpe(const char *file, char *const argv[], char *const envp[])
+{
+    size_t mark = arena_enter();  /* target() allocates from the arena: without it an app's jspawnhelper (own-data mapping) crashed here at NULL, and its core dump took ~1 s */
+    int r = execvpe_in(file, argv, envp);
+    arena.top = mark;
+    return r;
+}
+
+static int execvpe_in(const char *file, char *const argv[], char *const envp[])
 {
     if (strchr(file, '/') && (execve(file, argv, envp), errno != ENOEXEC)) return -1;  /* ENOEXEC (a script without #!): glibc runs it with /bin/sh */
     struct target t;

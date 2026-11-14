@@ -142,6 +142,9 @@ if is_variable('c_bio') and is_variable('apklayer_preload')
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),
       'APKLAYER_OWN_DATA=hello.exec:10001:/tmp/hello.exec', 'ENV_HOST_ONLY=private', 'PATH=/host-path-must-not-be-searched'],
     suite: 'bionic', timeout: 30)
+  # the glibc execvp of a program name (jspawnhelper's exec of a host ProcessBuilder command) in a process with an own-data mapping
+  test('exec-vp', executable('exec-vp-test', 'exec-vp.c'),
+    env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'APKLAYER_OWN_DATA=hello.execvp:10001:/tmp/hello.execvp'], suite: 'bionic', timeout: 30)
   # guest system, popen/pclose/fclose and posix_spawn[p] (0069): /system/bin/sh, the guest environment and PATH, bionic's spawn objects
   test('guest-spawn', executable('guest-spawn-test', 'guest-spawn.c', dependencies: [dependency('dl'), dependency('threads')]), args: [c_bio],
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),

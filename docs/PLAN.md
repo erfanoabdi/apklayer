@@ -13,6 +13,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Bugs
 - `webview` group fails in 3 of 4 runs on the PC at baseline (cookie assert).
+- `services` group fails "service survived stopSelf" on UTM (also on the old preload).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
 - Termux: a failed exec in a forked child may still hang in `exit()` (fix untested in Termux itself).
@@ -65,7 +66,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
 - Cold-start costs: Hyphenator `nInit`; `JNI_OnLoad` ~150 ms (eager libraries); the keystore step waits 1.3-4.4 s for the hub's gatekeeper enrollment on every cold start (async would let an early `isDeviceSecure()` see false).
-- Starting any process from the app JVM (ProcessBuilder) costs ~1.1 s on Parallels (cause not found: exec_preload, jspawnhelper or the proc views).
 - SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
