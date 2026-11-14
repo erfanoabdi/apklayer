@@ -21,6 +21,15 @@ Current authorization (2026-10-27, user): build anything needed in `~/los24` aut
 6. Run only the test groups for the code you changed: `tests/run <group>...` (groups in `tests/groups.toml`: `gpu` quick smoke, `gpu-window`, `otr2`, `vulkan`, the hub groups `providers services activities pendingintents notifications broadcasts binder hub-services webview`, media `codec2 native-*`, audio `audio-*`, system `files view sysprov system-apps keystore devices portal properties`). Each group runs in its own apklayer instance, several at a time. No long scripts.
 7. VM: host and password live in `tests/vm/local.conf` (untracked; `local.conf.example`), read by `tests/vm/config.sh` / `config.py`; the repo copy on the VM is `~/apklayer`. Use `ssh utm@192.168.64.7` with that password (the VM user has passwordless sudo, `/etc/sudoers.d/90-apklayer-tests`; the tests use `sudo -n`).
 
+## Cleaning up after yourself (owner, 2026-11-14: trees piled up until the VMs and the PC were full)
+Whoever creates something on a test host removes it before finishing, in the same task:
+- **Trees and data** you made under `~/apklayer-x86/<name>`, `~/apklayer-<name>`, `~/<name>-click`, `/tmp`, a phone's home (`~/apklayer-<name>`, `/userdata/apklayer/<name>-agent`): delete them at the end, also when the task failed or was stopped. Name them after the task, so the owner can tell what they are. Never leave one "for reruns".
+- **Processes**: stop your instances (`apklayer --instance <id> stop`) and anything you started; check `ps` on the host before you report.
+- **Copies**: APK, runtime and bundle copies you pushed to a host, lock files (`~/apklayer-vm-*.lock`), build containers/volumes and scratch files on the Mac.
+- **Never delete** what you did not create: the owner's FCL data (`~/apklayer-fc` on Parallels, `~/apklayer-x86/proc` on the PC) and the `apks` folders stay until the owner says; shared trees (`~/apklayer-st`, `~/apklayer-x86/{lead,main}`) belong to the lead.
+- Say in your report what you deleted and what you left, with its size and why.
+- Disk is a shared limit: check `df -h /` before you copy a tree; at 90% free space first (your own leftovers), then stop and ask.
+
 ## Before writing or downloading anything
 1. Read `STATUS.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer (ATL) and the AOSP tree are all **local**; never clone or download what is there.
 2. Look for real code to copy or reuse first (those projects, Mesa, AOSP). Write new code only if nothing fits, and say why in the commit message.
