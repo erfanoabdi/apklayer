@@ -33,10 +33,26 @@ final class AppEnvironment {
     static boolean installing;  // `apklayer install` reads the package's metadata: no stack, no hub
 
 
+    private static volatile Throwable lastFatal;
+
+    /** "FATAL EXCEPTION" with the trace, once per failure (the pre-handler and the default handler both see it). */
+    static void logFatal(Thread thread, Throwable failure) {
+        if (failure == lastFatal) return;
+        lastFatal = failure;
+        System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); System.out.flush();
+    }
+
+    /** RuntimeInit's LoggingHandler as the pre-handler of the patched java.base (JdkHooks): logged before an app's handler ends the process. */
+    private static void installPreHandler() {
+        try { Class.forName("java.lang.ApklayerHooks").getField("preHandler").set(null, (Thread.UncaughtExceptionHandler) AppEnvironment::logFatal); }
+        catch (ReflectiveOperationException | RuntimeException absent) { }  // java.base without the identity patch: the default handler logs
+    }
+
     /** Robolectric simulator AppLoader: application state straight from the APK. */
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
         installing = describing;
-        if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); });  // like Android's RuntimeInit: an app's own handlers (ACRA, Gecko) still chain to it
+        installPreHandler();
+        if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler(AppEnvironment::logFatal);  // like Android's RuntimeInit: an app's own handlers (ACRA, Gecko) still chain to it
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
         System.setProperty("java.specification.vendor", "The Android Project");  // as ART reports it: J2V8 picks its Android library (System.loadLibrary) by this vendor

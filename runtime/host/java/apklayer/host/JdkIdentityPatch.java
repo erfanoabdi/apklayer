@@ -15,7 +15,7 @@ import org.objectweb.asm.commons.SimpleRemapper;
 /**
  * The runtime-identity part of the java.base patch (run by {@link JdkPatch}): java.lang.ApklayerHooks and java.lang.BootClassLoader from their
  * templates (JdkHooks, JdkBootLoader), and the JDK methods that answer through the hooks: a Throwable's frames, another thread's frames,
- * Thread.getAllStackTraces, NullPointerException.getMessage, and the messages HotSpot gives the index, cast and arithmetic exceptions it throws.
+ * Thread.getAllStackTraces, the uncaught-exception pre-handler, NullPointerException.getMessage, and the messages HotSpot gives the index, cast and arithmetic exceptions it throws.
  */
 final class JdkIdentityPatch {
     private JdkIdentityPatch() {}
@@ -47,6 +47,14 @@ final class JdkIdentityPatch {
         message(dir, "java/lang/ClassCastException", JdkHooks.CAST);
         message(dir, "java/lang/ArithmeticException", JdkHooks.ARITHMETIC);
         message(dir, "java/lang/NoSuchMethodException", JdkHooks.METHOD);
+        // Thread.dispatchUncaughtException runs the pre-handler first, as Android's Thread does
+        patch(dir, "java/lang/Thread", (owner, name, desc, mv) -> !(name.equals("dispatchUncaughtException") && desc.equals("(Ljava/lang/Throwable;)V")) ? mv : new MethodVisitor(Opcodes.ASM9, mv) {
+            @Override public void visitCode() {
+                super.visitCode();
+                mv.visitVarInsn(Opcodes.ALOAD, 0); mv.visitVarInsn(Opcodes.ALOAD, 1);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, HOOKS, "uncaught", "(Ljava/lang/Thread;Ljava/lang/Throwable;)V", false);
+            }
+        });
         // Class.getMethod / getDeclaredMethod ask the hidden-API policy first; getDeclaredFields filters for app callers
         patch(dir, "java/lang/Class", (owner, name, desc, mv) -> {
             if ((name.equals("getMethod") || name.equals("getDeclaredMethod")) && desc.startsWith("(Ljava/lang/String;[Ljava/lang/Class;)")) return new MethodVisitor(Opcodes.ASM9, mv) {
