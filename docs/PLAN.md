@@ -220,7 +220,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 
 ## Planned work
 - **Per-app memory and start time** (low priority): 1. JDK 25 with the AOT cache (Leyden) for framework and app classes, checked against
-  Robolectric's instrumentation, the JDK patches, bionic_translation and every package's JDK; 2. per-JVM limits where starts do not slow;
+  Robolectric's instrumentation, the JDK patches, bionic_translation and every package's JDK; 2. (done 2026-11-14 on Parallels: heap free ratios + two C1 threads, NewPipe app JVM -21% PSS, CHANGELOG; open: measure on the phones with and without `APKLAYER_JVM_MEM=default`, apps with a live heap above ~500 MB);
   3. only if needed, a shared zygote-like JVM. Today: ~1 GB PSS per app JVM on the Volla, NewPipe ~21 s cold / ~12 s warm. Blocked (2026-11-14): no Linux glibc JDK 25 is local and the owner allows no download; paper study in CHANGELOG (patch generator and flags already fine on 25). With a JDK 25 aarch64 (Temurin 25 tarball, `java -XX:AOTMode=...`): (a) `tools/release/jdk-image.sh <jdk25>/bin/java <native>` then `APKLAYER_NATIVE_JAVA=<native>/jdk/bin/java`; (b) record `-XX:AOTCacheOutput=<f>.aot` with the same flags/classpath as cli/env.cpp; (c) measure startup/UiBench/Calculator/NewPipe and smaps_rollup PSS against JDK 21 on Parallels (free ~5 GB first).
 - **One build instead of tools/***: finish with `tools/stage` rewritten small in Python and the remaining `tools/release/*` folded into Meson.
 
