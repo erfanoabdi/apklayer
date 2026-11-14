@@ -46,14 +46,9 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
-- text-input-v3: no surrounding text and no show/hide request (a closed touch-desktop keyboard returns only on the next focus change); desktop touch session unchecked.
-- A WebView field sends no surrounding text; Enter labels are English words, not keyboard icons; the Maliit slide-in sends ~10 CONFIGUREs.
-- On Lomiri's greeter only the first tap of a uinput device registers.
+- text-input-v3: no show/hide request in the protocol. Enter labels are words, not icons.
+- Unverified: `input-desktop` (IBus `ENGINE surrounding 你好 2 2`) did not run on Parallels (flameshot aborts); WebView surrounding text (HostTextBridge.followWebSurrounding) has no assertion in `webview-input`.
 - OTR2: a portrait/landscape game in a mobile maximized window untested; FlorisBoard typing untested.
-- text-input-v3: no show/hide request in the protocol (surrounding text is sent, untested on a compositor with an IME).
-- WebView fields send no surrounding text. Enter labels are words, not icons.
-- Maliit slide-in sends ~10 CONFIGUREs.
-- Recheck IME target and `FLAG_ALT_FOCUSABLE_IM` windows.
 - Lomiri greeter: only the first uinput tap registers.
 - OTR2 in a mobile maximized window and FlorisBoard typing are untested.
 

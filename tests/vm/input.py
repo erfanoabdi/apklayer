@@ -133,6 +133,7 @@ try:
                     assert '[hello-input] text=你好' in '\n'.join(seen), 'real IME commit did not reach field'
                     assert 'ENGINE committed 你好' in '\n'.join(seen), 'IBus did not process real input'
                     checks.add('ime')
+                    assert 'ENGINE surrounding 你好 2 2' in '\n'.join(seen), 'IBus did not get the field text and cursor (surrounding text)'
                     x, y = locate(296)
                     keys(f'abs:{x},{y}', 'click')
                 elif 'script: hover:8,0' in line:

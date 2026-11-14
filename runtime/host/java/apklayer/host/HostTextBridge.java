@@ -24,6 +24,7 @@ final class HostTextBridge {
         if (editor != imeField) {
             imeField = editor;
             surrounding = "";
+            webIc = null;
             EditorInfo info = new EditorInfo();
             if (editor != null) editor.onCreateInputConnection(info);
             shell.sendTextInput(editor == null ? 0 : 1, info.inputType, info.imeOptions);
@@ -35,8 +36,9 @@ final class HostTextBridge {
 
     /** The focused field's text around the cursor and its selection, when they change: the phones' keyboards (Maliit) need them for Backspace
      * after a cursor move or with a selection, and for capitals at a sentence's start. Not while composing (Qt's excludes the preedit), not a password.
-     * shortcut: TextViews only (a WebView's field sends none), 500 characters each side; upgrade with an InputConnection's getSurroundingText if needed */
+     * 500 characters each side; a WebView's field is asked through its InputConnection (followWebSurrounding) */
     private void followSurrounding() {
+        if (imeField != null && !(imeField instanceof android.widget.TextView)) { followWebSurrounding(); return; }
         if (!(imeField instanceof android.widget.TextView tv) || !(tv.getText() instanceof android.text.Spannable text)) return;
         int s = tv.getSelectionStart(), e = tv.getSelectionEnd();
         if (s < 0 || android.view.inputmethod.BaseInputConnection.getComposingSpanStart(text) >= 0) return;
@@ -48,6 +50,45 @@ final class HostTextBridge {
         if (state.equals(surrounding)) return;
         surrounding = state;
         shell.sendSurrounding(e - from, s - from, around);  // Qt's cursor is the selection's moving end (Android's end), its anchor the start
+    }
+
+    private android.view.inputmethod.InputConnection webIc;  // the focused non-TextView field's connection, made on first use
+    private int webType;                                      // its EditorInfo.inputType
+    private long webAt;                                       // when it was last asked
+    private volatile boolean webBusy;
+
+    /** The text around the cursor of a field that is no TextView (Chromium's), from its InputConnection on the thread it names, at most every 300 ms
+     * (each answer is a round trip to the renderer). Not for passwords. */
+    private void followWebSurrounding() {
+        long now = System.nanoTime();
+        if (webBusy || now - webAt < 300_000_000L) return;
+        webAt = now;
+        if (webIc == null) {
+            EditorInfo info = new EditorInfo();
+            webIc = imeField.onCreateInputConnection(info);
+            webType = info.inputType;
+        }
+        android.view.inputmethod.InputConnection ic = webIc;
+        int variation = webType & (android.text.InputType.TYPE_MASK_CLASS | android.text.InputType.TYPE_MASK_VARIATION);
+        if (ic == null || variation == 0x81 || variation == 0x91 || variation == 0xe1 || variation == 0x12) return;
+        View field = imeField;
+        Runnable ask = () -> {
+            try {
+                CharSequence before = ic.getTextBeforeCursor(500, 0), after = ic.getTextAfterCursor(500, 0), selected = ic.getSelectedText(0);
+                if (before == null || after == null || field != imeField) return;
+                int s = before.length(), e = s + (selected == null ? 0 : selected.length());
+                String state = s + "," + e + "," + before + (selected == null ? "" : selected) + after;
+                if (state.equals(surrounding)) return;
+                surrounding = state;
+                shell.sendSurrounding(e, s, before.toString() + (selected == null ? "" : selected) + after);
+            } finally {
+                webBusy = false;
+            }
+        };
+        android.os.Handler handler = ic.getHandler();
+        webBusy = true;
+        if (handler == null || handler.getLooper() == android.os.Looper.myLooper()) ask.run();
+        else if (!handler.post(ask)) webBusy = false;
     }
 
     /** InputMethodManager.showSoftInput (TextView's tap in a focused field, or the app's own call): the shell shows a keyboard the user closed again;

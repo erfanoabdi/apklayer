@@ -2,6 +2,7 @@
  * Lomiri) show their on-screen keyboard through Maliit's D-Bus (maliit.c), which delivers through text_input_send. */
 #include "shell.h"
 #include "text-input-v3-client-protocol.h"
+#include "utf16.h"
 
 struct zwp_text_input_manager_v3 *text_mgr;
 
@@ -111,20 +112,15 @@ static void apply_enabled(void)
     if (debug_input) fprintf(stderr, "[shell] text input %s (hint 0x%x, purpose %u)\n", enable ? "enabled" : "disabled", hint, purpose);
 }
 
-/* The field's text around the cursor ({chars} from the host) as set_surrounding_text (byte offsets); the protocol's text limit is 4000 bytes.
- * shortcut: char counts are taken as code points (UTF-16 pairs shift offsets by one), fine for text without astral characters */
+/* The field's text around the cursor ({UTF-16 units} from the host) as set_surrounding_text (byte offsets); the protocol's text limit is 4000 bytes. */
 void text_input_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len)
 {
     if (!text_input || w != ime_window || len > 4000) return;
     char *t = strndup(text, len);
     if (!t) return;
-    int off[2] = { cursor, anchor }, pos[2] = { 0, 0 };
-    for (int k = 0; k < 2; k++) {
-        size_t i = 0;
-        for (int n = 0; n < off[k] && i < len; n++) for (i++; i < len && (t[i] & 0xc0) == 0x80; i++);
-        pos[k] = (int)i;
-    }
-    zwp_text_input_v3_set_surrounding_text(text_input, t, pos[0], pos[1]);
+    int c = (int)utf16_to_byte(t, len, cursor), a = (int)utf16_to_byte(t, len, anchor);
+    if (debug_input) fprintf(stderr, "[shell] text input surrounding cursor %d anchor %d of %zu bytes\n", c, a, len);
+    zwp_text_input_v3_set_surrounding_text(text_input, t, c, a);
     zwp_text_input_v3_set_text_change_cause(text_input, ZWP_TEXT_INPUT_V3_CHANGE_CAUSE_OTHER);
     zwp_text_input_v3_commit(text_input);
     ti_serial++;
