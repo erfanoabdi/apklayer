@@ -27,11 +27,11 @@
 #include <ucontext.h>
 #include <unistd.h>
 
-extern char out[16384];
+extern char out[65536];
 extern size_t on;
 void say(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #ifdef ACEDIFF_DEFS
-char out[16384];
+char out[65536];
 size_t on;
 void say(const char *fmt, ...)
 {

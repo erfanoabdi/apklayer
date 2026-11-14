@@ -508,3 +508,8 @@ run = ["python3 -u tests/vm/otr2-input.py aspect"]
 [art-maps]
 apps = ["hello-arm64"]
 run = ["python3 -u tests/vm/art-maps.py"]
+
+[acediff]
+# the arm64 translator against real arm64: tests/apps/hello-acediff prints one line per instruction family / signal behaviour; real-arm64.txt is the output of the same code on real hardware
+apps = ["hello-acediff"]
+run = ["tests/vm/acediff.sh"]
