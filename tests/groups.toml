@@ -141,7 +141,7 @@ alone = true
 
 [permissions]  # the runtime permission prompt and role requests (HubPermissionPrompt): answers by test input, kept for the manager
 apps = ["hello-permissions"]
-run = ["python3 -u tests/vm/permissions.py", "python3 -u tests/vm/permission-mobile.py"]
+run = ["python3 -u tests/vm/permissions.py", "python3 -u tests/vm/permission-mobile.py", "python3 -u tests/vm/permission-location.py"]
 
 [host-binder]
 run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device

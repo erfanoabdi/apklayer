@@ -582,7 +582,7 @@ final class HubDirectory extends Binder {
             }
             case HubProtocol.PERMISSIONS_REQUEST -> {
                 Peer caller = caller(); String[] names = request.createStringArray(); request.enforceNoDataAvail();
-                reply.writeNoException(); reply.writeIntArray(permissionPrompt.request(caller.name(), names)); return true;
+                reply.writeNoException(); reply.writeIntArray(permissionPrompt.request(caller.name(), caller.pid(), names)); return true;
             }
             case HubProtocol.ROLE_REQUEST -> {
                 Peer caller = caller(); String role = request.readString(); request.enforceNoDataAvail();

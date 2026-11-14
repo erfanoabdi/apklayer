@@ -54,7 +54,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
-- Permission prompt: precise/approximate location, "only this time", background location step.
 - No screen for `APP_NOTIFICATION_SETTINGS`. Channel groups stay per process.
 - Shared libraries: HIDL libraries, `<uses-native-library>`, resources.
 - Storage: no scoped-storage rules; `UNMOUNTABLE` not sent.
