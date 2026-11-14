@@ -57,6 +57,9 @@ std::string hostGles(const Layout& layout, const Env& env) {
     if (at == std::string::npos) return "";
     size_t end = out.find_first_of(" \n", at + key.size());
     std::string version = out.substr(at + key.size(), end - at - key.size());
+    // android.hardware.opengles.aep (HostSystemConfig): Mesa lists the pack when the driver covers its 20 extensions (the override below cannot fake it).
+    // shortcut: eglinfo's own device with several GPUs
+    if (out.find("GL_ANDROID_extension_pack_es31a") != std::string::npos) version += " aep";
     writeFile(cache, version + "\n");
     if (version.rfind("2.", 0) == 0 || version == "3.0")
         fprintf(stderr, "apklayer: the host GLES is %s; apps get a 3.2 claim (APKLAYER_GLES_OVERRIDE=off to disable)\n", version.c_str());
@@ -76,6 +79,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
     int status = 0;
     std::string out = runCapture(probe, &status), version;
     unsigned best = 0;
+    std::string label;  // "GPU0": the best device's block
     for (size_t at = out.find("\nGPU"); at != std::string::npos;) {  // the "GPU0:", "GPU1:" ... blocks
         size_t next = out.find("\nGPU", at + 4);
         std::string gpu = out.substr(at, next == std::string::npos ? std::string::npos : next - at);
@@ -89,7 +93,21 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         std::string api = field("apiVersion"), type = field("deviceType"), driver = field("driverID");
         unsigned major = 0, minor = 0;
         if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU" || driver == "DRIVER_ID_MESA_VENUS") continue;
-        if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor);
+        if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor), label = gpu.substr(1, gpu.find(':') - 1);
+    }
+    if (!version.empty()) {  // hardware level 1: the features of CTS's VulkanFeaturesTest.determineHardwareLevel, all set on the best device ("<major>.<minor> 1")
+        probe.argv = {"vulkaninfo", "--text"};
+        std::string text = runCapture(probe, &status);
+        size_t at = text.find("\n" + label + ":\n"), next = text.find("\nGPU", at + 1);
+        std::string gpu = at == std::string::npos ? "" : text.substr(at, next == std::string::npos ? std::string::npos : next - at);
+        bool level1 = !gpu.empty();
+        for (const char* f : {"textureCompressionETC2", "fullDrawIndexUint32", "imageCubeArray", "independentBlend", "geometryShader", "tessellationShader",
+                              "sampleRateShading", "textureCompressionASTC_LDR", "fragmentStoresAndAtomics", "shaderImageGatherExtended",
+                              "shaderUniformBufferArrayDynamicIndexing", "shaderSampledImageArrayDynamicIndexing"}) {
+            size_t k = gpu.find(std::string("\n\t") + f + " ");
+            level1 = level1 && k != std::string::npos && gpu.compare(gpu.find('=', k), 6, "= true") == 0;
+        }
+        if (level1) version += " 1";
     }
     writeFile(cache, (version.empty() ? "-" : version) + "\n");
     return version;
@@ -287,6 +305,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     if (env.count("APKLAYER_VULKAN_PRESENT") && env["APKLAYER_VULKAN_PRESENT"] == "0") env.erase("APKLAYER_VULKAN_PRESENT");
     else if (env.count("APKLAYER_VULKAN_HOST")) {
         std::string vulkan = hostVulkan(layout, env);
+        if (size_t sp = vulkan.find(' '); sp != std::string::npos) env["APKLAYER_VULKAN_LEVEL"] = vulkan.substr(sp + 1), vulkan.resize(sp);
         if (!vulkan.empty()) env["APKLAYER_VULKAN_PRESENT"] = "1", env["APKLAYER_VULKAN_VERSION"] = vulkan;
     }
     // the host side of the graphics, media and audio HALs: every staged library is loaded (services and apps use all of them)
@@ -310,6 +329,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
             if (g.compositor) env["APKLAYER_COMPOSITOR_NODE"] = g.node;
     }
     std::string gles = hostGles(layout, env);
+    if (size_t sp = gles.find(' '); sp != std::string::npos) gles.resize(sp), env["APKLAYER_GLES_AEP"] = "1";
     if (!env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
         // eglinfo probes a device of its own choosing: with several GPUs the claim is made anyway (a no-op on a 3.2 driver)
         if (gles.rfind("2.", 0) == 0 || gles == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";

@@ -29,8 +29,8 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Present fences signal at hand-over, not at the real present.
 - Swap interval 0: low frame rate; a waiting attach drops a release fence.
 - Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
-- Vulkan presentation untested on AMD. `vulkan.level` is declared 0.
-- Play feature list lacks sensors (no host provider yet), `opengles.aep` and `vulkan.level` 1 (both need a probe of the device).
+- Vulkan presentation untested on AMD.
+- Play feature list lacks sensors (no host provider yet).
 - GPU per instance: Vulkan device filter, copy fallback, VA plugin device, LINEAR on Intel.
 - OTR2 on the PC runs ~30 fps at 2448x1374.
 - Windows: smaller second output, output hotplug, no Back button under server-side decorations, KDE.
