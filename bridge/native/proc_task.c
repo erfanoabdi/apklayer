@@ -264,6 +264,11 @@ long apklayer_proc_link_view(const char *path, char *buf, long n, size_t size)
     const char *view = NULL;
     if (!strcmp(rest, "exe")) view = exe_view(pid, real);
     else if (!strncmp(rest, "fd/", 3) && is_own_pid(pid)) view = runtime_file(real);
+    else if (!strncmp(rest, "map_files/", 10) && is_own_pid(pid)) {  /* the file behind a mapping, spelled as its maps line is; a mapping without an Android name keeps its path */
+        static __thread char spelled[PATH_MAX];
+        view = apklayer_proc_map_name(real, spelled, sizeof spelled);
+        if (view && !*view) view = NULL;
+    }
     errno = saved;
     if (!view) return n;
     size_t len = strlen(view);

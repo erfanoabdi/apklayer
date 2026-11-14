@@ -88,7 +88,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Unity: `hpatchz`, no backtrace in fault notes, the app log cap misses lines.
 
 ## Runtime identity (nothing blocking)
-- `/proc/self/map_files` still shows a host path first.
 - Hidden: `/home` and `/tmp` stay visible (host app dirs below them).
 - Missing paths: `app_process32`, `core-oj.jar`, `framework.jar`, `/data/dalvik-cache`, `/dev/socket/zygote`, `/vendor/lib64`.
 - Modules: `dl_iterate_phdr` lists 270 of 320; libc exports `bionic_*` names.
