@@ -152,7 +152,7 @@ new file mode 100644
 +		return true;
 +	}
 +	if (starts(base, "libc_bio.so") || !strcmp(base, "libc.so.6")) { snprintf(buf, size, RUNTIME_BIONIC "libc.so"); return true; }
-+	if (starts(base, "libpthread_bio.so") || starts(base, "libdl_bio.so")) { snprintf(buf, size, RUNTIME_BIONIC "libc.so"); return glibc_loaded ? false : true; }
++	if (starts(base, "libpthread_bio.so") || starts(base, "libdl_bio.so")) { snprintf(buf, size, RUNTIME_BIONIC "libc.so"); return true; }  /* bionic's libc has them (one module in the list: the iteration reports the first) */
 +	if (!strcmp(base, "libm.so.6") || !strcmp(base, "libm.so")) { snprintf(buf, size, RUNTIME_BIONIC "libm.so"); return true; }
 +	if (starts(base, "libstdc++_bio.so")) { snprintf(buf, size, "/system/lib64/libstdc++.so"); return true; }
 +	if (starts(base, "ld-linux")) { snprintf(buf, size, "/system/bin/linker64"); return true; }
