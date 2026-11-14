@@ -1,0 +1,15 @@
+#!/bin/bash
+# Headless GNOME Wayland session (own session bus) + its RDP daemon, one process tree so
+# systemd restarts both together. RDP user/password live in ~/.local/share/gnome-remote-desktop/credentials.ini.
+export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_DESKTOP=gnome GNOME_SHELL_SESSION_MODE=ubuntu
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+D=${RDP_DIR:-$HOME/apklayer-pgr-test}
+gnome-shell --headless --wayland --no-x11 --virtual-monitor 2560x1440 &
+for i in $(seq 100); do [ -S "$XDG_RUNTIME_DIR/wayland-0" ] && break; sleep 0.2; done
+grdctl --headless rdp set-tls-cert "$D/rdp.crt"
+grdctl --headless rdp set-tls-key "$D/rdp.key"
+grdctl rdp disable-view-only   # the non-headless form is the one that writes the setting the daemon reads
+gsettings set org.gnome.desktop.remote-desktop.rdp enable true
+/usr/libexec/gnome-remote-desktop-daemon --headless &
+wait -n   # either child dying ends the script, systemd restarts all
+kill 0

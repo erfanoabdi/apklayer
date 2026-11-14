@@ -1,0 +1,19 @@
+[Unit]
+Description=apklayer instance pgr (Punishing Gray Raven) in the headless GNOME session
+After=apklayer-gnome-headless.service
+Wants=apklayer-gnome-headless.service
+PartOf=apklayer-gnome-headless.service
+
+[Service]
+Environment=XDG_RUNTIME_DIR=%t WAYLAND_DISPLAY=wayland-0
+# a stale wayland-0 file can outlive a killed shell: wait until something accepts connections on it
+ExecStartPre=/usr/bin/python3 -c "import socket,time,sys\nfor i in range(150):\n try: socket.socket(socket.AF_UNIX).connect('%t/wayland-0'); sys.exit(0)\n except OSError: time.sleep(0.2)\nsys.exit(1)"
+ExecStartPre=-/usr/bin/apklayer --instance pgr stop
+# sg video: a lingering user manager may lack the video group (needs /dev/dri/card0); sg adds it without root
+ExecStart=/usr/bin/sg video -c "exec /usr/bin/apklayer --instance pgr run com.kurogame.gplay.punishing.grayraven.en"
+ExecStop=-/usr/bin/apklayer --instance pgr stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

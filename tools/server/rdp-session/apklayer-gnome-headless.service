@@ -1,0 +1,10 @@
+[Unit]
+Description=Headless GNOME Wayland session with RDP (always the same session)
+
+[Service]
+ExecStart=/usr/bin/dbus-run-session -- %h/.local/bin/apklayer-gnome-headless
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
