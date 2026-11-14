@@ -54,6 +54,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
+- Permission prompt: precise/approximate location, "only this time", background location step.
+- No screen for `APP_NOTIFICATION_SETTINGS`. Channel groups stay per process.
 - Shared libraries: HIDL libraries, `<uses-native-library>`, resources.
 - Storage: no scoped-storage rules; `UNMOUNTABLE` not sent.
 - Every instance scans every drive. Eject can fail "busy" while MediaProvider maps an image.
@@ -61,7 +63,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Keystore: only pam_unix passwords, never locked.
 - libcore: `sun.misc.Cleaner`, `fstat(fd)`, SharedMemory `PROT_EXEC`/`PROT_NONE`.
 - Termux: under the sandbox, `getpwuid` names, no `/system/bin/sh` or `getprop`.
-- Direct buffer `array()` writes are lost: an app's `allocateDirect` buffer reports an array that is a copy (ApklayerBuffers; on Android libcore backs it with the shared byte[], HotSpot cannot pin one). Not fixable without JVM pinning; kept for apps that write through it.
+- Direct buffer `array()` writes are lost. Only the default-route interface is a network.
 
 ## Startup and memory
 - JDK 25: flatpak still names JDK 21; findJava prefers an installed 21 over 25.
