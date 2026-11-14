@@ -3,7 +3,7 @@ Section: utils
 Priority: optional
 Maintainer: Erfan Abdi <erfangplus@gmail.com>
 Build-Depends: debhelper-compat (= 13), meson, ninja-build, pkg-config, python3, binutils, git, ca-certificates,
- openjdk-21-jdk-headless,
+ openjdk-21-jdk-headless | openjdk-25-jdk-headless,
  libwayland-dev, wayland-protocols, libxkbcommon-dev, libcairo2-dev, libpng-dev,
  libdrm-dev, libgbm-dev, libegl-dev, libgles-dev,
  libpipewire-0.3-dev, libpulse-dev, libglib2.0-dev, libgstreamer1.0-dev, libgstreamer-plugins-base1.0-dev,
@@ -17,7 +17,7 @@ Rules-Requires-Root: no
 Package: apklayer
 Architecture: arm64 amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, ${apklayer:Depends},
- openjdk-21-jre-headless, python3, python3-gi, zip, unzip, wget, zstd, uidmap
+ openjdk-21-jre-headless | openjdk-25-jre-headless, python3, python3-gi, zip, unzip, wget, zstd, uidmap
 Recommends: mesa-utils, pkexec, xdg-utils, desktop-file-utils,
  gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav
 Suggests: ${apklayer:Suggests}
