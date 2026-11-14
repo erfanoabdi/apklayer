@@ -488,10 +488,14 @@ static int other_package_path(const char *path)
 /* The desktop's terminals: /dev/pts/<n> are the user's shells and terminal tabs. An app on Android has none of them in its /dev/pts; ACE (PGR) probes
  * /dev/pts/0..7, which on Android tells a debugger or `adb shell` session from a plain start. ENOENT for an app process (own data set) under any path that
  * names one by number; /dev/pts itself and /dev/pts/ptmx stay (Termux opens a pty of its own: its new terminals are numbered ones too, so APKLAYER_PTS_VIEW=host
- * turns the filter off). */
+ * turns the filter off). apklayer patch: a process that opened /dev/ptmx itself (a terminal emulator) keeps its numbered slaves: Termux's forked child
+ * opens /dev/pts/<n> of its own pty after closing the master; ENOENT ended it in exit(-1) and the shell never started (the flag survives fork). */
+static int opened_ptmx;
+
 static int desktop_terminal_path(const char *path)
 {
-    if (strncmp(path, "/dev/pts/", 9)) return 0;
+    if (!strcmp(path, "/dev/ptmx") || !strcmp(path, "/dev/pts/ptmx")) __atomic_store_n(&opened_ptmx, 1, __ATOMIC_RELEASE);
+    if (strncmp(path, "/dev/pts/", 9) || __atomic_load_n(&opened_ptmx, __ATOMIC_ACQUIRE)) return 0;
     const char *leaf = path + 9;
     static int host_view = -1;
     if (host_view < 0) { const char *v = getenv("APKLAYER_PTS_VIEW"); host_view = v && !strcmp(v, "host"); }
