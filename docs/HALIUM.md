@@ -496,3 +496,6 @@ The four libraries newer than the prebuilts (below) were again copied from the t
 Earlier results (sysroot tarball, instance `ut`; `~/apklayer-sfos/sf-shots.sh <pkg> <secs>` on the phone: run, both screenshots, stop): UiBench draws (device gralloc buffers to
 Lipstick); NewPipe draws its UI (Trending stayed empty); Open Camera opens the device's camera 0 through cameraserver over the HIDL provider (`ID:0`, no
 CameraControllerException; the preview was dark, the phone lying on the desk: not judged). Not run on this phone: audio, sensors, GNSS, vibrator, media.
+
+## A compositor that stops repainting (weston's VNC output, 2026-11-14)
+weston's VNC backend stops repainting (no frame callbacks, no buffer releases) while no VNC client is connected. The shell then gets no `wl_buffer.release`, SurfaceFlinger's queue runs dry and the app's `dequeueBuffer` times out (-110); the app is not broken, it resumes when a viewer connects (or with another output/compositor). The shell has no timeout-driven release of its own: releasing a buffer the compositor may still read would tear, so this is documented, not worked around. Test on weston with a VNC client attached.
