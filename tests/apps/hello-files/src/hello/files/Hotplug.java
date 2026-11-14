@@ -62,6 +62,8 @@ final class Hotplug {
         check("volume callback", (uuid + " mounted").equals(callback));
         StorageVolume volume = storage.getStorageVolumes().stream().filter(v -> uuid.equals(v.getUuid())).findFirst().orElse(null);
         check("volume listed", volume != null && volume.isRemovable() && "mounted".equals(volume.getState()) && path.equals(volume.getDirectory().getPath()));
+        File[] dirs = context.getExternalFilesDirs(null);
+        check("files dirs secondary", dirs.length == 2 && dirs[1].isDirectory() && dirs[1].getPath().equals(path + "/Android/data/" + context.getPackageName() + "/files"));
         String media = uuid.toLowerCase();
         check("mediastore volume", MediaStore.getExternalVolumeNames(context).contains(media));
         boolean scanned = appears(context, media, "pre.png", true);
