@@ -49,6 +49,18 @@ def detach():
     device = None
 
 
+RULE = Path('/etc/polkit-1/rules.d/49-apklayer-volumes-%s.rules' % INSTANCE)
+
+
+def polkit(allow):
+    """The drive here is mounted by root (sudo), where the desktop's udisks mounts it for the user: udisksctl unmount (the hub's Eject) of it needs polkit's
+    unmount-others, not given to an ssh session. For the eject run only: this rule, removed again."""
+    if allow:
+        root('sh', '-c', "printf '%%s\\n' 'polkit.addRule(function(a, s) { if (a.id == \"org.freedesktop.udisks2.filesystem-unmount-others\" && s.user == \"%s\") return polkit.Result.YES; });' > %s" % (os.environ.get('USER', 'user'), RULE))
+    else:
+        root('rm', '-f', str(RULE), check=False)
+
+
 def mount():
     root('mkdir', '-p', str(point))
     root('mount', '-t', 'vfat', '-o', 'uid=%d,gid=%d' % (os.getuid(), os.getgid()), device, str(point))
@@ -122,6 +134,7 @@ def eject(line, lines):
     elif '[hotplug] PASS MEDIA_UNMOUNTED broadcast' in line:  # before the instance's stop could end the holder
         lines.append('[hotplug] %s eject ended the holder' % ('PASS' if holder.poll() is not None else 'FAIL'))
         lines.append('[hotplug] %s eject unmounted' % ('PASS' if subprocess.run(['mountpoint', '-q', str(point)]).returncode else 'FAIL'))
+        detach()  # the drive is pulled out after its eject
 
 
 def pulled(line, lines):
@@ -151,7 +164,9 @@ try:
     (point / 'DCIM/pre.png').write_bytes(png())
     unmount()
     subprocess.run(['bin/apklayer', 'permissions', 'grant', 'hello.files', 'android.permission.READ_MEDIA_IMAGES'], env=ENV, capture_output=True)
+    polkit(True)
     lines += app('-Dhello.hotplug=1 -Dhello.eject=1', eject)
+    polkit(False)
     if holder and holder.poll() is None: holder.kill()
     unmount()
     detach()
@@ -174,6 +189,7 @@ try:
     lines += app(jopts + '-Dhello.catchup.drive=0', lambda line, lines: None, budget)
 finally:
     stop()
+    polkit(False)
     unmount()
     detach()
     image.unlink(missing_ok=True)

@@ -84,13 +84,14 @@ final class HubVolumes {
      * MediaProvider keeps a scanned image mapped until a GC and would make the unmount fail busy), then udisks unmounts it, lazily when it is still busy
      * (other instances' processes in other trees see the drive too). The broadcasts and callbacks follow from the udisks monitor as for any unmount.
      */
-    synchronized boolean eject(String id) {
+    synchronized boolean eject(String id, int caller) {
         VolumeInfo volume = mounted.values().stream().filter(v -> v.id.equals(id)).findFirst().orElse(null);
         if (volume == null) return false;
         String point = HostVolumes.Removable.mountPoint(volume);
         String device = source(point);
         if (device == null) return false;
         for (int pid : holders(point)) {
+            if (pid == caller) continue;  // the one asking is not ended mid-call (its answer would be lost)
             System.out.println("[apklayer-hub] eject " + id + ": ending pid " + pid + " (files open on " + point + ")");
             ProcessHandle.of(pid).ifPresent(ProcessHandle::destroyForcibly);
         }
@@ -98,7 +99,7 @@ final class HubVolumes {
     }
 
     private static boolean run(String... command) {
-        try { return new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start().waitFor() == 0; }
+        try { return new ProcessBuilder(command).redirectInput(new File("/dev/null")).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start().waitFor() == 0; }
         catch (IOException | InterruptedException failure) { return false; }
     }
 
