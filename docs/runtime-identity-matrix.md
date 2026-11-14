@@ -6,7 +6,7 @@ This file compares what an app sees on real Android with what it sees under apkl
 - **ARM64**: apklayer on UTM (native arm64), userspace binder. Runtime: the `~/wt/realapps` tree (built 2026-11-13 19:36 from current main plus the Termux/Fennec agent's work). The VM had no room for a tree of its own; the `~/apklayer` tree did not start an app at the time.
 - **x86**: apklayer on the x86 PC, worktree at 0f42092b (main 811b44c1), userspace binder. The arm64 library is translated by berberis.
 
-Raw results are in `tests/identity/results/{waydroid,apklayer-arm64,apklayer-x86}.txt`. The full joined table comes from `python3 tests/identity/compare.py tests/identity/results/waydroid.txt tests/identity/results/apklayer-{arm64,x86}.txt`. To collect again: `tests/run identity-matrix` (an optional group) or `tests/identity/collect.py apklayer|waydroid OUT` (docstring there).
+Raw results are in `tests/identity/results/{waydroid,apklayer-arm64,apklayer-x86}.txt` (first run) and `apklayer-{arm64,x86}-main.txt` (rerun on main fecb75f5). The full joined table comes from `python3 tests/identity/compare.py tests/identity/results/waydroid.txt tests/identity/results/apklayer-{arm64,x86}.txt`. To collect again: `tests/run identity-matrix` (an optional group) or `tests/identity/collect.py apklayer|waydroid OUT` (docstring there).
 
 **Reading the verdicts.** Some differences are expected and are not gaps:
 - the ABI (x86_64 on Waydroid, arm64 for apklayer);
@@ -40,12 +40,14 @@ Raw key-by-key equality against Waydroid. Every probe line counts, so ABI and de
 
 The judged matrix below groups those keys into 116 probes. A row counts as "match" only if both apklayer columns match.
 
-| area | probes | match | partial (one arch, or cosmetic) | mismatch | n/a |
+| area | rows | match | partial | mismatch | n/a |
 |---|---|---|---|---|---|
-| 5 Java/class identity | 37 | 6 | 4 | 27 | 0 |
-| 6 native inspection | 49 | 13 | 7 | 28 | 1 |
-| 7 ART internals | 30 | 10 | 2 | 18 | 0 |
-| total | 116 | 29 | 13 | 73 | 1 |
+| 5 Java/class identity | 37 | 18 | 13 | 6 | 0 |
+| 6 native inspection | 49 | 24 | 12 | 11 | 2 |
+| 7 ART internals | 31 | 15 | 4 | 11 | 1 |
+| total | 117 | 57 | 29 | 28 | 3 |
+
+First measurement (2026-11-13, 116 judged probes): 29 match, 13 partial, 73 mismatch, 1 n/a. After the fixes of 2026-11-14 (counted from the verdict column below, rows as of main fecb75f5): 57 match, 29 partial, 28 mismatch, 3 n/a. Raw key equality against Waydroid over the 464 probe lines, from `tests/identity/results/apklayer-{arm64,x86}-main.txt` (main fecb75f5): ARM64 207 (first run 142 of 446 keys), x86 212 (first run 169 of 463). The rows were not re-judged key by key against the new files; the raw counts are the check. Open mismatches are mostly item 14 of PLAN (ART structures) plus host paths, uname/attr leaks and the exception texts listed in PLAN.
 
 ### Top mismatches by severity
 *Update 2026-11-14 (native process views, tests/native/proc-views.c, hello-identity `child.*`): item 2 and the process-view parts of item 4 (thread names, comm, exe, fd targets, cgroup, mountinfo, rwx, host paths in maps) are fixed on ARM64 and x86; the rows of "6. Native inspection" say what changed and what is left. Items 1, 3 and 5-10 are as measured.*
