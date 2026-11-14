@@ -98,13 +98,18 @@ final class HubVolumes {
             if (before != null && before.path.equals(volume.path) && before.state == volume.state) continue;
             unmounted.remove(volume.fsUuid);
             mounted.put(volume.fsUuid, volume);
-            changed(volume, VolumeInfo.STATE_UNMOUNTED);
+            if (before == null) {  // vold checks the file system first (ACTION_MEDIA_CHECKING); already mounted and only changed (read-only) it does not
+                changed(state(volume, VolumeInfo.STATE_CHECKING), VolumeInfo.STATE_UNMOUNTED);
+                changed(volume, VolumeInfo.STATE_CHECKING);
+            } else changed(volume, before.state);
             media.add(Path.of(HostVolumes.Removable.mountPoint(volume)), volume.path, -1);
         }
         for (VolumeInfo gone : List.copyOf(mounted.values())) {
             if (now.containsKey(gone.fsUuid)) continue;
             mounted.remove(gone.fsUuid);
             media.remove(gone.path);
+            // shortcut: the device already gone when the unmount is seen counts as pulled out while mounted (a clean eject followed at once by removal looks the same)
+            if (!Files.exists(Path.of("/dev/disk/by-uuid", gone.fsUuid))) changed(state(gone, VolumeInfo.STATE_BAD_REMOVAL), VolumeInfo.STATE_MOUNTED);
             changed(state(gone, VolumeInfo.STATE_EJECTING), VolumeInfo.STATE_MOUNTED);
             changed(state(gone, VolumeInfo.STATE_UNMOUNTED), VolumeInfo.STATE_EJECTING);
             unmounted.put(gone.fsUuid, state(gone, VolumeInfo.STATE_UNMOUNTED));
@@ -169,7 +174,7 @@ final class HubVolumes {
         String action = VolumeInfo.getBroadcastForEnvironment(user.getState());
         if (action != null) directory.sendSystem(new Intent(action, Uri.fromFile(user.getPathFile())).putExtra(StorageVolume.EXTRA_STORAGE_VOLUME, user)
                 .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND), false);
-        HubStorageService.notify(directory, user);
+        if (volume.state != VolumeInfo.STATE_CHECKING) HubStorageService.notify(directory, user);  // StorageSessionController tells the service of mounts and ends only
     }
 
     private static StorageVolume storageVolume(VolumeInfo volume) {

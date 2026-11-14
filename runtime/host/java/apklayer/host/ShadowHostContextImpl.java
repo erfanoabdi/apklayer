@@ -182,8 +182,21 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     }
     /** Android's app-specific external directories (Environment.buildExternalStorageAppFilesDirs, ...CacheDirs): <external>/Android/data/<pkg>/files[/type] and .../cache. */
     @Implementation @Override protected java.io.File getExternalFilesDir(String type) { return externalAppDir("files", type); }
-    @Implementation @Override protected java.io.File[] getExternalFilesDirs(String type) { return new java.io.File[] {getExternalFilesDir(type)}; }
-    @Implementation protected java.io.File[] getExternalCacheDirs() { return new java.io.File[] {externalAppDir("cache", null)}; }
+    @Implementation @Override protected java.io.File[] getExternalFilesDirs(String type) { return externalAppDirs("files", type); }
+    @Implementation protected java.io.File[] getExternalCacheDirs() { return externalAppDirs("cache", null); }
+    /** Environment.buildExternalStorageAppFilesDirs: the primary volume's directory, then one on every other mounted writable volume (a drive); null for one that cannot be made. */
+    private java.io.File[] externalAppDirs(String kind, String type) {
+        java.util.List<java.io.File> dirs = new java.util.ArrayList<>();
+        dirs.add(externalAppDir(kind, type));
+        android.os.storage.StorageManager storage = real.getSystemService(android.os.storage.StorageManager.class);
+        if (storage != null) for (android.os.storage.StorageVolume volume : storage.getStorageVolumes()) {
+            if (volume.isPrimary() || !android.os.Environment.MEDIA_MOUNTED.equals(volume.getState()) || volume.getDirectory() == null) continue;
+            java.io.File dir = new java.io.File(volume.getDirectory(), "Android/data/" + real.getPackageName() + "/" + kind);
+            if (type != null) dir = new java.io.File(dir, type);
+            dirs.add(dir.isDirectory() || dir.mkdirs() ? dir : null);
+        }
+        return dirs.toArray(new java.io.File[0]);
+    }
     private java.io.File externalAppDir(String kind, String type) {
         java.io.File dir = new java.io.File(android.os.Environment.getExternalStorageDirectory(), "Android/data/" + real.getPackageName() + "/" + kind);
         if (type != null) dir = new java.io.File(dir, type);
