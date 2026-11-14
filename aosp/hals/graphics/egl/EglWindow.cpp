@@ -54,6 +54,7 @@ struct Window {
     int64_t presentationTime = 0;  // eglPresentationTimeANDROID for the next frame (0 = none)
     WindowAttach* attach = nullptr;  // the zero-copy present (null: every frame is copied)
 };
+constexpr int kAsyncBufferCount = 6;  // the window's buffers (dequeued + undequeued) at swap interval 0: the gbm_surface's four plus copy targets
 std::recursive_mutex windowsLock;
 std::set<Window*> windows;
 
@@ -150,7 +151,7 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
     if (w.presentationTime) { native_window_set_buffers_timestamp(nw, w.presentationTime); w.presentationTime = 0; }
     ANativeWindowBuffer* dst = nullptr;
     int fence = -1;
-    if (w.attach && w.attach->present(dpy, w.gbmSurface, bo, w.width, w.height, &dst, &fence)) return;
+    if (w.attach && !importForcedToFail() && w.attach->present(dpy, w.gbmSurface, bo, w.width, w.height, &dst, &fence)) return;
     if (!dst && (nw->dequeueBuffer(nw, &dst, &fence) != 0 || !dst)) {
         ALOGE("dequeueBuffer failed");
         gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
@@ -166,7 +167,7 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
     auto createImage = host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR");
     CachedImage *src = nullptr, *out = nullptr;
     std::optional<GlState> saved;  // restored when the function ends (creating a cache entry binds a texture and a framebuffer)
-    if (ctx != EGL_NO_CONTEXT) {
+    if (ctx != EGL_NO_CONTEXT && !importForcedToFail()) {
         saved.emplace();
         src = cachedImage(w, w.srcCache, (uint64_t)st.st_ino, nullptr, [&]() -> EGLImage {
             uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
@@ -199,8 +200,11 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
                       w.width, w.height, rs, ds, dst->width, dst->height, dst->format, (unsigned long long)dst->usage);
         }
         outFence = gpuFence(dpy);
+    } else if (cpuCopy(bo, dst, w.width, w.height)) {  // an import failed (or no context): the frame goes through the CPU
+        static int told = 0;
+        if (told++ < 3) ALOGW("window present %ux%u: dmabuf import failed (images %p %p): copied on the CPU", w.width, w.height, src, out);
     } else {
-        ALOGE("window present: images %p %p or no current context", src, out);
+        ALOGE("window present: images %p %p or no current context, and no CPU copy: the frame is blank", src, out);
     }
     close(fd);
     gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
@@ -350,6 +354,9 @@ EGLBoolean eglSwapInterval(EGLDisplay dpy, EGLint interval) {
     Window* w = windowOf(appSurface(host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW)));
     if (!w) return host<EGLBoolean (*)(EGLDisplay, EGLint)>("eglSwapInterval")(dpy, interval);
     if (w->native && w->native->setSwapInterval) w->native->setSwapInterval(w->native, interval < 0 ? 0 : interval);
+    // Interval 0 renders faster than SurfaceFlinger releases: all four gbm buffers are out and the swap would wait for a release. With room in
+    // the queue for more buffers, that frame is dequeued as a copy target at once (presentToWindow) instead of blocking.
+    if (w->native && interval <= 0) native_window_set_buffer_count(w->native, kAsyncBufferCount);
     return EGL_TRUE;
 }
 

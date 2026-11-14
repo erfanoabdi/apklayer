@@ -324,6 +324,11 @@ needs = ["com.android.test.uibench"]
 setup = ["locale -a | grep -qx nl_NL.utf8 || sudo -n locale-gen nl_NL.UTF-8 >/dev/null"]
 run = ["python3 -u tests/vm/gpu-smoke.py", "LANG=nl_NL.UTF-8 LC_ALL=nl_NL.UTF-8 python3 -u tests/vm/gpu-smoke.py", "python3 -u tests/vm/hwbitmap.py"]
 
+[gpu-import-fail]
+# a failing dmabuf import of a window frame (forced: APKLAYER_RUNTIME_DEBUG=egl-import-fail) falls back to a CPU copy; the frames still reach the compositor
+needs = ["com.android.test.uibench"]
+run = ["APKLAYER_RUNTIME_DEBUG=egl-import-fail python3 -u tests/vm/gpu-smoke.py"]
+
 [gfx-readback]
 # the GPU copy of buffers the CPU cannot map (readback.c: NVIDIA's tiled window and capture buffers), every format it moves, tiled and LINEAR
 run = ["b/bridge/hals/graphics/readback-test"]
