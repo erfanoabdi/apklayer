@@ -28,6 +28,11 @@ public class Main extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (Boolean.getBoolean("hello.perm.second")) {  // the run after the first, which made this app the browser: the role is kept
+            check(getSystemService(RoleManager.class).isRoleHeld(RoleManager.ROLE_BROWSER), "role kept across restarts");
+            finish();
+            return;
+        }
         tick();
         check(!held(CAMERA), "unasked camera not held");
         check(held(AUDIO), "manager grant held at start");
