@@ -17,7 +17,7 @@ diff --git a/libc/libc.c b/libc/libc.c
  }
  
 -#define APK_SYNC_SIGNALS ((1UL << (SIGSEGV - 1)) | (1UL << (SIGBUS - 1)) | (1UL << (SIGILL - 1)) | (1UL << (SIGFPE - 1)))
-+#define APK_SYNC_SIGNALS ((1UL << (SIGSEGV - 1)) | (1UL << (SIGBUS - 1)) | (1UL << (SIGILL - 1)) | (1UL << (SIGFPE - 1)) | (1UL << (SIGSYS - 1)))  /* SIGSYS: apklayer patch 0074, the raw-syscall filter's trap (a blocked SIGSYS kills the process) */
++#define APK_SYNC_SIGNALS ((1UL << (SIGSEGV - 1)) | (1UL << (SIGBUS - 1)) | (1UL << (SIGILL - 1)) | (1UL << (SIGFPE - 1)) | (1UL << (SIGSYS - 1)))  /* SIGSYS: apklayer patch 0072, the raw-syscall filter's trap (a blocked SIGSYS kills the process) */
  static int apk_sigmask(int thread, int how, const unsigned long *set, unsigned long *oset) /* apklayer patch: see docs/PATCHES.md */
  {
  	sigset_t in, out;
@@ -39,7 +39,7 @@ diff --git a/linker/linker.c b/linker/linker.c
  
 -	void *base = mmap(NULL, si->size, PROT_NONE,
 -			  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-+	/* apklayer patch (0074): the libraries this linker loads sit in one address window the host's raw-syscall filter recognises (the
++	/* apklayer patch (0072): the libraries this linker loads sit in one address window the host's raw-syscall filter recognises (the
 +	 * preload's apklayer_guest_window_take, absent or NULL: the kernel's choice) */
 +	void *hint = apklayer_guest_window_take ? apklayer_guest_window_take(si->size) : NULL;
 +	void *base = mmap(hint, si->size, PROT_NONE,
