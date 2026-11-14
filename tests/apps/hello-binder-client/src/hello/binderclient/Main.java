@@ -34,6 +34,37 @@ public class Main extends Activity {
         }, "client").start();
     }
 
+    /** Round trip of a trivial transaction (code 3), two-way and oneway (N sent, then one two-way: the server has handled all of them); microseconds. */
+    private static void bench(IBinder echo) throws Exception {
+        Parcel d = Parcel.obtain(), r = Parcel.obtain();
+        for (int i = 0; i < 4000; i++) {
+            long t0 = System.nanoTime();
+            d.setDataPosition(0); d.writeInterfaceToken(DESCRIPTOR); r.setDataPosition(0);
+            echo.transact(3, d, r, 0);
+            if (i == 500) { d.recycle(); r.recycle(); d = Parcel.obtain(); r = Parcel.obtain(); }
+        }
+        int n = 3000;
+        long[] us = new long[n];
+        for (int i = 0; i < n; i++) {
+            d.recycle(); r.recycle(); d = Parcel.obtain(); r = Parcel.obtain();
+            d.writeInterfaceToken(DESCRIPTOR);
+            long t0 = System.nanoTime();
+            echo.transact(3, d, r, 0);
+            us[i] = (System.nanoTime() - t0) / 1000;
+        }
+        java.util.Arrays.sort(us);
+        long t0 = System.nanoTime();
+        for (int i = 0; i < n; i++) {
+            d.recycle(); d = Parcel.obtain();
+            d.writeInterfaceToken(DESCRIPTOR);
+            echo.transact(3, d, null, IBinder.FLAG_ONEWAY);
+        }
+        d.recycle(); d = Parcel.obtain(); d.writeInterfaceToken(DESCRIPTOR);
+        echo.transact(3, d, r, 0);
+        long oneway = (System.nanoTime() - t0) / 1000 / n;
+        System.out.println("[hello-binder-client] BENCH twoway_us median=" + us[n / 2] + " p90=" + us[n * 9 / 10] + " min=" + us[0] + " oneway_us_each=" + oneway);
+    }
+
     private void run() throws Exception {
         Class<?> real = Class.forName("apklayer.host.RealBinder");
         long waitStarted = System.nanoTime();
@@ -119,6 +150,7 @@ public class Main extends Activity {
         require(callerPid[0] == serverPid, "the callback was called by the server's process");
         require(called.startsWith("server got cb:hi from pid " + Process.myPid()), "callback round trip: " + called);
 
+        bench(echo);
         java.util.concurrent.CountDownLatch death = new java.util.concurrent.CountDownLatch(1);
         echo.linkToDeath(() -> { System.out.println("[hello-binder-client] binderDied"); death.countDown(); }, 0);
         System.out.println("[hello-binder-client] PASS echo, callback, identities; waiting for the server to die");

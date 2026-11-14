@@ -75,8 +75,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
 ## Userspace binder
-- Fewer hops per call (futex doorbells, no second wakeup, busy-poll). Measure SurfaceFlinger and audio.
-- Halium without binderfs: host context is fixed at `/dev/binder`.
+- Fewer hops per call: the daemon's 60 us busy-poll is done (CHANGELOG 2026-11-15 "binderd busy-poll"); not done: a busy-poll window in the route (bridge/native/binder_route.c) before it sleeps in recv, futex doorbells, no second wakeup. Measure SurfaceFlinger per frame and audio (only the trivial transaction is measured: hello-binder-client BENCH).
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`).
@@ -84,7 +83,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - No translation cache across starts.
 - Telegram has no x86_64 FOSS APK to test.
 - The guest JVM finds the host's `libjsig`: watch for a later SIGSEGV handler.
-- Unity: `hpatchz`, no backtrace in fault notes, the app log cap misses lines.
+- Unity: `hpatchz`.
 (The translator is Digitalis, a fork of AOSP's Berberis that keeps its names: libberberis_arm64, BERBERIS_*, berberis.mode.*; docs/X86_64.md.)
 - Diagnostics for this (tools/ace/): bpftrace on the translator and glibc through `sudo tools/ace/trace.sh <script.bt> [out]`: ace-self-signal
   (signals to itself), ace-files (raw file syscalls, counted), ace-names (every raw file syscall, in order), ace-proxy (glibc calls of guest
@@ -172,7 +171,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
   berberis.mode.<package> is lite-translate-or-interpret; the home scene is not checked yet (the runs end at the title screen).
 - No translation cache across starts; Telegram (no x86_64 FOSS APK to test); the manager's "translated" label.
 - The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
-- Unity: `hpatchz`; no backtrace in the fault note; app log cap misses Log lines (Unity's own graphics API lines never reach the app log).
+- Unity: `hpatchz`.
 
 ## Runtime identity (nothing blocking)
 - Modules: `dl_iterate_phdr` lists 279 of 320 (arm64); the staged graphics stack (libEGL, libGLESv*, libvulkan) stalls the app at start when loaded eagerly. libc exports `bionic_*` names: `libc.so` is the mapping itself, so a stand-in with Android's names cannot be the same file.

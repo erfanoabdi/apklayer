@@ -6,7 +6,9 @@
 
 namespace apklayer {
 
-// The machine runs its own Android (an LXC container or droid-hal: /android/system, /vendor) with binderfs.
+// What marks a Halium device: its Android's system and vendor trees and a binder of the device's own, binderfs or (a kernel without it) /dev/binder.
+inline bool haliumLayout(bool androidSystem, bool binderfs, bool devBinder, bool vendorLib) { return androidSystem && (binderfs || devBinder) && vendorLib; }
+// The machine runs its own Android (an LXC container or droid-hal: /android/system, /vendor) with binderfs or /dev/binder.
 bool isHalium();
 // The default instance id: "ut" on a Halium device (the default instance's binder, /dev/binder, is the device's own), else "default".
 std::string defaultInstanceId();
