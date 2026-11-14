@@ -25,6 +25,7 @@ public class Main extends Activity {
     private static native String layout(String pkg);
     private static native String cpuProfile();
     private static native String fidelity();
+    private static native String oldHandlers();
 
     static int twice(int v) { return 2 * v; }
 
@@ -79,6 +80,8 @@ public class Main extends Activity {
         log("errno " + (errno == 222 ? "ok" : "WRONG " + errno));
         int fault = fault();  // a guest null read its own SIGSEGV handler recovers from: the JVM lives on
         log("guest fault " + (fault == 1 ? "recovered" : "FAIL " + fault));
+        String handlers = oldHandlers();  // the previous actions sigaction reports are SIG_DFL, SIG_IGN or code (a chained crash handler calls them)
+        log("old handlers " + (handlers.isEmpty() ? "ok" : "WRONG" + handlers));
         int stack = ownStack();  // pthread_getattr_np(pthread_self()) of this JVM thread: its own guest stack
         log("own stack " + (stack == 1 ? "ok" : "WRONG"));
         int auxv = auxv();  // /proc/self/auxv's hwcaps are getauxval's (the guest's, not the host's)
@@ -96,7 +99,7 @@ public class Main extends Activity {
                 + android.os.Build.HARDWARE + " / " + android.os.Build.FINGERPRINT);
         log("profile cpu " + cpuProfile());
         boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1
-                && auxv == 1 && ids && proc == 15;
+                && auxv == 1 && handlers.isEmpty() && ids && proc == 15;
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         long t7 = System.nanoTime();
         int px = gl();  // EGL pbuffer cleared to (1, 0.5, 0, 1): 0xff0080ff, read back as RGBA bytes
