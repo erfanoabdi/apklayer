@@ -121,6 +121,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
                 Map.entry("android.util.Xml", ShadowHostXml.class.getName()),
                 Map.entry("dalvik.system.VMRuntime", ShadowHostVMRuntime.class.getName()),
+                Map.entry("dalvik.system.VMStack", ShadowHostVMStack.class.getName()),  // the calling classes (Flogger's logger names, Play services)
                 Map.entry("dalvik.system.BaseDexClassLoader", ShadowHostBaseDexClassLoader.class.getName())));
         if (HostCameraShadows.declared()) entries.addAll(HostCameraShadows.entries());  // the stack runs cameraserver over the camera HAL
         if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK)
