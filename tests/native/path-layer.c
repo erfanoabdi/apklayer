@@ -41,6 +41,11 @@ int main(int argc, char **argv) {
     assert(symlinkat("b", AT_FDCWD, "/storage/t/d") == 0);
     char buf[64] = {0};
     assert(readlinkat(AT_FDCWD, "/storage/t/d", buf, sizeof buf) == 1 && buf[0] == 'b');
+    /* a native bridge's kernel emulation runs the guest's symlinkat as the raw syscall: the link's path is argument 3 (a translated Gecko's profile
+     * lock, "<profile>/lock" -> "ip:+pid", failed with ENOENT and Gecko's XRE_main ended early), the target text stays as the caller wrote it */
+    assert(syscall(SYS_symlinkat, "127.0.0.1:+1", AT_FDCWD, "/storage/t/lock") == 0);
+    assert(readlinkat(AT_FDCWD, in("t/lock"), buf, sizeof buf) == 12 && !memcmp(buf, "127.0.0.1:+1", 12));
+    assert(syscall(SYS_truncate, "/storage/t/b", 0) == 0 && unlink("/storage/t/lock") == 0);
     assert(fchownat(AT_FDCWD, "/storage/t/b", getuid(), getgid(), 0) == 0);
     {   /* a descriptor-relative stat (glibc's fstat is fstatat(fd, "", AT_EMPTY_PATH)): the /proc filter asks whether fd is /proc with a raw
          * syscall that reaches the preload's syscall() again; it recursed until the stack ran out (systemd-run under the preload, 2026-11-13) */
