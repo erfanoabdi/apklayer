@@ -207,7 +207,7 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_vdsoVerdef(JNIEnv *env, jclass c)
     }
 }
 
-/* A GL function the host library lacks (Mesa has no ANGLE/CHROMIUM entry points) is a known name of the guest libGLESv2 proxy with no host function behind it: calling
+/* A GL function the host lacks (Mesa has no NV path rendering) is a known name of the guest libGLESv2 proxy with no host function behind it: calling
  * it aborted the process ("Bad thunk call", Fennec's GPU process, binary_translation 0030); it must return, as a driver without the function would. Number of
  * such functions found and called, -1 without libGLESv2 (reaching the end is the pass). */
 JNIEXPORT jint JNICALL Java_hello_arm64_Main_missingGlFunctions(JNIEnv *env, jclass c)
@@ -215,7 +215,7 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_missingGlFunctions(JNIEnv *env, jcl
     (void)env; (void)c;
     void *h = dlopen("libGLESv2.so", RTLD_NOW);
     if (!h) return -1;
-    static const char *names[] = {"glProvokingVertexANGLE", "glCopyTextureCHROMIUM", "glCopySubTextureCHROMIUM", "glCopyTexture3DANGLE", "glCopySubTexture3DANGLE"};
+    static const char *names[] = {"glWeightPathsNV", "glViewportSwizzleNV", "glWaitVkSemaphoreNV", "glWindowRectanglesEXT"};  /* names of the proxy that Mesa lacks even through eglGetProcAddress */
     int called = 0;
     for (unsigned i = 0; i < sizeof names / sizeof *names; i++) {
         void (*fn)(int, int, int, int) = (void (*)(int, int, int, int))dlsym(h, names[i]);
