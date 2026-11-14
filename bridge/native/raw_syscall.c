@@ -1,4 +1,4 @@
-/* Raw syscalls of guest code on native arm64 (docs/PLAN.md "Raw syscalls of guest code", PATCHES: bionic_translation 0072).
+/* Raw syscalls of guest code on native arm64 (docs/PLAN.md "Raw syscalls of guest code", PATCHES: bionic_translation 0074).
  * An `svc #0` in a library the bionic linker loaded (an app's anti-tamper code, a Go runtime, a static libc) reaches the kernel past every
  * view the libc wrappers and the path layer give: it saw the desktop uid and the JVM in /proc/self/maps. The bionic linker places the
  * libraries it loads in one 4 GiB window (apklayer_guest_window_take, below); one seccomp-bpf filter turns the few syscalls that carry
@@ -171,7 +171,7 @@ static void reserve_and_install(void)
     if (debug()) fprintf(stderr, "[raw-syscall] guest libraries in %#lx..%#lx, raw syscalls viewed\n", window_base, window_base + WINDOW_SIZE);
 }
 
-/* The bionic linker's allocation of a library's address range (bionic_translation 0072): a page-aligned address in the window, 0 for
+/* The bionic linker's allocation of a library's address range (bionic_translation 0074): a page-aligned address in the window, 0 for
  * the kernel's choice (not an app process, no window, window full). */
 void *apklayer_guest_window_take(size_t size)
 {

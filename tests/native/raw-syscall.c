@@ -1,4 +1,4 @@
-/* What guest code sees on native arm64 (bionic_translation 0071, 0072; bridge/native/raw_syscall.c). A library loaded by bionic_translation's linker
+/* What guest code sees on native arm64 (bionic_translation 0073, 0074; bridge/native/raw_syscall.c). A library loaded by bionic_translation's linker
  * in the app namespace (raw-syscall-lib.c) makes raw `svc #0` syscalls and inspects the process through dlopen, dladdr and dl_iterate_phdr.
  *   app mode (APKLAYER_OWN_DATA): raw getuid/getgid/getresuid/getgroups answer the app's ids, raw openat maps /system paths through the
  *     path layer, a raw rt_sigaction of SIGSYS is accepted, threads and forks keep the view; dlopen of the host's libraries fails as

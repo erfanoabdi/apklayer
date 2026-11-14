@@ -199,6 +199,7 @@ public final class Main extends Activity {
         initialProc(initial);
         failures += PathChecks.run(this);
         failures += JniSystemChecks.run();
+        failures += JniSurfaceChecks.run();
         try {
             step("initial cleanup", () -> { unset(KEY); unset(PUT); unset(LOCAL); });
             views(KEY, null, "absent");

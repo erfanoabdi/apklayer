@@ -1,0 +1,9 @@
+tracepoint:syscalls:sys_enter_openat /comm == "Gecko" && @n < 8000/ { @n++; printf("openat %s|%s\n", str(args->filename), str(args->filename + 104)); }
+tracepoint:syscalls:sys_exit_openat /comm == "Gecko" && @n < 8000/ { printf("  -> %d\n", args->ret); }
+tracepoint:syscalls:sys_enter_newfstatat /comm == "Gecko" && @n < 8000/ { @n++; printf("stat %s|%s\n", str(args->filename), str(args->filename + 104)); }
+tracepoint:syscalls:sys_exit_newfstatat /comm == "Gecko" && @n < 8000/ { printf("  -> %d\n", args->ret); }
+tracepoint:syscalls:sys_enter_faccessat /comm == "Gecko" && @n < 8000/ { @n++; printf("access %s\n", str(args->filename)); }
+tracepoint:syscalls:sys_enter_readlinkat /comm == "Gecko" && @n < 8000/ { @n++; printf("readlink %s\n", str(args->pathname)); }
+tracepoint:syscalls:sys_enter_mkdirat /comm == "Gecko" && @n < 8000/ { @n++; printf("mkdir %s\n", str(args->pathname)); }
+tracepoint:syscalls:sys_enter_exit_group /comm == "Gecko"/ { printf("exit_group %d\n", args->error_code); }
+tracepoint:syscalls:sys_enter_rt_tgsigqueueinfo /comm == "Gecko" && @q < 1/ { @q++; printf("FIRST rt_tgsigqueueinfo sig %d\n", args->sig); }
