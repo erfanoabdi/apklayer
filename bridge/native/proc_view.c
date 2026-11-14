@@ -209,6 +209,12 @@ static int mount_kept(const char *point)
 {
     static const char *const roots[] = {"/", "/proc", "/sys", "/dev", "/system", "/vendor", "/product", "/system_ext", "/odm", "/apex", "/data", "/storage", "/sdcard", "/mnt/runtime", "/cache", "/metadata", "/linkerconfig", NULL};
     if (!strcmp(point, "/")) return 1;
+    /* the desktop's own kernel file systems: no such mount in an Android app's table */
+    static const char *const desktop[] = {"/dev/shm", "/dev/mqueue", "/dev/hugepages", "/dev/binderfs", "/sys/kernel/security", "/sys/firmware", "/sys/fs/fuse", "/proc/sys/fs/binfmt_misc", "/sys/fs/cgroup/user.slice", NULL};
+    for (int i = 0; desktop[i]; i++) {
+        size_t n = strlen(desktop[i]);
+        if (!strncmp(point, desktop[i], n) && (!point[n] || point[n] == '/')) return 0;
+    }
     for (int i = 1; roots[i]; i++) {
         size_t n = strlen(roots[i]);
         if (!strncmp(point, roots[i], n) && (!point[n] || point[n] == '/')) return 1;
@@ -250,7 +256,27 @@ static int mounts_filter(int fd, int cloexec)
     int result = -1;
     FILE *out = open_memstream(&text, &size);
     if (!out) goto done;
-    while (getline(&line, &cap, in) >= 0) if (mounts_line_kept(line)) fputs(line, out);
+    int shape = 0;  /* 1 mountinfo, 2 mounts */
+    while (getline(&line, &cap, in) >= 0) {
+        if (!shape) shape = line[0] >= '0' && line[0] <= '9' ? 1 : strncmp(line, "device ", 7) ? 2 : 3;
+        if (mounts_line_kept(line)) fputs(line, out);
+    }
+    /* Android's partitions (an Android 13 app's table: dm-verity system partitions, the ART/runtime apexes, /data, the FUSE storage) */
+    static const struct { const char *point, *source, *type, *opts; } android[] = {
+        {"/system", "/dev/block/dm-3", "ext4", "ro,seclabel,relatime"}, {"/vendor", "/dev/block/dm-4", "ext4", "ro,seclabel,relatime"},
+        {"/product", "/dev/block/dm-5", "ext4", "ro,seclabel,relatime"}, {"/system_ext", "/dev/block/dm-6", "ext4", "ro,seclabel,relatime"},
+        {"/odm", "/dev/block/dm-7", "ext4", "ro,seclabel,relatime"}, {"/apex", "tmpfs", "tmpfs", "rw,seclabel,nosuid,nodev,noexec,relatime,mode=755"},
+        {"/apex/com.android.art", "/dev/block/loop1", "ext4", "ro,dirsync,seclabel,nodev,noatime"},
+        {"/apex/com.android.runtime", "/dev/block/loop2", "ext4", "ro,dirsync,seclabel,nodev,noatime"},
+        {"/apex/com.android.i18n", "/dev/block/loop3", "ext4", "ro,dirsync,seclabel,nodev,noatime"},
+        {"/data", "/dev/block/dm-8", "ext4", "rw,seclabel,nosuid,nodev,noatime"}, {"/linkerconfig", "tmpfs", "tmpfs", "rw,seclabel,nosuid,nodev,noexec,relatime,mode=755"},
+        {"/storage/emulated", "/dev/fuse", "fuse", "rw,lazytime,nosuid,nodev,noexec,noatime,user_id=0,group_id=0,allow_other"},
+    };
+    for (size_t i = 0; shape == 1 || shape == 2; i++) {
+        if (i == sizeof android / sizeof *android) break;
+        if (shape == 1) fprintf(out, "%zu 1 0:%zu / %s %s - %s %s %s\n", 1000 + i, 100 + i, android[i].point, android[i].opts, android[i].type, android[i].source, android[i].opts);
+        else fprintf(out, "%s %s %s %s 0 0\n", android[i].source, android[i].point, android[i].type, android[i].opts);
+    }
     if (ferror(in) || ferror(out) || fclose(out)) { out = NULL; goto done; }
     out = NULL;
     result = proc_replace(fd, cloexec, "mounts", text, size);
@@ -278,8 +304,10 @@ static char *slurp_fd(int fd, size_t *size)
 }
 
 /* comm, stat, cgroup and cmdline of a thread of this process (tid), and the zygote and environ views of another process (foreign) */
+extern __thread volatile int apklayer_proc_raw;
 static int task_filter(int fd, int cloexec, int kind, long tid, long foreign)
 {
+    if (apklayer_proc_raw) return fd;
     if (foreign) {
         if (kind == 5) {  /* another Android program of the app: its exec environment (proc_task.c) */
             int env = apklayer_proc_foreign_environment(foreign);

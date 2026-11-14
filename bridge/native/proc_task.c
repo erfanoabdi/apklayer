@@ -77,7 +77,7 @@ const char *apklayer_proc_thread_name(long tid, const char *real, char *out)
         snprintf(out, 16, "%s", n > 15 ? cmdline + n - 15 : cmdline);
         return out;
     }
-    if (!strncmp(real, "apklayer-", 9)) { snprintf(out, 16, "binder:%ld_%lX", pid, ((tid - pid) & 0xf) + 1); return out; }
+    if (!strncmp(real, "apklayer-", 9)) { snprintf(out, 16, "binder:%ld_%ld", pid, ((tid - pid) & 0x7) + 1); return out; }
     for (size_t i = 0; i < sizeof jvm_threads / sizeof *jvm_threads; i++)
         if (jvm_threads[i].exact ? !strcmp(real, jvm_threads[i].host) : !strncmp(real, jvm_threads[i].host, strlen(jvm_threads[i].host)))
             return jvm_threads[i].android;

@@ -248,11 +248,14 @@ static bool linker_path(char **path)
  * the processes in its cgroup (the app's systemd scope: its JVM, translator threads, children); another pid's /proc/<pid>[/...] is ENOENT. Not hidden:
  * /proc, /proc/self, /proc/thread-self and everything not numeric. The kernel's own answer is read with raw syscalls (the wrappers call this).
  * APKLAYER_PROC_VIEW=host turns it off. Without a scope for the app (no systemd) nothing is hidden: every process shares the cgroup. */
+__thread volatile int apklayer_proc_raw;  /* set while the filter itself reads a cgroup: proc_view.c must not project that read (it judges processes by the real value) */
 static int cgroup_read(long pid, char *out, size_t n)
 {
     char p[48];
     snprintf(p, sizeof p, "/proc/%ld/cgroup", pid);
+    apklayer_proc_raw = 1;
     int fd = (int)syscall(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC);
+    apklayer_proc_raw = 0;
     if (fd < 0) return -1;
     ssize_t r = read(fd, out, n - 1);
     close(fd);
