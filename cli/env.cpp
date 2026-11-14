@@ -238,6 +238,8 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     NativeEnv result;
     Env& env = result.env;
     env = currentEnv();
+    // the desktop's Qt session variables (the shell's, the portal's) mean nothing to Android's processes and showed in the guest's exec environment (identity matrix)
+    for (auto it = env.begin(); it != env.end();) it = it->first.rfind("QT_", 0) == 0 ? env.erase(it) : std::next(it);
     const std::string& n = layout.native;
     const std::string& l = layout.androidLibs;
     env["XDG_RUNTIME_DIR"] = layout.runtimeHome;
