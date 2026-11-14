@@ -2,6 +2,7 @@
  * shortcut: ART mapping names do not provide ART symbols or object layouts; extend alongside the runtime compatibility work. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -41,6 +42,7 @@ static int proc_file_kind(const char *leaf)
 
 /* Resolve the opened file, so relative openat, symlinks and per-thread spellings share one check. *tid: the thread the file describes
  * (/proc/<tid>/... too). A file of another process sets *foreign to its pid and returns its kind (0 for an own file). */
+static const char *jdk_root(void);
 static int proc_file_of(int fd, long *tid, long *foreign)
 {
     char link[64], path[PATH_MAX], task[80];
@@ -49,6 +51,10 @@ static int proc_file_of(int fd, long *tid, long *foreign)
     *foreign = 0;
     if (n < 0) return 0;
     path[n] = 0;
+    if (n > 9 && !strcmp(path + n - 9, "/bin/java")) {  /* the JDK's java: what /proc/self/exe opens (its link reads app_process64, proc_task.c) */
+        const char *jdk = jdk_root();
+        if (jdk[0] && strlen(jdk) == (size_t)n - 9 && !strncmp(path, jdk, n - 9)) return 11;
+    }
     unsigned long pid, id;
     char leaf[16];
     int end = 0;
@@ -351,6 +357,29 @@ static int task_filter(int fd, int cloexec, int kind, long tid, long foreign)
     return result;
 }
 
+/* The ELF behind /proc/self/exe: Android's app_process64 stand-in, a static executable of this machine's architecture that only exits (a reader
+ * finds an ELF64 of the right class and machine, as in the real binary; it has no symbols). Returns its size. */
+static size_t app_process_standin(unsigned char *out)
+{
+#if defined(__aarch64__)
+    static const unsigned char code[] = {0xa8, 0x0b, 0x80, 0xd2, 0x00, 0x00, 0x80, 0xd2, 0x01, 0x00, 0x00, 0xd4};  /* mov x8,#93; mov x0,#0; svc #0 */
+    const int machine = EM_AARCH64;
+#else
+    static const unsigned char code[] = {0xb8, 0x3c, 0, 0, 0, 0x31, 0xff, 0x0f, 0x05};  /* mov eax,60; xor edi,edi; syscall */
+    const int machine = EM_X86_64;
+#endif
+    Elf64_Ehdr eh = {0};
+    Elf64_Phdr ph = {0};
+    size_t head = sizeof eh + sizeof ph, size = head + sizeof code;
+    memcpy(eh.e_ident, ELFMAG, SELFMAG);
+    eh.e_ident[EI_CLASS] = ELFCLASS64; eh.e_ident[EI_DATA] = ELFDATA2LSB; eh.e_ident[EI_VERSION] = EV_CURRENT;
+    eh.e_type = ET_EXEC; eh.e_machine = machine; eh.e_version = EV_CURRENT; eh.e_entry = 0x400000 + head;
+    eh.e_phoff = sizeof eh; eh.e_ehsize = sizeof eh; eh.e_phentsize = sizeof ph; eh.e_phnum = 1;
+    ph.p_type = PT_LOAD; ph.p_flags = PF_R | PF_X; ph.p_vaddr = ph.p_paddr = 0x400000; ph.p_filesz = ph.p_memsz = size; ph.p_align = 0x1000;
+    memcpy(out, &eh, sizeof eh); memcpy(out + sizeof eh, &ph, sizeof ph); memcpy(out + head, code, sizeof code);
+    return size;
+}
+
 /* fd remains owned by the caller, including on failure. */
 static int proc_filter(int fd)
 {
@@ -361,6 +390,7 @@ static int proc_filter(int fd)
     long tid = 0, foreign = 0;
     int kind = proc_file_of(fd, &tid, &foreign);
     if (!kind || kind == 3) return fd;
+    if (kind == 11) { unsigned char elf[128]; size_t size = app_process_standin(elf); return proc_replace(fd, cloexec, "app_process64", (const char *)elf, size); }
     if (foreign || kind >= 7) return task_filter(fd, cloexec, kind, tid, foreign);
     if (kind == 5) {
         const char *(*initial)(size_t *) = dlsym(RTLD_DEFAULT, "libc_bio_initial_environment");
