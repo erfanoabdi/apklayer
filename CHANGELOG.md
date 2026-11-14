@@ -3,6 +3,13 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: sandboxed sysprov, hub-services, binder and the spare chdir
+- binder, native-audio: the test apps reach host classes by `Class.forName("apklayer.host.RealBinder")`, which the app loader hides since the identity work; `-Dapklayer.testClasses=<names>` (APKLAYER_JOPTS of the test) lets named classes through (AppClassLoader.testClass).
+- sysprov (sandboxed): SettingsProvider's host ran as its app uid but /data/system/users stayed the user's, so no settings file or ANDROID_ID was ever written (not a lost flush). sandbox-exec gives a system app that directory; an unsandboxed `run` takes it back.
+- hub-services (sandboxed): `apklayer hub` in the always-on unit was forwarded to apklayerd, so hub.pid named apklayerd's child; the unit's hub now runs in the unit (cli/main.cpp).
+- Spare chdir to APKLAYER_CWD back (spare_target.c): `input` (both modes) and sandboxed `system-apps` pass with it; the earlier hang did not reproduce. hello-system sysprops no longer reads the (faked) /proc/self/status uid: the refused write tells.
+- Own tree on UTM, sandbox AppArmor profile and the test confs removed afterwards. system-apps `location` still fails (also unsandboxed).
+
 ## 2026-11-14: Google Play Sign in: Play services' account authenticator no longer dies; Play Store's background crash
 - Sign in did nothing: GMS's GoogleAccountAuthenticatorService.addAccount read an annotation default (OnboardingNode.e(), an R8-renamed enum) and the JDK's AnnotationParser threw `AnnotationFormatError: Invalid default` (Enum.valueOf by the field's name; the constant's own name differs). The java.base patch (JdkIdentityPatch, JdkAnnotationEnums -> sun.reflect.annotation.ApklayerEnums) resolves an annotation's enum element by its static field, as ART does (dex encodes a field reference). Checked: Google's class on the JDK alone throws the error, with the patch `e()` is LIGHT; in the GApps test instance Sign in now opens PreAddAccountActivity/WrapperControlledActivity.
 - Play Store's bgExecutor died on `ApplicationRuntime.getBaseApkOptimizationInfo().isOptimized()` (VMRuntime native, null): ShadowHostVMRuntime and ShadowHostDexFile answer ART's install-time status (speed-profile/install); Play Store ran 40 s without the crash.
