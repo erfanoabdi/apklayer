@@ -33,12 +33,19 @@ std::string frameworkDependencyDir(const Layout& l) {
 }
 
 
+// A probe's cached answer (until the next login) is dropped once the CLI is newer than it: a package update may change what the probe finds.
+std::optional<std::string> freshCache(const std::string& path) {
+    struct stat cached{}, self{};
+    if (stat(path.c_str(), &cached) == 0 && stat("/proc/self/exe", &self) == 0 && cached.st_mtime < self.st_mtime) return std::nullopt;
+    return readFile(path);
+}
+
 // Android apps ask for the GLES level a device gives (3.2; Off The Road 2 needs 3.1). A host driver that stops lower (virgl: ES 3.0) makes
 // eglCreateContext fail with EGL_BAD_MATCH; the driver's own version override then claims the Android level: what the driver truly lacks
 // (compute shaders...) fails when used, as on a device without it. Probed once per session; APKLAYER_GLES_OVERRIDE=off disables it.
 std::string hostGles(const Layout& layout, const Env& env) {
     std::string cache = join(layout.runtimeHome, "apklayer-host-gles");
-    if (auto cached = readFile(cache); cached && !trim(*cached).empty()) return trim(*cached);
+    if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) return trim(*cached);
     if (!exists("/usr/bin/eglinfo")) return "";  // mesa-utils is only recommended (a Halium phone has none, and its GLES is the device's)
     Spawn probe;
     probe.argv = {"eglinfo", "-p", "gbm"};
@@ -61,7 +68,7 @@ std::string hostGles(const Layout& layout, const Env& env) {
 // target. shortcut: any such device counts, not only the instance's GPU (APKLAYER_GPU); the driver still checks the extensions on its own device.
 std::string hostVulkan(const Layout& layout, const Env& env) {
     std::string cache = join(layout.runtimeHome, "apklayer-host-vulkan");
-    if (auto cached = readFile(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
+    if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
     if (!exists("/usr/bin/vulkaninfo")) return "";  // vulkan-tools is only recommended
     Spawn probe;
     probe.argv = {"vulkaninfo", "--summary"};
