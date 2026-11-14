@@ -151,7 +151,7 @@ the first setup does it by itself on a small home with a writable `/userdata/apk
 Offline: `--bundle apklayer-runtime-<cpu>-<R>.tar.zst` (a `.sha256` beside it is checked) or `APKLAYER_RUNTIME_BUNDLE`; `APKLAYER_RELEASES_URL` names another releases.json.
 On a Halium device the step `providers` seeds a new instance with graphics and camera = device (docs/HALIUM.md).
 Nothing in it runs as root (no pkexec, no sudo): binder is only checked (the userspace binder, the default, needs nothing; an instance on the kernel binder needs its nodes, which the
-optional `apklayer-binder.service` makes at boot; a failed step names the command), java checks for Java 21 (`APKLAYER_NATIVE_JAVA` names another), and the WebView's switch file is the instance's own. A runtime directory
+optional `apklayer-binder.service` makes at boot; a failed step names the command), java checks for Java 21 (`apklayer config set java <path>` names another), and the WebView's switch file is the instance's own. A runtime directory
 missing `android-root/system`, `android-libs` or `aosp/android-all` (a bundle made from a prebuilts checkout of links, before runtime-bundle.sh copied
 through them) counts as not installed: setup unpacks it again, and such a bundle is refused. `apklayer --version` also prints `defaultInstance`
 (`ut` on a Halium device), which the manager uses when no instance is named.

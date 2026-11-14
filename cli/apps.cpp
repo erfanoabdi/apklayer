@@ -4,7 +4,7 @@
 #include "desktop.h"
 #include "manage.h"  // settingsChanged: `ime` applies to a running instance
 #include "flatpak.h"
-#include "env.h"  // findJava: the converter and the install tools run on the apps' JVM (a phone names it in ~/.config/apklayer/env)
+#include "env.h"  // findJava: the converter and the install tools run on the apps' JVM (a phone names it with `apklayer config set java`)
 #include "version.h"
 #include "autostart.h"  // microG Services turns the instance always on
 

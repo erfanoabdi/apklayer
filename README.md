@@ -25,6 +25,7 @@ apklayer-shell ──> one Wayland window per app                               
 
 ## Build and run
 **Installing on a new machine: `docs/INSTALL.md`** (step by step, with the Android parts from the `prebuilts` branch; no LineageOS tree needed).
+Settings (graphics, JVM, /proc and /etc views, audio, permissions; global and per app): the manager's Settings page or `apklayer config`; the environment variables that remain are debug switches and internals: `docs/ENV-VARS.md`.
 Writing a hardware plugin (sensors, GNSS, vibrator or camera backend, built out of tree against `apklayer-dev`): `docs/PLUGINS.md`.
 For development, the Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
 ```sh

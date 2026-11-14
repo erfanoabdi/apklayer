@@ -224,7 +224,7 @@ From the deb to the click (done on the Volla X23, 2026-11-09; apps, data, runtim
 1. `systemctl --user stop apklayer-instance@ut; apklayer --instance ut stop`
 2. `sudo mount -o remount,rw / && sudo dpkg -r apklayer && sudo mount -o remount,ro /` (`apt remove` too; `systemctl disable apklayer-binder`
    if it was enabled: the userspace binder needs no unit)
-3. Install the click (above). A `APKLAYER_NATIVE_JAVA=` line in `~/.config/apklayer/env` (the deb without its Java dependency) would still win over
+3. Install the click (above). A `java=` line in `~/.config/apklayer/config` (`apklayer config set java <path>`; the deb without its Java dependency) would still win over
    the click's JDK: remove it.
 4. Open Apklayer once, or run `apklayer setup` (the runtime is set up again for the new package half, ~1 minute) and `apklayer list`: the launchers
    and the always-on unit then name the click's CLI. `systemctl --user start apklayer-instance@ut` (or the next login) starts the instance.
@@ -284,8 +284,8 @@ sudo apt install ./apklayer_<version>_arm64.deb     # pulls openjdk-21-jre-headl
 sudo mount -o remount,ro /
 ```
 The rootfs is `/dev/mapper/system_a`: an OTA update replaces it, and the deb (with its Java) must be installed again; `/home` is separate and keeps the
-runtime, the apps and their data. Without the Java dependency (`dpkg -i --ignore-depends=openjdk-21-jre-headless`, as on the test phone) name a Java 21 in
-`~/.config/apklayer/env` (`APKLAYER_NATIVE_JAVA=<jdk>/bin/java`); `apklayer setup` says when there is none.
+runtime, the apps and their data. Without the Java dependency (`dpkg -i --ignore-depends=openjdk-21-jre-headless`, as on the test phone) name a Java 21 with
+`apklayer config set java <jdk>/bin/java`; `apklayer setup` says when there is none.
 
 What needs root, and where it happens (nothing at runtime):
 | Step | Root? | Where |

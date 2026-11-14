@@ -70,7 +70,7 @@ SystemApps systemApps(const std::string& dir, const std::string& record) {
 }
 
 // "" when the JVM apps run on is Java 21 or newer, else what is wrong (the deb depends on openjdk-21-jre-headless; an install that skipped it,
-// as on a phone's small root file system, names another one as APKLAYER_NATIVE_JAVA in ~/.config/apklayer/env)
+// as on a phone's small root file system, names another one with `apklayer config set java`)
 std::string javaProblem(const Layout& layout) {
     std::string java = findJava(layout);
     Spawn s;
@@ -81,7 +81,7 @@ std::string javaProblem(const Layout& layout) {
     size_t at = out.find("version \"");
     int major = status == 0 && at != std::string::npos ? atoi(out.c_str() + at + 9) : 0;
     if (major >= 21) return "";
-    std::string hint = " (sudo apt install openjdk-21-jre-headless, or APKLAYER_NATIVE_JAVA=<java 21> in ~/.config/apklayer/env)";
+    std::string hint = " (sudo apt install openjdk-21-jre-headless, or apklayer config set java <java 21>)";
     return major > 0 ? "Java " + std::to_string(major) + " is too old: apklayer needs 21" + hint : "No Java 21 found" + hint;
 }
 
