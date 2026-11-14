@@ -289,3 +289,66 @@ Build it: `sh flatpak/build.sh <prebuilts checkout> <out dir> [version]` (needs 
 SDK and openjdk21 extension from Flathub). The build has no network: the bionic_translation wrap, `deps.lock`'s artifacts and Slint are pinned
 sources in the manifest; after a change to `deps/deps.lock` run `tools/gen/flatpak-sources.py` (it writes `flatpak/deps-sources.json`), after a new
 bionic_translation revision or Slint version change the manifest beside the wrap or `manager/fetch-slint.sh`.
+
+## Nix
+
+The flake at the root builds apklayer, the manager and everything they need, on `x86_64-linux` and `aarch64-linux`
+(`nix-command` and `flakes` are the only experimental features it wants):
+
+```sh
+nix build github:erfanoabdi/apklayer          # or `nix build .` in a checkout
+./result/bin/apklayer run com.example.app
+```
+
+**Different from the deb and the Flatpak: the Android half is in the package.** Those two build `-Dandroid_runtime=false`
+and let `apklayer setup` download the runtime bundle per user (section "Installed package: first run"); the Nix build keeps
+the default, so the framework jars carry the JNI shim and are instrumented while the package is built. `apklayer setup` has
+no runtime step to do — it reports the one that is built in — nothing is downloaded at first run, and an update never
+re-instruments anything in your home. The price is the closure: Android's libraries and the android root are about 1.1 GB
+of it, where the deb would have kept them under `~/.local/share/apklayer`.
+
+The build has no network, as the Flatpak's has none: `subprojects/bionic_translation.wrap`'s revision, `deps/deps.lock`'s
+artifacts (through `flatpak/deps-sources.json`, so the two stay in step) and the prebuilts branch are all fetched as pinned
+inputs beforehand. The prebuilts are taken one architecture at a time.
+
+Android's content providers and the WebView are not part of any `meson install` (section 6), so the modules below install
+them at login from the prebuilts already in the store; `nix build` alone leaves that to you.
+
+A development shell has the whole toolchain and sets `APKLAYER_PREBUILTS`, `APKLAYER_DEPS_LOCAL` and `APKLAYER_SLINT`, so an
+ordinary Meson build inside it needs no network either:
+
+```sh
+nix develop
+meson setup b && ninja -C b          # section 4, without the apt packages or the downloads
+```
+
+NixOS, with the per-app sandbox and the kernel binder as options (neither is needed for the userspace binder, which is the
+default; NixOS allows the user namespaces the sandbox wants, so it needs no AppArmor profile):
+
+```nix
+{
+  inputs.apklayer.url = "github:erfanoabdi/apklayer";
+
+  outputs = {nixpkgs, apklayer, ...}: {
+    nixosConfigurations.yours = nixpkgs.lib.nixosSystem {
+      modules = [
+        apklayer.nixosModules.default
+        {
+          programs.apklayer = {
+            enable = true;
+            sandbox = {
+              enable = true;
+              users = ["you"];
+            };
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+`apklayer.homeModules.default` is the same for Home Manager, without what only root can do (the render-node rule, the
+sandbox's subordinate ids, binderfs).
+
+A Wayland session and a GPU with Mesa are still required, as everywhere else on this page.

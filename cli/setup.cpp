@@ -19,6 +19,7 @@
 #include "env.h"
 #include "fetch.h"
 #include "halium.h"
+#include "json.h"
 #include "providers.h"
 #include "releases.h"
 #include "util.h"
@@ -121,6 +122,16 @@ std::string installFromIndex(const Layout& layout, const Instance& inst, const s
     }
     return "";
 }
+
+// A build with -Dandroid_runtime (the default) installs the Android half into the package's own
+// prefix and marks it "built" (runtime/meson.build); cli/layout.cpp already prefers that over a
+// bundle. Its version, so setup counts it as installed instead of offering to download one.
+std::string builtInRuntime(const Layout& layout) {
+    auto text = readFile(join(layout.native, "runtime.json"));
+    if (!text) return "";
+    if (manager::json::member(*text, "built") != "true") return "";
+    return manager::json::str(manager::json::member(*text, "version"));
+}
 }  // namespace
 
 int setupCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args) {
@@ -143,6 +154,9 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     if (layout.runtimeVersion.empty()) die("setup is for the installed package (a source tree has its own runtime)");
     const std::string root = manager::runtimeRoot(), downloads = root + "/.downloads";  // a bundle downloads beside its runtime: one file system to check
     std::string have = manager::installedRuntime(root), note;
+    // the package carries the runtime itself: there is none to download, update or replace
+    const std::string builtIn = builtInRuntime(layout);
+    if (!builtIn.empty()) have = builtIn;
 
     // 1. binder: the userspace one needs nothing; the kernel's (apklayer binder kernel) its devices (root's: tools/host-setup/binder.sh)
     bool binder = binderReady(instance.root, instance.id);
@@ -156,7 +170,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     // 2. the runtime: --bundle, else the current release's (releases.json), else what the package names
     manager::Release release;
     std::string error;
-    if (o.bundle.empty() && (have.empty() || o.update || o.check)) {
+    if (builtIn.empty() && o.bundle.empty() && (have.empty() || o.update || o.check)) {
         std::string file = manager::downloadsDir() + "/releases.json";
         error = manager::download(manager::releasesUrl(), file, nullptr);
         if (error.empty()) release = manager::parseLatest(readText(file), manager::osCodename(), manager::cpuNames(), error);
@@ -176,7 +190,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         std::string big = bigDataDir(layout), e = moveData(layout, big);
         step("runtime", "running", e.empty() ? "apklayer's data goes to " + big + " (the home's file system is small)" : "apklayer's data stays in the home: " + e);
     }
-    if (!o.bundle.empty() && (have.empty() || o.update)) {
+    if (builtIn.empty() && !o.bundle.empty() && (have.empty() || o.update)) {
         step("runtime", "running", "Unpacking " + baseName(o.bundle));
         std::string src = o.bundle.rfind("file://", 0) == 0 ? manager::fileUriPath(o.bundle) : o.bundle, file = src;
         std::string sum;
@@ -194,7 +208,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         if (file != src) unlink(file.c_str());
         if (!e.empty()) return runtimeFailed(layout, e);
         have = layout.runtimeVersion;
-    } else if (o.bundle.empty() && (have.empty() || (o.update && newer))) {
+    } else if (builtIn.empty() && o.bundle.empty() && (have.empty() || (o.update && newer))) {
         if (!release.runtime.found()) { step("runtime", "failed", error.empty() ? "The release has no runtime for " + manager::cpuNames()[0] : error); return 1; }
         // the bundle and its contents, before a byte is downloaded (releases.json before 0.4.10 lists no sizes: unpackRuntime checks the contents)
         const long long unpacked = release.runtime.unpacked;
@@ -210,9 +224,12 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     if (!note.empty()) step("runtime", "running", note);  // the runtimes removed to make room
     if (have.empty()) { step("runtime", "failed", "No complete Android runtime: run setup again (a download or --bundle <file>)"); return 1; }
     Layout fresh = Layout::detect(false);  // the unpacked bundle is the native dir now: link the package's half in, instrument the framework (a few minutes)
-    step("runtime", "running", "Setting up version " + have + " (a few minutes after an update)");
-    fresh.requireRuntime();
-    if (!fresh.setUpBundle(false)) { step("runtime", "failed", "Setting up the runtime in " + fresh.native + " failed: apklayer setup in a terminal shows why"); return 1; }
+    // a built-in runtime is set up already (the build instrumented it) and its native dir may well be read-only
+    if (builtIn.empty()) {
+        step("runtime", "running", "Setting up version " + have + " (a few minutes after an update)");
+        fresh.requireRuntime();
+        if (!fresh.setUpBundle(false)) { step("runtime", "failed", "Setting up the runtime in " + fresh.native + " failed: apklayer setup in a terminal shows why"); return 1; }
+    }
     step("runtime", "done", "Version " + have);
 
     // 3. the instance's providers: automatic (a Halium device's graphics, camera and vibrator are the device's), nothing to write

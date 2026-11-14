@@ -75,8 +75,10 @@ if get_option('android_runtime')
   install_symlink('android-libs', pointing_to: android_libs, install_dir: native_dir)
   # the files Android processes read at fixed paths: the prebuilts' and apklayer's own (bridge/native/android-root, which wins). Copied as cp -a
   # does: Meson's install_subdir fails on the tree's links (data/media/0, links to the libraries)
+  # chmod: cp -a keeps the prebuilts' modes, and a read-only tree (a distribution's package build
+  # serves one from its store) would leave apklayer's own files nowhere to go
   meson.add_install_script('sh', '-c', 'd="$MESON_INSTALL_DESTDIR_PREFIX/$1" && mkdir -p "$d" && cp -au --remove-destination "$2/." "$d/" && ' +
-    'cp -r --remove-destination "$3/." "$d/"', 'sh', fs.relative_to(native_dir / 'android-root', get_option('prefix')),
+    'chmod -R u+w "$d" && cp -r --remove-destination "$3/." "$d/"', 'sh', fs.relative_to(native_dir / 'android-root', get_option('prefix')),
     prebuilts / cpu / 'android-root', meson.project_source_root() / 'bridge/native/android-root')
   runtime_version = fs.read('../tools/release/versions').split('runtime=')[1].strip()
   configure_file(output: 'runtime.json', command: [python, '-c', 'import json, sys; json.dump({"version": sys.argv[1], "cpu": sys.argv[2], "built": True}, open(sys.argv[3], "w"))',

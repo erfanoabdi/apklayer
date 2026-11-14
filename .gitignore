@@ -10,3 +10,6 @@ tests/corpus/results-subset.md
 /b/
 /inst/
 /flatpak/prebuilts
+/result
+/result-*
+.direnv/
