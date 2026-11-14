@@ -1,0 +1,56 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: pthread_sigqueue maps a guest thread's own record to the host pthread_t
+
+The proxy passed pthread_sigqueue straight to the host, so a record from the guest's pthread_self() (glibc-host-thread-id-handoff)
+failed with ESRCH. A custom trampoline reads the union sigval (one register for the guest) as a pointer, builds the host union and
+maps the thread with GuestPthreadToHost as 0001 does for pthread_kill. Test: tests/apps/hello-arm64 "sigqueue" (group native-bridge).
+
+--- a/android_api/libc/proxy/pthread_translation.cc
++++ b/android_api/libc/proxy/pthread_translation.cc
+@@ -18,6 +18,7 @@
+ 
+ #include <dlfcn.h>  // dlsym
+ #include <errno.h>
++#include <signal.h>  // pthread_sigqueue, union sigval
+ #include <unistd.h>  // getpid
+ 
+ #include <algorithm>  // std::max
+@@ -98,6 +99,16 @@
+ APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_getschedparam, pthread_getschedparam(GuestPthreadToHost(t), a, b), t, a, b)
+ APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_setschedparam, pthread_setschedparam(GuestPthreadToHost(t), a, b), t, a, b)
+ 
++// pthread_sigqueue takes a union sigval by value (one register, as the guest passes it): decltype of a stand-in that takes the pointer.
++using ApklayerSigqueueGuest = int(pthread_t, int, void*);
++void DoCustomTrampoline_pthread_sigqueue(HostCode /* callee */, ProcessState* state) {
++  auto [t, sig, value] = GuestParamsValues<ApklayerSigqueueGuest>(state);
++  auto&& [ret] = GuestReturnReference<ApklayerSigqueueGuest>(state);
++  union sigval sv;
++  sv.sival_ptr = value;
++  ret = pthread_sigqueue(GuestPthreadToHost(t), sig, sv);
++}
++
+ // int pthread_join(pthread_t thread, void **retval);
+ void DoCustomTrampoline_pthread_join(HostCode /* callee */,
+                                      ProcessState* state) {
+--- a/android_api/libc/proxy/pthread_translation.h
++++ b/android_api/libc/proxy/pthread_translation.h
+@@ -132,6 +132,7 @@
+ void DoCustomTrampoline_pthread_getname_np(HostCode callee, ProcessState* state);
+ void DoCustomTrampoline_pthread_getschedparam(HostCode callee, ProcessState* state);
+ void DoCustomTrampoline_pthread_setschedparam(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_sigqueue(HostCode callee, ProcessState* state);
+ 
+ // int pthread_key_create(pthread_key_t* key, void (*destructor)(void*));
+ void DoCustomTrampoline_pthread_key_create(HostCode callee,
+--- a/android_api/libc/proxy/trampolines_arm64_to_x86_64-inl.h
++++ b/android_api/libc/proxy/trampolines_arm64_to_x86_64-inl.h
+@@ -106,7 +106,8 @@
+ {"pthread_setschedprio", DoCustomTrampoline_pthread_setschedprio, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
+ // was: {"pthread_setschedprio", GetTrampolineFunc<auto(int64_t, int32_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_setspecific", GetTrampolineFunc<auto(int32_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_sigqueue", GetTrampolineFunc<auto(int64_t, int32_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_sigqueue", DoCustomTrampoline_pthread_sigqueue, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_sigqueue", GetTrampolineFunc<auto(int64_t, int32_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"setjmp", GetTrampolineFunc<auto(void*) -> int32_t>(), reinterpret_cast<void*>(DoThunk_setjmp)},
+ {"siglongjmp", GetTrampolineFunc<auto(void*, int32_t) -> void>(), reinterpret_cast<void*>(DoThunk_siglongjmp)},
+ {"sigsetjmp", GetTrampolineFunc<auto(void*, int32_t) -> int32_t>(), reinterpret_cast<void*>(DoThunk_sigsetjmp)},

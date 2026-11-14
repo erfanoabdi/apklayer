@@ -80,6 +80,7 @@ public final class NativeLoader {
         try {
             mapOwnData(pkg, uid, appGroups(pkg, uid), root);
             environmentTargetReady = true;
+            System.setProperty("apklayer.ownDataMapped", "1");  // this class exists once per class loader: AppClassLoader (the host loader) reads the flag here
         } catch (LinkageError noShim) {
             environmentSetupFailure = noShim;
         }

@@ -141,6 +141,11 @@ JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_skipNativeExitHandlers(JN
     on_exit(end_without_native_destructors, NULL);
 }
 
+/* A forked child (an app's createSubprocess: fork, a failed exec, exit(-1)) inherits the exit handlers of threads that do not exist in it, and libgallium's
+ * joins one: exit() hung. Registered in the child at fork, the handler above runs first there and ends it at once (apklayer patch, docs/PATCHES.md). */
+static void forked_child_ends_without_native_destructors(void) { on_exit(end_without_native_destructors, NULL); }
+__attribute__((constructor)) static void register_forked_child_end(void) { pthread_atfork(NULL, NULL, forked_child_ends_without_native_destructors); }
+
 /* The JVM's end began (a shutdown hook): a process still there `arg` seconds later is killed, as init and ActivityManager kill what SIGTERM did not end.
  * A thread of its own, not attached to the JVM: it runs while a safepoint or a stuck hook holds every Java thread (an app JVM once outlived SIGTERM for 9 min). */
 static void *exit_deadline(void *arg)

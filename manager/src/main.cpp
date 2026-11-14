@@ -19,6 +19,7 @@
 #include "setup.h"
 #include "hardware.h"
 #include "addons.h"
+#include "settings.h"
 #ifdef APKLAYER_WLSHELL
 #include "wlshell.h"
 #endif
@@ -37,12 +38,12 @@ const char* const kLiteMode = "lite-translate-or-interpret";
 
 // What the selected app's detail shows besides the list's row: `info` and `permissions` (whose failure, an install older than the list, is a note there)
 struct Detail {
-    Rows info, permissions;
+    Rows info, permissions, config;  // config: the app's own settings (`config list --app`)
     std::string error, permissionsNote;
 };
 
 struct Snapshot {
-    Rows apps, instances, props, settings, status, gpus, providers, binder;
+    Rows apps, instances, props, settings, status, gpus, providers, binder, config;
     std::optional<Detail> detail;
     std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
 };
@@ -58,6 +59,7 @@ Detail loadDetail(const Cli& cli, const std::string& pkg) {
     Detail d;
     d.info = rows(cli, {"info", pkg}, d.error);
     d.permissions = rows(cli, {"permissions", pkg}, d.permissionsNote);
+    d.config = rows(cli, {"config", "list", "--app", pkg}, d.error);
     return d;
 }
 
@@ -71,6 +73,7 @@ Snapshot load(const Cli& cli, const std::string& current) {
     s.gpus = rows(cli, {"gpus"}, s.error);
     s.providers = rows(cli, {"providers"}, s.error);
     s.binder = rows(cli, {"binder"}, s.error);
+    s.config = rows(cli, {"config", "list"}, s.error);
     if (!current.empty()) s.detail = loadDetail(cli, current);
     return s;
 }
@@ -182,6 +185,7 @@ public:
         b.set_binder_kernel_setup(slint::SharedString(setup));
         if (hardware_) hardware_->show(s.providers);
         if (addons_) addons_->show(s.apps);
+        b.set_config(manager::configModel(s.config));
         if (!current_.empty() && s.detail) showDetail(*s.detail);
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
@@ -242,6 +246,7 @@ private:
         b.set_app_info(appInfo(d.info));
         b.set_permissions_note(slint::SharedString(d.permissionsNote));
         b.set_app_permissions(permissions(d.permissions));
+        b.set_app_config(manager::configModel(d.config));
     }
 
     // `apklayer permissions` rows (permission, level, granted): the runtime ones first, each with a title ("ACCESS_FINE_LOCATION" -> "Access fine location")
@@ -345,6 +350,9 @@ private:
         });
         b.on_set_drawer([this](slint::SharedString pkg, bool shown) {
             action(shown ? "Showing in the app drawer" : "Hiding from the app drawer", {"launcher", shown ? "show" : "hide", std::string(pkg)});
+        });
+        b.on_set_config([this](slint::SharedString pkg, slint::SharedString key, slint::SharedString value) {
+            action("Saving", manager::configArgs(std::string(pkg), std::string(key), std::string(value)));
         });
         b.on_select_app([this](slint::SharedString pkg) {
             current_ = std::string(pkg);

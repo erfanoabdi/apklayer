@@ -20,6 +20,7 @@ TESTS = {
     'providers': ({'denied': 'hello.cpdenied', 'grant': 'hello.cpdenied'}, 'hello.cp', 'cpc', ('[cpp]',), 120),
     'services': ('hello.svccaller', 'hello.svc', 'svc', ('[svc-t]',), 120),
     'activities': ('hello.actcaller', 'hello.act', 'act', ('[act-t]',), 120),
+    'restart': ('hello.actrestart', None, 'ar', (), 90),  # the activity below the top one comes back in a new process with its saved state
     'processes': ('hello.actprocess', None, 'ap', (), 120),
     'pendingintents': ('hello.picreator', 'hello.pi', 'pi', ('[pi-h]',), int(os.environ.get('APKLY_PATIENCE', '120'))),
     'notifications': ('hello.ntposter', 'hello.nt', 'nt', ('[nt-h]',), 120),
@@ -98,6 +99,10 @@ try:
         while time.monotonic() < end:
             if not events.select(2): continue
             data = os.read(proc.stdout.fileno(), 65536)
+            if not data and TEST == 'restart':  # the client ends with the killed process; the verdict is the restarted one's, in its log
+                print([l for l in instance.wait_file(log / 'app-hello.actrestart.log', '[ar] PASS', 60).split('\n') if '[ar] PASS' in l][0], flush=True)
+                print('PASS %s %s' % (TEST, PHASE), flush=True)
+                raise SystemExit(0)
             if not data: raise AssertionError('client ended (exit status %s)\n' % proc.wait() + '\n'.join(lines[-20:]))
             parts = (pending + data).split(b'\n')
             pending = parts.pop()

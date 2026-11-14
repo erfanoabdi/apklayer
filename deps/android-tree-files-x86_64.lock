@@ -238,7 +238,7 @@ e903458390a1d5b67c3b38ce9d51ce9d44072ae816ebeceb37fb198daf1b0f4d 355816 x86_64/a
 77af007831084e3cea8bd1090c192c0c7938bdb88a77493a49b3c1abb17f8733 234736 x86_64/android-libs/lib64/libbase.so out/target/product/generic_x86_64/system/lib64/libbase.so same
 3b7ff646ee3d428ab95b2e67cf2d4a072831ef25eb1883603dad4ddd4efb75d2 35784 x86_64/android-libs/lib64/libbattery.so out/target/product/generic_x86_64/system/lib64/libbattery.so same
 ac51566ee1b6b15cce1f4a9ce40c55d1f708edde36a48063975547ca8879d25b 51912 x86_64/android-libs/lib64/libbatterystats_aidl.so out/target/product/generic_x86_64/system/lib64/libbatterystats_aidl.so same
-9786502a255329bc7118b37f98250bf5a322eea5a86cda89fb2f00a1614d733c 3248552 x86_64/android-libs/lib64/libberberis_arm64.so out/soong/.intermediates/frameworks/libs/binary_translation/libberberis_arm64/android_x86_64_shared/libberberis_arm64.so same
+6193782c4cf05c14aa0a316eb3d4c4f474f9ab19df4adca13a48b0ff64b35756 3248280 x86_64/android-libs/lib64/libberberis_arm64.so out/soong/.intermediates/frameworks/libs/binary_translation/libberberis_arm64/android_x86_64_shared/libberberis_arm64.so same
 2f552cd8de89081b137362f36e836117935a29d04945955d283980edcb091e43 591704 x86_64/android-libs/lib64/libberberis_exec_region.so out/target/product/generic_x86_64/system/lib64/libberberis_exec_region.so same
 7714e426833a94b72c1e72a517e8de1b2335e4595ebc902e45a647149d39f1b9 508848 x86_64/android-libs/lib64/libberberis_proxy_libEGL.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libEGL.so same
 6f4e86c64d7b479947183372a7d16a881db98af47ad3a9ba4b2302158f047f91 52440 x86_64/android-libs/lib64/libberberis_proxy_libGLESv1_CM.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libGLESv1_CM.so same
@@ -251,7 +251,7 @@ fbfd76c39739dfcd5919a732615890bbf6439ea03c980bfb29612167ee06eab3 52176 x86_64/an
 c07842c32b2dae09b3044cd073a1f94f1ea4f7e9d1a51d7689ecb8cc5e93f0f3 102448 x86_64/android-libs/lib64/libberberis_proxy_libandroid.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libandroid.so same
 284f0b78d892082487426f7c94e946dc0732b6048dd44415d4d2ea902c2a3ebf 133552 x86_64/android-libs/lib64/libberberis_proxy_libandroid_runtime.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libandroid_runtime.so same
 d76ece184d42a4adb2396b8040f63793c283ad2adc9f6f412fd02c33d628e559 85384 x86_64/android-libs/lib64/libberberis_proxy_libbinder_ndk.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libbinder_ndk.so same
-b0b0dc48048d3586b0ceca87da144bb0c75d23494c321695222416bde57a8141 68952 x86_64/android-libs/lib64/libberberis_proxy_libc.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libc.so apklayer
+2c81a8623e1914b40faa0c4dbc8e5273c5f83caa1ed03ecd284783a85c09098b 68944 x86_64/android-libs/lib64/libberberis_proxy_libc.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libc.so apklayer
 8232780686ea1421107b4ed52778af43eed25640daae519d1a2328b34643e9f6 52608 x86_64/android-libs/lib64/libberberis_proxy_libcamera2ndk.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libcamera2ndk.so same
 f932f6dc32756e97744105533919402eb81161aee461b57ef60eb79e4226e383 52208 x86_64/android-libs/lib64/libberberis_proxy_libjnigraphics.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libjnigraphics.so same
 9519ac741d2671253743b0fb5eddebf5219fe14b7dac85193f93e53b4016a10f 51632 x86_64/android-libs/lib64/libberberis_proxy_libm.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libm.so same
@@ -521,6 +521,7 @@ a25412b0e3923e2a7fdd07dacf8b9002343c514c11e38171236be07195ddeaf3 134368 x86_64/a
 772e0ed351430207fe70d3a7145d3c3b5956be93f73be8c25dd3029b19733e24 101904 x86_64/android-libs/lib64/spatializer-aidl-cpp.so out/target/product/generic_x86_64/system/lib64/spatializer-aidl-cpp.so same
 6ce83063712314fc0f9e8dc0b2c487375e923f01b0bc5b244fdb47d84f59e9b8 51872 x86_64/android-libs/lib64/volumegroupcallback-aidl-cpp.so out/target/product/generic_x86_64/system/lib64/volumegroupcallback-aidl-cpp.so same
 b49ddff857a106c4637acbcff3dde3f1a7c47de097b7a93a7e603b00b61338e8 69512 x86_64/android-libs/lib64/vulkan.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/vulkan/vulkan.apklayer/android_x86_64_shared/vulkan.apklayer.so apklayer
+c3dbf5c9d141c466fc18189458e119cde1fcd81b5ff068ae2966fa896dea2c6f 36696 x86_64/android-root/apex/com.android.art/lib64/libart.so (aarch64 build of bridge/native/libart_*.c: tools/lib/build-libart-arm64.sh; not from the tree's build outputs) apklayer
 41a711319e141ef185031258e1757ebdf250bb5803fc60ad50e966ebfd35df1e 1619 x86_64/android-root/apex/com.android.i18n/etc/aconfig_flags.pb (staged from the tree's build outputs, see CHANGELOG.md) same
 b5f86375fba25eed594a019cc7d3a9c569a95837e6296be9c9e3acefd73ea226 42 x86_64/android-root/apex/com.android.i18n/etc/flag.info (staged from the tree's build outputs, see CHANGELOG.md) same
 899de6ad1d3e3d52d6b4da267e82957b385594b4a70852177fb04f832dfa7875 289 x86_64/android-root/apex/com.android.i18n/etc/flag.map (staged from the tree's build outputs, see CHANGELOG.md) same

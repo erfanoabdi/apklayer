@@ -33,12 +33,19 @@ std::string frameworkDependencyDir(const Layout& l) {
 }
 
 
+// A probe's cached answer (until the next login) is dropped once the CLI is newer than it: a package update may change what the probe finds.
+std::optional<std::string> freshCache(const std::string& path) {
+    struct stat cached{}, self{};
+    if (stat(path.c_str(), &cached) == 0 && stat("/proc/self/exe", &self) == 0 && cached.st_mtime < self.st_mtime) return std::nullopt;
+    return readFile(path);
+}
+
 // Android apps ask for the GLES level a device gives (3.2; Off The Road 2 needs 3.1). A host driver that stops lower (virgl: ES 3.0) makes
 // eglCreateContext fail with EGL_BAD_MATCH; the driver's own version override then claims the Android level: what the driver truly lacks
 // (compute shaders...) fails when used, as on a device without it. Probed once per session; APKLAYER_GLES_OVERRIDE=off disables it.
 std::string hostGles(const Layout& layout, const Env& env) {
     std::string cache = join(layout.runtimeHome, "apklayer-host-gles");
-    if (auto cached = readFile(cache); cached && !trim(*cached).empty()) return trim(*cached);
+    if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) return trim(*cached);
     if (!exists("/usr/bin/eglinfo")) return "";  // mesa-utils is only recommended (a Halium phone has none, and its GLES is the device's)
     Spawn probe;
     probe.argv = {"eglinfo", "-p", "gbm"};
@@ -50,6 +57,9 @@ std::string hostGles(const Layout& layout, const Env& env) {
     if (at == std::string::npos) return "";
     size_t end = out.find_first_of(" \n", at + key.size());
     std::string version = out.substr(at + key.size(), end - at - key.size());
+    // android.hardware.opengles.aep (HostSystemConfig): Mesa lists the pack when the driver covers its 20 extensions (the override below cannot fake it).
+    // shortcut: eglinfo's own device with several GPUs
+    if (out.find("GL_ANDROID_extension_pack_es31a") != std::string::npos) version += " aep";
     writeFile(cache, version + "\n");
     if (version.rfind("2.", 0) == 0 || version == "3.0")
         fprintf(stderr, "apklayer: the host GLES is %s; apps get a 3.2 claim (APKLAYER_GLES_OVERRIDE=off to disable)\n", version.c_str());
@@ -61,7 +71,7 @@ std::string hostGles(const Layout& layout, const Env& env) {
 // target. shortcut: any such device counts, not only the instance's GPU (APKLAYER_GPU); the driver still checks the extensions on its own device.
 std::string hostVulkan(const Layout& layout, const Env& env) {
     std::string cache = join(layout.runtimeHome, "apklayer-host-vulkan");
-    if (auto cached = readFile(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
+    if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
     if (!exists("/usr/bin/vulkaninfo")) return "";  // vulkan-tools is only recommended
     Spawn probe;
     probe.argv = {"vulkaninfo", "--summary"};
@@ -69,6 +79,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
     int status = 0;
     std::string out = runCapture(probe, &status), version;
     unsigned best = 0;
+    std::string label;  // "GPU0": the best device's block
     for (size_t at = out.find("\nGPU"); at != std::string::npos;) {  // the "GPU0:", "GPU1:" ... blocks
         size_t next = out.find("\nGPU", at + 4);
         std::string gpu = out.substr(at, next == std::string::npos ? std::string::npos : next - at);
@@ -82,7 +93,21 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         std::string api = field("apiVersion"), type = field("deviceType"), driver = field("driverID");
         unsigned major = 0, minor = 0;
         if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU" || driver == "DRIVER_ID_MESA_VENUS") continue;
-        if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor);
+        if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor), label = gpu.substr(1, gpu.find(':') - 1);
+    }
+    if (!version.empty()) {  // hardware level 1: the features of CTS's VulkanFeaturesTest.determineHardwareLevel, all set on the best device ("<major>.<minor> 1")
+        probe.argv = {"vulkaninfo", "--text"};
+        std::string text = runCapture(probe, &status);
+        size_t at = text.find("\n" + label + ":\n"), next = text.find("\nGPU", at + 1);
+        std::string gpu = at == std::string::npos ? "" : text.substr(at, next == std::string::npos ? std::string::npos : next - at);
+        bool level1 = !gpu.empty();
+        for (const char* f : {"textureCompressionETC2", "fullDrawIndexUint32", "imageCubeArray", "independentBlend", "geometryShader", "tessellationShader",
+                              "sampleRateShading", "textureCompressionASTC_LDR", "fragmentStoresAndAtomics", "shaderImageGatherExtended",
+                              "shaderUniformBufferArrayDynamicIndexing", "shaderSampledImageArrayDynamicIndexing"}) {
+            size_t k = gpu.find(std::string("\n\t") + f + " ");
+            level1 = level1 && k != std::string::npos && gpu.compare(gpu.find('=', k), 6, "= true") == 0;
+        }
+        if (level1) version += " 1";
     }
     writeFile(cache, (version.empty() ? "-" : version) + "\n");
     return version;
@@ -108,7 +133,7 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
         if (stat(entry.c_str(), &st) == 0) key += entry + std::to_string(st.st_size) + "." + std::to_string(st.st_mtime) + ":";
     }
     char name[32];
-    // JDK 25: the AOT cache (JEP 483) instead of the dynamic archive. The first launches record (-XX:AOTMode=record: the configuration is written at a normal
+    // JDK 25: the AOT cache (JEP 483) instead of the dynamic archive. The idle spare records (-XX:AOTMode=record: the configuration is written at a normal
     // JVM exit, which CdsDump makes after its training) and CdsDump starts the create step in a JVM of its own; a missing or mismatched cache is no error
     // (AOTMode auto: the JVM runs on without it)
     std::string rel = readFile(join(dirName(dirName(realPath(a[0]))), "release")).value_or("");
@@ -122,10 +147,9 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
             glob_t old{};  // the configurations of the JVMs that recorded and ended after the cache was made
             if (glob((jsa + "conf.*").c_str(), 0, nullptr, &old) == 0) for (size_t i = 0; i < old.gl_pathc; i++) unlink(old.gl_pathv[i]);
             globfree(&old);
-        } else {  // every JVM of the instance records (which one trains is known only at its first activity): a configuration file each, a JVM truncates it at its start
-            static int count = 0;
+        } else {  // no cache yet: only the idle spare records and trains (cli/spare.cpp runAppSpare adds the recording, CdsDump.trainSpare), never a user's launch
             makeDirs(dirName(jsa));
-            a.insert(a.end(), {"-XX:AOTMode=record", "-XX:AOTConfiguration=" + jsa + "conf." + std::to_string(getpid()) + "." + std::to_string(count++), "-Dapklayer.cdsdump=" + jsa});
+            a.push_back("-Dapklayer.cdsdump=" + jsa);
         }
         return;
     }
@@ -220,15 +244,15 @@ static void deviceGraphicsEnv(const Instance& instance, Env& env, const std::str
 // GL extensions hidden from Android code (APKLAYER_GL_HIDE="GL_KHR_texture_compression_astc_ldr ...", from the environment or
 // ~/.config/apklayer/env): libGLESv2.so maps to bridge/native/gles_filter.c's library, which answers the extension queries without them,
 // through a cfg.d in the instance's directory first in XDG_DATA_DIRS (the runtime's own cfg.d maps libGLESv2.so to the host's directly).
-// A driver can advertise a format it decodes wrongly (NVIDIA's ASTC, PGR's home scene): the engine then takes its fallback.
+// A driver can advertise a format it decodes wrongly (NVIDIA's ASTC, PGR's home scene): the engine then takes its fallback. The library is mapped
+// always (it also caps GL_MAX_TEXTURE_IMAGE_UNITS at 16: virgl claims 32 and Unciv's shaders then kill the context).
 static void glesFilterEnv(const Instance& instance, Env& env, const std::string& native) {
-    auto hide = env.find("APKLAYER_GL_HIDE");
     std::string lib = join(native, "libapklayer_gles.so");
-    if (hide == env.end() || trim(hide->second).empty() || !exists(lib)) return;
+    if (!exists(lib)) return;
     std::string share = join(instance.root, "gles-filter/share");
     makeDirs(join(share, "bionic_translation/cfg.d"));
     writeFile(join(share, "bionic_translation/cfg.d/gles-filter.cfg"),
-              "# APKLAYER_GL_HIDE: the host's GLES with those extensions hidden (cli/env.cpp glesFilterEnv)\n"
+              "# the host's GLES with APKLAYER_GL_HIDE's extensions hidden and at most 16 fragment samplers (cli/env.cpp glesFilterEnv)\n"
               "libGLESv2.so " + lib + "\nlibGLESv3.so " + lib + "\n");
     env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
 }
@@ -238,6 +262,8 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     NativeEnv result;
     Env& env = result.env;
     env = currentEnv();
+    // the desktop's Qt session variables (the shell's, the portal's) mean nothing to Android's processes and showed in the guest's exec environment (identity matrix)
+    for (auto it = env.begin(); it != env.end();) it = it->first.rfind("QT_", 0) == 0 ? env.erase(it) : std::next(it);
     const std::string& n = layout.native;
     const std::string& l = layout.androidLibs;
     env["XDG_RUNTIME_DIR"] = layout.runtimeHome;
@@ -267,7 +293,6 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env, layout.java.empty() ? "lib64" : "lib");  // a layout with its own JVM: the 32-bit one
     else glesFilterEnv(instance, env, n);
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
-    if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // more preloads (debugging)
     env["BIONIC_LD_LIBRARY_PATH"] = l;
     if (!env.count("APKLAYER_CRASH_TRACE")) env["APKLAYER_CRASH_TRACE"] = "1";
     // system_server's services stay in the JVM; native clients use their existing unavailable-service fallbacks
@@ -279,6 +304,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     if (env.count("APKLAYER_VULKAN_PRESENT") && env["APKLAYER_VULKAN_PRESENT"] == "0") env.erase("APKLAYER_VULKAN_PRESENT");
     else if (env.count("APKLAYER_VULKAN_HOST")) {
         std::string vulkan = hostVulkan(layout, env);
+        if (size_t sp = vulkan.find(' '); sp != std::string::npos) env["APKLAYER_VULKAN_LEVEL"] = vulkan.substr(sp + 1), vulkan.resize(sp);
         if (!vulkan.empty()) env["APKLAYER_VULKAN_PRESENT"] = "1", env["APKLAYER_VULKAN_VERSION"] = vulkan;
     }
     // the host side of the graphics, media and audio HALs: every staged library is loaded (services and apps use all of them)
@@ -302,6 +328,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
             if (g.compositor) env["APKLAYER_COMPOSITOR_NODE"] = g.node;
     }
     std::string gles = hostGles(layout, env);
+    if (size_t sp = gles.find(' '); sp != std::string::npos) gles.resize(sp), env["APKLAYER_GLES_AEP"] = "1";
     if (!env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
         // eglinfo probes a device of its own choosing: with several GPUs the claim is made anyway (a no-op on a 3.2 driver)
         if (gles.rfind("2.", 0) == 0 || gles == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";

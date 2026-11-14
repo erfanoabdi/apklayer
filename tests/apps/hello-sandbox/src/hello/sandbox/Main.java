@@ -29,6 +29,15 @@ public final class Main extends Activity {
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(w)) { out.write(1); wrote = true; } catch (Exception e) { wrote = false; }
             log("change mkdir=" + made.mkdir() + " write=" + wrote + " rename=" + w.renameTo(r) + " delete=" + r.delete() + " rmdir=" + made.delete()
                 + " access=" + new File(privdir, "p.txt").canRead());
+            String more;  // chmod, symlink and link too
+            try {
+                java.nio.file.Path p = new File(privdir, "p.txt").toPath(), sym = new File(privdir, "sym").toPath(), hard = new File(privdir, "hard").toPath();
+                Files.setPosixFilePermissions(p, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+                Files.createSymbolicLink(sym, p); Files.createLink(hard, p);
+                more = "chmod=ok symlink=" + Files.isSymbolicLink(sym) + " link=" + Files.exists(hard);
+                Files.delete(sym); Files.delete(hard);
+            } catch (Exception e) { more = "failed " + e; }
+            log("change2 " + more);
         }
         try {
             Files.writeString(new File(System.getProperty("hello.write", "/nonexistent/x")).toPath(), "written");

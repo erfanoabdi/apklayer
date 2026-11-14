@@ -1,0 +1,71 @@
+// Settings: the user's settings of `apklayer config` (cli/config.cpp lists them: this page has no table of its own). ConfigRows draws a list of them,
+// global on the Settings page, one app's in its detail. A choice is a row of buttons, a text a field (Enter saves, empty goes back to the default).
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, FilledButton, TonalButton, TextButton, TextField, FilledCard } from "@material";
+import { Backend, ConfigEntry } from "backend.slint";
+import { Row, Tag } from "widgets.slint";
+
+export component ConfigRows {
+    in property <[ConfigEntry]> entries;
+    in property <string> app;      // "": the global settings
+
+    VerticalLayout {
+        for e in root.entries : VerticalLayout {
+            Row {
+                text: e.title;
+                supporting-text: e.help;
+                clickable: false;
+                if e.own : Tag { text: root.app == "" ? "Set" : "This app"; strong: true; }
+            }
+            HorizontalLayout {
+                padding-left: MaterialStyleMetrics.padding_16;
+                padding-right: MaterialStyleMetrics.padding_16;
+                padding-bottom: MaterialStyleMetrics.padding_8;
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                if e.kind == "choice" : HorizontalLayout {
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    for c in e.choices : HorizontalLayout {
+                        if e.value == c : FilledButton { text: c; }
+                        if e.value != c : TonalButton { text: c; enabled: !Backend.busy; clicked => { Backend.set-config(root.app, e.key, c); } }
+                    }
+                }
+                if e.kind == "text" : TextField {
+                    horizontal-stretch: 1;
+                    min-width: 240px;
+                    label: e.title;
+                    accessible-label: e.title;
+                    text: e.value;
+                    accepted(t) => { Backend.set-config(root.app, e.key, t); }
+                }
+                if e.own : TextButton { text: "Reset"; enabled: !Backend.busy; clicked => { Backend.set-config(root.app, e.key, ""); } }
+            }
+        }
+    }
+}
+
+export component SettingsPage {
+    ScrollView {
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                max-width: 840px;
+                padding: MaterialStyleMetrics.padding_16;
+                padding-bottom: 96px;
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                FilledCard {
+                    VerticalLayout {
+                        padding: MaterialStyleMetrics.padding_16;
+                        MaterialText {
+                            text: "Settings of apklayer for every instance and app; they apply the next time what they affect starts. A setting can also be changed for one app in its page, and from a terminal: apklayer config set <key> <value> [--app <package>].";
+                            style: MaterialTypography.body_medium;
+                            color: MaterialPalette.on_surface;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+                ConfigRows { entries: Backend.config; app: ""; }
+            }
+        }
+    }
+}

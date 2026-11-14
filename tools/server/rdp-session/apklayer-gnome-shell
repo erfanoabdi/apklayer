@@ -1,0 +1,13 @@
+#!/bin/bash
+# Headless GNOME Wayland session on its own private session bus (started by dbus-run-session in the unit).
+# This process is the whole session: only its exit ends the windows. The RDP daemon is a separate unit.
+export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_DESKTOP=gnome GNOME_SHELL_SESSION_MODE=ubuntu
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+echo "$DBUS_SESSION_BUS_ADDRESS" > "$XDG_RUNTIME_DIR/apklayer-session-bus"   # read by apklayer-grd
+# Never lock or suspend an unattended session: a lock screen would hide every window from the RDP client.
+gsettings set org.gnome.desktop.session idle-delay 0
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+gsettings set org.gnome.desktop.screensaver idle-activation-enabled false
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type nothing
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type nothing
+exec gnome-shell --headless --wayland --no-x11 --virtual-monitor 1280x720

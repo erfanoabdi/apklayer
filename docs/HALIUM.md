@@ -122,7 +122,7 @@ Never the GNSS HAL (its one client is the OS's location service): a GNSS backend
   on the system bus (lomiri-location-serviced, dbus-cpp). The `lomiri` backend (probe 10) gets real fixes there as an unconfined client:
   CreateSessionForCriteria -> `/sessions/0`, StartPositionUpdates, then the service calls UpdatePosition (`ddbdbdbx`: altitude and horizontal
   accuracy present, vertical absent), UpdateVelocity and UpdateHeading (`dx`) about once a second; first fix ~10 s, 6.5-10 m. Checked with
-  `tests/hals/gnss-backend-fixes` (built on Parallels) and dbus-monitor, in `~/apklayer-loc` (removed afterwards).
+  `tests/hals/gnss-backend-fixes.c` (built on Parallels) and dbus-monitor, in `~/apklayer-loc` (removed afterwards).
 - Sailfish OS (read only): GeoClue 1 (geoclue 0.12) `org.freedesktop.Geoclue.Master` on the session bus, activatable, with the hybris and
   MLS providers; no GeoClue 2. The `geoclue1` backend's names and GetPosition signature come from the binaries' dbus-glib data
   (MasterClient.SetRequirements(iibi), PositionStart; Position.GetPosition -> `(iiddd(idd))`); tested only against a stand-in
@@ -224,7 +224,7 @@ From the deb to the click (done on the Volla X23, 2026-11-09; apps, data, runtim
 1. `systemctl --user stop apklayer-instance@ut; apklayer --instance ut stop`
 2. `sudo mount -o remount,rw / && sudo dpkg -r apklayer && sudo mount -o remount,ro /` (`apt remove` too; `systemctl disable apklayer-binder`
    if it was enabled: the userspace binder needs no unit)
-3. Install the click (above). A `APKLAYER_NATIVE_JAVA=` line in `~/.config/apklayer/env` (the deb without its Java dependency) would still win over
+3. Install the click (above). A `java=` line in `~/.config/apklayer/config` (`apklayer config set java <path>`; the deb without its Java dependency) would still win over
    the click's JDK: remove it.
 4. Open Apklayer once, or run `apklayer setup` (the runtime is set up again for the new package half, ~1 minute) and `apklayer list`: the launchers
    and the always-on unit then name the click's CLI. `systemctl --user start apklayer-instance@ut` (or the next login) starts the instance.
@@ -284,8 +284,8 @@ sudo apt install ./apklayer_<version>_arm64.deb     # pulls openjdk-21-jre-headl
 sudo mount -o remount,ro /
 ```
 The rootfs is `/dev/mapper/system_a`: an OTA update replaces it, and the deb (with its Java) must be installed again; `/home` is separate and keeps the
-runtime, the apps and their data. Without the Java dependency (`dpkg -i --ignore-depends=openjdk-21-jre-headless`, as on the test phone) name a Java 21 in
-`~/.config/apklayer/env` (`APKLAYER_NATIVE_JAVA=<jdk>/bin/java`); `apklayer setup` says when there is none.
+runtime, the apps and their data. Without the Java dependency (`dpkg -i --ignore-depends=openjdk-21-jre-headless`, as on the test phone) name a Java 21 with
+`apklayer config set java <jdk>/bin/java`; `apklayer setup` says when there is none.
 
 What needs root, and where it happens (nothing at runtime):
 | Step | Root? | Where |
@@ -496,3 +496,6 @@ The four libraries newer than the prebuilts (below) were again copied from the t
 Earlier results (sysroot tarball, instance `ut`; `~/apklayer-sfos/sf-shots.sh <pkg> <secs>` on the phone: run, both screenshots, stop): UiBench draws (device gralloc buffers to
 Lipstick); NewPipe draws its UI (Trending stayed empty); Open Camera opens the device's camera 0 through cameraserver over the HIDL provider (`ID:0`, no
 CameraControllerException; the preview was dark, the phone lying on the desk: not judged). Not run on this phone: audio, sensors, GNSS, vibrator, media.
+
+## A compositor that stops repainting (weston's VNC output, 2026-11-14)
+weston's VNC backend stops repainting (no frame callbacks, no buffer releases) while no VNC client is connected. The shell then gets no `wl_buffer.release`, SurfaceFlinger's queue runs dry and the app's `dequeueBuffer` times out (-110); the app is not broken, it resumes when a viewer connects (or with another output/compositor). The shell has no timeout-driven release of its own: releasing a buffer the compositor may still read would tear, so this is documented, not worked around. Test on weston with a VNC client attached.

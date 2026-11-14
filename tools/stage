@@ -133,6 +133,8 @@ stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF 
         cp "$out/system/etc/ld.config.arm64.txt" "$stage/android-root/system/etc/"
         cp "$repo/aosp/nativebridge/cpuinfo.arm64.txt" "$stage/android-root/system/etc/cpuinfo.arm64.txt"  # the guest's /proc/cpuinfo fallback (the translator synthesizes it per online CPU: 0010)
     fi
+    echo "== libart.so for the guest (aarch64: the host build is x86-64)"
+    sh "$repo/tools/lib/build-libart-arm64.sh" "$tree" "$repo/bridge/native" "$stage/android-root/apex/com.android.art/lib64/libart.so"
     echo "== Robolectric"
     mkdir -p "$stage/aosp" && cp "$tree/out/host/linux-x86/framework/Robolectric_all.jar" "$stage/aosp/"
     echo "== framework javac shards (runtime/meson.build lists the @CriticalNative methods from them)"

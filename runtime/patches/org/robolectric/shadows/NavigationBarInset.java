@@ -63,6 +63,21 @@ public final class NavigationBarInset {
     if (l != null) l.accept(!visible);
   }
 
+  /**
+   * IWindowManager.getWindowInsets (a window context's WindowMetrics): the insets state the app's newest window has (its bars, the IME), as
+   * WindowManagerService answers from the display's state. False without a window yet: the state stays empty (no insets).
+   */
+  public static boolean windowInsets(android.view.InsetsState out) {
+    try {
+      java.util.Map<?, ?> windows = org.robolectric.util.ReflectionHelpers.getField(ShadowWindowManagerGlobal.getWindowSessionDelegate(), "windows");
+      ShadowWindowManagerGlobal.WindowInfo last = null;
+      synchronized (windows) { for (Object window : windows.values()) last = (ShadowWindowManagerGlobal.WindowInfo) window; }
+      if (last == null || last.insetsState == null || out == null) return false;
+      out.set(last.insetsState, true);
+      return true;
+    } catch (RuntimeException noWindows) { return false; }
+  }
+
   /** The navigation bar is px pixels high (0: none, the desktop style). */
   public static void set(int px) {
     SystemUi.systemUiForDefaultDisplay().setNavigationBarBehavior(px > 0 ? new Bar(px) : SystemUi.NO_NAVIGATION_BAR);

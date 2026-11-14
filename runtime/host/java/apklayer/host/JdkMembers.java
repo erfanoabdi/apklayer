@@ -13,6 +13,11 @@ final class JdkMembers {
         public final synchronized void stop(Throwable cause) { throw new UnsupportedOperationException(); }
     }
 
+    /** ART's Executable.artMethod (Android 13), filled by ApklayerArt (JdkArt) at the end of the Method/Constructor constructors. */
+    static final class Executable {
+        private long artMethod;
+    }
+
     static final class InetAddress {
         /** VpnService.Builder.addAddress/addRoute/addDnsServer, VpnProfile: a numeric address only, never a DNS lookup (libcore: inet_pton). */
         public static java.net.InetAddress parseNumericAddress(String address) {

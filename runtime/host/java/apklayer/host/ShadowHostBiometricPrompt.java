@@ -16,7 +16,7 @@ import org.robolectric.util.ReflectionHelpers;
  * BiometricPrompt as AuthService answers it on a device without biometric sensors: a prompt that allows DEVICE_CREDENTIAL asks for the desktop's
  * login password in the hub's dialog (HubLockScreen.confirm, the credential page of BiometricPrompt); with a CryptoObject the credential is
  * verified with the operation's id as the challenge, so a key that needs authentication for every use (timeout 0) works for that operation.
- * A biometric-only prompt fails as without hardware. shortcut: cancelling through the CancellationSignal leaves the dialog open until answered.
+ * A biometric-only prompt fails as without hardware. Cancelling through the CancellationSignal closes the dialog.
  */
 @Implements(BiometricPrompt.class)
 public class ShadowHostBiometricPrompt {
@@ -39,6 +39,9 @@ public class ShadowHostBiometricPrompt {
         long challenge = primitive == null ? 0 : android.security.keystore2.AndroidKeyStoreProvider.getKeyStoreOperationHandle(primitive);
         String title = info.getTitle() == null ? null : info.getTitle().toString();
         CharSequence about = info.getDescription() != null ? info.getDescription() : info.getSubtitle();
+        if (cancel != null) cancel.setOnCancelListener(() -> new Thread(() -> {  // the hub's password dialog goes with it
+            try { if (HubClient.connected()) HubClient.current().cancelCredential(); } catch (RuntimeException noHub) { /* nothing open */ }
+        }, "biometric-cancel").start());
         Thread asking = new Thread(() -> {
             boolean confirmed;
             try { confirmed = HubClient.connected() && HubClient.current().confirmCredential(title, about == null ? null : about.toString(), challenge); }

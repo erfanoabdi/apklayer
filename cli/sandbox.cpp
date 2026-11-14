@@ -7,6 +7,7 @@
 #include "flatpak.h"
 #include "logs.h"
 #include "halium.h"
+#include <algorithm>
 
 #include <algorithm>
 #include <cerrno>
@@ -401,9 +402,14 @@ void enterInstanceUserNs() {
 
 void sandboxSpawn(const Layout& l, const Instance& inst, Spawn& spec, const std::string& package) {
     std::vector<std::string> argv = {l.cliBinary(), "--instance", inst.id, "sandbox-exec", package, "--"};
-    // an app reads the instance's class data sharing archive but never writes it (code the other apps' JVMs map): the hub dumps it (HubHost)
-    for (const std::string& a : spec.argv)
-        if (package == "-" || (a != "-XX:+RecordDynamicDumpInfo" && a.rfind("-Dapklayer.cdsdump=", 0) != 0)) argv.push_back(a);
+    // an app reads the instance's class data sharing archive but never writes it (code the other apps' JVMs map): the hub dumps it (HubHost, JDK 21); on
+    // JDK 25 (.aot) no sandboxed JVM records (the hub's would exit to write its configuration): the spare the hub starts is not sandboxed and trains
+    // (CdsDump.trainSpare)
+    bool aot = std::any_of(spec.argv.begin(), spec.argv.end(), [](const std::string& a) { return a.rfind("-Dapklayer.cdsdump=", 0) == 0 && a.size() > 4 && a.compare(a.size() - 4, 4, ".aot") == 0; });
+    for (const std::string& a : spec.argv) {
+        bool aotRecording = aot && (a == "-XX:AOTMode=record" || a.rfind("-XX:AOTConfiguration=", 0) == 0 || a.rfind("-Dapklayer.cdsdump=", 0) == 0);
+        if (!aotRecording && (package == "-" || (a != "-XX:+RecordDynamicDumpInfo" && a.rfind("-Dapklayer.cdsdump=", 0) != 0))) argv.push_back(a);
+    }
     spec.argv = argv;
     // not in sandbox-exec itself: the path layer would answer its own path lookups with Android's (/storage...); sandbox-exec hands it on
     if (spec.env.count("LD_PRELOAD")) { spec.env["APKLAYER_SANDBOX_PRELOAD"] = spec.env["LD_PRELOAD"]; spec.env.erase("LD_PRELOAD"); }

@@ -29,6 +29,14 @@ public final class Main extends Activity {
             }
             System.out.println(tag + " optional=" + optional + " query=" + query + " client=" + client.getClass().getName() + " testBase=" + testBase
                     + " libs=" + Arrays.toString(getApplicationInfo().sharedLibraryFiles));
+            try {  // another app's ApplicationInfo carries its libraries too (hello.sharedlib.old targets 27: org.apache.http.legacy)
+                android.content.pm.ApplicationInfo other = getPackageManager().getApplicationInfo("hello.sharedlib.old", 0);
+                boolean files = other.sharedLibraryFiles != null && Arrays.stream(other.sharedLibraryFiles).anyMatch(f -> f.endsWith("org.apache.http.legacy.jar"));
+                Object list = android.content.pm.ApplicationInfo.class.getField("sharedLibraryInfos").get(other);  // @hide
+                boolean infos = list instanceof List<?> l && l.stream().anyMatch(i -> "org.apache.http.legacy".equals(String.valueOf(((android.content.pm.SharedLibraryInfo) i).getName())));
+                System.out.println(tag + " other " + (files && infos ? "PASS" : "FAIL") + " files=" + Arrays.toString(other.sharedLibraryFiles) + " infos=" + list);
+            } catch (ReflectiveOperationException hidden) { System.out.println(tag + " other FAIL " + hidden);
+            } catch (android.content.pm.PackageManager.NameNotFoundException notInstalled) { System.out.println(tag + " other absent"); }
             System.out.println(tag + " PASS");
         } catch (Throwable failure) {
             System.out.println(tag + " FAIL " + failure);

@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <spawn.h>
+#include <sys/mman.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,18 +34,38 @@ static char *started[NVARS];  /* "NAME=value" of each runtime variable at load, 
 /* The exec path runs in a vfork child, on the parent's heap: what it allocates and never frees (a successful exec does not return)
  * leaked there. Its allocations come from a per-thread arena instead: an entry point rewinds it on return, and a vfork child (another
  * pid than the one that last used it) starts it over. Larger than the arena: the heap. */
-static __thread struct { char buf[32768] __attribute__((aligned(16))); size_t top; pid_t pid; } arena;
-static size_t arena_enter(void) { pid_t p = getpid(); if (arena.pid != p) arena.pid = p, arena.top = 0; return arena.top; }
+#define ARENA_SIZE 32768
+/* Not a 32 KB __thread array: that made the preload's static TLS 45 KB, which glibc takes from every thread's stack, and the JDK's 128 KB "process reaper" thread overflowed at start on x86_64 (apklayer patch of today; mmap on first use, shortcut: not unmapped at thread exit, only threads that exec use it). */
+static __thread struct { char *buf; size_t top; pid_t pid; } arena;
+/* depth (a script's interpreter may be a script: the kernel's limit) and guest_launch (set while a guest entry execs: a script's
+ * #!/bin/<name> is Android's /system/bin/<name>; host execs keep the host's /bin) are per thread. A successful exec in a vfork child never
+ * returns to restore them in the memory it shares with the parent: the first entry of another pid (the child) saves the parent's values,
+ * the first entry of the parent's pid again (the child has exec'd or exited) restores them. */
+static __thread struct { int deep, guest, saved_depth, saved_guest; pid_t pid, saved_pid; } st;
+#define guest_launch st.guest
+#define depth st.deep
+static size_t arena_enter(void)
+{
+    pid_t p = getpid();
+    if (st.pid != p) {
+        if (st.saved_pid == p) st.deep = st.saved_depth, st.guest = st.saved_guest, st.saved_pid = 0;
+        else if (!st.saved_pid && st.pid) st.saved_depth = st.deep, st.saved_guest = st.guest, st.saved_pid = st.pid;
+        st.pid = p;
+    }
+    if (!arena.buf) { void *m = mmap(NULL, ARENA_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0); arena.buf = m == MAP_FAILED ? NULL : m; }
+    if (arena.pid != p) arena.pid = p, arena.top = arena.buf ? 0 : ARENA_SIZE;
+    return arena.top;
+}
 static void *xcalloc(size_t n, size_t size)
 {
     if (size && n > SIZE_MAX / size) return NULL;
     size_t bytes = (n * size + 15) & ~(size_t)15;
-    if (bytes > sizeof arena.buf - arena.top) return calloc(n, size);
+    if (bytes > ARENA_SIZE - arena.top) return calloc(n, size);
     void *p = arena.buf + arena.top;
     arena.top += bytes;
     return memset(p, 0, bytes);
 }
-static void xfree(void *p) { if (p && ((char *)p < arena.buf || (char *)p >= arena.buf + sizeof arena.buf)) free(p); }
+static void xfree(void *p) { if (p && ((char *)p < arena.buf || (char *)p >= arena.buf + ARENA_SIZE)) free(p); }
 static int xasprintf(char **out, const char *fmt, ...)
 {
     va_list ap;
@@ -206,7 +227,6 @@ static const char *guest_bin(const char *path, char *buf, size_t size)
 
 /* Set while a guest entry (the guest exec and spawn entries, the guest PATH search, a guest Java launch) execs on this thread: a
  * script's #!/bin/<name> is then Android's /system/bin/<name> too. Host execs (the runtime's own scripts) keep the host's /bin. */
-static __thread int guest_launch;
 
 /* Real candidate execs share mapping, translator, permission checks and script handling. */
 static int exec_search(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited);
@@ -277,6 +297,7 @@ next:
 static int guest_path_exec(const char *file, char *const argv[], char *const envp[])
 {
     char bin[PATH_MAX];
+    arena_enter();
     int saved = guest_launch;
     guest_launch = 1;
     execve(guest_bin(file, bin, sizeof bin), argv, envp);
@@ -355,7 +376,6 @@ static int execve_in(const char *path, char *const argv[], char *const envp[])
 {
     static const char marker[] = "/proc/self/fd/apklayer-exec-search/";
     if (!strncmp(path, marker, sizeof marker - 1)) return search_request(path, argv, envp);
-    static __thread int depth;  /* a script's interpreter may be a script: the kernel's limit */
     struct command c;
     struct target t;
     char **sa;
@@ -380,6 +400,7 @@ int execv(const char *path, char *const argv[]) { return execve(path, argv, envi
 int apklayer_execve_guest(const char *path, char *const argv[], char *const envp[])
 {
     char bin[PATH_MAX];
+    arena_enter();
     int saved = guest_launch;
     guest_launch = 1;
     int r = execve(guest_bin(path, bin, sizeof bin), argv, envp), error = errno;
@@ -404,7 +425,6 @@ int apklayer_spawn_guest(pid_t *pid, const char *path, const posix_spawn_file_ac
 static int apklayer_spawn_guest_in(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
                          char *const argv[], char *const envp[])
 {
-    static __thread int depth;  /* a script's interpreter may be a script: the kernel's limit */
     int (*real)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]) = REAL(posix_spawn);
     char bin[PATH_MAX], **sa;
     struct command c;

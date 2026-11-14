@@ -24,6 +24,11 @@ run = ["python3 -u tests/vm/runtime-identity.py"]
 apps = ["hello-tls"]
 run = ["tests/vm/tls.sh"]
 
+[recreate]
+# Activity.recreate() from the app (NewPipe's MainActivity.onResume): saved state to the new instance, window attached, no NPE
+apps = ["hello-recreate"]
+run = ["tests/vm/recreate.sh"]
+
 [identity-matrix]
 # runtime identity probes for docs/runtime-identity-matrix.md (a measurement: tests/identity/collect.sh compares them with Android)
 apps = ["hello-identity"]
@@ -177,7 +182,7 @@ run = ["unshare --user --map-users=100500:$(id -u):1 --map-groups=100500:$(id -g
 
 [system-apps]
 apps = ["hello-system", "hello-accounts", "hello-accounts-hidden", "hello-rotated"]  # signing reads hello-rotated; the accounts scenario shows its account to the one and not the other
-needs = ["com.android.providers.contacts", "com.android.documentsui"]
+needs = ["com.android.providers.settings", "com.android.providers.contacts", "com.android.providers.userdictionary", "com.android.providers.calendar", "com.android.providers.downloads", "com.android.externalstorage", "com.android.providers.media.module", "com.android.documentsui"]
 run = ["tests/vm/system-apps.sh"]
 
 [first-start]
@@ -223,10 +228,10 @@ apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries t
 run = ["python3 -u tests/vm/installer.py"]
 
 [activities]
-apps = ["hello-act-target", "hello-act-caller", "hello-act-process"]
+apps = ["hello-act-target", "hello-act-caller", "hello-act-process", "hello-act-restart"]
 run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",
        "python3 -u tests/vm/hub.py activities private", "python3 -u tests/vm/hub.py activities up", "python3 -u tests/vm/relaunch.py",
-       "python3 -u tests/vm/hub.py processes kill", "python3 -u tests/vm/exit-deadline.py",
+       "python3 -u tests/vm/hub.py processes kill", "python3 -u tests/vm/hub.py restart saved", "python3 -u tests/vm/exit-deadline.py",
        "python3 -u tests/vm/exit-deadline.py held", "python3 -u tests/vm/exit-deadline.py spare"]
 
 [pendingintents]
@@ -269,7 +274,7 @@ run = ["python3 -u tests/vm/hub.py webview probe"]
 [webview-input]
 apps = ["hello-wvprobe"]
 needs = ["com.android.webview"]
-run = ["python3 -u tests/vm/webview-input.py"]
+run = ["python3 -u tests/vm/webview-input.py", "python3 -u tests/vm/symbol-keys.py webview"]
 
 [splash]
 needs = ["com.android.test.uibench"]
@@ -357,7 +362,7 @@ run = ["python3 -u tests/vm/godot-vulkan.py"]
 
 [input]
 apps = ["hello-input", "hello-system"]  # hello.system's Ime: the Android input method bound to hello.input's field (ime-bind)
-run = ["python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
+run = ["cc -o b/utf16-offsets tests/vm/utf16-offsets.c && b/utf16-offsets", "python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/symbol-keys.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
 
 [magnifier]
 apps = ["hello-input"]

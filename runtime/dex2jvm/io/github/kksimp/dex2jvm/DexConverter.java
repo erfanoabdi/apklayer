@@ -174,10 +174,7 @@ public final class DexConverter {
             if (p != null) return p;
             synchronized (this) {
                 if (repointPlan == null) {
-                    // DEX2JVM_INIT_REPOINT=0 turns the whole fix off for A/B.
-                    String env = System.getenv("DEX2JVM_INIT_REPOINT");
-                    repointPlan = "0".equals(env) ? InitRepointPlan.NONE
-                                                  : InitRepointPlan.build(byName);
+                    repointPlan = InitRepointPlan.build(byName);
                 }
                 return repointPlan;
             }
@@ -1041,7 +1038,7 @@ public final class DexConverter {
      * GDM one above) and zero writers of it.
      */
     static final boolean IFACE_FIELD_FLAGS =
-            !"0".equals(System.getenv("DEX2JVM_IFACE_FIELD_FLAGS"));
+            true;
 
     /**
      * DEX2JVM_INITIALIZER_HELPER_FINALS (default ON; =0 keeps ACC_FINAL,
@@ -1060,7 +1057,7 @@ public final class DexConverter {
      * of &lt;init&gt;). See ClassFileWriter.unfinalFieldsWrittenByInitializerHelpers.
      */
     static final boolean INITIALIZER_HELPER_FINALS =
-            !"0".equals(System.getenv("DEX2JVM_INITIALIZER_HELPER_FINALS"));
+            true;
 
     static int fieldAccessFlags(DexClass cls, DexField f, SuperInterfacePlan app) {
         int flags = f.accessFlags() & FIELD_FLAGS_MASK;

@@ -262,6 +262,8 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env
             snprintf(err, sizeof err, "%s: app namespace: %s", bridge, nb->getError() ? nb->getError() : "?");
         else if (!install_guest_environment(h))
             snprintf(err, sizeof err, "%s: guest environment authority unavailable", bridge);
+        else if (!nb->loadLibraryExt("/apex/com.android.art/lib64/libart.so", RTLD_NOW_BIONIC, system))  /* libart.so's maps line and file in the guest (libart_symbols.c; best effort) */
+            fprintf(stderr, "[runtime] guest libart.so did not load: %s\n", nb->getError() ? nb->getError() : "?");
         free(pub);
     }
     if (*err) nb = NULL;

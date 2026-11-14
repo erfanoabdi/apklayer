@@ -48,7 +48,8 @@ try:
     pending = b''
     with open(instance.OUT / 'webview-input.log', 'wb') as log:
         while step < len(STEPS):
-            assert selector.select(5) and time.monotonic() < end, 'webview input test stalled at step %d' % step
+            assert time.monotonic() < end, 'webview input test stalled at step %d' % step
+            if not selector.select(5): continue  # a quiet spell (Chromium starting under load) is no failure: only the deadline is
             data = os.read(app.stdout.fileno(), 65536)
             assert data, 'app ended at step %d' % step
             log.write(data)

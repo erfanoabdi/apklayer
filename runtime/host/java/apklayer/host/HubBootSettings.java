@@ -99,11 +99,12 @@ final class HubBootSettings {
         String current = Settings.Secure.getString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD);
         List<String> ids = enabled.isEmpty() ? List.of() : List.of(enabled.split(":"));
         if (current == null || !ids.contains(current)) put(resolver, Settings.Secure.DEFAULT_INPUT_METHOD, ids.isEmpty() ? "" : ids.get(0));
+        System.out.println("[apklayer-hub] default input method " + Settings.Secure.getString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD));
         return enabled;
     }
 
     private static void put(ContentResolver resolver, String key, String value) {
-        if (!value.equals(Settings.Secure.getString(resolver, key))) Settings.Secure.putString(resolver, key, value);
+        if (!value.equals(Settings.Secure.getString(resolver, key)) && !Settings.Secure.putString(resolver, key, value)) System.out.println("[apklayer-hub] setting " + key + " not written");
     }
 
     /** The host's location service (GeoClue, bridge/portal/geoclue.py) as HostLocation asks it: null without python. */

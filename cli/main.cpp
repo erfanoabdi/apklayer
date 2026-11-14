@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "autostart.h"
+#include "config.h"
 #include "binder.h"
 #include "daemon.h"
 #include "desktop.h"
@@ -33,7 +34,7 @@ int usage() {
           "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
-          "  setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]  first run and runtime updates in one command (the manager runs it):\n"
+          "  setup [--check] [--update] [--bundle <file|file://|URL>] [--microg | --gapps] [--fdroid]  first run and runtime updates in one command (the manager runs it):\n"
           "                         binder check, the Android runtime (releases.json; --bundle or APKLAYER_RUNTIME_BUNDLE offline), the device providers of a Halium\n"
           "                         device (Ubuntu Touch: default instance \"ut\"), the system apps, optional microG and F-Droid; prints `step <id> <state> <detail>`\n"
           "                         lines; --check changes nothing\n"
@@ -56,6 +57,8 @@ int usage() {
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
           "  providers [set DOMAIN BACKEND [KEY=VALUE...] | unset DOMAIN]  the hardware providers (sensors, gnss, vibrator, camera) and their backends\n"
           "                         (rows: domain provider backend option...; backend DOMAIN NAME probe; option DOMAIN BACKEND KEY DEFAULT text|file)\n"
+          "  config [list | get KEY | set KEY VALUE | unset KEY] [--app <package>]  the user's settings (graphics, JVM, views, audio...), also in the\n"
+          "                         manager's Settings page; list rows: key kind default value choices title help per-app own\n"
           "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24,\n"
           "                         window-mode[.<package>] auto|mobile|desktop); live in a running instance\n"
@@ -98,13 +101,14 @@ int main(int argc, char** argv) {
         printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\ndefaultInstance\t%s\n", kVersion, kConverterAbi, kDataFormat, id.c_str());
         return 0;
     }
-    Layout layout = Layout::detect(args[0] != "setup");  // setup sets the runtime up itself, after replacing a broken one
+    Layout layout = Layout::detect(args[0] != "setup" && args[0] != "config");  // setup sets the runtime up itself, after replacing a broken one; config needs none
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
     bool autostart = args.size() >= 3 && args[0] == "instance" && args[1] == "autostart";  // systemctl --user is the user's, not apklayerd's
-    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup"};
+    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup", "config"};
     if (args[0] == "run" && args.size() == 2 && !inDaemon) startLomiriAppShell(layout, id);  // in the drawer launch's unit, before it is left
     bool local = kLocal.count(args[0]) && !(inFlatpak() && args[0] == "setup");  // the Flatpak's setup starts a stack: the daemon's, as every command's
     if (int status = 0; !inDaemon && !autostart && !local && forwardToDaemon(layout, full, &status)) return status;
+    if (args[0] == "config") return configCommand(std::vector<std::string>(args.begin() + 1, args.end()));
     if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
     // what lives on leaves the caller's systemd unit, which its session may freeze (Lomiri): each launch, the spare, the hub, the stack, setup (cli/unit.h)
     const std::string& what = args[0];

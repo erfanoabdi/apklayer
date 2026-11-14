@@ -1,7 +1,6 @@
 package apklayer.host;
 
 import android.app.Application;
-import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import java.io.IOException;
@@ -93,6 +92,9 @@ final class AppEnvironment {
         provideExternalStorage();
         provideNativeLibraryDir();
         if (!describing) initAppOpsWithoutApplication();
+        // MediaStore before any app code: initializing the nested MediaStore.Images.Media first crashed the JVM (SIGSEGV in ConstantPool::klass_at_impl
+        // from Class.getDeclaringClass0, which Robolectric's ShadowMap calls while the outer class is not loaded yet)
+        if (!describing) try { Class.forName("android.provider.MediaStore"); } catch (ClassNotFoundException | LinkageError e) { /* the app's first use then loads it */ }
         StartTrace.mark("data dirs, storage, library dir");
         // before the application exists: the hub attaches in Application.onCreate's place (ShadowHostInstrumentation) and replaces it with the installed MediaProvider
         if (!ownsMediaAuthority) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", new HostMediaStub());
@@ -102,8 +104,8 @@ final class AppEnvironment {
     /** The sandbox configuration of every apklayer process (the same for every package; an install's description runs no Application of the app). */
     private static FixedConfiguration configuration(boolean describing) {
         Config.Builder builder = new Config.Builder()
-                .setSdk(Integer.getInteger("apklayer.sdk", 36))
-                .setQualifiers(System.getProperty("apklayer.qualifiers", "w480dp-h800dp"));
+                .setSdk(36)
+                .setQualifiers("w480dp-h800dp");
         // Install-time labels/icons need package resources, not the app's startup code.
         if (describing) builder.setApplication(Application.class);
         Config config = builder.build();
@@ -262,13 +264,13 @@ final class AppEnvironment {
 
     /**
      * The ApplicationInfo an app is shown, with its installed code under Android's names (/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/<package>-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk, split_*.apk, lib/<abi>), which the
-     * path layer maps back (bridge/native/paths.c own_apk_path). A copy: the framework's own ApplicationInfo keeps the host paths it opens resources and classes by. Off unless
-     * APKLAYER_APK_PATHS=android is set for the process (untested against resource loading in a running app), and only in a process whose own-data mapping is set.
+     * path layer maps back (bridge/native/paths.c own_apk_path). A copy: the framework's own ApplicationInfo keeps the host paths it opens resources and classes by. On (APKLAYER_APK_PATHS=host turns it off), and only in a process whose own-data mapping is set.
      */
     static android.content.pm.ApplicationInfo androidApkPaths(android.content.pm.ApplicationInfo info) {
-        if (info == null || info.packageName == null || !"android".equals(System.getenv("APKLAYER_APK_PATHS")) || !NativeLoader.ownDataMapped()) return info;
+        if (info == null || info.packageName == null || "host".equals(System.getenv("APKLAYER_APK_PATHS")) || !NativeLoader.ownDataMapped()) return info;
         String apps = System.getProperty("apklayer.apps"), pkg = System.getProperty("apklayer.package");
-        if (apps == null || !info.packageName.equals(pkg) || info.sourceDir == null || !info.sourceDir.startsWith(apps + "/" + pkg + "/")) return info;
+        if (apps == null || !info.packageName.equals(pkg) || info.sourceDir == null) return info;  // sourceDir may be Android's already (PackageManager's copy): nativeLibraryDir still gets set
+        if (info.nativeLibraryDir != null && info.nativeLibraryDir.startsWith("/data/app/")) return info;
         String dir = "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" + pkg + "-Zl3q8XvKc0bYtqN2dHkP5Q==";
         android.content.pm.ApplicationInfo copy = new android.content.pm.ApplicationInfo(info);
         copy.sourceDir = copy.publicSourceDir = dir + "/base.apk";
@@ -276,8 +278,7 @@ final class AppEnvironment {
             copy.splitSourceDirs = java.util.Arrays.stream(info.splitSourceDirs).map(f -> dir + "/" + new java.io.File(f).getName()).toArray(String[]::new);
             copy.splitPublicSourceDirs = copy.splitSourceDirs;
         }
-        if (info.nativeLibraryDir != null)
-            copy.nativeLibraryDir = dir + "/lib/" + switch (HostBuild.appAbi()) { case "arm64-v8a" -> "arm64"; case "armeabi-v7a" -> "arm"; default -> "x86_64"; };
+        copy.nativeLibraryDir = dir + "/lib/" + switch (HostBuild.appAbi()) { case "arm64-v8a" -> "arm64"; case "armeabi-v7a" -> "arm"; default -> "x86_64"; };
         return copy;
     }
 
@@ -388,12 +389,6 @@ final class AppEnvironment {
         HostProviders.install(app);  // Android's security providers and TLS (Conscrypt); without it HostTrust's host-aware default trust manager (Chromium, X509TrustManagerExtensions)
         HostLocation.install(app);
         HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build
-        if (Boolean.getBoolean("apklayer.debugdata")) {
-            SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);
-            int launches = prefs.getInt("launches", 0) + 1;
-            prefs.edit().putInt("launches", launches).commit();
-            System.out.println("[apklayer] data: " + app.getDataDir() + " launches=" + launches);
-        }
 
         // Simulator.start(): real draws and animations, a paused Choreographer driven by the loop.
         ShadowView.setUseRealViewAnimations(true);

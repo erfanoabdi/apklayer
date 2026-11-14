@@ -25,7 +25,7 @@ host_jar = custom_target('host-classes.jar',
   command: [javac_jar, '@OUTPUT@', '@PRIVATE_DIR@', '--cp', ':'.join([sim_classes, robolectric, framework, dex2jvm_jar.full_path()]),
     '--extract', simulator, 'org/robolectric/simulator/FrameListener.class', 'org/robolectric/simulator/ScreenUpdateHandler.class',
     '--resources', meson.current_source_dir() / 'host/resources',
-    '--javac=--add-exports=java.base/sun.net.util=ALL-UNNAMED', '--javac=--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED',
+    '--javac=--add-exports=java.base/sun.net.util=ALL-UNNAMED', '--javac=--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED', '--javac=--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED',
     '--javac=--add-exports=java.base/sun.security.x509=ALL-UNNAMED', '--javac=-sourcepath', '--javac=' + meson.current_source_dir() / 'patches',
     '--javac=-implicit:none', meson.current_source_dir() / 'host/java'],
   install: true, install_dir: native_dir / 'aosp')
@@ -40,6 +40,9 @@ overlay_jar = custom_target('overlay.jar', input: overlay_sources, depend_files:
 custom_target('jdk-patch', input: host_jar, output: 'jdk-patch',
   command: ['sh', '-c', 'rm -rf "$1" && exec "$2" -cp "$3" apklayer.host.JdkPatch "$1"', 'sh', '@OUTPUT@', java, host_cp],
   install: true, install_dir: native_dir)
+# an install adds and replaces, it never removes: classes no longer built would stay in the installed jdk-patch (and in the JDK image made from it)
+meson.add_install_script('sh', '-c', 'd="$MESON_INSTALL_DESTDIR_PREFIX/$1/jdk-patch"; cd "$d" 2>/dev/null && find . -type f | while read -r f; do [ -e "$2/jdk-patch/$f" ] || rm -f "$f"; done; exit 0',
+  'sh', fs.relative_to(native_dir, get_option('prefix')), meson.current_build_dir())
 
 # @CriticalNative methods (apklayer.host.CriticalNatives) of the framework's javac output (the prebuilts' javac-shards), plus the ones of classes
 # the shards lack (bridge/native/critical-natives-extra.txt)
@@ -62,7 +65,7 @@ framework_patched = custom_target('framework-patched.jar', input: [framework, ov
   command: [jar_put, '@INPUT0@', '@OUTPUT@',
     'dalvik/system/PathClassLoader.class=@@INPUT1@', 'dalvik/system/BaseDexClassLoader.class=@@INPUT1@',
     'dalvik/system/BaseDexClassLoader$Reporter.class=@@INPUT1@', 'dalvik/system/BaseDexClassLoader$ResourceEnumeration.class=@@INPUT1@',
-    'com/android/org/conscrypt/NativeCryptoJni.class=@@INPUT1@', 'com/android/org/conscrypt/OpenSSLECGroupContext.class=@@INPUT1@'])
+    'com/android/org/conscrypt/NativeCryptoJni.class=@@INPUT1@', 'com/android/org/conscrypt/OpenSSLECGroupContext.class=@@INPUT1@', 'com/android/org/conscrypt/OpenSSLXDHKeyPairGenerator.class=@@INPUT1@'])
 
 if get_option('android_runtime')
   subdir('android-all')

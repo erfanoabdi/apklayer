@@ -9,6 +9,7 @@
 #include <log/log.h>
 #include <errno.h>
 #include <poll.h>
+#include <string.h>
 #include <system/window.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -293,7 +294,10 @@ EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
 int apklayer::egl::gpuFence(EGLDisplay dpy) {
     auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
     auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
-    EGLSyncKHR sync = createSync && dupFence ? createSync(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr) : EGL_NO_SYNC_KHR;
+    // a software driver (llvmpipe/kms_swrast) has no native fences: asking raises EGL_BAD_ATTRIBUTE, which HWUI then reads as its own error
+    const char* ext = host<const char* (*)(EGLDisplay, EGLint)>("eglQueryString")(dpy, EGL_EXTENSIONS);
+    bool native = ext && strstr(ext, "EGL_ANDROID_native_fence_sync");
+    EGLSyncKHR sync = native && createSync && dupFence ? createSync(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr) : EGL_NO_SYNC_KHR;
     int fd = -1;
     if (sync != EGL_NO_SYNC_KHR) {
         gl<void (*)()>("glFlush")();  // the fence fd exists once the sync is flushed

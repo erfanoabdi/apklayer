@@ -159,6 +159,31 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_ownStack(JNIEnv *env, jclass c)
     return own_stack();
 }
 
+/* pthread_sigqueue(pthread_self(), SIGUSR2, value) delivers to an SA_SIGINFO handler with si_value = value (the guest record maps to the host thread): 1 if so. */
+static volatile int sigq_got;
+static void sigq_handler(int sig, siginfo_t *si, void *ctx)
+{
+    (void)sig; (void)ctx;
+    sigq_got = si->si_value.sival_int;
+}
+
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_sigqueue(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    struct sigaction sa, old;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = sigq_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGUSR2, &sa, &old);
+    union sigval v;
+    v.sival_int = 4242;
+    /* the NDK's headers lack it: bionic exports it, looked up by name */
+    int (*sigqueue_fn)(pthread_t, int, union sigval) = (int (*)(pthread_t, int, union sigval))dlsym(RTLD_DEFAULT, "pthread_sigqueue");
+    int r = sigqueue_fn ? sigqueue_fn(pthread_self(), SIGUSR2, v) : -1;
+    sigaction(SIGUSR2, &old, NULL);
+    return r == 0 && sigq_got == 4242;
+}
+
 /* /proc/self/auxv is the auxv getauxval reports (Go reads the file; the host's x86 AT_HWCAP read as arm64 bits made it run DIT: SIGILL):
  * 1 if its AT_HWCAP and AT_HWCAP2 (0 when absent) match. */
 JNIEXPORT jint JNICALL Java_hello_arm64_Main_auxv(JNIEnv *env, jclass c)
@@ -205,6 +230,23 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_vdsoVerdef(JNIEnv *env, jclass c)
         if (!vd->vd_next) return 0;
         vd = (const void *)((const char *)vd + vd->vd_next);
     }
+}
+
+/* A GL function the host lacks (Mesa has no NV path rendering) is a known name of the guest libGLESv2 proxy with no host function behind it: calling
+ * it aborted the process ("Bad thunk call", Fennec's GPU process, binary_translation 0030); it must return, as a driver without the function would. Number of
+ * such functions found and called, -1 without libGLESv2 (reaching the end is the pass). */
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_missingGlFunctions(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    void *h = dlopen("libGLESv2.so", RTLD_NOW);
+    if (!h) return -1;
+    static const char *names[] = {"glWeightPathsNV", "glViewportSwizzleNV", "glWaitVkSemaphoreNV", "glWindowRectanglesEXT"};  /* names of the proxy that Mesa lacks even through eglGetProcAddress */
+    int called = 0;
+    for (unsigned i = 0; i < sizeof names / sizeof *names; i++) {
+        void (*fn)(int, int, int, int) = (void (*)(int, int, int, int))dlsym(h, names[i]);
+        if (fn) { fn(0, 0, 0, 0); called++; }
+    }
+    return called;
 }
 
 /* The app uid as translated code sees it (binary_translation 0015): bionic's getuid() is a raw syscall the translator answers with the app's

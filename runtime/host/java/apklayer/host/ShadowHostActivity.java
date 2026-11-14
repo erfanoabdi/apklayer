@@ -52,5 +52,7 @@ public class ShadowHostActivity extends ShadowActivity {
         real.startActivity(new android.content.Intent(upIntent).setComponent(dest));
         return true;
     }
-    @Implementation protected boolean isTaskRoot() { return !Boolean.getBoolean("apklayer.notaskroot") && ActivityTask.isTaskRoot(real); }
+    /** Posted as ActivityThread does; the host's relaunch path (AppHost.recreate) instead of ActivityController.recreate. */
+    @Implementation protected void recreate() { new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> AppHost.recreate(real)); }
+    @Implementation protected boolean isTaskRoot() { return ActivityTask.isTaskRoot(real); }
 }

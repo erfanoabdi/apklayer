@@ -1,4 +1,4 @@
-// The manager's first run (binder, runtime, instance, system apps, microG and F-Droid) and its updates (the banner: a new apklayer deb, a new
+// The manager's first run (binder, runtime, instance, system apps, microG or Google Play, F-Droid) and its updates (the banner: a new apklayer deb, a new
 // runtime bundle, apps to convert again). The work runs on threads; the UI hears of it through Backend's setup-* and update-* properties.
 #pragma once
 
@@ -33,7 +33,7 @@ private:
     void wire();
     void show(const State& s);
     void step(const std::string& id, const std::string& state, const std::string& detail, bool running);
-    void runSetup(Cli cli, bool microg, bool fdroid);
+    void runSetup(Cli cli, std::string google, bool fdroid);  // google: "microg", "gapps" or ""
     void runUpdate(Cli cli, std::shared_ptr<State> s);
 
     slint::ComponentHandle<AppWindow> ui_;

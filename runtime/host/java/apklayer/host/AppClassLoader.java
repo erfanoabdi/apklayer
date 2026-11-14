@@ -91,6 +91,8 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         try {
             Path apk = jars[jars.length - 1];
             if (!apk.toString().endsWith(".apk")) return;
+            String shown = androidDir();  // apklayer patch: the code paths under Android's names (toString, dexElements, nativeLibraryDirectories); the host paths stay in the URL index
+            String shownApk = shown == null ? apk.toString() : shown + "/base.apk";
             Class<?> base = loader.getClass().getSuperclass();
             java.lang.reflect.Field pathList = base.getDeclaredField("pathList");
             pathList.setAccessible(true);
@@ -108,9 +110,9 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
             }
             java.lang.reflect.Field fileName = dexFileClass.getDeclaredField("mFileName");
             fileName.setAccessible(true);
-            fileName.set(dex, apk.toString());
+            fileName.set(dex, shownApk);
             java.lang.reflect.Constructor<?> make = elementClass.getConstructor(dexFileClass, java.io.File.class);
-            Object element = make.newInstance(dex, apk.toFile());
+            Object element = make.newInstance(dex, new java.io.File(shownApk));
             Object elements = java.lang.reflect.Array.newInstance(elementClass, 1);
             java.lang.reflect.Array.set(elements, 0, element);
             java.lang.reflect.Field target = list.getClass().getDeclaredField("dexElements");
@@ -119,8 +121,9 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
             String abi = HostBuild.appAbi(), lib = abi.equals("armeabi-v7a") ? "lib" : "lib64";
             java.util.List<java.io.File> dirs = new java.util.ArrayList<>();
             String libdir = System.getProperty("apklayer.libdir", "");
-            if (!libdir.isEmpty()) dirs.add(new java.io.File(libdir));
-            dirs.add(new java.io.File(apk + "!/lib/" + abi));
+            if (shown != null) dirs.add(new java.io.File(shown + "/lib/" + switch (abi) { case "arm64-v8a" -> "arm64"; case "armeabi-v7a" -> "arm"; default -> "x86_64"; }));
+            else if (!libdir.isEmpty()) dirs.add(new java.io.File(libdir));
+            dirs.add(new java.io.File(shownApk + "!/lib/" + abi));
             java.util.List<java.io.File> system = new java.util.ArrayList<>();
             for (String d : new String[] {"/system/" + lib, "/system/system_ext/" + lib, "/system/product/" + lib}) system.add(new java.io.File(d));
             for (Object[] set : new Object[][] {{"nativeLibraryDirectories", dirs}, {"systemNativeLibraryDirectories", system}}) {
@@ -258,9 +261,28 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         String path = NativeLoader.findLibrary(name);
         // apklayer patch: the app's own library under Android's spelling (/data/app/~~tag/<pkg>-tag/lib/<abi>/), which the path layer maps back (paths.c own_apk_path)
         String apps = System.getProperty("apklayer.apps"), pkg = System.getProperty("apklayer.package");
-        if (path == null || apps == null || pkg == null || !NativeLoader.ownDataMapped() || !path.startsWith(apps + "/" + pkg + "/lib/")) return path;
+        if (path == null || apps == null || pkg == null || System.getProperty("apklayer.ownDataMapped") == null || !path.startsWith(apps + "/" + pkg + "/lib/")) return path;
         String abi = switch (HostBuild.appAbi()) { case "arm64-v8a" -> "arm64"; case "armeabi-v7a" -> "arm"; default -> "x86_64"; };
         return "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" + pkg + "-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/" + abi + path.substring((apps + "/" + pkg + "/lib").length());
+    }
+
+    /** The app's code directory under Android's name (as ApplicationInfo shows it), or null when the own-data mapping is off. */
+    private static String androidDir() {
+        String pkg = System.getProperty("apklayer.package");
+        if (pkg == null || System.getProperty("apklayer.apps") == null || "host".equals(System.getenv("APKLAYER_APK_PATHS"))) return null;  // display only (the loader is made before the own-data mapping): the URLs still read the host files
+        return "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" + pkg + "-Zl3q8XvKc0bYtqN2dHkP5Q==";
+    }
+
+    /** A resource URL of the app's last jar spelled jar:file:/data/app/.../base.apk!/...; opening it still reads the host file. */
+    private URL androidUrl(URL real) {
+        URL[] jars = getURLs();
+        String dir = androidDir(), prefix = jars.length == 0 ? null : "jar:" + jars[jars.length - 1] + "!/";
+        if (real == null || dir == null || prefix == null || !real.toString().startsWith(prefix)) return real;
+        try {
+            return new URL("jar", null, -1, "file:" + dir + "/base.apk!/" + real.toString().substring(prefix.length()), new java.net.URLStreamHandler() {
+                @Override protected java.net.URLConnection openConnection(URL u) throws java.io.IOException { return real.openConnection(); }
+            });
+        } catch (MalformedURLException keep) { return real; }
     }
 
     /** The app's own resources first (META-INF/services, kotlin builtins), as for classes. */
@@ -268,6 +290,6 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     public URL getResource(String name) {
         URL own = findResource(name);
         if (own == null && libraries != null) own = libraries.findResource(name);
-        return own != null ? own : super.getResource(name);
+        return own != null ? androidUrl(own) : super.getResource(name);
     }
 }

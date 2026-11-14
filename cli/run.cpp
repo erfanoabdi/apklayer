@@ -1,5 +1,7 @@
 #include "run.h"
 #include "apps.h"
+
+#include "config.h"
 #include "logs.h"
 #include "manage.h"
 #include "sandbox.h"
@@ -98,7 +100,16 @@ bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const 
 std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, const std::string& package) {
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
-    if (isStale(join(dir, "info.properties"))) fprintf(stderr, "apklayer: %s was converted by an older converter ABI; run `apklayer reconvert %s` (its data stays) for the current runtime identity\n", package.c_str(), package.c_str());
+    if (isStale(join(dir, "info.properties"))) {
+        // converted by an older converter ABI: convert it again once (in a child: a failing install die()s), then go on; a failure keeps the old install and says so
+        fprintf(stderr, "apklayer: %s was converted by an older converter ABI: converting it again\n", package.c_str());
+        fflush(stdout);
+        pid_t child = fork();
+        if (child == 0) { reconvert(l, inst, package); fflush(stdout); _exit(0); }
+        int st = -1;
+        if (child < 0 || waitpid(child, &st, 0) != child || !WIFEXITED(st) || WEXITSTATUS(st) != 0)
+            fprintf(stderr, "apklayer: could not convert %s again; run `apklayer reconvert %s` (its data stays) for the current runtime identity\n", package.c_str(), package.c_str());
+    }
     ensureUid(l, dir);
     std::string data = appDataDir(l, inst, package);
     if (!sandboxOn()) reclaim(data);  // the sandbox ran it as the app's own uid; without it the app runs as the user
@@ -145,6 +156,7 @@ std::vector<std::string> launchOptions(const std::vector<std::string>& window, c
 }  // namespace
 
 int runApp(const Layout& l, const Instance& inst, const std::string& package, RunMode mode) {
+    applySettings(package);  // the app's own settings over the global ones (cli/config.cpp)
     std::vector<std::string> own = packageJvmArgs(l, inst, package);
     std::vector<std::string> files(own.end() - 2, own.end());  // the APK and classes jar: Main's arguments
     own.resize(own.size() - files.size());
@@ -189,6 +201,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         ne32.env["APKLAYER_ARM32_PRELOAD"] = ne32.env["LD_PRELOAD"];
         ne32.env.erase("LD_PRELOAD");
     }
+    nj.env["APKLAYER_CWD"] = dir;  // a spare-born process changes to it (spare_target.c); a cold JVM starts there (app.cwd)
     if (mode == RunMode::Component) nj.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
     // under the sandbox a launch's intent file goes with it as text (its place is not in the app's view, and the app could not delete it there):
     // one line, newlines as \x1f (spare.cpp hands launch variables over as lines; Properties.store never writes control characters raw)
@@ -267,7 +280,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
     int status = 0;
-    // shortcut: SIGKILL to this waiter (the hub's stuck-host path) leaves a spare-born JVM to `apklayer stop` (its record); upgrade when the hub tracks JVM pids
+    // SIGKILL to this waiter closes its socket: the spare's holder ends the JVM (runAppSpare)
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
     else {
         passSignalsTo(jvmPid);
@@ -333,7 +346,7 @@ int runHub(const Layout& l, const Instance& inst) {
     // SettingsProvider is system_server's own (android:process="system"): it runs in the hub's JVM, as on a device, not in a JVM of its own (docs/history/PLAN-2026-11-10.md
     // "app start speed on phones" 8). Its data and package as for its own process, the hub's uid. Under the sandbox it keeps its own host (its app uid's files).
     std::vector<std::string> system;
-    if (!sandboxOn() && getenvOr("APKLAYER_SETTINGS_IN_HUB", "1") != "0" && exists(join(appDir(l, kSystemProcessPackage), "classes.jar"))) {
+    if (!sandboxOn() && exists(join(appDir(l, kSystemProcessPackage), "classes.jar"))) {
         system = packageJvmArgs(l, inst, kSystemProcessPackage);
         system.erase(std::remove_if(system.begin(), system.end(), [](const std::string& a) { return a.rfind("-Dapklayer.uid=", 0) == 0; }), system.end());
         jvm.insert(jvm.end(), system.begin(), system.end() - 2);

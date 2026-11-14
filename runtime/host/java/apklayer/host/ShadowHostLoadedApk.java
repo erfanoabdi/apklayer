@@ -8,6 +8,7 @@ import org.robolectric.shadows.ShadowLoadedApk;
 @Implements(className = "android.app.LoadedApk", isInAndroidSdk = false)
 public class ShadowHostLoadedApk extends ShadowLoadedApk {
     @Implementation @Override public ClassLoader getClassLoader() {
+        HostProcessName.fill(loaded.getApplicationInfo());  // before the Application is made (makeApplication asks for the loader first): attachBaseContext sees it
         ClassLoader sandbox = super.getClassLoader();  // also creates the manifest's AppComponentFactory
         return AppClassLoader.app != null ? AppClassLoader.app : sandbox;
     }

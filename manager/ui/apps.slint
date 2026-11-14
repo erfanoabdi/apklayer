@@ -4,6 +4,7 @@ import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText
 import { Backend, AppIcons, AppEntry } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 import { AddonsSection } from "addons.slint";
+import { ConfigRows } from "settings.slint";
 
 component AppDetail {
     in property <AppEntry> app;
@@ -100,6 +101,11 @@ component AppDetail {
                         }
                     }
                 }
+            }
+            if Backend.app-config.length > 0 : Heading { text: "Settings of this app"; }
+            if Backend.app-config.length > 0 : MaterialText { text: "A change applies at the app's next cold start: stop the app (or it restarts on its own) for it to take effect."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+            if Backend.app-config.length > 0 : OutlinedCard {
+                ConfigRows { entries: Backend.app-config; app: root.app.package; }
             }
             Heading { text: "Permissions"; }
             if Backend.permissions-note != "" : MaterialText {

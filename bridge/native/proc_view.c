@@ -37,6 +37,8 @@ static int proc_file_kind(const char *leaf)
     if (!strcmp(leaf, "stat")) return 8;
     if (!strcmp(leaf, "cgroup")) return 9;
     if (!strcmp(leaf, "cmdline")) return 10;
+    if (!strcmp(leaf, "attr/current")) return 12;
+    if (!strcmp(leaf, "loginuid")) return 13;
     return 0;
 }
 
@@ -58,7 +60,7 @@ static int proc_file_of(int fd, long *tid, long *foreign)
     unsigned long pid, id;
     char leaf[16];
     int end = 0;
-    if (sscanf(path, "/proc/%lu/%15s%n", &pid, leaf, &end) == 2 && end && !path[end] && !strchr(leaf, '/')) {
+    if (sscanf(path, "/proc/%lu/%15s%n", &pid, leaf, &end) == 2 && end && !path[end] && (!strchr(leaf, '/') || !strcmp(leaf, "attr/current"))) {
         snprintf(task, sizeof task, "/proc/self/task/%lu", pid);
         *tid = (long)pid;
         if (access(task, F_OK) == 0) return proc_file_kind(leaf);
@@ -118,7 +120,12 @@ const char *apklayer_proc_module_name(const char *name)
     const char *result = name;
     if (len && !strncmp(name, root, len) && name[len] == '/')
         result = !strcmp(name + len, "/lib/server/libjvm.so")
-            ? (sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libart.so" : "/apex/com.android.art/lib/libart.so") : "";
+            ? (sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libopenjdkjvm.so" : "/apex/com.android.art/lib/libopenjdkjvm.so") : "";
+    else if (strstr(name, "/android-root/apex/")) {  /* libart.so (jni_art.c): a file of the Android root, named as Android spells it */
+        static __thread char spelled[PATH_MAX];
+        const char *android = apklayer_proc_map_name(name, spelled, sizeof spelled);
+        if (android) result = android;
+    }
     errno = saved;
     return result;
 }
@@ -210,10 +217,11 @@ done:
 
 /* What an app sees of the mount table (/proc/<pid>/mounts, mountinfo, mountstats): Android's mounts are its partitions, /data and the app's storage; the desktop's
  * (the user's /home, /run/user, /mnt drives, the NVIDIA and portal mounts, /boot, /tmp, systemd's autofs) name the host and are left out. The mounts that
- * exist on both are kept as they are. A mount is kept when its mount point is below one of Android's roots, or is one of the kernel's virtual file systems. */
+ * exist on both are kept as they are. Removable drives stay (udisks2: /media/<user>/<label>, /run/media/...): the storage service lists them from this table
+ * (HostVolumes.Removable) in the app's own process, vold's public volumes; without them an app never saw a drive. A mount is kept when its mount point is below one of Android's roots, or is one of the kernel's virtual file systems. */
 static int mount_kept(const char *point)
 {
-    static const char *const roots[] = {"/", "/proc", "/sys", "/dev", "/system", "/vendor", "/product", "/system_ext", "/odm", "/apex", "/data", "/storage", "/sdcard", "/mnt/runtime", "/cache", "/metadata", "/linkerconfig", NULL};
+    static const char *const roots[] = {"/", "/proc", "/sys", "/dev", "/system", "/vendor", "/product", "/system_ext", "/odm", "/apex", "/data", "/storage", "/sdcard", "/mnt/runtime", "/cache", "/metadata", "/linkerconfig", "/media", "/run/media", NULL};
     if (!strcmp(point, "/")) return 1;
     /* the desktop's own kernel file systems: no such mount in an Android app's table */
     static const char *const desktop[] = {"/dev/shm", "/dev/mqueue", "/dev/hugepages", "/dev/binderfs", "/sys/kernel/security", "/sys/firmware", "/sys/fs/fuse", "/proc/sys/fs/binfmt_misc", "/sys/fs/cgroup/user.slice", NULL};
@@ -359,7 +367,7 @@ static int task_filter(int fd, int cloexec, int kind, long tid, long foreign)
 
 /* The ELF behind /proc/self/exe: Android's app_process64 stand-in, a static executable of this machine's architecture that only exits (a reader
  * finds an ELF64 of the right class and machine, as in the real binary; it has no symbols). Returns its size. */
-static size_t app_process_standin(unsigned char *out)
+size_t apklayer_app_process_elf(unsigned char *out)
 {
 #if defined(__aarch64__)
     static const unsigned char code[] = {0xa8, 0x0b, 0x80, 0xd2, 0x00, 0x00, 0x80, 0xd2, 0x01, 0x00, 0x00, 0xd4};  /* mov x8,#93; mov x0,#0; svc #0 */
@@ -390,7 +398,14 @@ static int proc_filter(int fd)
     long tid = 0, foreign = 0;
     int kind = proc_file_of(fd, &tid, &foreign);
     if (!kind || kind == 3) return fd;
-    if (kind == 11) { unsigned char elf[128]; size_t size = app_process_standin(elf); return proc_replace(fd, cloexec, "app_process64", (const char *)elf, size); }
+    if (kind == 11) { unsigned char elf[128]; size_t size = apklayer_app_process_elf(elf); return proc_replace(fd, cloexec, "app_process64", (const char *)elf, size); }
+    if (kind == 12) {  /* an app's SELinux context, as on a device and as the translator's 0018 spells it (c<id & 255>,c<256 + id / 256>,c512,c768) */
+        long id = apklayer_app_uid() % 100000 - 10000;
+        char ctx[80];
+        int n = snprintf(ctx, sizeof ctx, "u:r:untrusted_app:s0:c%ld,c%ld,c512,c768", id & 255, 256 + ((id >> 8) & 255)) + 1;  /* with its NUL, as the kernel returns it */
+        return foreign || id < 0 ? fd : proc_replace(fd, cloexec, "attr_current", ctx, (size_t)n);
+    }
+    if (kind == 13) return foreign ? fd : proc_replace(fd, cloexec, "loginuid", "4294967295", 10);  /* no login session, as on Android */
     if (foreign || kind >= 7) return task_filter(fd, cloexec, kind, tid, foreign);
     if (kind == 5) {
         const char *(*initial)(size_t *) = dlsym(RTLD_DEFAULT, "libc_bio_initial_environment");
@@ -454,7 +469,9 @@ static int proc_filter(int fd)
             size_t len = strlen(jdk);
             if (len && !strncmp(path, jdk, len) && path[len] == '/') {
                 if (strstr(path + len, "/lib/server/libjvm.so"))
-                    fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /apex/com.android.art/%s/libart.so\n", start, end, perms, offset, major, minor, inode, sizeof(void *) == 8 ? "lib64" : "lib");
+                    fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /apex/com.android.art/%s/libopenjdkjvm.so\n", start, end, perms, offset, major, minor, inode, sizeof(void *) == 8 ? "lib64" : "lib");
+                else if (!strcmp(path + len, "/bin/java\n"))  /* the launcher is the app's executable, as app_process64 is on Android */
+                    fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /system/bin/app_process64\n", start, end, perms, offset, major, minor, inode);
                 else fprintf(buffer, "%lx-%lx %s 00000000 00:00 0\n", start, end, perms);
                 continue;
             }

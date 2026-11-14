@@ -60,7 +60,9 @@ def empty_done_kept():
 # so a stalled app that bursts its ticks only delays the steps (docs/history/PLAN-2026-11-10.md). The finger of a long press stays down until the long click ran.
 STEPS = [
     ('type', lambda: tick[0] * TICK_MS >= 3000, ['focus', 'click:%d,%d' % FIELD, 'key:35', 'key:23'], None),  # h, i
-    ('select all', lambda: saw('[hello-input] text=hi'), ['combo:ctrl+30'], None),
+    # ASCII punctuation reaches the field as real KeyEvents (HostInput.hostKey: keycode 0 + unicode from the shell -> keycode + shift meta)
+    ('punctuation', lambda: saw('[hello-input] text=hi'), ['key:52', 'key:12', 'key:53', 'combo:shift+39'], None),  # . - / :
+    ('select all', lambda: saw('[hello-input] text=hi.-/:'), ['combo:ctrl+30'], None),
     # its own step, once Ctrl+A's key went in and a tick passed (the key runs on the main thread, IME text applies at the next input poll)
     ('ime', lambda: saw('[apklayer] key action=1 code=29', mark['select all']) and ticks_since('select all') >= 2, ['preedit:ni', 'text:你好'], None),
     ('tap', lambda: saw('[hello-input] text=你好', mark['ime']), ['tap:%d,%d' % COPY], None),
@@ -127,6 +129,7 @@ try:
                     instance.inject(PKG, *steps)
                     if STALL: stall()
     assert app.poll() is None, 'input app ended'
+    assert saw('[hello-input] text=hi.-/:'), 'punctuation keys did not type . - / : (%s)' % texts()
     assert saw('[hello-input] text=ni'), 'IME preedit did not reach the field'
     # a mouse click reaches the app as one finger on a touchscreen (HostInput.click): engines that read the source (Unity) drop SOURCE_UNKNOWN
     assert saw('[apklayer] click action=ACTION_DOWN source=0x1002 tool=finger'), 'the click was not a touchscreen event'

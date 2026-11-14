@@ -2,6 +2,7 @@
  * Lomiri) show their on-screen keyboard through Maliit's D-Bus (maliit.c), which delivers through text_input_send. */
 #include "shell.h"
 #include "text-input-v3-client-protocol.h"
+#include "utf16.h"
 
 struct zwp_text_input_manager_v3 *text_mgr;
 
@@ -109,6 +110,21 @@ static void apply_enabled(void)
     zwp_text_input_v3_commit(text_input);
     ti_serial++;
     if (debug_input) fprintf(stderr, "[shell] text input %s (hint 0x%x, purpose %u)\n", enable ? "enabled" : "disabled", hint, purpose);
+}
+
+/* The field's text around the cursor ({UTF-16 units} from the host) as set_surrounding_text (byte offsets); the protocol's text limit is 4000 bytes. */
+void text_input_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len)
+{
+    if (!text_input || w != ime_window || len > 4000) return;
+    char *t = strndup(text, len);
+    if (!t) return;
+    int c = (int)utf16_to_byte(t, len, cursor), a = (int)utf16_to_byte(t, len, anchor);
+    if (debug_input) fprintf(stderr, "[shell] text input surrounding cursor %d anchor %d of %zu bytes\n", c, a, len);
+    zwp_text_input_v3_set_surrounding_text(text_input, t, c, a);
+    zwp_text_input_v3_set_text_change_cause(text_input, ZWP_TEXT_INPUT_V3_CHANGE_CAUSE_OTHER);
+    zwp_text_input_v3_commit(text_input);
+    ti_serial++;
+    free(t);
 }
 
 /* Track fields per window: an inactive JVM must not replace the focused IME. */

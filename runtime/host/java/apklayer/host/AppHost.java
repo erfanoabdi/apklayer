@@ -122,6 +122,11 @@ public final class AppHost implements Runnable {
                 hostState(flags);
             }
         });
+        input.textCommit = s -> { // characters without an Android keycode go to the focused field as IME text (Chromium takes no ACTION_MULTIPLE)
+            if (HostWindows.focusedEditor() == null) return false;
+            text.ime(0, 0, s, "");
+            return true;
+        };
         scriptRunner = new ScriptRunner(input, java.util.Map.of(
                 "clipin", text::clipboardIn, // the system selection changed
                 "clipcopy", text::clipboardCopy, // the app copies text itself
@@ -138,6 +143,8 @@ public final class AppHost implements Runnable {
                     input.onHostEvent(new int[] {0, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
                     input.onHostEvent(new int[] {1, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
                 },
+                // uchar:<code point>: a key press the shell sends without an Android keycode (a non-US character)
+                "uchar", c -> input.onHostEvent(new int[] {12, 0, 0, Integer.parseInt(c), 0}),
                 "notify", t -> { // notify:<title>[,<id>[,<importance>[,ongoing]]]: as if the app posted a notification
                     String[] p = t.split(",");
                     int id = p.length > 1 ? Integer.parseInt(p[1]) : 1, importance = p.length > 2 ? Integer.parseInt(p[2]) : android.app.NotificationManager.IMPORTANCE_DEFAULT;
@@ -244,10 +251,6 @@ public final class AppHost implements Runnable {
             long ms = Long.parseLong(kv[0]);
             // allow multiple steps at the same time, separated by ','
             script.merge(ms, kv[1], (a, b) -> a + ";" + b);
-        }
-        if (Boolean.getBoolean("apklayer.autotap") && process == null) {
-            long t = Long.getLong("apklayer.autotap.ms", 4500);
-            script.put(t, "tap:first");
         }
         // runms holds in headless mode too, on the sandbox clock step() advances (Simulator's advanceTo + idleFor); with a window real time drives it
         pausedMode = shell == null;
@@ -420,6 +423,27 @@ public final class AppHost implements Runnable {
                     setVisible(c.visible(), true);  // ActivityController's recreation leaves the new window unattached
                     HostWindows.focus(c, c == top && host.windowActive);  // Robolectric's recreation focuses it: only the top window has focus
                 });
+    }
+
+    /** Activity.recreate() from the app (NewPipe's onResume): the configuration-change relaunch with every change unhandled; Robolectric's own leaves the new window unattached and NPEs in windowFocusChanged. */
+    static void recreate(Activity a) {
+        AppHost host = running;
+        if (host == null || a.isDestroyed()) return;
+        for (ActivityController<? extends Activity> c : stack) {
+            if (c.get() != a) continue;
+            ActivityController<? extends Activity> top = stack.peek();
+            if (host.task.stopped.contains(a)) return;  // a stopped activity is relaunched at its restart: not modelled
+            android.content.res.Resources res = org.robolectric.RuntimeEnvironment.getApplication().getResources();
+            c.configurationChange(new android.content.res.Configuration(res.getConfiguration()), res.getDisplayMetrics(), ~android.content.pm.ActivityInfo.CONFIG_WINDOW_CONFIGURATION);
+            c.get().setRequestedOrientation(a.getRequestedOrientation());
+            host.task.recreated(a, c.get());
+            setVisible(c.visible(), true);
+            HostWindows.focus(c, c == top && host.windowActive);
+            System.out.println("[apklayer] Activity.recreate(): " + a.getClass().getName());
+            return;
+        }
+        // asked while the activity is still launching (onResume runs before ActivityTask pushes it): ActivityThread runs it after the resume
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> recreate(a), 50);
     }
 
     /**

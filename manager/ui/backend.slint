@@ -7,12 +7,14 @@ export struct AppEntry { package: string, label: string, version: string, icon: 
                          translated: bool, lite: bool }
 export struct InstanceEntry { id: string, running: bool, binder: bool, root: string, autostart: bool }
 export struct PropEntry { key: string, value: string, source: string, live: string }
+// a setting of `apklayer config list` (cli/config.cpp): kind choice|text; own: set in this scope (global, or the app's)
+export struct ConfigEntry { key: string, title: string, help: string, kind: string, value: string, default-value: string, choices: [string], own: bool }
 export struct InfoEntry { key: string, value: string }
 // `apklayer permissions`: runtime ones (dangerous) can be granted and revoked; state: what the others' grant is ("Granted", "Not granted", ...)
 export struct PermEntry { name: string, title: string, runtime: bool, granted: bool, state: string }
 
-// a first-run step (src/setup.cpp): id binder|runtime|instance|system-apps|microg|fdroid; state: "", "Done", "Failed", "Skipped"
-// an add-on of the Apps page (src/addons.cpp): id microg|fdroid; installed: any of its packages, complete: all of them; detail: what its
+// a first-run step (src/setup.cpp): id binder|runtime|instance|system-apps|microg|gapps|fdroid; state: "", "Done", "Failed", "Skipped"
+// an add-on of the Apps page (src/addons.cpp): id microg|gapps|fdroid; installed: any of its packages, complete: all of them; detail: what its
 // install or removal is doing; icon: the installed app's
 export struct AddonEntry { id: string, title: string, description: string, detail: string, version: string, icon: image, installed: bool, complete: bool, running: bool }
 
@@ -34,9 +36,9 @@ export global Backend {
     in property <bool> setup-running;
     in property <bool> setup-done;
     in property <float> setup-progress;    // of the running step: 0..1, negative while its size is unknown
-    callback setup-start(bool, bool);  // with microG, with F-Droid
+    callback setup-start(string, bool);  // Google's services ("microg", "gapps" or ""), with F-Droid
     callback setup-finish();
-    // the Apps page's add-ons: the first run's optional apps at any time (`apklayer setup --microg|--fdroid`, uninstall to remove)
+    // the Apps page's add-ons: the first run's optional apps at any time (`apklayer setup --microg|--gapps|--fdroid`, uninstall to remove)
     in property <[AddonEntry]> addons;
     in property <string> addon-running;    // the add-on whose install or removal runs ("" none): one at a time
     in property <string> addon-detail;
@@ -105,6 +107,9 @@ export global Backend {
     in property <string> window-mode-setting;  // the instance's window style (`apklayer settings`): "" automatic (mobile on a phone or in a mobile shell), "mobile", "desktop"
     in property <string> app-window-mode-setting;  // the selected app's window style override (window-mode.<package>): "" follows the instance, "mobile", "desktop"
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
+    in property <[ConfigEntry]> config;         // the Settings page
+    in property <[ConfigEntry]> app-config;     // the selected app's own (those a setting can be given per app)
+    callback set-config(string, string, string);  // package ("" global), key, value ("" unsets): `apklayer config set|unset`
     in property <[HwDomain]> hardware;
     callback set-provider(string, int);    // domain, index into its backends: `apklayer providers set|unset` with the options typed in
     callback provider-option(string, int, string, string);  // domain, backend index, key, value: a field edited

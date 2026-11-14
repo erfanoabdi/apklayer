@@ -41,6 +41,7 @@ final class HubPackages {
             PackageParser.Package parsed = ShadowPackageParser.callParsePackage(splits ? directory : apk);
             if (!name.equals(parsed.packageName)) throw new SecurityException("Installed APK package mismatch: " + name + " holds " + parsed.packageName);
             parsed.applicationInfo.uid = uid(name);  // the app id the scanner assigns (PackageManagerService did this at scan time); every component shares this ApplicationInfo and the generators copy it
+            HostProcessName.fill(parsed.applicationInfo);  // fixProcessName of the scan: other apps see the package's process as Android names it
             if (system(name)) parsed.applicationInfo.flags |= android.content.pm.ApplicationInfo.FLAG_SYSTEM;  // as the scanner marks the system partition's packages
             cache.put(name, new Cached(modified, size, parsed)); return parsed;
         } catch (IOException failure) { throw new IllegalStateException("Cannot read installed package " + name, failure); }

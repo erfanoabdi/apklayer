@@ -26,6 +26,9 @@ public class Main extends Activity {
         Out.probe("java.appinfo.pmPackageInfo", () -> getPackageManager().getPackageInfo(getPackageName(), 0).applicationInfo.dataDir);
         Out.probe("java.appinfo.installed", () -> { for (android.content.pm.ApplicationInfo a : getPackageManager().getInstalledApplications(0)) if (a.packageName.equals(getPackageName())) return a.dataDir; return "absent"; });
         Out.probe("java.appinfo.getDataDir", () -> getDataDir().getPath());
+        Out.probe("java.appinfo.sourceDir", () -> getApplicationInfo().sourceDir + " " + getApplicationInfo().publicSourceDir);
+        Out.probe("java.appinfo.nativeLibraryDir", () -> getApplicationInfo().nativeLibraryDir);
+        Out.probe("java.appinfo.pmSourceDir", () -> getPackageManager().getApplicationInfo(getPackageName(), 0).sourceDir + " " + getPackageCodePath() + " " + getPackageManager().getApplicationInfo(getPackageName(), 0).nativeLibraryDir + " " + getApplicationInfo().getClass());
         Out.probe("java.appinfo.filesDir", () -> getFilesDir().getPath());
         JavaProbes.run(Main.class);
         ArtProbes.run();

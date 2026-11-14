@@ -18,7 +18,7 @@ BuildRequires:  pkgconfig
 BuildRequires:  python3-base
 BuildRequires:  binutils
 BuildRequires:  git
-BuildRequires:  temurin-21-jdk
+BuildRequires:  (temurin-21-jdk or temurin-25-jdk)
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-cursor)
 BuildRequires:  pkgconfig(wayland-protocols)
@@ -38,7 +38,7 @@ BuildRequires:  pkgconfig(gstreamer-allocators-1.0)
 BuildRequires:  pkgconfig(libelf)
 BuildRequires:  pkgconfig(libbsd)
 BuildRequires:  pkgconfig(libunwind)
-Requires:       temurin-21-jdk
+Requires:       (temurin-21-jdk or temurin-25-jdk)
 Requires:       python3-base
 # bridge/portal's D-Bus helpers (Bluetooth, location, settings) are PyGObject; Sailfish does not install it by default
 Requires:       python3-gobject
@@ -72,7 +72,7 @@ Headers and apklayer-plugin.pc for building apklayer hardware plugins out of tre
 
 %build
 # the flags the tree is built and tested with (meson's), as debian/rules does: the path layer and bionic_translation interpose symbols
-export PATH=/usr/lib/jvm/temurin-21-jdk/bin:$PATH
+export PATH=/usr/lib/jvm/temurin-21-jdk/bin:/usr/lib/jvm/temurin-25-jdk/bin:$PATH
 env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS -u FFLAGS -u FCFLAGS meson setup build --prefix=%{_prefix} --libdir=%{_lib} \
     -Dprebuilts=%{apklayer_prebuilts} -Dandroid_runtime=false -Dpackage_version=%{version}
 ninja -C build %{?_smp_mflags}
@@ -82,7 +82,7 @@ env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS -u FFLAGS -u FCFLAGS meson setu
 ninja -C build-manager %{?_smp_mflags} apklayer-manager
 
 %install
-export PATH=/usr/lib/jvm/temurin-21-jdk/bin:$PATH
+export PATH=/usr/lib/jvm/temurin-21-jdk/bin:/usr/lib/jvm/temurin-25-jdk/bin:$PATH
 DESTDIR=%{buildroot} meson install -C build --skip-subprojects --no-rebuild --quiet
 DESTDIR=%{buildroot} meson install -C build-manager --no-rebuild --quiet
 install -D -m644 debian/instances %{buildroot}%{_sysconfdir}/apklayer/instances

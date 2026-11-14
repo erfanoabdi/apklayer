@@ -1,95 +1,89 @@
 # apklayer: open work
 
-Only what is still to do. History: `CHANGELOG.md`; earlier plans with their decisions and narratives: `docs/history/` (the last full plan is
-`docs/history/PLAN-2026-11-10.md`). Binding rules: `CLAUDE.md`. Drop an item here in the commit that finishes it.
+Only what is still to do. Done items are removed in the commit that finishes them.
+History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `docs/ART-DEFERRED.md`. Rules: `CLAUDE.md`.
 
-## Ground rules for open work
-- Distribution: GitHub releases only (debs, the Sailfish RPM, the Ubuntu Touch click, Flatpak bundles); no Flathub or OpenStore submission.
-- No per-app hacks: generic fixes only; the corpus (`tests/corpus/`) measures compatibility with current app versions. CTS strictly last.
-- Android's own interfaces (AIDL/HIDL HALs, framework classes) are the only interface for hardware; no apklayer-specific front.
-- Halium: device HALs only for vibrator, camera, media; never the device's sensors or GNSS HAL (single-client: go through sensorfw/GeoClue).
-- No cached app processes: idle component hosts end; always-on only for push/background, not as a speed trick.
-- An Android IME stays optional; no IME switcher. No Recents in the mobile navigation bar.
+## Ground rules
+- GitHub releases only (debs, Sailfish RPM, Ubuntu Touch click, Flatpak bundles).
+- No per-app hacks; the corpus (`tests/corpus/`) measures compatibility. CTS last.
+- Hardware only through Android's own interfaces (AIDL/HIDL HALs, framework classes).
+- Halium: device HALs only for vibrator, camera, media; never sensors or GNSS.
+- No cached app processes; always-on only for push/background.
+- An Android IME stays optional. No Recents in the mobile navigation bar.
 
-## Bugs (open)
-- PGR (Punishing: Gray Raven, Unity): its first-run Notice dialog (KuroSDK) was laid out for 1024x768 beside an 814x456 window, its accept button below the window. Current runs on the NVIDIA PC (2026-11-11) give every PGR window the real size (3440x1440, after 8e089188's display density) and no Process.killProcess; the dialog itself shows only on a first run, which needs a fresh install (clearing the tester's data would lose the account and the 43 GB download): check on a fresh instance.
-- Ubuntu Touch spread (per-launch shell, 2026-11-10, CHANGELOG): run groups input, multi-app, mobile on Parallels for the shell/CLI change;
-  a drawer launch that finds its app already running (relaunch) starts and ends a shell of its own for nothing.
-- Toasts queue per process, not across the instance's apps (NotificationManagerService has one queue).
-- A restarted launcher gets no saved instance state (HubActivities.restartIfAlone shortcut; FCL after the game quits).
-- Native bridge: pthread_sigqueue with a guest pthread record is not mapped.
-- Fennec 158 on x86 translation (CHANGELOG part 9): fixed so far: Build.CPU_ABI (part 7) and the Gecko main thread's `pthread_join` on a stale thread record (binary_translation 0029, needs the new libberberis_arm64 9786502a in the prebuilts). Now the page is fetched (GET /page) and its inline script runs in the content process, but its `fetch('/rendered')` never reaches the parent: the parent's main thread sleeps in a guest futex wait (FUTEX_WAIT_BITSET word 6, no later wake) after ~15 s while its IPC I/O thread receives the child's PHttpChannel constructor (3012 bytes); a lost wake-up of the parent main thread's event queue. gecko-page.py on x86 still fails (no beacon); ARM passes. Next: which guest condvar/mutex that is and why its signal does not wake it (kemu atomics, futex wake path of libapklayer-preload).
-- The boot broadcast may wake every app with a boot receiver at once (each a JVM; 14 receivers on Parallels): check, it is ordered since 2026-11-08.
-- FCL: after a window resize no new frame reached the shell (window looked frozen); not diagnosed.
-- An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
-- `--spare` JVM still running after `apklayer stop` (4 in ~120 stops, not reproduced since): candidate fix, a second records pass after the hub.
-- An installer run once hung after its self update waiting on `apklayer.stack.ready` with no stack (not reproduced).
-- Phone with the deb: after 4-5 NewPipe launches `HubStartup.connect` blocked in `pingBinder` (swap full); restarting the instance cleared it.
-- volumes-sandbox "catchup present internal file" failed once in five (scan sent, not indexed in 30 s).
-- Unciv is black on UTM (Mesa 26, virgl and zink; draws on Parallels): an apitrace capture replayed elsewhere to find the call.
+## Bugs
+- Droid-ify and NewPipe: an NPE from a fragment/activity view that was not created (`ScreenFragment.getToolbar`).
+- NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
+- Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
+- Termux: a failed exec in a forked child may still hang in `exit()` (fix untested in Termux itself).
+- Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
+- FCL: no new frame after a window resize.
+- Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
+
+## PGR (Punishing: Gray Raven) and the anti-cheat
+- PGR dies after 31 s to 3 min under the x86 translator (Tencent ACE). It has run 26+ min natively on the arm64 server.
+- Cause on x86 unknown (CHANGELOG "ACE: what the runs of the day say"). Next: the same game on the x86 PC with the saved account; the unread ACE config files and `libanort.so`.
+- The server's crash collectors are running (core files in `/var/tmp/pgr-core`, maps snapshots in `~/pgr-experiments`).
+- Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
 
 ## Graphics
-- Present fences signal at the hand-over to the shell, not the real present (needs a kernel fence the composer can signal; then wp_presentation).
-- Swap interval 0: lower near-empty frame rate (waits for a free gbm buffer); an attach that waited drops that buffer's release fence (EglAttach.cpp).
-- Host-ES1 path (Gles1.cpp) untested: needs NVIDIA or a Mesa with -Dgles1=enabled.
-- Vulkan presentation untested on AMD (NVIDIA passes vulkan-present since a3e931cd); the probe takes any GPU, not the instance's.
-- The probe's cached answer ($XDG_RUNTIME_DIR/apklayer-host-vulkan, until the next login) outlives a package update: on the NVIDIA PC the
-  0.4.18 CLI's "-" (no Vulkan) stayed after the update to a3e931cd, so Endfield had no Vulkan until the file was deleted (2026-11-12).
-  Key the cache to the CLI's version (or drop it on update).
-- android.hardware.vulkan.level declared 0; Play feature list lacks multitouch, sensor.*, opengles.aep, vulkan.* where the host has them.
-- GPU per instance: build and test the Vulkan device filter (DeviceSelect.h); copy fallback when a buffer import fails; the VA plugin's device choice; LINEAR on Intel.
-- OTR2 on the PC at 2448x1374 ~30 fps (bound by GPU or its translated thread); Swappy's other inputs untested; the swap bpftrace trace does not load on the PC.
-- Windows: an app on a smaller second output still sees the largest; output hotplug reaches the app only at its next configure; no Back button under
-  server-side decorations; KDE untested; a real-session scale switch check.
-- Mobile style on Lipstick: the pointer on the navigation-bar strip goes to the app. Landscape keeps the bar at the bottom (Lomiri rotates now: Android puts it at the side).
-- Lomiri: a fixed-orientation app is turned (composed rotated, docs/HALIUM.md "Rotation on Ubuntu Touch"); the keyboard gets no inset while
-  turned. Rerun camera-reload on the X23
-  (hello.camera's Main is now turned). Sailfish (Lipstick) keeps the letterbox; its rotation unchecked.
+- Present fences signal at hand-over, not at the real present.
+- Swap interval 0: low frame rate; a waiting attach drops a release fence.
+- Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
+- Vulkan presentation untested on AMD.
+- Play feature list lacks sensors (no host provider yet).
+- GPU per instance: Vulkan device filter, copy fallback, VA plugin device, LINEAR on Intel.
+- OTR2 on the PC runs ~30 fps at 2448x1374.
+- Windows: smaller second output, output hotplug, no Back button under server-side decorations, KDE.
+- Lipstick: the pointer on the navigation-bar strip goes to the app.
+- Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
+- Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- Sensor timestamps; all streams scaled from the largest; NDK libcamera2ndk is a stub (and would miss a lazy cameraserver on first call).
-- A portrait desktop monitor gives rotate-and-crop like a turned phone: needs a per-camera "mounted on the display" setting or the monitor's transform.
-- First YUV frame of Parallels' MacBook camera reached hello.camera black; iPhone camera in Open Camera; Fossify Camera retest.
-- Halium: preview rotated in the phone's landscape window; `getCallingUid` in host callbacks; rear-camera still; present fences on the phone.
+- Shutter time is the request's time, not the frame's `timestamp_ns` (goldfish session). All streams scaled from the largest. NDK libcamera2ndk is a stub.
+- Portrait desktop monitor: a manager/`apklayer config` entry for the pipewire `mount=` option.
+- Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
+- Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
-- text-input-v3: no surrounding text and no show/hide request (a closed touch-desktop keyboard returns only on the next focus change); desktop touch session unchecked.
-- A WebView field sends no surrounding text; Enter labels are English words, not keyboard icons; the Maliit slide-in sends ~10 CONFIGUREs.
-- IME target and FLAG_ALT_FOCUSABLE_IM windows: recheck (likely fixed by 5f5dc6ff).
-- On Lomiri's greeter only the first tap of a uinput device registers.
-- OTR2: a portrait/landscape game in a mobile maximized window untested; FlorisBoard typing untested.
+- text-input-v3 has no show/hide request. Enter labels are words, not icons.
+- Untested: `input-desktop` IBus surrounding text (flameshot aborts on Parallels); WebView surrounding text has no assertion.
+- OTR2 in a mobile maximized window and FlorisBoard typing.
+- Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
-- Permission prompt: location precise/approximate and "only this time", background location as its own step.
-- Roles: kept across restarts and shown in the manager; a role's qualification check (RoleController's required components).
-- APP_NOTIFICATION_SETTINGS has no screen; notification channel groups stay per process.
-- Window-system gaps: getWindowInsets, attachWindowContextToDisplayArea.
-- Shared libraries: other packages' ApplicationInfo lacks sharedLibraryFiles/Infos; HIDL libraries for old system apps; `<uses-native-library>` linking;
-  installed apps' libraries give classes but not resources.
-- Storage: no per-app scoped-storage rules (apps reach other apps' Android/data without the sandbox); getExternalFilesDirs has no secondary volume;
-  MEDIA_CHECKING/BAD_REMOVAL/UNMOUNTABLE not sent; every instance scans every drive; changes over the inotify budget seen only at next hub start or mount.
-- Desktop eject can fail "busy" while MediaProvider has a scanned image mapped (needs a udisks2 unmount hook or MediaProvider dropping its mappings).
-- Call audio: of several MODE_IN_COMMUNICATION requesters the oldest counts (no per-app playback tracking; needs PlayerBase reports).
-- Keystore: only pam_unix passwords (a PAM conversation helper for others); no LockedHint -> never locked (ScreenSaver fallback); a cancelled prompt
-  leaves the hub dialog; isDeviceLocked ignores whether a credential is set; UNLOCKED_DEVICE_REQUIRED untested; gatekeeper libraries not in prebuilts/lock/x86_64.
-- libcore: `sun.misc.Cleaner` (repoint to a host class when an app needs it); fstat(fd) stays Robolectric's; SharedMemory PROT_EXEC/PROT_NONE.
-- Termux: under the sandbox unchecked; getpwuid/getgrgid names for app ids; /system/bin/sh and getprop missing from android-root; the /data/data mapping is textual.
-- Calls: writes through `array()` on an app's direct buffer are lost (needs pinned arrays); only the default-route interface is listed as a network.
+- Permission prompt: precise/approximate location, "only this time", background location step.
+- No screen for `APP_NOTIFICATION_SETTINGS`. Channel groups stay per process.
+- Shared libraries: HIDL libraries, `<uses-native-library>`, resources.
+- Storage: no scoped-storage rules; `UNMOUNTABLE` not sent.
+- Every instance scans every drive. Eject can fail "busy" while MediaProvider maps an image.
+- Call audio: oldest `MODE_IN_COMMUNICATION` requester wins.
+- Keystore: only pam_unix passwords, never locked.
+- libcore: `sun.misc.Cleaner`, `fstat(fd)`, SharedMemory `PROT_EXEC`/`PROT_NONE`.
+- Termux: under the sandbox, `getpwuid` names, no `/system/bin/sh` or `getprop`.
+- Direct buffer `array()` writes are lost. Only the default-route interface is a network.
 
 ## Startup and memory
-- The spare key churns with launches from terminals with different environments (allowlist, or the hub deriving the environment per launch).
-- Hyphenator nInit off-CPU on cold starts; cold JNI_OnLoad ~150 ms; a SIGKILLed waiter leaves its JVM until stop; spare-born processes have cwd = appsDir.
-- An app's first hub call waits for the hub boot (4-8 s under load): fewer classes before READY.
-- A sandboxed instance cannot write its CDS archive; "Preload Warning: Verification failed" lines in the dumping app's log.
-- Native side: SurfaceFlinger's shader-cache priming; the composer's GL context (~80 MB once an app drew) and SurfaceFlinger's Mali block; libraries services never use.
-- Audio without a sound server: a server started later is used only from the next stack start; audio-late-install failed once per host during a CDS write.
-- Owner to decide: whether Lomiri should suspend an unfocused apklayer window.
+- JDK 25: flatpak still names JDK 21; findJava prefers an installed 21 over 25.
+- Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
+- ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
+- Cold-start costs: Hyphenator `nInit`, cold `JNI_OnLoad` ~150 ms, hub boot wait of 4-8 s.
+- SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
+- A sound server started later is used only from the next stack start.
+- Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
 ## Userspace binder
-- Fewer hops per call (futex doorbells, reply without a second replier wakeup, a busy-poll window); measure SurfaceFlinger per frame and audio.
-- A Halium device without binderfs (host context fixed at /dev/binder): isHalium() needs binderfs today.
+- Fewer hops per call (futex doorbells, no second wakeup, busy-poll). Measure SurfaceFlinger and audio.
+- Halium without binderfs: host context is fixed at `/dev/binder`.
+- `binder` group: `ClassNotFoundException: apklayer.host.RealBinder` in a fresh tree.
 
 ## Native bridge (x86_64)
+- Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`).
+- ACE: the open leads are in the PGR section above and the CHANGELOG.
+- No translation cache across starts.
+- Telegram has no x86_64 FOSS APK to test.
+- The guest JVM finds the host's `libjsig`: watch for a later SIGSEGV handler.
+- Unity: `hpatchz`, no backtrace in fault notes, the app log cap misses lines.
 (The translator is Digitalis, a fork of AOSP's Berberis that keeps its names: libberberis_arm64, BERBERIS_*, berberis.mode.*; docs/X86_64.md.)
 - Diagnostics for this (tools/ace/): bpftrace on the translator and glibc through `sudo tools/ace/trace.sh <script.bt> [out]`: ace-self-signal
   (signals to itself), ace-files (raw file syscalls, counted), ace-names (every raw file syscall, in order), ace-proxy (glibc calls of guest
@@ -179,85 +173,63 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
 - Unity: `hpatchz`; no backtrace in the fault note; app log cap misses Log lines (Unity's own graphics API lines never reach the app log).
 
-## Sandbox (before it can be the default)
-- The NVIDIA tester's box with docs/INSTALL.md Troubleshooting's checklist (cause unconfirmed: nvidia-modprobe under no-new-privileges, glvnd vendor choice).
-- The groups sandboxed on the x86 PC (needs the owner's `sudo sh tools/host-setup/sandbox.sh ...` once).
-- A release-candidate deb with the sandbox on for a day of normal use.
-- A spare shared between apps; component hosts start cold; broker lacks chmod/utimes/symlink/link/xattrs, renameat2 flags, mkstemp/scandir opens.
-- Isolated processes run as the app uid; an on-demand daemon keeps its first client's environment; drive access is all or nothing per app.
+## Runtime identity (nothing blocking)
+- Modules: `dl_iterate_phdr` lists 279 of 320 (arm64); the staged graphics stack (libEGL, libGLESv*, libvulkan) stalls the app at start when loaded eagerly. libc exports `bionic_*` names: `libc.so` is the mapping itself, so a stand-in with Android's names cannot be the same file.
+- x86: `HWCAP2` is 0, exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the translated guest only; readable on arm64 and for the host user; cause not found).
+- Process attributes: main thread id; property count 231 of 635 (Waydroid's full list is not in `tests/identity/results`).
+- Termux: `TERMUX_APP__DATA_DIR` is a host path.
+- Launch leftovers: btload child `environ`, `#!/bin/sh` through the generic exec path.
+- Java: `String.class.getClassLoader()`, `Object.class.getResource`, ArrayStoreException text, StackOverflow depth, main thread id 2.
 
-## Click, Flatpak, packaging, releases
-- Click: Share/"Open with" (content-hub hook and a second app); "Choose file…" from the click's manager unchecked; the manager's update check offers debs only.
-- An update outside the manager (apt, dpkg, click) leaves running instances on the old programs (shell, stack, hub) until they all stop or the next
-  login; the manager's Update restarts them (2026-11-10, not yet built or run: no VM was reachable).
-- Flatpak: the launcher portal dialog unchecked (Ubuntu 24.04's icon validation fails under AppArmor; needs Ubuntu 26.04 or Fedora);
-  the `flatpak run` that starts apklayerd keeps a pipe on stdout until `apklayer stop`.
-- Releases: the amd64 leg untested; the first command after install blocks ~75 s for runtime setup (the manager's first run must show it);
-  the release guard's first tag run untested; deb install through PackageKit/pkexec untested; `setup` should say when the release's runtime differs.
-- System-app reinstall on runtime change not checked on a real deb upgrade or a Halium phone.
-- Sailfish: libhybris mapped into every Android process; a Chum/OBS repository for zypper updates; the manager (2026-11-10) has no text input
-  (Lipstick has no text-input protocol) and its "Open" from an app's page was not checked to start the app.
+## Sandbox (before it can be the default)
+- The NVIDIA tester's box with the INSTALL.md checklist.
+- Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
+- A release-candidate deb with the sandbox on for a day.
+- Spare-born processes start in the spare's cwd: a `chdir` to `APKLAYER_CWD` hung `hello.input` and the system-apps OtherProcess; find out why (`run.cpp` still sets the variable).
+- Sandboxed, these groups fail: `sysprov` (ANDROID_ID changes across `stop`), `hub-services` (`hub-unit.sh`), system-apps `location` (also unsandboxed).
+- Shared spare, cold component hosts.
+- Isolated processes run as the app uid. Design: own uid (AID_ISOLATED 99000+) in the userns map, a view kind in `sandbox-exec`, caller uid to package in the hub.
+
+## Packaging and releases
+- Click: Share/"Open with"; "Choose file…" from the manager; update check offers debs only.
+- Updates outside the manager leave running instances on old programs.
+- Flatpak: launcher portal dialog; `flatpak run` keeps a pipe on stdout.
+- amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
+- First command after install blocks ~75 s for runtime setup.
+- System-app reinstall on runtime change: unchecked on a real upgrade or phone.
+- Sailfish: libhybris in every Android process, a Chum/OBS repository, no text input in the manager.
+- Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
+- Server RDP: after a shell restart or a client of another size, re-run the monitor config (`tools/server/rdp-session/README.md`); nothing automates it.
 
 ## Manager
-- Apps installed before 2026-11-04 need a reinstall for permissions; a grant reaches the app at its next start; signature grants approximated.
-- ui.sh has no permission step; Hardware page: no live GNSS/camera test, screenshot mode presses only controls in view, each refresh loads every backend.
-- Binder devices of a removed kernel-binder instance stay until reboot.
+- Apps installed before 2026-11-04 need a reinstall for permissions.
+- No permission step in `ui.sh`. Hardware page: no live GNSS/camera test.
+- Binder devices of a removed instance stay until reboot.
 
 ## Hardware
-- Providers: pick the best backend by probe() when a domain is unset; fronts do not check the plugin ABI themselves.
-- Vibrator: compose/PWLE effects and haptic constants. GNSS: ParcelFileDescriptor.close leaves the fd open in the app; x86_64 libapklayer_gnss.
-- USB: attach while no hub runs; interface-name filters; one chooser for several matching apps; node access under the sandbox.
-- Bluetooth: a secure connection to an unbonded device pairs through the system's agent; setPin also confirms a comparison; Sailfish apps cannot
-  register an agent; BlueZ reaches only recently seen devices; several clients on one server socket untried on hardware; PendingIntent scans;
-  an unclosed server socket keeps its record until the app ends.
-- Push: a real WorkManager app doing one-time work; a constraint stopping a running job not exercised; resume after host suspend; microG 0.3.x.
+- Vibrator effects. GNSS fd leak, x86_64 `libapklayer_gnss`.
+- USB: attach with no hub, interface filters, one chooser for several apps, sandbox node access.
+- Bluetooth: pairing paths, Sailfish agent, several clients per server socket, PendingIntent scans.
+- Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- one-build plan leftover: the deb's per-user bundle setup is still `tools/release/setup-runtime.sh` (ship the instrumented framework jar in the bundle?).
-- Store clients scripted in the corpus: an Aurora download and split install, F-Droid update and uninstall.
-- webview-input failed once under 4-way load; native-media's AVC round trip fails ~1 in 2 on Parallels; audio-silent fails on the x86 PC.
-- x86 PC lead data home has no system apps (`bin/apklayer install --system <prebuilts>/x86_64/system-apps/*.apk`); prebuilts must carry `x86_64/system-apps/` and `common/gfxstream`.
+- Finish `tools/stage` in Python and fold `tools/release/*` into Meson.
+- Script store clients in the corpus (Aurora, Telegram: HTTPS needs scripted onboarding input).
+- Flaky, not reproduced (2026-11-15: 5 runs each, unloaded: webview-input, native-media AVC on Parallels, audio-silent on the x86 PC): waits made condition-based (webview-input quiet spell, AVC output deadline); watch for a recurrence with its log.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
-## Planned work
-- **Per-app memory and start time** (low priority): 1. JDK 25 AOT cache (2026-11-14, CHANGELOG), what is left: the first launch on 25 is the training run and ends after ~3 s of the first activity (a headless training at install would keep the user's first launch); no smaps_rollup PSS or Calculator/NewPipe numbers yet; tests group `cds` (tests/vm/cds-dump.sh) expects a .jsa and does not cover the .aot flow; the `Verification failed` warnings on 25 (ShadowHostPackageManager...); the packages still name JDK 21 (debian/control, rpm spec, flatpak yml); 2. per-JVM limits where starts do not slow;
-  Robolectric's instrumentation, the JDK patches, bionic_translation and every package's JDK; 2. (done 2026-11-14 on Parallels: heap free ratios + two C1 threads, NewPipe app JVM -21% PSS, CHANGELOG; open: measure on the phones with and without `APKLAYER_JVM_MEM=default`, apps with a live heap above ~500 MB);
-  3. only if needed, a shared zygote-like JVM. Today: ~1 GB PSS per app JVM on the Volla, NewPipe ~21 s cold / ~12 s warm.
-- **One build instead of tools/***: finish with `tools/stage` rewritten small in Python and the remaining `tools/release/*` folded into Meson.
-
-## Needs real hardware or a person
-- NVIDIA/AMD: Vulkan presentation, host ES1. Fennec page text on UTM is virgl's (report to virglrenderer).
-- Halium: host binder contexts against real vendor HALs; `media = device` as Halium default (owner, X23 only checked); NewPipe's network on the phone.
-- Sailfish phone: geoclue1 fix with location on; Lipstick's switcher with two apklayer apps; a finger on the full-screen host dialog.
-- Ubuntu Touch phone: the manager on the real screen, the navigation bar under Lomiri's panel, a drawer tap, the shell's android_wlegl window,
-  Lomiri maximizing under its top bar, the bar's look; turning the phone by hand (checked only with a fake accelerometer, tools/halium/ut-rotate.sh).
-- Bluetooth: the PIN dialog against a legacy (HC-05-style) device. USB: a real serial adapter with a serial app.
-- Push: a real Telegram/WhatsApp message with microG in an always-on instance on Parallels; the unit starting the stack at login.
-- A person: window raise of a relaunched app; the text magnifier; portal file chooser and pkexec in the manager; Google sign-in in Meet/microG;
-  playback quality by ear and eye; audio under load; a Material You app's colours; the IME window's look; the manager's installed paths.
-- Fullscreen (2026-11-10, CHANGELOG): NewPipe's player fullscreen with a playing video on the x86 PC (GNOME) and the Ubuntu Touch X23
-  (Lomiri: does set_fullscreen hide its panel; a landscape request in a maximized mobile window, with the UT rotation work); Robolectric
-  lets any new window's default insets (a dialog, a popup) show the bars again (Android: the focused window controls them); no
-  ACTION_CONFIGURATION_CHANGED broadcast on a resize or turn.
-- Apps: a real Godot 4 game; JW Library cover thumbnails; a NewPipe download.
+## Needs hardware or a person
+- NVIDIA/AMD: Vulkan presentation, host ES1.
+- Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
+- Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
+- Ubuntu Touch: manager on screen, navigation bar under the panel, drawer tap, shell window, maximize, turning by hand.
+- Bluetooth PIN dialog on a legacy device. A real USB serial adapter.
+- Push: a real Telegram/WhatsApp message with microG; the unit starting the stack at login.
+- By eye: window raise, text magnifier, portal file chooser, pkexec, Google sign-in, playback, audio, colours, IME look.
+- Fullscreen: NewPipe player on GNOME and the X23; default insets of new windows; no configuration-changed broadcast.
+- Apps: a Godot 4 game, JW Library thumbnails, a NewPipe download.
 
 ## Parked (owner's decision)
-- NFC, biometrics, game controllers, ModemManager telephony, screen capture portal; backlight and thermal are the host's.
-- Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory mode, tethering, detaching host drivers.
-- Several phone instances as a product; a JRE provisioned by setup for the Ubuntu Touch deb (the click bundles its JDK).
-
-## Runtime identity (open, rerun of 2026-11-14)
-
-Goal: what an app sees matches Android (Java, native inspection, ART internals). Do not equate maps labels with ART compatibility. Comparison: `docs/runtime-identity-matrix.md` (first run 29 match, 13 partial, 73 mismatch; rerun on main fecb75f5: 57 / 29 / 28; raw key equality ARM64 207 and x86 212 of 464, was 142 and 169). Probes `tests/apps/hello-identity`, tools and results `tests/identity/`, group `identity-matrix`. Open, most real-app impact first:
-1. Host paths in native views: the app's own files in maps/fd links (`/home/.../apps/<pkg>/lib/*.so`, base.apk) and the loader (`findLibrary`, nativeLibraryDirectories, APK element) need a `/data/app/<pkg>-x/` path-layer mapping; `/proc/self/exe` opened as a file is still the JDK `java` ELF; `/proc/<pid>/environ` of a process that publishes no guest environment (JVM, forked helper) shows host variables, and the x86 guest exec environment carries QT_* variables.
-2. `dlsym(RTLD_DEFAULT, "JNI_GetCreatedJavaVMs")` still resolves on ARM64 (answer is right); JNIEnv functions do not resolve to libart.so in `dladdr`.
-3. Process attributes: AT_SECURE is 0; uname nodename and attr/current leak the desktop on ARM64; x86 AT_PLATFORM null and HWCAP2 0 (translator); TMPDIR/BOOTCLASSPATH unset; main thread is not the pid; cpuinfo is the host's on ARM64; raw-syscall filter does not cover stat owner ids, getdents64, prctl, sysinfo, x86, or kernels without seccomp.
-4. Java loaders and threads: `String.class`/framework `getClassLoader()` (Android: BootClassLoader); `Object.class.getResource` gives jrt:; libcore overlay classes (Daemons, VMClassLoader, Transformers, sun.misc.Cleaner) absent; main thread id is not 2; `Thread.getAllStackTraces` lacks some ART daemons.
-5. Exception texts: ArrayStoreException, `ArrayList.get` IndexOutOfBounds and other libcore texts; StackOverflowError depth (21-47k, ART 65k); Proxy class name, MethodHandle class.
-6. Hidden-API: the framework's hiddenapi-flags database as the policy; `setHiddenApiExemptions` stays visible because HiddenApiBypass (Termux) cannot walk ART structures here.
-7. TLS/HTTPS: `tests/run tls` passes, but NewPipe's first HTTPS request dies in `sun.security.ssl.NamedGroup.<clinit>` (SunJSSE socket from okhttp's connectTlsEtc; Conscrypt's `ECParameters` throws "unhandled field class ECFieldF2m" for the sect* curves SunJSSE enumerates; matrix doc "HTTPS in a real app"). Fix: make `AlgorithmParameters` "EC" for SunJSSE resolve to SunEC (provider order or a shadow), or make okhttp's socket factory the Conscrypt one. Then recheck Droid-ify, F-Droid, Aurora, Telegram; the JDK URL handler is used (libcore's okhttp is not wired). Fixed 2026-11-14 in Conscrypt (OpenSSLECGroupContext overlay, checked exception); first-page load in NewPipe still to confirm.
-8. Properties: native `dalvik.vm.*` beyond the pixel5-extra.prop defaults; `Debug.getRuntimeStats` returns [].
-9. Environment/launch: Termux's TERMUX_APP__DATA_DIR is a host path (ApplicationInfo.dataDir is Robolectric's temp dir); `/proc/<pid>/environ` of a btload-launched program is empty for its child; Termux punctuation keys type nothing; guest `system`/`popen`/`posix_spawn` leftovers (`#!/bin/sh` through the generic exec path, relative PATH after `addchdir`, `POSIX_SPAWN_CLOEXEC_DEFAULT` race, vfork-child allocations leak, a toybox child's /proc/self/status EBADF in hello-environment); direct JNI calls into host System, Runtime.exec/ProcessBuilder through JNI.
-10. Fennec under x86 translation: starts, loads the page, but no beacon: the parent main thread blocks in a sync IPC send (xid) whose reply never comes (CHANGELOG Fennec parts 9-11); `free(): invalid pointer` / SIGSEGV at 0x8 with `debug.apklayer.log=1` is separate and open.
-11. ART structures (largest, last; only hook frameworks, HiddenApiBypass in Termux/Aurora and anti-cheat need them; the corpus has no direct ART probing): a real libart.so ELF at its maps path with .dynsym/.symtab and shims; Executable.artMethod and Class/Field/Thread ART fields over a synthetic 32-byte ArtMethod/16-byte ArtField table (jmethodID == artMethod); String `count`; identityHashCode in 28 bits; non-moving large arrays (collector-backed nonmoving allocation or an ART engine; SerialGC today, JNI critical access copies).
-12. Termux: punctuation keys fixed in code (HostInput, ASCII punctuation as real KeyEvents), not confirmed because a fresh bootstrap never finished on UTM (NPE in Handler.handleCallback, also without the change); on x86 the fork SIGSEGV in a libgallium atfork handler is not reproduced (next: gdb follow-fork-mode child on a bootstrapped Termux on the PC).
+- NFC, biometrics, game controllers, ModemManager telephony, screen capture portal.
+- Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
+- Several phone instances as a product; a JRE for the Ubuntu Touch deb.

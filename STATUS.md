@@ -2,23 +2,18 @@
 
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Open work: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
-## State (2026-11-04)
+## State (2026-11-14)
 - About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM; it passes on the owner's x86_64 PC (real GPU), where the x86_64 route runs.
-- Released: v0.1.0, v0.2.0, v0.2.1 (2026-11-04), v0.3.0 (2026-11-05; one Meson build, runtime 0.2.1). Since 0.1.0: Bluetooth, USB, camera, fake sensors/GNSS/vibrator (`providers.toml`), `apklayer logs|report`, the host binder context (Halium), apps' real target SDK. Meet works in a call: join, sound, remote video (owner checked, 2026-11-04).
-- Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU (docs/HALIUM.md); camera = device followed (below).
+- Released: v0.1.0, v0.2.0, v0.2.1 (2026-11-04), v0.3.0 (2026-11-05; one Meson build), up to v0.4.18 now (runtime bundle 0.4.18, `tools/release/versions`; docs/RELEASES.md). Since 0.1.0: Bluetooth, USB, camera, fake sensors/GNSS/vibrator (`providers.toml`), `apklayer logs|report`, the host binder context (Halium), apps' real target SDK. Meet works in a call: join, sound, remote video (owner checked, 2026-11-04).
+- Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU; `camera = device` works (camera2 and Camera1, Open Camera live on both cameras); vibrator, GNSS (lomiri), sensors (sensorfw), audio (PulseAudio backend) and H.264 video all run on the phone; media = device (the device's hardware Codec2: H.264 decode into a SurfaceView, encode; 2026-11-09) works and is the default on Halium with graphics = device (docs/HALIUM.md "Hardware providers").
+- Ubuntu Touch as a click (2026-11-09): `tools/release/click.sh`, release job `click`; the Volla X23 runs it instead of the deb (no root, its own JDK, survives updates and reboots; docs/HALIUM.md "Ubuntu Touch: the click").
 - Window style (2026-11-05): mobile (maximized, navigation bar, phone density) or desktop, `apklayer settings set window-mode`; immersive mode done, phone window check pending (docs/PLAN.md "Needs real hardware or a person").
 - Per-app sandbox (2026-11-08, milestone two, still off by default: `APKLAYER_SANDBOX=1`): Android's /data view and groups, kernel caller uids, D-Bus helpers through apklayerd, a spare per app, the deb's AppArmor profile/udev rule/unit; what remains before it is the default: docs/PLAN.md "Sandbox (before it can be the default)".
 - Background push (2026-11-05, microG 2026-11-08): installing microG Services turns the instance always on (`apklayer instance autostart <id> on|off`); with every app closed microG checks in, keeps its connection to Google (heartbeats, reconnects) and gets real FCM tokens, and a cloud message wakes the closed app (groups `push`, `push-microg`). A real message on Parallels is prepared, it needs a deb with this round (docs/PLAN.md "Needs real hardware or a person").
-- Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU; `camera = device` works (camera2 and Camera1, Open Camera live on both cameras); vibrator, GNSS (lomiri), sensors (sensorfw), audio (PulseAudio backend) and H.264 video all run on the phone; media = device (the device's hardware Codec2: H.264 decode into a SurfaceView, encode; 2026-11-09) works and is the default on Halium with graphics = device (docs/HALIUM.md "Hardware providers").
-- Ubuntu Touch as a click (2026-11-09): `tools/release/click.sh`, release job `click`; the Volla X23 runs it instead of the deb (no root, its own JDK, survives updates and reboots; docs/HALIUM.md "Ubuntu Touch: the click").
 - Binder (2026-11-09, for 0.4.9): apklayer's userspace binder (bridge/binderd, docs/BINDER.md) is the default, no root step; the kernel's is an option (`apklayer binder kernel`, the manager's Hardware page). Test groups run on userspace; `binder-kernel`, `host-binder-kernel` keep the kernel's.
-- Open work by area: `docs/PLAN.md`.
-
 - Runtime identity (2026-11-13): app property calls use AOSP defaults; VMRuntime queries and native maps/smaps/map_files/status group views are covered. Native suite (24 tests, including ELF/module/unwind checks), runtime-identity/art-maps APKs and native-bridge pass on UTM ARM64 and x86 translation with userspace binder. Waydroid ART baseline obtained. App/shared/provider classes now have actual PathClassLoader ownership; JNI/CDS tests pass on both architectures, and WebView survives new configuration contexts. Installed and in-memory DEX now share property/native-load/service transformations with per-loader metadata. Actual ART layouts/JNI IDs, boot-parent identity and other inspection gaps remain active in PLAN.
-
 - Guest code on native arm64 (2026-11-14): app-namespace callers see Android's linker view (bionic_translation 0073: dlopen of host/private libraries fails, dladdr/dl_iterate_phdr show Android modules) and raw `svc` syscalls are answered through the path layer and /proc views (0074 + bridge/native/raw_syscall.c: guest libraries in one address window, seccomp-bpf trap on the instruction pointer; design in docs/PLAN.md). A guest launch maps `#!/bin/sh` to `/system/bin/sh` on every path. Tests: tests/native/raw-syscall.c, hello-environment.
-
-- Environment replacement WIP (2026-11-13): shared active-ABI storage and Java/native/child probes pass on both VMs; backend controls, Java PATH and native exec tests pass on ARM and x86; all eight final ARM regression groups pass. The corrected Vulkan probe is staged on both and `vulkan` passes on UTM and the x86 PC. The native execvp fix is committed; real Termux confirmation remains pending; Fennec network/JavaScript work but rendering is unverified. The working implementation is checkpointed at the owner's request; see CHANGELOG and PLAN before treating it as release-ready.
+- Open work by area: `docs/PLAN.md`.
 
 ## How to work here
 - A new machine: `docs/INSTALL.md` (prebuilts branch, build, first app).
@@ -49,7 +44,7 @@ Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, 
 ## Facts that bite
 - `ro.*` properties are write-once: every stack start gets a fresh store.
 - Process lookup: Android processes carry their process name in `/proc/<pid>/cmdline`; find an instance's processes by `APKLAYER_INSTANCE` in `/proc/<pid>/environ`
-  or the recorded `run.*` pids, never by name. Never `pkill -f` a pattern in your own command line. Do not attach `jcmd` to app JVMs (it ended Fennec).
+  or the recorded `run.*` pids (killing rules: `CLAUDE.md`). Do not attach `jcmd` to app JVMs (it ended Fennec).
 - After an edited bionic_translation patch: ninja and install (the reconfigure resets the subproject when the edited series no longer matches; a new patch is picked up by ninja itself).
 - Files deleted in git stay on the VMs after a push: remove them there by name. macOS tar: `COPYFILE_DISABLE=1`, `tar -c -f - --no-xattrs`.
 - dex2jvm needs `android-all` on its own classpath; its output needs `@DoNotInstrument` (`DenyInstrument`). gcc 15 makes implicit declarations errors.

@@ -30,8 +30,6 @@ public final class ComponentHost implements Runnable {
         StartTrace.mark("hub attached");
         System.out.println("[apklayer] component-host READY " + app.getPackageName() + " pid=" + android.os.Process.myPid());
         AppSpare.launchStarted();
-        String startService = System.getProperty("apklayer.startservice");  // exploration (PLAN archive P8): what system_server's startSystemUi does, by hand
-        if (startService != null) app.startService(new android.content.Intent().setClassName(app.getPackageName(), startService));
         // no cached processes (the owner's rule; Android keeps them until memory runs short): a host that runs no service, has no work queued and
         // was not called for IDLE_EXIT_MS ends, as its last service's end does (Services.exitIfIdle); a provider's next client starts it again
         // (RemoteProvider retries a dead provider through the hub). What runs in system_server on a device (android:process="system":
@@ -52,11 +50,11 @@ public final class ComponentHost implements Runnable {
             // a message due later than the idle window does not keep it (Android ends such a cached process too): MediaProvider's WorkManager posts
             // its delayed work 14 h ahead (GreedyScheduler), the same work is a job the hub runs then (JobScheduler)
             long next = looper.getNextScheduledTaskTime().toMillis();
-            boolean idle = Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && (next == 0 || next - android.os.SystemClock.uptimeMillis() > idleExitNs / 1_000_000);
+            boolean idle = Services.none() && !HubServices.holdsBinding() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && (next == 0 || next - android.os.SystemClock.uptimeMillis() > idleExitNs / 1_000_000);
             if (idle) { System.out.println("[apklayer] component-host idle for " + idleExitNs / 1_000_000 + " ms (no service, no call): exiting"); stop(); }
             else if (!told[0]) {  // uncalled, yet kept: say once by what
                 told[0] = true;
-                System.out.println("[apklayer] component-host stays: " + (Services.none() ? "" : "a service runs, ") + ShadowHostRealBinder.IN_FLIGHT.get() + " calls in flight, next message "
+                System.out.println("[apklayer] component-host stays: " + (Services.none() ? "" : "a service runs, ") + (HubServices.holdsBinding() ? "a service of another process is bound, " : "") + ShadowHostRealBinder.IN_FLIGHT.get() + " calls in flight, next message "
                         + (looper.getNextScheduledTaskTime().toMillis() == 0 ? "none" : "in " + (looper.getNextScheduledTaskTime().toMillis() - android.os.SystemClock.uptimeMillis()) + " ms: "
                         + org.robolectric.util.ReflectionHelpers.getField(Looper.getMainLooper().getQueue(), "mMessages")));
             }

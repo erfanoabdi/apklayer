@@ -19,7 +19,7 @@ final class HostConfiguration {
     /** The configuration bits the host settings change (what decides whether an activity handles the change itself or is recreated). */
     static final int SETTINGS_CHANGES = android.content.pm.ActivityInfo.CONFIG_UI_MODE | android.content.pm.ActivityInfo.CONFIG_LOCALE
             | android.content.pm.ActivityInfo.CONFIG_LAYOUT_DIRECTION | android.content.pm.ActivityInfo.CONFIG_FONT_SCALE;
-    private static String size = System.getProperty("apklayer.qualifiers", "w480dp-h800dp");
+    private static String size = "w480dp-h800dp";
     private static Bundle settings = new Bundle();
     private static android.graphics.Rect screen;
 
@@ -42,12 +42,20 @@ final class HostConfiguration {
         }
     }
 
-    /** The desktop session's lock (the hub's "locked", logind's LockedHint): KeyguardManager.isKeyguardLocked and isDeviceLocked, as TrustManager has them. */
-    private static void locked(boolean locked) {
+    private static volatile boolean desktopLocked;
+
+    /**
+     * The desktop session's lock (the hub's "locked", logind's LockedHint): KeyguardManager.isKeyguardLocked, and isDeviceLocked as TrustManager has it:
+     * only with a credential set (isDeviceSecure; HostKeyStore.lockScreen sets it once the instance's credential is known, then calls relock).
+     */
+    private static void locked(boolean locked) { desktopLocked = locked; relock(); }
+
+    static void relock() {
+        boolean locked = desktopLocked, deviceLocked = locked && Boolean.TRUE.equals(org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceSecure"));
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isKeyguardLocked", locked);
-        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceLocked", locked);
+        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceLocked", deviceLocked);
         java.util.Set<Integer> users = org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "deviceLockedForUsers");
-        if (locked) users.add(android.os.UserHandle.myUserId()); else users.remove(android.os.UserHandle.myUserId());
+        if (deviceLocked) users.add(android.os.UserHandle.myUserId()); else users.remove(android.os.UserHandle.myUserId());
     }
 
     private static int apply(Bundle next) {

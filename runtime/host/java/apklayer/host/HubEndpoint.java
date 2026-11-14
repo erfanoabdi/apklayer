@@ -80,7 +80,7 @@ final class HubEndpoint extends Binder {
                 if (code == HubProtocol.ENDPOINT_START) {
                     int[] result = Services.startFromHub(context, explicit, delivered);
                     reply.writeNoException(); reply.writeInt(result == null ? -1 : result[0]); reply.writeInt(result == null ? 0 : result[1]);
-                } else { reply.writeNoException(); reply.writeBoolean(Services.stopService(context, explicit)); }
+                } else { reply.writeNoException(); Boolean here = Services.stopHere(context, explicit); reply.writeBoolean(here != null && here); }  // never back to the hub: not ours is not running
             } finally { Services.HUB_CALLS.decrementAndGet(); }
             return true;
         }
