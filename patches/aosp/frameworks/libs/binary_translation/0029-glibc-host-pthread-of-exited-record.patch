@@ -1,0 +1,108 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the host pthread_t of the record of a thread that has exited
+
+A guest pthread_t is often a thread's own record (pthread_self() under glibc-host-thread-id-handoff): NSPR's _pt_root overwrites the id the
+creator got from pthread_create with it (a race with the creator's own store), and Gecko joins that value. 0004 maps a record to its host
+pthread_t only while the GuestThread lives; once the thread has exited its records were unmapped and the address reused (Fennec's heap),
+GuestPthreadToHost found no GuestThread and the host's pthread_join waited forever on a garbage "tid" word: Fennec on x86 never loaded a
+page (Gecko's main thread in pthread_join, no network request). The records of exited threads now stay mapped (the newest 512) with their
+host pthread_t, and GuestPthreadToHost looks there first, by the pointer value (no read).
+
+--- a/guest_os_primitives/guest_thread.cc
++++ b/guest_os_primitives/guest_thread.cc
+@@ -18,6 +18,9 @@
+ 
+ #include <sys/mman.h>  // mprotect
+ #include <bit>
++#include <deque>  // apklayer patch: exited records
++#include <mutex>
++#include <unordered_map>
+ #include <cerrno>  // apklayer patch: WrapHostCallForGuestErrno
+ 
+ // region digitalis
+@@ -68,6 +71,23 @@
+ 
+ namespace {
+ 
++#if defined(__BIONIC__)
++// apklayer patch: a guest pthread_t is often a thread's own record (pthread_self()); NSPR's _pt_root overwrites the id the creator got from
++// pthread_create with it, and Gecko then joins that value. Once the thread had exited its records were unmapped and the address reused
++// (Fennec's heap), so GuestPthreadToHost found no GuestThread and pthread_join waited forever on a garbage "tid" word. The records of
++// exited threads now stay mapped (the newest kKeptExitedRecords of them) and name their host pthread_t.
++constexpr size_t kKeptExitedRecords = 512;
++struct ExitedRecords {
++  std::mutex mutex;
++  std::unordered_map<const void*, pthread_t> host;
++  std::deque<void*> order;
++};
++ExitedRecords* GetExitedRecords() {
++  static auto* records = new ExitedRecords;
++  return records;
++}
++#endif
++
+ const size_t kGuestThreadPageAlignedSize = AlignUpPageSize(sizeof(GuestThread));
+ 
+ // region digitalis
+@@ -208,8 +228,16 @@
+   if (thread->static_tls_ != nullptr) {
+     MunmapOrDie(thread->static_tls_, AlignUpPageSize(g_static_tls_config.size));
+   }
+-  if (thread->glibc_host_records_ != nullptr) {  // apklayer patch
+-    MunmapOrDie(thread->glibc_host_records_, kGlibcHostRecordsSize);
++  if (thread->glibc_host_records_ != nullptr) {  // apklayer patch: kept for GuestExitedRecordToHost
++    ExitedRecords* kept = GetExitedRecords();
++    std::lock_guard<std::mutex> lock(kept->mutex);
++    kept->host[thread->glibc_host_records_] = thread->host_pthread_;
++    kept->order.push_back(thread->glibc_host_records_);
++    while (kept->order.size() > kKeptExitedRecords) {
++      kept->host.erase(kept->order.front());
++      MunmapOrDie(kept->order.front(), kGlibcHostRecordsSize);
++      kept->order.pop_front();
++    }
+   }
+   if (thread->scs_region_ != nullptr) {
+     MunmapOrDie(thread->scs_region_, SCS_GUARD_REGION_SIZE);
+@@ -413,6 +441,19 @@
+   // For Glibc we provide stub which is only usable to distinguish different threads.
+   // This is the only thing that many applications need.
+   SetTlsAddr(*state_, GettidSyscall());
++#endif
++}
++
++bool GuestExitedRecordToHost([[maybe_unused]] const void* record, [[maybe_unused]] pthread_t* host) {
++#if defined(__BIONIC__)
++  ExitedRecords* kept = GetExitedRecords();
++  std::lock_guard<std::mutex> lock(kept->mutex);
++  auto it = kept->host.find(record);
++  if (it == kept->host.end()) return false;
++  *host = it->second;
++  return true;
++#else
++  return false;
+ #endif
+ }
+ 
+--- a/guest_os_primitives/guest_thread_manager.cc
++++ b/guest_os_primitives/guest_thread_manager.cc
+@@ -132,6 +132,8 @@
+   // apklayer patch: a record's tid finds its GuestThread (reading that word of a glibc struct pthread is harmless; the record
+   // pointer itself must then match).
+   if (thread != 0 && IsConfigFlagSet(kGlibcHostThreadIdHandoff)) {
++    pthread_t exited;  // apklayer patch: a record of a thread that has exited (never read: its memory may have been reused)
++    if (GuestExitedRecordToHost(reinterpret_cast<const void*>(thread), &exited)) return exited;
+     GuestThread* guest = GuestThreadMap::GetInstance()->FindThread(reinterpret_cast<const pthread_internal_t*>(thread)->tid);
+     if (guest != nullptr) guest->HostPthreadOf(reinterpret_cast<const void*>(thread), &thread);
+   }
+--- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
++++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
+@@ -59,6 +59,9 @@
+   jmp_buf buf;
+ };
+ 
++// apklayer patch: the host pthread_t of a record that belonged to a thread that has exited (its records are kept for a while).
++bool GuestExitedRecordToHost(const void* record, pthread_t* host);
++
+ // ATTENTION: GuestThread object can only be used by the current thread!
+ class GuestThread {
+  public:
