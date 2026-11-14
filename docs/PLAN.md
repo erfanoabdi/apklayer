@@ -97,9 +97,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Isolated processes run as the app uid. Design: own uid (AID_ISOLATED 99000+) in the userns map, a view kind in `sandbox-exec`, caller uid to package in the hub.
 
 ## Packaging and releases
-- Click: Share/"Open with"; "Choose file…" from the manager; update check offers debs only.
-- Updates outside the manager leave running instances on old programs.
-- Flatpak: launcher portal dialog; `flatpak run` keeps a pipe on stdout.
+- Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
+- Flatpak: launcher portal dialog.
 - amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
 - First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
@@ -109,7 +108,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Manager
 - Apps installed before 2026-11-04 need a reinstall for permissions.
-- No permission step in `ui.sh`. Hardware page: no live GNSS/camera test.
+- `manager/tests/ui.sh` permission step is written but never run. Hardware page: no live GNSS/camera test.
 - Binder devices of a removed instance stay until reboot.
 
 ## Hardware
