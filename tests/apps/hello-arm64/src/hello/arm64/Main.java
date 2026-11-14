@@ -27,6 +27,7 @@ public class Main extends Activity {
     private static native String fidelity();
     private static native String oldHandlers();
     private static native String probeEnv();
+    private static native String zipDiff();
     private static String getPrimaryCpuAbi(android.content.pm.ApplicationInfo ai) { return field(ai, "primaryCpuAbi"); }
     private static String getSecondaryCpuAbi(android.content.pm.ApplicationInfo ai) { return field(ai, "secondaryCpuAbi"); }
     private static String field(Object o, String n) {
@@ -109,8 +110,11 @@ public class Main extends Activity {
         log("profile " + android.os.Build.MANUFACTURER + " / " + android.os.Build.MODEL + " / " + android.os.Build.DEVICE + " / " + android.os.Build.BOARD + " / "
                 + android.os.Build.HARDWARE + " / " + android.os.Build.FINGERPRINT);
         log("profile cpu " + cpuProfile());
+        String zd = zipDiff();
+        for (String line : zd.split("\n")) log("zipdiff " + line);  // Fennec x86 part 8: identical lines on arm64 and under the translator
         boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1
-                && auxv == 1 && handlers.isEmpty() && ids && proc == 15;
+                && auxv == 1 && handlers.isEmpty() && ids && proc == 15
+                && zd.contains("found 700 wrong 0") && zd.contains("greprefs@0") && zd.contains("siglongjmp=7");
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         long t7 = System.nanoTime();
         int px = gl();  // EGL pbuffer cleared to (1, 0.5, 0, 1): 0xff0080ff, read back as RGBA bytes
