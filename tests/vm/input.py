@@ -4,6 +4,7 @@ import gi
 gi.require_version('IBus', '1.0')
 from gi.repository import IBus, Gio
 import os
+import re
 from pathlib import Path
 import selectors
 import signal
@@ -13,7 +14,6 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
-import pixels  # noqa: E402
 LOGDIR = instance.LOGDIR
 ENV = dict(instance.ENV, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % instance.SESSION,
     APKLAYER_RUNTIME_DEBUG='1',
@@ -40,10 +40,11 @@ else:
         layout, _, variant = name.partition('+')
         prefix = 'xkb:' + layout + ':' + variant + ':'
         previous = next(e.get_name() for e in bus.list_engines() if e.get_name().startswith(prefix))
+# ticks are on the app's clock: each step's real input (a uinput call is ~2 s) must be done before the next tick
 steps = [(1000, 1), (4000, 2), (6000, 3), (9000, 4), (12000, 5),
          (13000, 6), (16000, 0), (17000, 7), (20000, 8), (22000, 9)]
-ENV['APKLAYER_JOPTS'] = ('-Dapklayer.runms=24000 -Dapklayer.debugkeys=true -Dapklayer.script='
-    + '+'.join(f'{t}:hover:{step},0' for t, step in steps))
+ENV['APKLAYER_JOPTS'] = ('-Dapklayer.runms=48000 -Dapklayer.debugkeys=true -Dapklayer.script='
+    + '+'.join(f'{2 * t}:hover:{step},0' for t, step in steps))
 selector = selectors.DefaultSelector()
 children = []
 log = open('/tmp/input-test.log', 'wb')
@@ -62,8 +63,29 @@ def keys(*steps):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 
+_origin = []
+
+
 def locate(content_y):
-    return pixels.active_window(instance.capture('locate'), content_y)
+    """Desktop permille of (the window's content middle, content_y): where the shell reports the pointer, not a desktop screenshot (flameshot
+    hangs or aborts on GNOME 46): the absolute pointer goes from the top panel to a probe point, the shell logs 'pointer enter content at X,Y' in
+    the window's own coordinates, so the window's origin is the probe minus that."""
+    if not _origin:
+        state = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, 0, None, 'org.gnome.Mutter.DisplayConfig', '/org/gnome/Mutter/DisplayConfig',
+                                               'org.gnome.Mutter.DisplayConfig', None).call_sync('GetCurrentState', None, 0, -1, None).unpack()
+        mode = next(m for m in state[1][0][1] if m[6].get('is-current'))
+        width, height = mode[1], mode[2]  # shortcut: one monitor at scale 1 (the VM); read the logical monitor if a test host differs
+        shell_log = Path(LOGDIR + '/shell.log')
+        for px, py in ((300, 300), (500, 400), (400, 600), (700, 300), (250, 450), (600, 650)):
+            seen_before = shell_log.read_text(errors='replace').count('pointer enter content')
+            instance.keys('abs:500,5', f'abs:{px * 1000 // width},{py * 1000 // height}', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            enters = re.findall(r'pointer enter content at (-?\d+),(-?\d+)', shell_log.read_text(errors='replace'))
+            if len(enters) > seen_before:
+                _origin[:] = [px - int(enters[-1][0]), py - int(enters[-1][1]), width, height]
+                break
+        assert _origin, 'the shell saw no pointer enter on the window at any probe point'
+    ox, oy, width, height = _origin
+    return round((ox + 231) * 1000 / width), round((oy + content_y) * 1000 / height)
 
 
 def paste():
@@ -83,10 +105,10 @@ try:
     children.append(app)
     selector.register(app.stdout, selectors.EVENT_READ, 'app')
     pending['app'] = b''
-    end = time.monotonic() + 40
+    end = time.monotonic() + 80
     app_done = False
     while not app_done:
-        events = selector.select(3)
+        events = selector.select(12)
         assert events and time.monotonic() < end, 'input test stalled'
         for key, _ in events:
             data = os.read(key.fd, 65536)
@@ -140,7 +162,7 @@ try:
                     assert paste() == b'L' * 20000, 'long clipboard transfer was truncated or stalled'
                     checks.add('long-clipboard')
                 elif 'script: hover:9,0' in line:
-                    instance.capture('verified input')
+                    instance.capture('verified input', 'hello.input')  # the window's own picture
     assert len(checks) == 5, checks
     shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert '[shell] text input enabled' in shell, 'proxied field did not enable text-input-v3'

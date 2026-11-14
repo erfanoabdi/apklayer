@@ -16,6 +16,12 @@ class TestEngine(IBus.Engine):
         super().__init__(*args, **kwargs)
         self.preedit = ''
 
+    def do_enable(self):
+        self.get_surrounding_text()  # an engine asks once, then IBus sends the field's text and cursor (RequireSurroundingText)
+
+    def do_focus_in(self):
+        self.get_surrounding_text()
+
     def do_set_surrounding_text(self, text, cursor_pos, anchor_pos):
         # characters, as Mutter converts the shell's byte offsets (text-input-v3 set_surrounding_text)
         print(f'ENGINE surrounding {text.get_text()} {cursor_pos} {anchor_pos}', flush=True)
