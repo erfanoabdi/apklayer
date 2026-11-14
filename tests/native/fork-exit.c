@@ -20,5 +20,6 @@ int main(int argc, char **argv)
     int st = 0;
     if (waitpid(pid, &st, 0) != pid || !WIFEXITED(st) || WEXITSTATUS(st) != 127) { fprintf(stderr, "fork-exit: child status %d\n", st); kill(pid, SIGKILL); return 1; }
     puts("PASS a forked child's exit(127) ends at once");
-    return 0;
+    fflush(NULL);
+    _exit(0);  /* the parent's own exit would run the hanging handler */
 }
