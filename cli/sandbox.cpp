@@ -433,6 +433,8 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
         struct stat st{};
         if (::stat(data.c_str(), &st) == 0 && st.st_uid != uid) chownTree(data, uid);  // the app's files are its own uid's (data from before the sandbox too)
         chmod(data.c_str(), 0700);
+        // a system app (SettingsProvider) writes /data/system/users: its settings files and the ANDROID_IDs (read only, they were lost at every stop)
+        if (property(join(appDir(l, package), "info.properties"), "system") == "true") chownTree(join(realPath(inst.dataDir), "system/users"), uid);
         nftw(realPath(inst.storageDir).c_str(), openStorageDir, 16, FTW_PHYS);
         for (const std::string& f : listDir(appDir(l, package)))  // its APKs readable by its uid (installs before cli/apps.cpp made them 0644)
             if (f.size() > 4 && f.substr(f.size() - 4) == ".apk") chmod(join(appDir(l, package), f).c_str(), 0644);
