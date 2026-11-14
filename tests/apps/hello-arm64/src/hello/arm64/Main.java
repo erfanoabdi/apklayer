@@ -17,6 +17,7 @@ public class Main extends Activity {
     private static native int fault();
     private static native int errnos();
     private static native int ownStack();
+    private static native int sigqueue();
     private static native int auxv();
     private static native int vdsoVerdef();
     private static native int missingGlFunctions();
@@ -99,6 +100,8 @@ public class Main extends Activity {
         log("old handlers " + (handlers.isEmpty() ? "ok" : "WRONG" + handlers));
         int stack = ownStack();  // pthread_getattr_np(pthread_self()) of this JVM thread: its own guest stack
         log("own stack " + (stack == 1 ? "ok" : "WRONG"));
+        int sigq = sigqueue();  // pthread_sigqueue to this thread: the handler gets the sigval
+        log("sigqueue " + (sigq == 1 ? "ok" : "WRONG"));
         int auxv = auxv();  // /proc/self/auxv's hwcaps are getauxval's (the guest's, not the host's)
         log("auxv " + (auxv == 1 ? "ok" : "WRONG"));
         int verdef = vdsoVerdef();  // the guest vdso defines LINUX_2.6.39 (Go's vdso parser dereferences its verdef)
@@ -118,7 +121,7 @@ public class Main extends Activity {
         log("profile cpu " + cpuProfile());
         String zd = zipDiff();
         for (String line : zd.split("\n")) log("zipdiff " + line);  // Fennec x86 part 8: identical lines on arm64 and under the translator
-        boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1
+        boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1 && sigq == 1
                 && auxv == 1 && verdef == 1 && handlers.isEmpty() && ids && proc == 15
                 && zd.contains("found 700 wrong 0") && zd.contains("greprefs@0") && zd.contains("siglongjmp=7");
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
