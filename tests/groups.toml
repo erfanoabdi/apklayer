@@ -274,7 +274,7 @@ run = ["python3 -u tests/vm/hub.py webview probe"]
 [webview-input]
 apps = ["hello-wvprobe"]
 needs = ["com.android.webview"]
-run = ["python3 -u tests/vm/webview-input.py"]
+run = ["python3 -u tests/vm/webview-input.py", "python3 -u tests/vm/symbol-keys.py webview"]
 
 [splash]
 needs = ["com.android.test.uibench"]
@@ -362,7 +362,7 @@ run = ["python3 -u tests/vm/godot-vulkan.py"]
 
 [input]
 apps = ["hello-input", "hello-system"]  # hello.system's Ime: the Android input method bound to hello.input's field (ime-bind)
-run = ["python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
+run = ["python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/symbol-keys.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
 
 [magnifier]
 apps = ["hello-input"]

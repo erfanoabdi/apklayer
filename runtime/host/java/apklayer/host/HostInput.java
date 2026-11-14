@@ -154,6 +154,9 @@ final class HostInput {
                 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0);
     }
 
+    /** Commits text into the focused text field (the IME path); false when no field has focus. */
+    java.util.function.Predicate<String> textCommit;
+
     /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */
     void hostKey(long now, int action, int code, int unicode, int meta) {
         if (Boolean.getBoolean("apklayer.debugkeys"))
@@ -178,9 +181,11 @@ final class HostInput {
                 return;
             }
         }
-        if (code == 0) { // no Android keycode (non-US characters, symbols): type the character
-            if (act == KeyEvent.ACTION_DOWN && unicode > 0)
-                inject(new KeyEvent(now, new String(Character.toChars(unicode)), 0, 0));
+        if (code == 0) { // no Android keycode (non-US characters): type the character
+            if (act == KeyEvent.ACTION_DOWN && unicode > 0) {
+                String chars = new String(Character.toChars(unicode));
+                if (textCommit == null || !textCommit.test(chars)) inject(new KeyEvent(now, chars, 0, 0));
+            }
             return;
         }
         injectKey(new KeyEvent(now, now, act, code, 0, meta), HostWindows.isNavigationKey(code));
