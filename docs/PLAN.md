@@ -13,7 +13,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Bugs
 - Droid-ify: the NPE in `ScreenFragment.getToolbar` seen on UTM after the F-Droid index sync does not show on Parallels (first frame, tabs and turns are fine; there the index never downloads: TLS handshake_failure). Needs the sync to finish (network with working TLS), then the cause. Group `fragment` covers the plain fragment lifecycle (passes).
-- F-Droid index download fails on Parallels with a TLS `handshake_failure` (it completes on UTM).
 - `webview` group fails in 3 of 4 runs on the PC at baseline (cookie assert).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
