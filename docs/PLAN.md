@@ -37,7 +37,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
 - Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
 - Sailfish keeps the letterbox; its rotation is unchecked.
-- weston's VNC output stalls with no client connected.
 
 ## Camera
 - Sensor timestamps: the shutter time is the request's CLOCK_MONOTONIC time, not the frame's `timestamp_ns` (goldfish session change). All streams scaled from the largest. NDK libcamera2ndk is a stub.
