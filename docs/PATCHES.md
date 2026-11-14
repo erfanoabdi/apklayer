@@ -10,7 +10,7 @@ additions (`JdkPatch`/`JdkMembers`, and `JdkIdentityPatch` with its templates `J
 `android-all` is never patched; dex2jvm is vendored (docs/THIRD_PARTY.md).
 
 Rule: keep a patch thin, mark it inline "apklayer patch" (in its header, and in the code where the change is not in a patch file),
-and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md` at git tag `archive-last`.
+and list it here. (2026-11-14: JdkIdentityPatch also rewrites plain IndexOutOfBoundsException(String) messages to libcore's "Index: 5, Size: 3", an apklayer patch like the others.) The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md` at git tag `archive-last`.
 
 ## bionic_translation (`patches/bionic_translation/`)
 | Patch | Purpose |

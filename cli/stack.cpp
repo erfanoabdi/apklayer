@@ -274,7 +274,7 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     std::string abis64 = std::string(kAbi) + (bridge ? std::string(",") + kBridgeAbi : "");
     std::string abis = abis64 + (*kAbi32 ? std::string(",") + kAbi32 : "");
     if (bridge) {
-        setProperty(l, ne, "ro.dalvik.vm.native.bridge", kBridgeLib);
+        setProperty(l, ne, "ro.dalvik.vm.native.bridge", "libndk_translation.so");  // AOSP's bridge name, what an app sees (the loader takes the real library from -Dapklayer.nativebridge, not this property)
         setProperty(l, ne, "ro.berberis.flags", "glibc-host-thread-id-handoff");  // bionic_translation's thread slots are glibc's (native_bridge.c)
     }
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());

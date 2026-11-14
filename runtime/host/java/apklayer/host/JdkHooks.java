@@ -56,7 +56,7 @@ final class JdkHooks {
         try { return hook.apply(message); } catch (Throwable keep) { return message; }
     }
 
-    static final int INDEX = 1, CAST = 2, ARITHMETIC = 3, METHOD = 4;
+    static final int INDEX = 1, CAST = 2, ARITHMETIC = 3, METHOD = 4, LIST = 5;
 
     /** The message HotSpot gives an exception it throws itself, as ART words it (art/runtime/common_throws.cc); any other message unchanged. */
     static String message(String m, int kind) {
@@ -68,6 +68,13 @@ final class JdkHooks {
                 if (m.startsWith(head) && at > head.length()) {
                     String index = m.substring(head.length(), at), length = m.substring(at + mid.length());
                     if (number(index) && number(length)) return "length=" + length + "; index=" + index;
+                }
+            } else if (kind == LIST) {  // plain IndexOutOfBoundsException (ArrayList.get): libcore's "Index: 5, Size: 3"
+                String head = "Index ", mid = " out of bounds for length ";
+                int at = m.indexOf(mid);
+                if (m.startsWith(head) && at > head.length()) {
+                    String index = m.substring(head.length(), at), length = m.substring(at + mid.length());
+                    if (number(index) && number(length)) return "Index: " + index + ", Size: " + length;
                 }
             } else if (kind == CAST) {  // "class A cannot be cast to class B (A and B are in ...)" -> "A cannot be cast to B"
                 String head = "class ", mid = " cannot be cast to class ";
