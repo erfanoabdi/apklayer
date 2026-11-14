@@ -476,7 +476,7 @@ final class HubDirectory extends Binder {
             }
             case HubProtocol.TOAST_SLOT -> {
                 caller(); long ms = request.readLong(); request.enforceNoDataAvail();
-                try { if (TOASTS.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS)) TOAST_TIMER.schedule(TOASTS::release, ms + 300, java.util.concurrent.TimeUnit.MILLISECONDS); }
+                try { if (TOASTS.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS)) TOAST_TIMER.schedule((Runnable) TOASTS::release, ms + 300, java.util.concurrent.TimeUnit.MILLISECONDS); }
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                 reply.writeNoException(); return true;
             }
