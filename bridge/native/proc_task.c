@@ -120,6 +120,44 @@ static const char *runtime_file(const char *target)
     return NULL;
 }
 
+/* Where Android has a staged platform library: /system/lib64, or its apex for the few that live there (the same table as bionic_translation 0078's apex_dir) */
+static const char *apex_dir(const char *base)
+{
+    static const struct { const char *dir, *names; } apexes[] = {
+        {"/apex/com.android.art/lib64/", " libandroidio.so libjavacore.so libnativehelper.so libnativebridge.so libnativeloader.so libsigchain.so libartbase.so libdexfile.so libartpalette.so libprofile.so libadbconnection.so libperfetto_hprof.so "},
+        {"/apex/com.android.i18n/lib64/", " libandroidicu.so libicu.so libicui18n.so libicuuc.so libicu_jni.so "},
+        {"/apex/com.android.os.statsd/lib64/", " libstatssocket.so "},
+    };
+    char key[128];
+    snprintf(key, sizeof key, " %s ", base);
+    for (size_t i = 0; i < sizeof apexes / sizeof *apexes; i++)
+        if (strstr(apexes[i].names, key)) return apexes[i].dir;
+    return "/system/lib64/";
+}
+
+/* The modules of the process that Android has too, by the file they are mapped from: bionic's libc (bionic_translation's libc_bio, which holds libm's and
+ * libpthread's share too), its libdl (the linker's own code here), libm (glibc's), the dynamic loader (Android: linker64), the JDK's launcher (the app's
+ * executable, app_process64), and the process's own data: the property area and the binder mappings (memfds). The Android root has files at these
+ * names (bridge/native/meson.build); dl_iterate_phdr names the same modules alike (bionic_translation 0078). */
+static const char *bionic_name(const char *host, const char *base)
+{
+    if (!base) return NULL;
+    base++;
+    if (strstr(host, "/bionic_translation/")) {
+        if (!strncmp(base, "libc_bio.so", 11)) return "/apex/com.android.runtime/lib64/bionic/libc.so";
+        if (!strncmp(base, "libdl_bio.so", 12)) return "/apex/com.android.runtime/lib64/bionic/libdl.so";
+        if (!strncmp(base, "libstdc++_bio.so", 16)) return "/system/lib64/libstdc++.so";
+        return NULL;
+    }
+    if (!strncmp(base, "ld-linux", 8)) return "/apex/com.android.runtime/bin/linker64";
+    if (!strcmp(base, "libm.so.6")) return "/apex/com.android.runtime/lib64/bionic/libm.so";
+    if (!strcmp(base, "java") && strstr(host, "/jdk/bin/")) return "/system/bin/app_process64";
+    if (!strcmp(base, "properties") && strstr(host, "/apklayer/")) return "/dev/__properties__/u:object_r:default_prop:s0";
+    if (!strncmp(host, "/memfd:binder", 13)) return "/dev/binder";
+    if (!strcmp(base, "libandroid_runtime.so") && strstr(host, "/robolectric-nativeruntime")) return "/system/lib64/libandroid_runtime.so";
+    return NULL;
+}
+
 /* A mapped file as Android names it: the instance's Android root files at their /system, /apex, /vendor paths (paths.c spelling), the staged Android
  * libraries at /system/lib64, the runtime's jars as above; NULL when the name stays (the app's own files). */
 const char *apklayer_proc_map_name(const char *host, char *out, size_t size)
@@ -134,13 +172,14 @@ const char *apklayer_proc_map_name(const char *host, char *out, size_t size)
         const char *libs = strstr(host, "/android-libs/"), *base = strrchr(host, '/');
         /* the translator and its proxy libraries (libberberis_*.so) exist only here: no Android device has a file of that name. The mapping is the memory of the
          * native bridge, which Android's own bridge (libhoudini, libndk_translation) also shows; it keeps its place in the view without a name that exists nowhere */
-        if (libs && base && !strncmp(base + 1, "libberberis_", 12)) result = "";
-        else if (libs && base && strstr(base, ".so")) { snprintf(out, size, "/system/lib64/%s", base + 1); result = out; }
+        if (libs && base && (!strncmp(base + 1, "libberberis_", 12) || !strncmp(base + 1, "libapklayer_", 12))) result = "";  /* libapklayer_*.so: apklayer's own modules */
+        else if (libs && base && strstr(base, ".so")) { snprintf(out, size, "%s%s", apex_dir(base + 1), base + 1); result = out; }
         else if (strstr(host, "/robolectric-nativeruntime-assets/") && base && strstr(host, "/fonts/")) { snprintf(out, size, "/system/fonts/%s", base + 1); result = out; }
         else if ((libs = runtime_file(host))) { snprintf(out, size, "%s", libs); result = out; }
+        else if ((libs = bionic_name(host, base))) { snprintf(out, size, "%s", libs); result = out; }
         else {  /* the desktop's libraries (glibc, Mesa, X/Wayland, ICU...) and apklayer's own host libraries: no Android name exists, so no name at all */
             static const char *const desktop[] = {"/usr/", "/lib/", "/lib64/", "/opt/", "/snap/", "/nix/", NULL};
-            int anonymous = strstr(host, "/lib/apklayer/") || strstr(host, "/apklayer/native/");
+            int anonymous = strstr(host, "/lib/apklayer/") || strstr(host, "/apklayer/native/") || !strncmp(host, "/tmp/", 5) || !strncmp(host, "/home/", 6);  /* the rest of the host's own files */
             for (int i = 0; desktop[i]; i++) anonymous |= !strncmp(host, desktop[i], strlen(desktop[i]));
             if (anonymous) result = "";
         }

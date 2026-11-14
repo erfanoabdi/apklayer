@@ -72,3 +72,20 @@ if android_libs != ''
     output: 'bionic_translation.cfg', depend_files: checked, command: [python, files('../../tools/gen/bt-cfg.py'), '@INPUT@', bt_cfg, android_libs, '@OUTPUT@'],
     install: true, install_dir: native_dir / 'share/bionic_translation/cfg.d')
 endif
+
+# Android's own names for the modules the process has (aarch64 hosts; docs/runtime-identity-matrix.md "libc.so file from maps path"): the Android root serves
+# bionic's libc and libdl (bionic_translation's libraries hold them), libm and the loader (the host's), and libjavacore at their apex paths, so that a reader
+# that opens the path from /proc/self/maps finds the ELF whose code is the mapping (proc_task.c bionic_name names the mappings alike)
+if host_machine.cpu_family() == 'aarch64'
+  runtime_apex = native_dir / 'android-root/apex/com.android.runtime'
+  install_symlink('libc.so', pointing_to: '../../../../../../bionic_translation/b/libc_bio.so.0', install_dir: runtime_apex / 'lib64/bionic')
+  install_symlink('libdl.so', pointing_to: '../../../../../../bionic_translation/b/libdl_bio.so.0.0.1', install_dir: runtime_apex / 'lib64/bionic')
+  install_symlink('libm.so', pointing_to: run_command('realpath', libm, check: true).stdout().strip(), install_dir: runtime_apex / 'lib64/bionic')
+  loader = run_command('realpath', '/lib/ld-linux-aarch64.so.1', check: false).stdout().strip()
+  if loader != ''
+    install_symlink('linker64', pointing_to: loader, install_dir: runtime_apex / 'bin')
+  endif
+  if android_libs != '' and fs.exists(android_libs / 'libjavacore.so')
+    install_symlink('libjavacore.so', pointing_to: android_libs / 'libjavacore.so', install_dir: native_dir / 'android-root/apex/com.android.art/lib64')
+  endif
+endif

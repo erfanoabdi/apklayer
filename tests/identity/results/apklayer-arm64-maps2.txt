@@ -1,0 +1,504 @@
+meta.abi=arm64-v8a aarch64
+meta.sdk=37 google/redfin/redfin:17/CP2A.260605.016/1793003012:user/release-keys
+java.appinfo.context=/data/user/0/hello.identity
+java.appinfo.pm=/data/user/0/hello.identity
+java.appinfo.pmFlags=/data/user/0/hello.identity
+java.appinfo.pmPackageInfo=/data/user/0/hello.identity
+java.appinfo.installed=/data/user/0/hello.identity
+java.appinfo.getDataDir=/data/user/0/hello.identity
+java.appinfo.sourceDir=/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk /data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk
+java.appinfo.nativeLibraryDir=/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/arm64
+java.appinfo.pmSourceDir=/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk /data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk /data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/arm64 class android.content.pm.ApplicationInfo
+java.appinfo.filesDir=/data/user/0/hello.identity/files
+java.prop.java.vm.name=Dalvik
+java.prop.java.vm.vendor=The Android Project
+java.prop.java.vm.version=2.1.0
+java.prop.java.vm.specification.name=Dalvik Virtual Machine Specification
+java.prop.java.vm.specification.vendor=The Android Project
+java.prop.java.vm.specification.version=0.9
+java.prop.java.runtime.name=Android Runtime
+java.prop.java.runtime.version=0.9
+java.prop.java.version=0
+java.prop.java.vendor=The Android Project
+java.prop.java.vendor.url=http://www.android.com/
+java.prop.java.specification.name=Dalvik Core Library
+java.prop.java.specification.vendor=The Android Project
+java.prop.java.specification.version=0.9
+java.prop.java.home=/apex/com.android.art
+java.prop.java.class.version=50.0
+java.prop.java.class.path=.
+java.prop.java.boot.class.path=/apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/apex/com.android.i18n/javalib/core-icu4j.jar:/apex/com.android.conscrypt/javalib/conscrypt.jar:/apex/com.android.wifi/javalib/framework-wifi.jar
+java.prop.java.library.path=/system/lib64:/system/system_ext/lib64:/system/product/lib64
+java.prop.java.io.tmpdir=/data/user/0/hello.identity/cache
+java.prop.java.compiler=
+java.prop.java.ext.dirs=
+java.prop.java.vm.vendor.url=http://www.android.com/
+java.prop.os.name=Linux
+java.prop.os.arch=aarch64
+java.prop.os.version=7.0.0-42-generic
+java.prop.user.name=u0_a0
+java.prop.user.home=
+java.prop.user.dir=/
+java.prop.user.language=en
+java.prop.user.region=US
+java.prop.file.encoding=UTF-8
+java.prop.file.separator=/
+java.prop.path.separator=:
+java.prop.line.separator=\n
+java.prop.android.icu.library.version=78.3
+java.prop.android.icu.unicode.version=17.0
+java.prop.android.openssl.version=OpenSSL 1.1.1 (compatible; BoringSSL)
+java.prop.android.zlib.version=1.3.1
+java.prop.http.agent=Dalvik/2.1.0 (Linux; U; Android 17; Pixel 5 Build/CP2A.260605.016)
+java.prop.javax.net.ssl.trustStore=null
+java.prop.sun.boot.library.path=null
+java.prop.sun.java.command=null
+java.prop.sun.arch.data.model=null
+java.prop.sun.cpu.endian=null
+java.prop.sun.jnu.encoding=null
+java.prop.jdk.debug=null
+java.prop.java.vm.info=null
+java.prop.java.vm.compressedOopsMode=null
+java.prop.native.encoding=null
+java.prop.stdout.encoding=null
+java.props.keys=[android.icu.library.version, android.icu.unicode.version, android.openssl.version, android.zlib.version, file.encoding, file.separator, http.agent, java.boot.class.path, java.class.path, java.class.version, java.compiler, java.ext.dirs, java.home, java.io.tmpdir, java.library.path, java.net.preferIPv6Addresses, java.runtime.name, java.runtime.version, java.specification.name, java.specification.vendor, java.specification.version, java.vendor, java.vendor.url, java.version, java.vm.name, java.vm.specification.name, java.vm.specification.vendor, java.vm.specification.version, java.vm.vendor, java.vm.vendor.url, java.vm.version, line.separator, os.arch, os.name, os.version, path.separator, user.dir, user.home, user.language, user.name, user.region]
+java.props.count=2
+java.props.hostish=[]
+java.class.dalvik.system.VMRuntime=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.VMStack=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.VMDebug=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.DexPathList=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.BaseDexClassLoader=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.PathClassLoader=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.InMemoryDexClassLoader=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.DexFile=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.ZygoteHooks=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.CloseGuard=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.BlockGuard=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.system.RuntimeHooks=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.dalvik.annotation.optimization.FastNative=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.java.lang.Daemons=absent
+java.class.java.lang.VMClassLoader=absent
+java.class.java.lang.BootClassLoader=present loader=null(boot)
+java.class.java.lang.AndroidHardcodedSystemProperties=absent
+java.class.java.lang.invoke.MethodHandleImpl=present loader=null(boot)
+java.class.java.lang.invoke.Transformers=absent
+java.class.java.lang.invoke.LambdaForm=absent
+java.class.java.lang.invoke.DirectMethodHandle=absent
+java.class.java.lang.invoke.VarHandle=present loader=null(boot)
+java.class.java.lang.invoke.StringConcatFactory=absent
+java.class.java.lang.Module=absent
+java.class.java.lang.StackWalker=absent
+java.class.java.lang.ProcessHandle=absent
+java.class.java.lang.Record=absent
+java.class.java.lang.ref.Cleaner=present loader=null(boot)
+java.class.libcore.io.Libcore=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.libcore.io.Os=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.libcore.util.EmptyArray=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.libcore.icu.ICU=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.android.icu.util.ULocale=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.sun.misc.Unsafe=present loader=null(boot)
+java.class.sun.misc.Signal=absent
+java.class.sun.misc.Cleaner=absent
+java.class.sun.reflect.Reflection=absent
+java.class.jdk.internal.misc.Unsafe=present loader=null(boot)
+java.class.jdk.internal.misc.VM=present loader=null(boot)
+java.class.jdk.internal.reflect.Reflection=present loader=null(boot)
+java.class.jdk.internal.loader.ClassLoaders=absent
+java.class.jdk.internal.vm.annotation.Contended=present loader=null(boot)
+java.class.jdk.internal.misc.SharedSecrets=absent
+java.class.java.lang.management.ManagementFactory=absent
+java.class.com.sun.management.HotSpotDiagnosticMXBean=absent
+java.class.sun.management.VMManagement=absent
+java.class.com.android.internal.os.ZygoteInit=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.com.android.internal.os.RuntimeInit=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.android.app.ActivityThread=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.android.os.SystemProperties=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.com.android.org.conscrypt.OpenSSLProvider=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.org.apache.http.HttpResponse=present loader=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.class.org.robolectric.RuntimeEnvironment=absent
+java.class.org.robolectric.Robolectric=absent
+java.class.org.robolectric.shadows.ShadowApplication=absent
+java.class.org.robolectric.internal.bytecode.RobolectricInternals=absent
+java.class.apklayer.host.Main=absent
+java.class.apklayer.host.NativeLoader=absent
+java.class.de.robv.android.xposed.XposedBridge=absent
+java.class.com.saurik.substrate.MS=absent
+java.cnfe.message=no.such.Klass cause=null
+java.loader.app.class=dalvik.system.PathClassLoader
+java.loader.app.toString=dalvik.system.PathClassLoader[DexPathList[[zip file "/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk"],nativeLibraryDirectories=[/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/lib, /home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk!/lib/arm64-v8a, /system/lib64, /system/system_ext/lib64, /system/product/lib64]]]
+java.loader.chain=dalvik.system.PathClassLoader -> java.lang.BootClassLoader -> null
+java.loader.app.parent.toString=java.lang.BootClassLoader@2a8c2017
+java.loader.system.class=dalvik.system.PathClassLoader
+java.loader.system.toString=dalvik.system.PathClassLoader[DexPathList[[zip file "/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk"],nativeLibraryDirectories=[/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/lib, /home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk!/lib/arm64-v8a, /system/lib64, /system/system_ext/lib64, /system/product/lib64]]]
+java.loader.system.parent=java.lang.BootClassLoader
+java.loader.context=dalvik.system.PathClassLoader
+java.loader.String=null(boot)
+java.loader.Activity=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.loader.bootParentLoadsFramework=org.robolectric.internal.AndroidSandbox$SdkSandboxClassLoader
+java.loader.resource.parent=null
+java.loader.resource.app=jar:file:/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk!/AndroidManifest.xml
+java.loader.resource.objectClass=jrt:/java.base/java/lang/Object.class
+java.dex.pathList=dalvik.system.DexPathList DexPathList[[zip file "/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk"],nativeLibraryDirectories=[/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/lib, /home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk!/lib/arm64-v8a, /system/lib64, /system/system_ext/lib64, /system/product/lib64]]
+java.dex.dexElements=1: zip file "/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk" dexFile=dalvik.system.DexFile cookie=long[][2]
+java.dex.nativeLibraryDirectories=[/home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/lib, /home/utm/apklayer-maps2/data/apklayer/apps/hello.identity/base.apk!/lib/arm64-v8a]
+java.dex.findLibrary=/data/app/<APP>/lib/arm64/libhello.so
+java.dex.BaseDexClassLoader.fields=[pathList:DexPathList]
+java.dex.ClassLoader.fields=[]
+java.stack.exception=depth=22 hostFrames=0 | hello.identity.JavaProbes.lambda$stacks$0(JavaProbes.java:152) | hello.identity.JavaProbes$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0) | hello.identity.Out.probe(Out.java:34) | hello.identity.JavaProbes.stacks(JavaProbes.java:152) | hello.identity.JavaProbes.run(JavaProbes.java:62) | hello.identity.Main.onCreate(Main.java:33) | android.app.Activity.performCreate(Activity.java:9340) | android.app.Activity.performCreate(Activity.java:9318) | android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1543) | android.os.Handler.handleCallback(Handler.java:1095) | android.os.Handler.dispatchMessageImpl(Handler.java:135) | android.os.Handler.dispatchMessage(Handler.java:125) | java.util.concurrent.FutureTask.run(FutureTask.java:317) | java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) | java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) | java.lang.Thread.run(Thread.java:1583) | android.os.Looper.loopOnce(Looper.java:232) | android.os.Looper.loop(Looper.java:317) | android.app.ActivityThread.main(ActivityThread.java:8705) | java.lang.reflect.Method.invoke(Native Method) | com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:565) | com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1081)
+java.stack.thread=depth=24 hostFrames=0 | dalvik.system.VMStack.getThreadStackTrace(Native Method) | java.lang.Thread.getStackTrace(Thread.java:1841) | hello.identity.JavaProbes.lambda$stacks$1(JavaProbes.java:153) | hello.identity.JavaProbes$$ExternalSyntheticLambda4.run(D8$$SyntheticClass:0) | hello.identity.Out.probe(Out.java:34) | hello.identity.JavaProbes.stacks(JavaProbes.java:153) | hello.identity.JavaProbes.run(JavaProbes.java:62) | hello.identity.Main.onCreate(Main.java:33) | android.app.Activity.performCreate(Activity.java:9340) | android.app.Activity.performCreate(Activity.java:9318) | android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1543) | android.os.Handler.handleCallback(Handler.java:1095) | android.os.Handler.dispatchMessageImpl(Handler.java:135) | android.os.Handler.dispatchMessage(Handler.java:125) | java.util.concurrent.FutureTask.run(FutureTask.java:317) | java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) | java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) | java.lang.Thread.run(Thread.java:1583) | android.os.Looper.loopOnce(Looper.java:232) | android.os.Looper.loop(Looper.java:317) | android.app.ActivityThread.main(ActivityThread.java:8705) | java.lang.reflect.Method.invoke(Native Method) | com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:565) | com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1081)
+java.stack.reflectInvoke=depth=24 hostFrames=0 | hello.identity.JavaProbes.traceHere(JavaProbes.java:195) | java.lang.reflect.Method.invoke(Native Method) | hello.identity.JavaProbes.lambda$stacks$2(JavaProbes.java:156) | hello.identity.JavaProbes$$ExternalSyntheticLambda5.run(D8$$SyntheticClass:0) | hello.identity.Out.probe(Out.java:34) | hello.identity.JavaProbes.stacks(JavaProbes.java:154)
+java.reflect.packagePrivate=secret42
+java.reflect.privateInstance=IllegalAccessException
+java.stack.printTop=23 lines: java.lang.Exception: probe / at hello.identity.JavaProbes.lambda$stacks$5(JavaProbes.java:165) / at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1081)
+java.reflect.unsafeGetUnsafe=true
+java.reflect.unsafeMethods=89 methods, 33 get*, class loader null
+java.reflect.unsafeNames=[getAddress, getAndAddInt, getAndAddLong, getAndSetInt, getAndSetLong, getAndSetObject, getUnsafe]
+java.stack.callerOfStatic=null(boot)
+java.stack.allThreads={FinalizerDaemon=1, FinalizerWatchdogDaemon=1, HeapTaskDaemon=1, Jit thread pool worker thread N=1, Profile Saver=1, ReferenceQueueDaemon=1, Signal Catcher=1, binder:N_N=2, main=1}
+java.thread.main=name=main id=14 prio=5 group=main daemon=false class=java.lang.Thread
+java.thread.new=name=Thread-3 group=main
+java.vmdebug.features=THROWS java.lang.NoSuchMethodException: dalvik.system.VMDebug.getVmFeatureList []
+java.vmdebug.isDebuggerConnected=false
+java.debug.runtimeStats=[]
+java.debug.gcCount=null
+java.runtime.version=THROWS java.lang.NoSuchMethodException: java.lang.Runtime.version []
+java.runtime.cpus=10
+java.runtime.maxMemoryMB=256
+java.vmruntime=vmVersion=vmVersion=!NoSuchMethodException vmLibrary=libart.so vmInstructionSet=arm64 is64Bit=true isCheckJniEnabled=isCheckJniEnabled=!NoSuchMethodException isNativeDebuggable=isNativeDebuggable=!NoSuchMethodException isJavaDebuggable=isJavaDebuggable=!NoSuchMethodException getTargetSdkVersion=getTargetSdkVersion=!NoSuchMethodException getTargetHeapUtilization=getTargetHeapUtilization=!NoSuchMethodException properties=!NoSuchMethodException bootClassPath=!NoSuchMethodException classPath=!NoSuchMethodException
+java.security.providers=AndroidNSSP AndroidOpenSSL CertPathProvider AndroidKeyStoreBCWorkaround BC HarmonyJSSE AndroidKeyStore SunEC
+java.ssl.default=AndroidOpenSSL
+java.ssl.tmf=PKIX AndroidNSSP
+java.ssl.kmf=PKIX AndroidOpenSSL
+java.ssl.tls=AndroidOpenSSL
+java.keystore.cacerts=HarmonyJSSE aliases>100=true
+java.securerandom=AndroidOpenSSL AndroidOpenSSL
+java.charset=UTF-8
+java.methodhandle.class=java.lang.invoke.DirectMethodHandle
+java.proxy.class=jdk.proxy4.$Proxy46
+java.lambda.class=hello.identity.JavaProbes$$ExternalSyntheticLambdaN
+java.Object.hashCode.toString=public native int java.lang.Object.hashCode()
+java.Thread.currentThread.toString=public static native java.lang.Thread java.lang.Thread.currentThread()
+java.Object.getClass.toString=public final native java.lang.Class java.lang.Object.getClass()
+java.env.keys=[ANDROID_ART_ROOT, ANDROID_ASSETS, ANDROID_BOOTLOGO, ANDROID_DATA, ANDROID_I18N_ROOT, ANDROID_ROOT, ANDROID_STORAGE, ANDROID_TZDATA_ROOT, ASEC_MOUNTPOINT, BOOTCLASSPATH, DEX2OATBOOTCLASSPATH, EXTERNAL_STORAGE, PATH]
+java.mapLibraryName=libx.so
+art.unsafe.class=sun.misc.Unsafe
+art.unsafe.arrayBaseOffset.byte[]=16 scale=1
+art.unsafe.arrayBaseOffset.char[]=16 scale=2
+art.unsafe.arrayBaseOffset.int[]=16 scale=4
+art.unsafe.arrayBaseOffset.long[]=16 scale=8
+art.unsafe.arrayBaseOffset.Object[]=16 scale=4
+art.unsafe.arrayBaseOffset.String[]=16 scale=4
+art.unsafe.addressSize=8
+art.unsafe.pageSize=4096
+art.unsafe.objectFieldOffset.Layout=i=12 j=16 o=28 b=24
+art.unsafe.objectFieldOffset.String=value=20 coder=16 hash=12 hashIsZero=17
+art.unsafe.stringCount=THROWS java.lang.NoSuchFieldException: count
+art.fields.Object=[]
+art.fields.String=[CASE_INSENSITIVE_ORDER:Comparator, COMPACT_STRINGS:boolean, LATIN1:byte, REPL:char, UTF16:byte, coder:byte, hash:int, hashIsZero:boolean, serialPersistentFields:ObjectStreamField[], serialVersionUID:long, value:byte[]]
+art.fields.Class=[ANNOTATION:int, EMPTY_CLASS_ARRAY:Class[], ENUM:int, SYNTHETIC:int, annotationData:AnnotationData, annotationType:AnnotationType, cachedConstructor:Constructor, classRedefinedCount:int, classValueMap:ClassValueMap, componentType:Class, enumConstantDirectory:Map, enumConstants:Object[], genericInfo:ClassRepository, module:Module, name:String, packageName:String, reflectionData:SoftReference, reflectionFactory:ReflectionFactory, serialPersistentFields:ObjectStreamField[], serialVersionUID:long]
+art.fields.Thread=[EMPTY_STACK_TRACE:StackTraceElement[], MAX_PRIORITY:int, MIN_PRIORITY:int, NEW_THREAD_BINDINGS:Object, NORM_PRIORITY:int, NO_INHERIT_THREAD_LOCALS:int, cont:Continuation, container:ThreadContainer, contextClassLoader:ClassLoader, defaultUncaughtExceptionHandler:UncaughtExceptionHandler, eetop:long, headStackableScopes:StackableScope, holder:FieldHolder, inheritableThreadLocals:ThreadLocalMap, inheritedAccessControlContext:AccessControlContext, interruptLock:Object, interrupted:boolean, name:String, nioBlocker:Interruptible, parkBlocker:Object, scopedValueBindings:Object, threadLocalRandomProbe:int, threadLocalRandomSecondarySeed:int, threadLocalRandomSeed:long, threadLocals:ThreadLocalMap, tid:long, uncaughtExceptionHandler:UncaughtExceptionHandler]
+art.fields.Throwable=[$assertionsDisabled:boolean, CAUSE_CAPTION:String, EMPTY_THROWABLE_ARRAY:Throwable[], NULL_CAUSE_MESSAGE:String, SELF_SUPPRESSION_MESSAGE:String, SUPPRESSED_CAPTION:String, SUPPRESSED_SENTINEL:List, UNASSIGNED_STACK:StackTraceElement[], backtrace:Object, cause:Throwable, depth:int, detailMessage:String, serialVersionUID:long, stackTrace:StackTraceElement[], suppressedExceptions:List]
+art.fields.Executable=[artMethod:long, declaredAnnotations:Map, parameterData:ParameterData]
+art.fields.Method=[]
+art.fields.Field=[]
+art.fields.ClassLoader=[]
+art.fields.Reference=[$assertionsDisabled:boolean, discovered:Reference, next:Reference, processPendingActive:boolean, processPendingLock:Object, queue:ReferenceQueue, referent:Object]
+art.fields.MethodHandle=[$assertionsDisabled:boolean, FORM_OFFSET:long, UPDATE_OFFSET:long, asTypeCache:MethodHandle, asTypeSoftCache:SoftReference, customizationCount:byte, form:LambdaForm, type:MethodType, updateInProgress:boolean]
+art.fields.Buffer=[$assertionsDisabled:boolean, IOOBE_FORMATTER:BiFunction, SCOPED_MEMORY_ACCESS:ScopedMemoryAccess, SPLITERATOR_CHARACTERISTICS:int, UNSAFE:Unsafe, address:long, capacity:int, limit:int, mark:int, position:int, segment:MemorySegment]
+art.executable.artMethod=273939436487688
+art.artMethod.delta=32
+art.artMethod.walk=size=32 flags.low16match=true publicApiBit=true lengthPrefix>=3=true
+art.field.artField=artField=!NoSuchFieldException dexFieldIndex=!NoSuchFieldException offset=!NoSuchFieldException accessFlags=!NoSuchFieldException
+art.class.accessFlags=THROWS java.lang.NoSuchFieldException: accessFlags
+art.class.status=THROWS java.lang.NoSuchFieldException: status
+art.class.objectSize=THROWS java.lang.NoSuchFieldException: objectSize
+art.class.dexCache=THROWS java.lang.NoSuchFieldException: dexCache
+art.object.shadowKlass=THROWS java.lang.NoSuchFieldException: shadow$_klass_
+art.thread.nativePeer=THROWS java.lang.NoSuchFieldException: nativePeer
+art.hiddenapi.setHiddenApiExemptions=found
+art.hiddenapi.metaReflection=found
+art.hiddenapi.currentActivityThread=android.app.ActivityThread
+art.hiddenapi.SystemProperties.get=37
+art.identityHash=maxBits=31 distinct=4096/4096 zero=0 ascending=2052 meanBits=30
+art.object.toString=java.lang.Object@<hex>
+art.msg.npe=Attempt to invoke virtual method 'java.lang.String.length()' on a null object reference
+art.msg.npeField=Attempt to read from field 'i' on a null object reference
+art.msg.aioobe=length=3; index=5
+art.msg.sioobe=length=3; index=5
+art.msg.cce=java.lang.Integer cannot be cast to java.lang.String
+art.msg.ase=java.lang.Integer
+art.msg.nase=-1
+art.msg.arith=divide by zero
+art.msg.nsme=java.lang.String.nope []
+art.msg.unsatisfiedLink=dlopen failed: library "libno_such_lib.so" not found
+art.msg.stackOverflowDepth=45k frames
+art.string.intern=true
+native.proc.maps.lines=2418
+native.proc.maps.anonymous=1235
+native.proc.maps.rwx=0
+native.proc.maps.rwx.kb=0
+native.proc.maps.rwx.names=
+native.proc.maps.firstExec=/system/lib64/libjavacrypto.so
+native.proc.maps.markers.present=/apex/com.android.art/lib64/libart.so /apex/com.android.runtime/lib64/bionic/libc.so /apex/com.android.runtime/bin/linker64 /system/bin/app_process64 libjavacore.so libandroid_runtime.so base.apk /system/framework/framework.jar [anon:dalvik- dalvik-jit-code-cache [stack] [vdso] [vvar] /dev/__properties__ jdk gralloc 
+native.proc.maps.markers.absent=/system/bin/linker64 libopenjdk.so boot.art boot.oat boot-framework .vdex .odex /apex/com.android.art/javalib/core-oj.jar [anon:dalvik-main space [anon:libc_malloc] [anon:scudo: [anon:.bss] [anon:stack_and_tls: memfd: (deleted) /dev/ashmem /dev/binderfs /data/dalvik-cache libjvm.so libjava.so /lib/modules .jsa /usr/lib /home/ /tmp/ /opt/ /snap/ ld-linux libberberis libndk_translation libhoudini libapklayer libglib libwayland java- /proc/ /dev/dri /dev/kgsl /dev/mali /vendor/lib64/ 
+native.proc.maps.paths=/system/lib64/libjavacrypto.so;/system/lib64/libssl.so;/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/arm64/libhello.so;/system/bin/app_process64;[heap];/system/framework/framework.jar;/system/fonts/NotoSerifCJK-Regular.ttc;/system/fonts/NotoSansCJK-Regular.ttc;/apex/com.android.i18n/etc/icu/icudt78l.dat;/system/framework/org.lineageos.platform-res.apk;/apex/com.android.tzdata/etc/tz/versioned/10/icu/timezoneTypes.res;/system/fonts/NotoSerifYezidi-VF.ttf;/system/fonts/NotoSerifNyiakengPuachueHmong-VF.ttf;/system/fonts/NotoSansTakri-VF.ttf;/system/fonts/NotoSansSoyombo-VF.ttf;/system/fonts/NotoSansMedefaidrin-VF.ttf;/system/fonts/NotoSerifDogra-Regular.ttf;/system/fonts/NotoSansModi-Regular.ttf;/system/fonts/NotoSansGrantha-Regular.ttf;/system/fonts/NotoSansWarangCiti-Regular.otf;/system/fonts/NotoSansMasaramGondi-Regular.otf;/system/fonts/NotoSansKhojki-Regular.otf;/system/fonts/NotoSansGunjalaGondi-Regular.otf;/system/fonts/NotoSansSharada-Regular.otf;/system/fonts/NotoSansNewa-Regular.otf;/system/fonts/NotoSansMiao-Regular.otf;/system/fonts/NotoSansMarchen-Regular.otf;/system/fonts/NotoSansBhaiksuki-Regular.otf;/system/fonts/NotoSansAnatolianHieroglyphs-Regular.otf;/system/fonts/NotoSansMongolian-Regular.ttf;/system/fonts/NotoSansYi-Regular.ttf;/system/fonts/NotoColorEmoji.ttf;/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk;/system/fonts/NotoColorEmojiFlags.ttf;/system/fonts/NotoSerifHentaigana.ttf;/system/fonts/NotoSansSymbols-Regular-Subsetted.ttf;/system/fonts/NotoSansVai-Regular.ttf;/system/fonts/NotoSerifTibetan-VF.ttf;/system/fonts/NotoSansTaiTham-Regular.ttf;/system/fonts/NotoSansSyriacWestern-Regular.ttf;/system/fonts/NotoSansSyriacEastern-Regular.ttf;/system/fonts/NotoSansSyriacEstrangela-Regular.ttf;/system/fonts/NotoSansLepcha-Regular.ttf;/system/fonts/NotoSansJavanese-Regular.otf;/system/fonts/NotoSansEgyptianHieroglyphs-Regular.ttf;/system/fonts/NotoSansCuneiform-Regular.ttf;/system/fonts/NotoSansCherokee-Regular.ttf;/system/fonts/NotoSansCanadianAboriginal-Regular.ttf;/system/fonts/NotoSansBamum-Regular.ttf;/system/fonts/NotoSansAdlam-VF.ttf;/system/fonts/NotoSansMyanmarUI-Bold.otf;/system/fonts/NotoSansMyanmarUI-Medium.otf;/system/fonts/NotoSansMyanmarUI-Regular.otf;/system/fonts/NotoSerifMyanmar-Bold.otf;/system/fonts/NotoSerifMyanmar-Regular.otf;/system/fonts/NotoSansMyanmar-Bold.otf;/system/fonts/NotoSansMyanmar-Medium.otf;/system/fonts/NotoSansMyanmar-Regular.otf;/system/fonts/NotoSansKhmer-VF.ttf;/system/fonts/NotoSansSinhalaUI-VF.ttf;/system/fonts/NotoSerifSinhala-VF.ttf;/system/fonts/NotoSansSinhala-VF.ttf;/system/fonts/NotoSansOriyaUI-Bold.ttf;/system/fonts/NotoSansOriyaUI-Regular.ttf;/system/fonts/NotoSansOriya-Bold.ttf;/system/fonts/NotoSansOriya-Regular.ttf;/system/fonts/NotoSansKannadaUI-VF.ttf;/system/fonts/NotoSerifKannada-VF.ttf;/system/fonts/NotoSansKannada-VF.ttf;/system/fonts/NotoSansTeluguUI-VF.ttf;/system/fonts/NotoSerifTelugu-VF.ttf;/system/fonts/NotoSansTelugu-VF.ttf;/system/fonts/NotoSansBengaliUI-VF.ttf;/system/fonts/NotoSerifBengali-VF.ttf;/system/fonts/NotoSansBengali-VF.ttf;/system/fonts/NotoSansMalayalamUI-VF.ttf;/system/fonts/NotoSerifMalayalam-VF.ttf;/system/fonts/NotoSansMalayalam-VF.ttf;/system/fonts/NotoSansTamilUI-VF.ttf;/system/fonts/NotoSerifTamil-VF.ttf;/system/fonts/NotoSansTamil-VF.ttf;/system/fonts/NotoSansGujaratiUI-Bold.ttf;/system/fonts/NotoSansGujaratiUI-Regular.ttf;/system/fonts/NotoSerifGujarati-VF.ttf;/system/fonts/NotoSansGujarati-Bold.ttf;/system/fonts/NotoSansGujarati-Regular.ttf;/system/fonts/NotoSerifDevanagari-VF.ttf;/system/fonts/Roboto-Regular.ttf;/system/fonts/NotoSansGurmukhiUI-VF.ttf;/system/fonts/RobotoFlex-Regular.ttf;/system/fonts/NotoSansLinearA-Regular.otf;/system/fonts/NotoSansDevanagariUI-VF.ttf;/system/fonts/NotoSansDevanagari-VF.ttf;/system/fonts/NotoSerifGeorgian-VF.ttf;/system/fonts/NotoSansHebrew-Bold.ttf;/system/fonts/NotoSerifEthiopic-VF.ttf;/system/fonts/NotoSansEthiopic-VF.ttf;/dev/binder;/system/fonts/NotoSansWancho-Regular.otf;/system/fonts/NotoNaskhArabicUI-Bold.ttf;/system/fonts/NotoNaskhArabicUI-Regular.ttf;/system/fonts/NotoNaskhArabic-Bold.ttf;/system/fonts/NotoNaskhArabic-Regular.ttf;/system/fonts/SourceSansPro-Bold.ttf;/system/lib64/libprotobuf-cpp-full-6.33.5.so;/system/fonts/SourceSansPro-BoldItalic.ttf;/system/fonts/SourceSansPro-SemiBoldItalic.ttf;/system/fonts/SourceSansPro-SemiBold.ttf;/system/fonts/SourceSansPro-Italic.ttf;/system/fonts/SourceSansPro-Regular.ttf;/system/fonts/DancingScript-Regular.ttf;/system/fonts/NotoSerif-BoldItalic.ttf;/system/fonts/NotoSerif-Italic.ttf;/system/lib64/libsonivox.so;/system/fonts/NotoSansPhagsPa-Regular.ttf;/system/fonts/CutiveMono.ttf;/system/fonts/NotoSerif-Bold.ttf;/system/fonts/NotoSerif-Regular.ttf;/system/lib64/libmtp.so;/system/lib64/libmedia_jni.so;/apex/com.android.tzdata/etc/tz/versioned/10/icu/zoneinfo64.res;/system/lib64/android.hardware.tv.tuner-V3-ndk.so;/system/lib64/libxml2.so;/system/fonts/NotoSansHebrew-Regular.ttf;/system/fonts/RobotoStatic-Regular.ttf;/system/lib64/libmediadrmmetrics_full.so;/system/lib64/libpowermanager.so;/system/fonts/DroidSansMono.ttf;/system/lib64/android.hardware.power@1.3.so;/system/lib64/android.hardware.power@1.2.so;/system/lib64/libandroid.so;/system/fonts/NotoSansHanifiRohingya-Regular.otf;/system/lib64/android.hardware.power@1.1.so;/system/lib64/android.hardware.power@1.0.so;/system/lib64/libactivitymanager_aidl.so;/system/lib64/liblzma.so;/system/lib64/libpcre2.so;/system/fonts/NotoSansLinearB-Regular.ttf;/apex/com.android.art/lib64/libart.so;/system/fonts/NotoSansGeorgian-VF.ttf;/apex/com.android.art/lib64/libjavacore.so;/system/fonts/NotoSansSymbols-Regular-Subsetted2.ttf;/system/lib64/android.hardware.power-V7-ndk.so;/apex/com.android.os.statsd/lib64/libstatssocket.so;/system/fonts/NotoSansKaithi-Regular.ttf;/system/fonts/NotoSansPauCinHau-Regular.otf;/system/fonts/NotoSansPalmyrene-Regular.otf;/system/fonts/NotoSansChakma-Regular.otf;/system/fonts/NotoSerifLao-Regular.ttf;/system/fonts/NotoSansPahawhHmong-Regular.otf;/system/fonts/NotoSansLao-Regular.ttf;/system/fonts/NotoSansMeroitic-Regular.otf;/system/fonts/NotoSansKhmerUI-Bold.ttf;/system/fonts/NotoSansManichaean-Regular.otf;/system/fonts/NotoSansKhmerUI-Regular.ttf;/system/fonts/NotoSansOldPermic-Regular.otf;/system/fonts/NotoSerifKhmer-Bold.otf;/system/fonts/NotoSerifGurmukhi-VF.ttf;/system/fonts/NotoSansTaiLe-Regular.ttf;/system/fonts/NotoSansGurmukhi-VF.ttf;/system/fonts/NotoSansTifinagh-Regular.otf;/system/fonts/NotoSerifArmenian-VF.ttf;/system/fonts/NotoSansSaurashtra-Regular.ttf;/system/fonts/NotoSansArmenian-VF.ttf;/system/fonts/NotoSansTaiViet-Regular.ttf;/system/fonts/NotoSerifThai-Regular.ttf;/system/fonts/NotoSansSoraSompeng-Regular.otf;/system/fonts/NotoSansOldNorthArabian-Regular.otf;/system/lib64/android.hardware.usb.flags-aconfig-cc-lib.so;/system/fonts/NotoSansNabataean-Regular.otf;/system/fonts/CarroisGothicSC-Regular.ttf;/system/fonts/NotoSansSylotiNagri-Regular.ttf;/system/lib64/libsqlite.so;/system/lib64/libjxl.so;/system/fonts/NotoSansSundanese-Regular.ttf;/system/lib64/libcom.android.tethering.connectivity_native.so;/system/lib64/dynamic_instrumentation_manager_aidl-cpp.so;/system/lib64/libinput.so;/system/lib64/libclang_rt.ubsan_standalone-aarch64-android.so;/system/lib64/libdng_sdk.so;/system/fonts/NotoSansMultani-Regular.otf;/system/fonts/ComingSoon.ttf;/system/fonts/NotoSansMro-Regular.otf;/system/lib64/android.os.flags-aconfig-cc.so;/system/fonts/NotoSansHatran-Regular.otf;/system/lib64/libpackagelistparser.so;/system/fonts/NotoSansBassaVah-Regular.otf;/apex/com.android.art/lib64/libandroidio.so;/system/fonts/NotoSansUgaritic-Regular.ttf;/apex/com.android.art/lib64/libnativehelper.so;/system/fonts/NotoSansTagbanwa-Regular.ttf;/system/lib64/libasyncio.so;/system/lib64/libmediadrmmetrics_consumer.so;[anon:Allocate];/system/lib64/libmemunreachable.so;/system/fonts/NotoSansKharoshthi-Regular.ttf;/system/lib64/pw_allocator.so;/system/lib64/libprotolog.so;/system/lib64/libperfetto_framework_jni.so;/system/lib64/libbpf_bcc.so;/system/fonts/NotoSansTagalog-Regular.ttf;/system/fonts/NotoSansShavian-Regular.ttf;/system/lib64/libbpf_minimal.so;/system/lib64/libimg_utils.so;/system/lib64/libmeminfo.so;/system/fonts/NotoSansSamaritan-Regular.ttf;/system/lib64/libtimeinstate.so;/system/lib64/libprocessgroup_flags_c.so;/system/lib64/libnetd_client.so;/system/lib64/libdataloader.so;/system/lib64/libtinyxml2.so;/system/fonts/NotoSansRunic-Regular.ttf;/system/lib64/android.system.suspend-V1-ndk.so;/system/lib64/libsensor.so;/system/lib64/libmedia_quality_include.so;/system/lib64/media_quality_aidl_interface-cpp.so;/system/fonts/NotoSansRejang-Regular.ttf;/system/fonts/NotoSansPhoenician-Regular.ttf;/system/lib64/libnativedisplay.so;/system/fonts/NotoSansOldPersian-Regular.ttf;/system/lib64/libhardware_legacy.so;/system/lib64/com.android.window.flags.window-aconfig_flags_c_lib.so;/system/lib64/libsfplugin_ccodec_utils.so;/system/fonts/NotoSansOsmanya-Regular.ttf;/system/lib64/libcore_jni_flags_c.so;/system/lib64/android.companion.virtual.virtualdevice_aidl-cpp.so;/system/lib64/libstagefright_framecapture_utils.so;/system/fonts/NotoSansBalinese-Regular.ttf;/system/lib64/aconfig_mediacodec_flags_c_lib.so;/system/lib64/libziparchive.so;/system/lib64/libstagefright_xmlparser.so;/system/lib64/android.hardware.media.c2@1.2.so;/system/lib64/libcodec2_client.so;/system/lib64/libsfplugin_ccodec.so;/system/fonts/NotoSansNKo-Regular.ttf;/system/lib64/android.hardware.media.c2@1.1.so;/system/lib64/libcodec2_aidl_client.so;/system/lib64/android.hardware.media.c2@1.0.so;/system/lib64/libhwui.so;/system/fonts/NotoSansOsage-Regular.ttf;/system/lib64/libcodec2_hidl_client@1.0.so;/system/lib64/libcodec2_vndk.so;/system/fonts/NotoSansOldTurkic-Regular.ttf;/system/lib64/libSurfaceFlingerProp.so;/system/lib64/android.hardware.media.c2-V2-ndk.so;/apex/com.android.tzdata/etc/tz/versioned/10/icu/metaZones.res;/system/lib64/libnativeloader_lazy.so;/system/lib64/libnativebridge_lazy.so;/system/lib64/libstagefright_bufferqueue_helper.so;/system/lib64/libcodec2_hal_common.so;/system/fonts/NotoSansNewTaiLue-Regular.ttf;/system/lib64/libGLESv1_CM.so;/system/lib64/libstagefright_omx_utils.so;/system/lib64/libstagefright.so;/system/lib64/libprotobuf-cpp-lite-6.33.5.so;/system/fonts/NotoSansLaoUI-Bold.ttf;/system/lib64/libstagefright_surface_utils.so;/system/lib64/libstagefright_aidl_bufferpool2.so;/system/lib64/libstagefright_bufferpool@2.0.1.so;/system/lib64/android.hardware.media.bufferpool@2.0.so;/system/lib64/android.hardware.cas@1.0.so;/system/lib64/android.hardware.drm@1.4.so;/system/lib64/android.hardware.drm@1.2.so;/system/lib64/libstagefright_graphicbuffersource_aidl.so;/system/lib64/graphicbuffersource-aidl-ndk.so;/system/lib64/android.hidl.memory.token@1.0.so;/system/fonts/NotoSansMeeteiMayek-Regular.ttf;/system/lib64/libstagefright_codecbase.so;/system/lib64/libdmabufheap.so;/system/lib64/android.hardware.drm@1.0.so;/system/lib64/libmediadrm.so;/system/fonts/NotoSansOldSouthArabian-Regular.ttf;/system/lib64/libprocessgroup_platform.so;/system/lib64/android.hardware.media.bufferpool2-V2-ndk.so;/system/lib64/android.hidl.allocator@1.0.so;/system/lib64/android.hardware.drm@1.1.so;/system/lib64/android.hardware.media.omx@1.0.so;/system/lib64/libcamera_client.so;/system/fonts/NotoSansCoptic-Regular.ttf;/system/lib64/libusbhost.so;/system/lib64/libETC1.so;/system/lib64/android.hidl.memory@1.0.so;/system/lib64/android.hardware.drm@1.3.so;/system/lib64/libmedia_omx.so;/system/lib64/libprocessgroup.so;/system/lib64/libaaudio_internal_mmap.so;/system/lib64/libaudioclient.so;/system/fonts/NotoSansOldItalic-Regular.ttf;/system/lib64/libmediandk_utils.so;/system/lib64/libcodec2_hidl_client@1.2.so;/system/lib64/android.hardware.cas.native@1.0.so;/system/lib64/libmedia_codeclist_capabilities.so;/system/lib64/libmedia_codeclist.so;/system/lib64/libaudiobase.so;/system/lib64/libmedia.so;/system/fonts/NotoSansOlChiki-Regular.ttf;/system/lib64/libcodec2_hidl_client@1.1.so;/system/lib64/libhidlmemory.so;/system/fonts/NotoSansMandaic-Regular.ttf;/system/lib64/android.hidl.safe_union@1.0.so;/system/lib64/libmediadrmmetrics_lite.so;/system/lib64/audiopolicy-aidl-cpp.so;/system/fonts/NotoSansLaoUI-Regular.ttf;/system/lib64/libcamera_metadata.so;/system/lib64/libmedia_omx_client.so;/system/lib64/libmedia_jni_utils.so;/system/lib64/aaudio-aidl-cpp.so;/system/lib64/libaudiofoundation.so;/system/lib64/libft2.so;/system/lib64/libpdfium.so;/system/lib64/libharfbuzz_subset.so;/system/lib64/mediametricsservice-aidl-V1-cpp.so;/system/lib64/libmediametrics.so;/system/lib64/lib-platform-compat-native-api.so;/apex/com.android.i18n/lib64/libandroidicu.so;/system/lib64/libmedia_helper.so;/system/lib64/libmediandk.so;/system/fonts/NotoSansOgham-Regular.ttf;/system/lib64/libaudio_aidl_conversion_common_cpp.so;/system/lib64/libperfetto_c.so;/system/fonts/NotoSansLydian-Regular.ttf;/system/lib64/libaaudio_internal_core.so;/system/lib64/android.hardware.graphics.composer3-V5-ndk.so;/system/fonts/NotoSerifHebrew-Regular.ttf;/system/lib64/libcodec2.so;/system/lib64/android.hardware.drm-V2-ndk.so;/system/lib64/libexpat.so;/system/fonts/NotoSansLycian-Regular.ttf;/system/fonts/NotoSansLimbu-Regular.ttf;/system/lib64/libdatasource.so;/system/lib64/libjpeg.so;/system/lib64/libultrahdr.so;/system/lib64/libgui.so;/system/fonts/NotoSansLisu-Regular.ttf;/system/fonts/NotoSansKayahLi-Regular.ttf;/system/lib64/libaaudio_internal_utils.so;/system/lib64/com.android.media.audioserver-aconfig-cc.so;/system/lib64/com.android.media.aaudio-aconfig-cc.so;/system/lib64/libimage_io.so;/system/fonts/NotoSansInscriptionalParthian-Regular.ttf;/system/lib64/libpng.so;/system/lib64/libaudiopolicy.so;/system/lib64/libpiex.so;/system/lib64/libhidlallocatorutils.so;/system/lib64/android.hardware.graphics.bufferqueue@2.0.so;/system/lib64/lib-camera-compatibility-info-api.so;/system/lib64/com.android.media.audioclient-aconfig-cc.so;/system/lib64/android.hardware.graphics.mapper@4.0.so;/system/lib64/libcrypto.so;/system/lib64/libandroidfw.so;/system/lib64/libminikin.so;/apex/com.android.i18n/lib64/libicui18n.so;/system/lib64/audio-permission-aidl-cpp.so;/system/lib64/android.hardware.graphics.mapper@2.1.so;/system/lib64/android.hardware.graphics.mapper@3.0.so;/system/fonts/NotoSansGlagolitic-Regular.ttf;/system/lib64/android.hardware.graphics.allocator@4.0.so;/system/lib64/libui.so;/system/lib64/libcameracompatbilityinfo.so;/system/lib64/capture_state_listener-aidl-cpp.so;/system/lib64/android.hardware.graphics.allocator@3.0.so;/system/lib64/android.hardware.graphics.mapper@2.0.so;/system/lib64/android.hardware.graphics.allocator@2.0.so;/system/lib64/libdebugstore_cxx.so;/system/lib64/libgralloctypes.so;/system/lib64/libbinderdebug.so;/system/lib64/libdebuggerd_client.so;/system/lib64/libincfs.so;/system/fonts/NotoSansBrahmi-Regular.ttf;/system/lib64/libaudiomanager.so;/system/lib64/contexthub_data_flow.so;/system/lib64/android.hardware.contexthub-V5-ndk.so;/system/lib64/libhidlbase.so;/apex/com.android.i18n/lib64/libicuuc.so;/system/fonts/NotoSansInscriptionalPahlavi-Regular.ttf;/system/fonts/NotoSansBatak-Regular.ttf;/system/lib64/libandroid_runtime_lazy.so;/system/lib64/android.hardware.drm.common-V1-ndk.so;/system/lib64/android.hardware.camera.device@3.2.so;/system/lib64/audioflinger-aidl-cpp.so;/system/fonts/NotoSansImperialAramaic-Regular.ttf;/system/lib64/libgraphicsenv.so;/system/lib64/libappfuse.so;/system/lib64/libnetdutils.so;/system/lib64/spatializer-aidl-cpp.so;/system/lib64/android.hardware.graphics.bufferqueue@1.0.so;/system/lib64/libmediautils.so;/system/lib64/libandroid_runtime.so;/system/fonts/NotoSansAhom-Regular.otf;/system/lib64/libnativewindow.so;/system/lib64/libaudioutils.so;/system/lib64/libharfbuzz_ng.so;/system/fonts/NotoSansCham-Bold.ttf;/system/lib64/effect-aidl-cpp.so;/system/lib64/libz.so;/system/lib64/packagemanager_aidl-cpp.so;/system/lib64/libbinder_ndk.so;/system/lib64/android.hardware.graphics.allocator-V2-ndk.so;/system/lib64/android.hidl.token@1.0.so;/system/lib64/libaudioclient_aidl_conversion.so;/system/lib64/libbinder.so;/system/fonts/NotoSansCham-Regular.ttf;/system/lib64/libpermission.so;/system/lib64/libstagefright_foundation.so;/system/fonts/NotoSansElbasan-Regular.otf;/system/fonts/NotoSan
+native.proc.smaps.fields=Size KernelPageSize MMUPageSize Rss Pss Pss_Dirty Shared_Clean Shared_Dirty Private_Clean Private_Dirty Referenced Anonymous KSM LazyFree AnonHugePages ShmemPmdMapped FilePmdMapped Shared_Hugetlb Private_Hugetlb Swap SwapPss Locked THPeligible VmFlags 
+native.proc.smaps_rollup=readable
+native.proc.map_files=entries=1412 readlink_ok=1412 readlink_err=none jdk=0 first=/home/utm/apklayer-maps2/prebuilts/arm64/android-libs/lib64/libjavacrypto.so
+native.proc.status.Name=hello.identity
+native.proc.status.Umask=0002
+native.proc.status.State=S (sleeping)
+native.proc.status.TracerPid=0
+native.proc.status.Uid=10000 10000 10000 10000
+native.proc.status.Gid=10000 10000 10000 10000
+native.proc.status.Groups=9997 20000 50000 
+native.proc.status.NStgid=971323
+native.proc.status.Kthread=0
+native.proc.status.untag_mask=0xffffffffffffff
+native.proc.status.Threads=22
+native.proc.status.CapInh=0000000000000000
+native.proc.status.CapPrm=0000000000000000
+native.proc.status.CapEff=0000000000000000
+native.proc.status.CapBnd=0000000000000000
+native.proc.status.CapAmb=0000000000000000
+native.proc.status.NoNewPrivs=1
+native.proc.status.Seccomp=2
+native.proc.status.Seccomp_filters=1
+native.proc.status.Speculation_Store_Bypass=vulnerable
+native.proc.status.Cpus_allowed_list=0-9
+native.proc.status.Mems_allowed_list=0
+native.proc.status.fieldNames=Name Umask State Tgid Ngid Pid PPid TracerPid Uid Gid FDSize Groups NStgid NSpid NSpgid NSsid Kthread VmPeak VmSize VmLck VmPin VmHWM VmRSS RssAnon RssFile RssShmem VmData VmStk VmExe VmLib VmPTE VmSwap HugetlbPages CoreDumping THP_enabled untag_mask Threads SigQ SigPnd ShdPnd SigBlk SigIgn SigCgt CapInh CapPrm CapEff CapBnd CapAmb NoNewPrivs Seccomp Seccomp_filters Speculation_Store_Bypass SpeculationIndirectBranch Cpus_allowed Cpus_allowed_list Mems_allowed Mems_allowed_list voluntary_ctxt_switches nonvoluntary_ctxt_switches 
+native.proc.cmdline=hello.identity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+native.proc.comm=hello.identity
+native.proc.stat.head=971323 (hello.identity) S 971165 971165 971165 0 -1 4194304 61757 170 0 0 196 21 0 0 20 0 22 0 10702557 15986229248 114639 18446744073709551615 219294756306944 219294756311076 281474826089104 0 0 0 4096 0 1090542799 0 0 0 17 1 0 0 0 0 0 219294756437256 219294756438032 219294990495744 281474826090788 281474826093306 281474826093306 281474826096564 0
+native.proc.cgroup=0::/uid_10000/pid_971323
+native.proc.attr.current=u:r:untrusted_app:s0:c0,c256,c512,c768
+native.proc.attr.prev=ERR Invalid argument
+native.proc.oom_score_adj=0
+native.proc.loginuid=1000
+native.proc.limits=Limit                     Soft Limit           Hard Limit           Units     |Max cpu time              unlimited            unlimited            seconds   |Max file size             unlimited            unlimited            bytes     |Max data size             unlimited            unlimited            bytes     |Max stack size            8388608              unlimited            bytes     |Max core file size        0                    unlimited            bytes     |Max resident set          unlimited            unlimited            bytes     |Max processes             124083               124083               processes |Max open files            524288               524288               files     |Max locked memory         8388608              8388608              bytes     |Max address space         unlimited            unlimited            bytes     |Max file locks            unlimited            unlimited            locks     |Max pending signals       124083               124083               signals   |Max msgqueue size         819200               819200               bytes     |Max nice priority         0                    0                    |Max realtime priority     0                    0                    |Max realtime timeout      unlimited            unlimited            us        
+native.proc.wchan=futex_do_wait
+native.proc.proc1.cmdline=ERR No such file or directory
+native.proc.version=Linux version 7.0.0-42-generic (buildd@bos03-arm64-093) (aarch64-linux-gnu-gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, GNU ld (GNU Binutils for Ubuntu) 2.46) #42-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 15 08:19:15 UTC 2026
+native.proc.net.unix.head=(long)
+native.proc.environ.count=13
+native.proc.environ.keys=ANDROID_ART_ROOT ANDROID_ASSETS ANDROID_BOOTLOGO ANDROID_DATA ANDROID_I18N_ROOT ANDROID_ROOT ANDROID_STORAGE ANDROID_TZDATA_ROOT ASEC_MOUNTPOINT BOOTCLASSPATH DEX2OATBOOTCLASSPATH EXTERNAL_STORAGE PATH 
+native.proc.auxv.file.hwcap=0xefb3ffff
+native.proc.auxv.file.hwcap2=0x100126181
+native.proc.auxv.file.execfn=/system/bin/app_process64
+native.proc.auxv.file.platform=aarch64
+native.proc.auxv.file.types=33 51 16 6 17 3 4 5 7 8 9 11 12 13 14 23 25 26 29 31 15 27 28 
+native.proc.auxv.file.getauxvalMismatch=0
+native.proc.link.exe=/system/bin/app_process64
+native.proc.link.cwd=/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==
+native.proc.link.root=/
+native.proc.link.ns/mnt=mnt:[N]
+native.proc.link.ns/pid=pid:[N]
+native.proc.link.ns/net=net:[N]
+native.proc.link.ns/user=user:[N]
+native.proc.link.ns/uts=uts:[N]
+native.proc.link.ns/ipc=ipc:[N]
+native.proc.link.ns/cgroup=cgroup:[N]
+native.proc.link.ns/time=time:[N]
+native.proc.exe.file=ELF machine=183
+native.proc.fd.count=46
+native.proc.fd.targets=/apex/com.android.art/javalib/apache-xml.jar;/apex/com.android.art/javalib/apache-xml.jar;/apex/com.android.art/javalib/bouncycastle.jar;/apex/com.android.art/javalib/bouncycastle.jar;/apex/com.android.art/javalib/core-libart.jar;/apex/com.android.art/javalib/core-libart.jar;/apex/com.android.art/javalib/core-libart.jar;/apex/com.android.art/javalib/core-oj.jar;/apex/com.android.art/javalib/okhttp.jar;/apex/com.android.art/javalib/okhttp.jar;/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk;/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk;/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk;/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/classes.jar;/dev/null;/dev/null;/dev/null;/dev/random;/dev/urandom;/linkerconfig;/proc/971323/fd;/system/framework/framework-graphics.jar;/system/framework/framework-graphics.jar;/system/framework/framework.jar;/system/framework/framework.jar;/system/framework/org.lineageos.platform-res.apk;/system/framework/telephony-common.jar;/system/framework/telephony-common.jar;anon_inode:[eventfd];anon_inode:[eventpoll];pipe:;pipe:;pipe:;pipe:;pipe:;pipe:;pipe:;pipe:;socket:;socket:;socket:;socket:;
+native.proc.mountinfo.count=23
+native.proc.mountinfo.points=/:ext4;/dev:devtmpfs;/dev/pts:devpts;/sys:sysfs;/sys/fs/cgroup:cgroup2;/sys/fs/pstore:pstore;/sys/fs/bpf:bpf;/sys/kernel/config:configfs;/proc:proc;/sys/kernel/tracing:tracefs;/sys/kernel/debug:debugfs;/system:ext4;/vendor:ext4;/product:ext4;/system_ext:ext4;/odm:ext4;/apex:tmpfs;/apex/com.android.art:ext4;/apex/com.android.runtime:ext4;/apex/com.android.i18n:ext4;/data:ext4;/linkerconfig:tmpfs;/storage/emulated:fuse;
+native.proc.task.count=22
+native.proc.task.comms=FinalizerDaemon;FinalizerWatchd;HeapTaskDaemon;Jit thread pool*2;Profile Saver;ReferenceQueueD;Runtime worker*10;Signal Catcher;binder:NNNNNN_N*2;hello.identity*2;
+native.proc.child.status=exit=0 Name: toybox|TracerPid: 0|Uid: 10000 10000 10000 10000|NoNewPrivs: 1|Seccomp: 2|
+native.proc.child.comm=exit=0 toybox|
+native.proc.child.cmdline=exit=0 /system/bin/toybox cat /proc/self/cmdline |
+native.proc.child.exe=exit=0 /system/bin/toybox|/system/bin/sh|
+native.proc.child.parentEnviron=exit=0 ANDROID_ART_ROOT ANDROID_ASSETS ANDROID_BOOTLOGO ANDROID_DATA ANDROID_I18N_ROOT ANDROID_ROOT ANDROID_STORAGE ANDROID_TZDATA_ROOT ASEC_MOUNTPOINT BOOTCLASSPATH DEX2OATBOOTCLASSPATH EXTERNAL_STORAGE PATH PROBE_PARENT _ |
+native.proc.parent.cmdline=zygote64
+native.elf.phdr.count=270
+native.elf.phdr.foreignMachine=0
+native.elf.phdr.unreadableHeader=0
+native.elf.phdr.noSoname=9
+native.elf.phdr.modules=/apex/com.android.runtime/lib64/bionic/libdl.so[183,libdl_bio.so.0];/system/lib64/libutils.so[183,libutils.so];/system/lib64/libcutils.so[183,libcutils.so];/system/lib64/liblog.so[183,liblog.so];/system/lib64/libc++.so[183,libc++.so];/system/lib64/libbase.so[183,libbase.so];/system/lib64/libvndksupport.so[183,libvndksupport.so];/system/lib64/libandroid_runtime.so[183,libandroid_runtime.so];/system/lib64/android.media.audio.common.types-V5-cpp.so[183,android.media.audio.common.types-V5-cpp.so];/system/lib64/libbinder.so[183,libbinder.so];/system/lib64/libapexsupport.so[183,libapexsupport.so];/system/lib64/libharfbuzz_ng.so[183,libharfbuzz_ng.so];/apex/com.android.i18n/lib64/libicu.so[183,libicu.so];/apex/com.android.i18n/lib64/libicuuc.so[183,libicuuc.so];/apex/com.android.i18n/lib64/libicui18n.so[183,libicui18n.so];/system/lib64/libmediautils.so[183,libmediautils.so];/system/lib64/com.android.media.audio-aconfig-cc.so[183,com.android.media.audio-aconfig-cc.so];/system/lib64/libaconfig_storage_read_api_cc.so[183,libaconfig_storage_read_api_cc.so];/system/lib64/libaudioclient_aidl_conversion.so[183,libaudioclient_aidl_conversion.so];/system/lib64/framework-permission-aidl-cpp.so[183,framework-permission-aidl-cpp.so];/system/lib64/libshmemcompat.so[183,libshmemcompat.so];/system/lib64/libshmemutil.so[183,libshmemutil.so];/system/lib64/shared-file-region-aidl-cpp.so[183,shared-file-region-aidl-cpp.so];/system/lib64/libstagefright_foundation.so[183,libstagefright_foundation.so];/system/lib64/audioclient-types-aidl-cpp.so[183,audioclient-types-aidl-cpp.so];/system/lib64/av-types-aidl-cpp.so[183,av-types-aidl-cpp.so];/system/lib64/libaudioutils.so[183,libaudioutils.so];/system/lib64/server_configurable_flags.so[183,server_configurable_flags.so];/system/lib64/libspeexresampler.so[183,libspeexresampler.so];/system/lib64/libbinder_ndk.so[183,libbinder_ndk.so];/system/lib64/libhidlbase.so[183,libhidlbase.so];/system/lib64/libpermission.so[183,libpermission.so];/system/lib64/android.hardware.graphics.bufferqueue@1.0.so[183,android.hardware.graphics.bufferqueue@1.0.so];/system/lib64/android.hardware.graphics.common@1.0.so[183,android.hardware.graphics.common@1.0.so];/system/lib64/android.hardware.media@1.0.so[183,android.hardware.media@1.0.so];/system/lib64/android.hidl.token@1.0-utils.so[183,android.hidl.token@1.0-utils.so];/system/lib64/android.hidl.token@1.0.so[183,android.hidl.token@1.0.so];/system/lib64/packagemanager_aidl-cpp.so[183,packagemanager_aidl-cpp.so];/system/lib64/process_info_service_aidl-cpp.so[183,process_info_service_aidl-cpp.so];/system/lib64/libminikin.so[183,libminikin.so];/system/lib64/aconfig_text_flags_c_lib.so[183,aconfig_text_flags_c_lib.so];/system/lib64/libz.so[183,libz.so];/system/lib64/libguiflags.so[183,libguiflags.so];/system/lib64/android.database.sqlite-aconfig-cc.so[183,android.database.sqlite-aconfig-cc.so];/system/lib64/android.media.audiopolicy-aconfig-cc.so[183,android.media.audiopolicy-aconfig-cc.so];/system/lib64/audioflinger-aidl-cpp.so[183,audioflinger-aidl-cpp.so];/system/lib64/effect-aidl-cpp.so[183,effect-aidl-cpp.so];/system/lib64/audiopolicy-types-aidl-cpp.so[183,audiopolicy-types-aidl-cpp.so];/system/lib64/spatializer-aidl-cpp.so[183,spatializer-aidl-cpp.so];/system/lib64/volumegroupcallback-aidl-cpp.so[183,volumegroupcallback-aidl-cpp.so];/system/lib64/android.hardware.camera.device@3.2.so[183,android.hardware.camera.device@3.2.so];/system/lib64/android.hardware.camera.common@1.0.so[183,android.hardware.camera.common@1.0.so];/system/lib64/camera_platform_flags_c_lib.so[183,camera_platform_flags_c_lib.so];/system/lib64/android.hardware.common.fmq-V1-cpp.so[183,android.hardware.common.fmq-V1-cpp.so];/system/lib64/android.hardware.common-V2-cpp.so[183,android.hardware.common-V2-cpp.so];/system/lib64/android.hardware.common.fmq-V1-ndk.so[183,android.hardware.common.fmq-V1-ndk.so];/system/lib64/android.hardware.common-V2-ndk.so[183,android.hardware.common-V2-ndk.so];/system/lib64/android.hardware.contexthub-V5-ndk.so[183,android.hardware.contexthub-V5-ndk.so];/system/lib64/chre_flags_c_lib.so[183,chre_flags_c_lib.so];/system/lib64/contexthub_data_flow.so[183,contexthub_data_flow.so];/system/lib64/libfmq.so[183,libfmq.so];/system/lib64/libbattery.so[183,libbattery.so];/system/lib64/libnetdutils.so[183,libnetdutils.so];/system/lib64/libmemtrack.so[183,libmemtrack.so];/system/lib64/libhardware.so[183,libhardware.so];/system/lib64/android.hardware.memtrack-V1-ndk.so[183,android.hardware.memtrack-V1-ndk.so];/system/lib64/libandroidfw.so[183,libandroidfw.so];/system/lib64/libincfs.so[183,libincfs.so];/system/lib64/libcrypto.so[183,libcrypto.so];/system/lib64/libappfuse.so[183,libappfuse.so];/system/lib64/libdebuggerd_client.so[183,libdebuggerd_client.so];/system/lib64/libprocinfo.so[183,libprocinfo.so];/system/lib64/libdebugstore_cxx.so[183,libdebugstore_cxx.so];/system/lib64/libbinderdebug.so[183,libbinderdebug.so];/system/lib64/libui.so[183,libui.so];/system/lib64/android.hardware.graphics.allocator@2.0.so[183,android.hardware.graphics.allocator@2.0.so];/system/lib64/android.hardware.graphics.mapper@2.0.so[183,android.hardware.graphics.mapper@2.0.so];/system/lib64/android.hardware.graphics.allocator@3.0.so[183,android.hardware.graphics.allocator@3.0.so];/system/lib64/android.hardware.graphics.common@1.1.so[183,android.hardware.graphics.common@1.1.so];/system/lib64/android.hardware.graphics.common@1.2.so[183,android.hardware.graphics.common@1.2.so];/system/lib64/android.hardware.graphics.mapper@3.0.so[183,android.hardware.graphics.mapper@3.0.so];/system/lib64/android.hardware.graphics.allocator@4.0.so[183,android.hardware.graphics.allocator@4.0.so];/system/lib64/android.hardware.graphics.mapper@4.0.so[183,android.hardware.graphics.mapper@4.0.so];/system/lib64/android.hardware.graphics.mapper@2.1.so[183,android.hardware.graphics.mapper@2.1.so];/system/lib64/libgralloctypes.so[183,libgralloctypes.so];/system/lib64/android.hardware.graphics.common-V7-ndk.so[183,android.hardware.graphics.common-V7-ndk.so];/system/lib64/libsync.so[183,libsync.so];/system/lib64/android.hardware.graphics.allocator-V2-ndk.so[183,android.hardware.graphics.allocator-V2-ndk.so];/system/lib64/libgraphicsenv.so[183,libgraphicsenv.so];/system/lib64/libgui.so[183,libgui.so];/system/lib64/android.hardware.graphics.bufferqueue@2.0.so[183,android.hardware.graphics.bufferqueue@2.0.so];/system/lib64/libapklayer_egl.so[183,libapklayer_egl.so];/system/lib64/libnativewindow.so[183,libnativewindow.so];/system/lib64/libhwui.so[183,libhwui.so];/system/lib64/libimage_io.so[183,libimage_io.so];/system/lib64/libultrahdr.so[183,libultrahdr.so];/system/lib64/libjpeg.so[183,libjpeg.so];/system/lib64/libjpegencoder.so[183,libjpegencoder.so];/system/lib64/libjpegdecoder.so[183,libjpegdecoder.so];/system/lib64/libtracing_perfetto.so[183,libtracing_perfetto.so];/system/lib64/libperfetto_c.so[183,libperfetto_c.so];/system/lib64/libpng.so[183,libpng.so];/system/lib64/libpiex.so[183,libpiex.so];/system/lib64/libexpat.so[183,libexpat.so];/system/lib64/libharfbuzz_subset.so[183,libharfbuzz_subset.so];/system/lib64/aconfig_view_accessibility_flags_c_lib.so[183,aconfig_view_accessibility_flags_c_lib.so];/system/lib64/android.hardware.drm.common-V1-ndk.so[183,android.hardware.drm.common-V1-ndk.so];/system/lib64/android.hardware.graphics.composer3-V5-ndk.so[183,android.hardware.graphics.composer3-V5-ndk.so];/system/lib64/libpdfium.so[183,libpdfium.so];/system/lib64/libft2.so[183,libft2.so];/system/lib64/libmediandk.so[183,libmediandk.so];/system/lib64/android.hardware.drm-V2-ndk.so[183,android.hardware.drm-V2-ndk.so];/system/lib64/libandroid_runtime_lazy.so[183,libandroid_runtime_lazy.so];/system/lib64/libdatasource.so[183,libdatasource.so];/system/lib64/libmedia.so[183,libmedia.so];/system/lib64/libaudiobase.so[183,libaudiobase.so];/system/lib64/libaudio_aidl_conversion_common_cpp.so[183,libaudio_aidl_conversion_common_cpp.so];/system/lib64/libaudiofoundation.so[183,libaudiofoundation.so];/system/lib64/libmedia_helper.so[183,libmedia_helper.so];/system/lib64/libaudiomanager.so[183,libaudiomanager.so];/system/lib64/audiopolicy-aidl-cpp.so[183,audiopolicy-aidl-cpp.so];/system/lib64/audio-permission-aidl-cpp.so[183,audio-permission-aidl-cpp.so];/system/lib64/capture_state_listener-aidl-cpp.so[183,capture_state_listener-aidl-cpp.so];/system/lib64/libaudiopolicy.so[183,libaudiopolicy.so];/system/lib64/libaudioclient.so[183,libaudioclient.so];/system/lib64/com.android.media.audioclient-aconfig-cc.so[183,com.android.media.audioclient-aconfig-cc.so];/system/lib64/libaaudio_internal_core.so[183,libaaudio_internal_core.so];/system/lib64/com.android.media.aaudio-aconfig-cc.so[183,com.android.media.aaudio-aconfig-cc.so];/system/lib64/com.android.media.audioserver-aconfig-cc.so[183,com.android.media.audioserver-aconfig-cc.so];/system/lib64/libaaudio_internal_utils.so[183,libaaudio_internal_utils.so];/system/lib64/libmediametrics.so[183,libmediametrics.so];/system/lib64/mediametricsservice-aidl-V1-cpp.so[183,mediametricsservice-aidl-V1-cpp.so];/system/lib64/libaaudio_internal_fifo.so[183,libaaudio_internal_fifo.so];/system/lib64/libaaudio_internal_mmap.so[183,libaaudio_internal_mmap.so];/system/lib64/aaudio-aidl-cpp.so[183,aaudio-aidl-cpp.so];/system/lib64/libprocessgroup.so[183,libprocessgroup.so];/apex/com.android.i18n/lib64/libandroidicu.so[183,libandroidicu.so];/system/lib64/libcamera_client.so[183,libcamera_client.so];/system/lib64/lib-platform-compat-native-api.so[183,lib-platform-compat-native-api.so];/system/lib64/libcamera_metadata.so[183,libcamera_metadata.so];/system/lib64/libcameracompatbilityinfo.so[183,libcameracompatbilityinfo.so];/system/lib64/lib-camera-compatibility-info-api.so[183,lib-camera-compatibility-info-api.so];/system/lib64/libmedia_codeclist.so[183,libmedia_codeclist.so];/system/lib64/android.hardware.media.omx@1.0.so[183,android.hardware.media.omx@1.0.so];/system/lib64/libmedia_codeclist_capabilities.so[183,libmedia_codeclist_capabilities.so];/system/lib64/libmedia_omx.so[183,libmedia_omx.so];/system/lib64/libmediadrm.so[183,libmediadrm.so];/system/lib64/libmediadrmmetrics_lite.so[183,libmediadrmmetrics_lite.so];/system/lib64/android.hardware.drm@1.0.so[183,android.hardware.drm@1.0.so];/system/lib64/android.hardware.drm@1.1.so[183,android.hardware.drm@1.1.so];/system/lib64/android.hardware.drm@1.2.so[183,android.hardware.drm@1.2.so];/system/lib64/libprotobuf-cpp-lite-6.33.5.so[183,libprotobuf-cpp-lite-6.33.5.so];/system/lib64/android.hardware.drm@1.3.so[183,android.hardware.drm@1.3.so];/system/lib64/android.hardware.drm@1.4.so[183,android.hardware.drm@1.4.so];/system/lib64/libhidlallocatorutils.so[183,libhidlallocatorutils.so];/system/lib64/android.hidl.memory@1.0.so[183,android.hidl.memory@1.0.so];/system/lib64/libmedia_jni_utils.so[183,libmedia_jni_utils.so];/system/lib64/libstagefright.so[183,libstagefright.so];/system/lib64/android.hardware.cas.native@1.0.so[183,android.hardware.cas.native@1.0.so];/system/lib64/android.hardware.cas@1.0.so[183,android.hardware.cas@1.0.so];/system/lib64/android.hidl.allocator@1.0.so[183,android.hidl.allocator@1.0.so];/system/lib64/libcodec2.so[183,libcodec2.so];/system/lib64/libcodec2_vndk.so[183,libcodec2_vndk.so];/system/lib64/android.hardware.media.bufferpool@2.0.so[183,android.hardware.media.bufferpool@2.0.so];/system/lib64/android.hardware.media.bufferpool2-V2-ndk.so[183,android.hardware.media.bufferpool2-V2-ndk.so];/system/lib64/libdmabufheap.so[183,libdmabufheap.so];/system/lib64/libstagefright_bufferpool@2.0.1.so[183,libstagefright_bufferpool@2.0.1.so];/system/lib64/libstagefright_aidl_bufferpool2.so[183,libstagefright_aidl_bufferpool2.so];/system/lib64/libhidlmemory.so[183,libhidlmemory.so];/system/lib64/android.hidl.memory.token@1.0.so[183,android.hidl.memory.token@1.0.so];/system/lib64/libmedia_omx_client.so[183,libmedia_omx_client.so];/system/lib64/libsfplugin_ccodec.so[183,libsfplugin_ccodec.so];/system/lib64/android.hardware.media.c2@1.0.so[183,android.hardware.media.c2@1.0.so];/system/lib64/android.hidl.safe_union@1.0.so[183,android.hidl.safe_union@1.0.so];/system/lib64/graphicbuffersource-aidl-ndk.so[183,graphicbuffersource-aidl-ndk.so];/system/lib64/libcodec2_client.so[183,libcodec2_client.so];/system/lib64/libcodec2_hal_common.so[183,libcodec2_hal_common.so];/system/lib64/android.hardware.media.c2-V2-ndk.so[183,android.hardware.media.c2-V2-ndk.so];/system/lib64/libcodec2_aidl_client.so[183,libcodec2_aidl_client.so];/system/lib64/android.hardware.media.c2@1.1.so[183,android.hardware.media.c2@1.1.so];/system/lib64/android.hardware.media.c2@1.2.so[183,android.hardware.media.c2@1.2.so];/system/lib64/libcodec2_hidl_client@1.0.so[183,libcodec2_hidl_client@1.0.so];/system/lib64/libcodec2_hidl_client@1.1.so[183,libcodec2_hidl_client@1.1.so];/system/lib64/libcodec2_hidl_client@1.2.so[183,libcodec2_hidl_client@1.2.so];/system/lib64/libsfplugin_ccodec_utils.so[183,libsfplugin_ccodec_utils.so];/system/lib64/libstagefright_bufferqueue_helper.so[183,libstagefright_bufferqueue_helper.so];/system/lib64/libstagefright_codecbase.so[183,libstagefright_codecbase.so];/system/lib64/libstagefright_graphicbuffersource_aidl.so[183,libstagefright_graphicbuffersource_aidl.so];/system/lib64/libstagefright_surface_utils.so[183,libstagefright_surface_utils.so];/system/lib64/libstagefright_xmlparser.so[183,libstagefright_xmlparser.so];/system/lib64/libstagefright_omx_utils.so[183,libstagefright_omx_utils.so];/system/lib64/libstagefright_framecapture_utils.so[183,libstagefright_framecapture_utils.so];/system/lib64/libGLESv1_CM.so[183,libGLESv1_CM.so];/system/lib64/libapklayer_vulkan.so[183,libvulkan.so];/system/lib64/libziparchive.so[183,libziparchive.so];/system/lib64/libnativebridge_lazy.so[183,libnativebridge_lazy.so];/system/lib64/libnativeloader_lazy.so[183,libnativeloader_lazy.so];/system/lib64/libSurfaceFlingerProp.so[183,libSurfaceFlingerProp.so];/system/lib64/aconfig_mediacodec_flags_c_lib.so[183,aconfig_mediacodec_flags_c_lib.so];/system/lib64/media_quality_aidl_interface-cpp.so[183,media_quality_aidl_interface-cpp.so];/system/lib64/libmedia_quality_include.so[183,libmedia_quality_include.so];/system/lib64/libmediandk_utils.so[183,libmediandk_utils.so];/system/lib64/libdng_sdk.so[183,libdng_sdk.so];/system/lib64/libjxl.so[183,libjxl.so];/system/lib64/libclang_rt.ubsan_standalone-aarch64-android.so[183,libclang_rt.ubsan_standalone-aarch64-android.so];/system/lib64/libnativedisplay.so[183,libnativedisplay.so];/system/lib64/libsensor.so[183,libsensor.so];/system/lib64/android.companion.virtual.virtualdevice_aidl-cpp.so[183,android.companion.virtual.virtualdevice_aidl-cpp.so];/system/lib64/libinput.so[183,libinput.so];/system/lib64/com.android.window.flags.window-aconfig_flags_c_lib.so[183,com.android.window.flags.window-aconfig_flags_c_lib.so];/system/lib64/libtinyxml2.so[183,libtinyxml2.so];/system/lib64/libcore_jni_flags_c.so[183,libcore_jni_flags_c.so];/system/lib64/libsqlite.so[183,libsqlite.so];/system/lib64/libdataloader.so[183,libdataloader.so];/system/lib64/libETC1.so[183,libETC1.so];/system/lib64/libhardware_legacy.so[183,libhardware_legacy.so];/system/lib64/android.system.suspend-V1-ndk.so[183,android.system.suspend-V1-ndk.so];/system/lib64/libmeminfo.so[183,libmeminfo.so];/system/lib64/libusbhost.so[183,libusbhost.so];/system/lib64/libimg_utils.so[183,libimg_utils.so];/system/lib64/libnetd_client.so[183,libnetd_client.so];/system/lib64/libprocessgroup_platform.so[183,libprocessgroup_platform.so];/system/lib64/libprocessgroup_flags_c.so[183,libprocessgroup_flags_c.so];/system/lib64/libmemunreachable.so[183,libmemunreachable.so];/system/lib64/libtimeinstate.so[183,libtimeinstate.so];/system/lib64/libbpf_bcc.so[183,libbpf_bcc.so];/system/lib64/libbpf_minimal.so[183,libbpf_minimal.so];/system/lib64/libperfetto_framework_jni.so[183,libperfetto_framework_jni.so];/system/lib64/libprotolog.so[183,libprotolog.so];/system/lib64/pw_allocator.so[183,pw_allocator.so];/apex/com.android.art/lib64/libjavacore.so[183,libjavacore.so];/apex/com.android.art/lib64/libnativehelper.so[183,libnativehelper.so];/apex/com.android.art/lib64/libandroidio.so[183,libandroidio.so];/apex/com.android.os.statsd/lib64/libstatssocket.so[183,libstatssocket.so];/system/lib64/libpackagelistparser.so[183,libpackagelistparser.so];/system/lib64/libpcre2.so[183,libpcre2.so];/system/lib64
+native.elf.phdr.modules.other=/apex/com.android.runtime/lib64/bionic/libdl.so[183,libdl_bio.so.0];/apex/com.android.i18n/lib64/libicu.so[183,libicu.so];/apex/com.android.i18n/lib64/libicuuc.so[183,libicuuc.so];/apex/com.android.i18n/lib64/libicui18n.so[183,libicui18n.so];/apex/com.android.i18n/lib64/libandroidicu.so[183,libandroidicu.so];/apex/com.android.art/lib64/libjavacore.so[183,libjavacore.so];/apex/com.android.art/lib64/libnativehelper.so[183,libnativehelper.so];/apex/com.android.art/lib64/libandroidio.so[183,libandroidio.so];/apex/com.android.os.statsd/lib64/libstatssocket.so[183,libstatssocket.so];/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/arm64/libhello.so[183,];/system/bin/app_process64[183,];[vdso][183,];/apex/com.android.runtime/lib64/bionic/libc.so[183,];/system/bin/linker64[183,];/apex/com.android.art/lib64/libopenjdkjvm.so[183,];/apex/com.android.runtime/lib64/bionic/libm.so[183,];/apex/com.android.art/lib64/libart.so[183,];
+native.elf.dladdr.open=open+0x0 (/apex/com.android.runtime/lib64/bionic/libc.so)
+native.elf.dladdr.malloc=malloc+0x0 (/apex/com.android.runtime/lib64/bionic/libc.so)
+native.elf.dladdr.pthread_create=pthread_create+0x0 (/apex/com.android.runtime/lib64/bionic/libc.so)
+native.elf.dladdr.dl_iterate_phdr=dl_iterate_phdr+0x0 (/apex/com.android.runtime/lib64/bionic/libdl.so)
+native.elf.dladdr.__system_property_get=__system_property_get+0x0 (/apex/com.android.runtime/lib64/bionic/libc.so)
+native.elf.dladdr.android_dlopen_ext=android_dlopen_ext+0x0 (/apex/com.android.runtime/lib64/bionic/libdl.so)
+native.elf.dladdr.dlopen=dlopen+0x0 (/apex/com.android.runtime/lib64/bionic/libdl.so)
+native.elf.dladdr.JNI_GetCreatedJavaVMs=null
+native.elf.dladdr.JNI_CreateJavaVM=null
+native.elf.dladdr.__libc_start_main=null
+native.elf.dladdr.gnu_get_libc_version=null
+native.elf.dladdr.__cxa_finalize=__cxa_finalize+0x0 (/apex/com.android.runtime/lib64/bionic/libc.so)
+native.elf.dladdr.jni.FindClass=?+0x2578 (/apex/com.android.art/lib64/libart.so)
+native.elf.dladdr.jni.CallStaticObjectMethodV=?+0x2a94 (/apex/com.android.art/lib64/libart.so)
+native.elf.dladdr.jni.RegisterNatives=?+0x2f44 (/apex/com.android.art/lib64/libart.so)
+native.elf.dladdr.jni.functionsTable=?+0x14e68d0 (/apex/com.android.art/lib64/libopenjdkjvm.so)
+native.elf.dladdr.jni.GetEnv=?+0x3040 (/apex/com.android.art/lib64/libart.so)
+native.elf.dladdr.jni.inLibart=234/234
+native.elf.dladdr.self=?+0x711c (/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/hello.identity-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/arm64/libhello.so)
+native.elf.dlopen.libart.so=FAIL dlopen failed: library "libart.so" not found
+native.elf.dlopen./apex/com.android.art/lib64/libart.so=FAIL dlopen failed: library "/apex/com.android.art/lib64/libart.so" not found
+native.elf.dlopen.libnativehelper.so=loaded syms=JNI_GetCreatedJavaVMs 
+native.elf.dlopen.libandroid_runtime.so=FAIL dlopen failed: library "libandroid_runtime.so" not found
+native.elf.dlopen.libc.so=loaded syms=JNI_GetCreatedJavaVMs 
+native.elf.dlopen.libdl.so=loaded syms=
+native.elf.dlopen.libjavacore.so=FAIL dlopen failed: library "libjavacore.so" not found
+native.elf.dlopen.libopenjdk.so=FAIL dlopen failed: library "libopenjdk.so" not found
+native.elf.dlopen.libandroid.so=loaded syms=JNI_GetCreatedJavaVMs 
+native.elf.dlopen.libbinder.so=FAIL dlopen failed: library "libbinder.so" not found
+native.elf.dlopen.libjvm.so=FAIL dlopen failed: library "libjvm.so" not found
+native.elf.dlopen.libjava.so=FAIL dlopen failed: library "libjava.so" not found
+native.elf.dlopen.libc.so.6=FAIL dlopen failed: library "libc.so.6" not found
+native.elf.dlopen.libnativebridge.so=FAIL dlopen failed: library "libnativebridge.so" not found
+native.elf.file.libart.path=/apex/com.android.art/lib64/libart.so base=found
+native.elf.file.libart.read=machine=183 class=2 size=94816
+native.elf.file.libart.sections=.note.gnu.build-id .dynsym .symtab 
+native.elf.file.libart.symbols=_ZN3art9ArtMethod6InvokeEPNS_6ThreadEPjjPNS_6JValueEPKc(d) _ZN3art7Runtime9instance_E(d) _ZN3art3jit3Jit11CompileMethodEPNS_9ArtMethodEPNS_6ThreadENS_15CompilationKindEb(d) art_quick_to_interpreter_bridge(d) JNI_GetCreatedJavaVMs(d) _ZN3art2gc4Heap12CollectGarbageEbNS0_7GcCauseE(d) JNI_CreateJavaVM(d) _ZN3art11ClassLinker22FixupStaticTrampolinesEPNS_6ThreadENS_6ObjPtrINS_6mirror5ClassEEE(d) _ZN3art6Thread14CurrentFromGdbEv(d) art_quick_generic_jni_trampoline(d) 
+native.elf.file.libart.codeMatchesMemory=18/18
+native.elf.file.libc.path=/apex/com.android.runtime/lib64/bionic/libc.so base=found
+native.elf.file.libc.read=machine=183 class=2 size=411056
+native.elf.file.libc.sections=.note.gnu.build-id .dynsym .symtab 
+native.elf.file.libc.symbols=android_set_abort_message(d) 
+native.elf.file.libc.codeMatchesMemory=2/2
+native.elf.file.libjavacore.path=/apex/com.android.art/lib64/libjavacore.so base=found
+native.elf.file.libjavacore.read=machine=183 class=2 size=259728
+native.elf.file.libjavacore.sections=.note.android.ident .note.gnu.build-id .dynsym .gnu_debugdata 
+native.elf.file.libjavacore.symbols=JNI_OnLoad(d) 
+native.elf.file.libjavacore.codeMatchesMemory=1/1
+native.sys.uname=Linux|localhost|7.0.0-42-generic|#42-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 15 08:19:15 UTC 2026|aarch64
+native.sys.getauxval.hwcap=0xefb3ffff
+native.sys.getauxval.hwcap2=0x100126181
+native.sys.getauxval.platform=aarch64
+native.sys.getauxval.pagesz=4096
+native.sys.getauxval.execfn=/system/bin/app_process64
+native.sys.getauxval.secure=0
+native.sys.getauxval.sysinfo_ehdr=set
+native.sys.getauxval.base=?+0x0 (/apex/com.android.runtime/lib64/bionic/libdl.so)
+native.sys.getauxval.entry=?+0xc80 ()
+native.sys.personality=0x0
+native.sys.prctl.name=hello.identity
+native.sys.prctl.dumpable=0
+native.sys.prctl.no_new_privs=1
+native.sys.prctl.seccomp=2
+native.sys.prctl.subreaper=0
+native.sys.ids=uid=10000 euid=10000 gid=10000 egid=10000
+native.sys.groups=9997 20000 50000 
+native.sys.ppid=971165
+native.sys.pidIsTid=0
+native.sys.cpus=conf=10 onln=10 affinity=10
+native.sys.pagesize=4096
+native.sys.cpuinfo.Hardware=absent
+native.sys.cpuinfo.model name=absent
+native.sys.cpuinfo.CPU implementer= 0x61
+native.sys.cpuinfo.CPU part= 0x000
+native.sys.cpuinfo.Features= fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 asimdfhm dit uscat ilrcpc flagm sb pa
+native.sys.cpuinfo.flags=absent
+native.sys.cpuinfo.vendor_id=absent
+native.sys.raw.uname=Linux 7.0.0-42-generic aarch64
+native.sys.raw.getuid=10000 libc=10000
+native.sys.raw.getpid=same
+native.sys.raw.openat./proc/self/maps=bytes=171385 libart=1 libjvm=0
+native.sys.raw.openat./proc/self/status=bytes=1202 TracerPid: 0 uidline=Uid: 10000 10000 10000 10000|Gid: 10000 
+native.sys.raw.openat./proc/self/cmdline=hello.identity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+native.sys.raw.openat./system/build.prop=bytes=4866
+native.sys.raw.openat./apex/com.android.art/lib64/libart.so=bytes=94816 elf=1 machine=183
+native.sys.raw.openat./proc/1/cmdline=ERR No such file or directory
+native.sys.prop.ro.build.fingerprint=google/redfin/redfin:17/CP2A.260605.016/1793003012:user/release-keys
+native.sys.prop.ro.build.version.sdk=37
+native.sys.prop.ro.build.type=user
+native.sys.prop.ro.build.tags=release-keys
+native.sys.prop.ro.debuggable=0
+native.sys.prop.ro.secure=1
+native.sys.prop.ro.kernel.qemu=(unset)
+native.sys.prop.ro.boot.qemu=(unset)
+native.sys.prop.ro.hardware=apklayer
+native.sys.prop.ro.product.cpu.abi=arm64-v8a
+native.sys.prop.ro.product.cpu.abilist=arm64-v8a,armeabi-v7a,armeabi
+native.sys.prop.ro.product.model=Pixel 5
+native.sys.prop.ro.boot.verifiedbootstate=green
+native.sys.prop.ro.boot.flash.locked=1
+native.sys.prop.ro.zygote=zygote64
+native.sys.prop.ro.dalvik.vm.native.bridge=0
+native.sys.prop.ro.enable.native.bridge.exec=(unset)
+native.sys.prop.persist.sys.dalvik.vm.lib.2=libart.so
+native.sys.prop.dalvik.vm.isa.arm64.variant=cortex-a76
+native.sys.prop.dalvik.vm.heapsize=512m
+native.sys.prop.dalvik.vm.heapgrowthlimit=256m
+native.sys.prop.dalvik.vm.usejit=true
+native.sys.prop.ro.vndk.version=33
+native.sys.prop.ro.treble.enabled=true
+native.sys.prop.ro.build.selinux=(unset)
+native.sys.prop.ro.boot.selinux=(unset)
+native.sys.prop.init.svc.adbd=stopped
+native.sys.prop.sys.usb.state=(unset)
+native.sys.prop.service.adb.root=(unset)
+native.sys.prop.ro.adb.secure=(unset)
+native.sys.prop.ro.serialno=(unset)
+native.sys.prop.gsm.version.baseband=(unset)
+native.sys.prop.ro.waydroid.cpu=(unset)
+native.sys.prop.ro.apklayer.version=(unset)
+native.sys.prop.ro.product.board=redfin
+native.sys.prop.ro.board.platform=lito
+native.sys.prop.count=219
+native.sys.files.exist=/system/bin/linker64 /apex/com.android.runtime/bin/linker64 /apex/com.android.art/lib64/libart.so /system/bin/sh /system/bin/toybox /vendor/build.prop /system/build.prop /sys/class/net /proc/net/tcp /usr/lib /home /run/user /tmp /lib/aarch64-linux-gnu /data/data /storage/emulated/0 /sdcard /odm /product /system_ext 
+native.sys.files.missing=/system/bin/su /system/xbin/su /sbin/su /su/bin/su /data/local/tmp /data/local/xbin/su /system/app/Superuser.apk /data/adb/magisk /system/bin/app_process64 /system/bin/app_process32 /apex/com.android.art/javalib/core-oj.jar /system/framework/framework.jar /system/framework/arm64/boot.oat /system/framework/x86_64/boot.oat /apex/com.android.art/javalib/arm64/boot.oat /data/dalvik-cache /dev/binder /dev/binderfs /dev/ashmem /dev/socket/zygote /dev/__properties__ /dev/qemu_pipe /dev/goldfish_pipe /system/lib64/libhoudini.so /system/lib64/libndk_translation.so /sys/fs/selinux/enforce /etc/os-release /lib/x86_64-linux-gnu /mnt/user/0 /vendor/lib64 
+native.sys.getenv.ANDROID_ROOT=/system
+native.sys.getenv.ANDROID_DATA=/data
+native.sys.getenv.ANDROID_ART_ROOT=/apex/com.android.art
+native.sys.getenv.ANDROID_I18N_ROOT=/apex/com.android.i18n
+native.sys.getenv.ANDROID_TZDATA_ROOT=/apex/com.android.tzdata
+native.sys.getenv.ANDROID_STORAGE=/storage
+native.sys.getenv.EXTERNAL_STORAGE=/sdcard
+native.sys.getenv.ASEC_MOUNTPOINT=/mnt/asec
+native.sys.getenv.PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/apex/com.android.virt/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin
+native.sys.getenv.LD_LIBRARY_PATH=(unset)
+native.sys.getenv.LD_PRELOAD=(unset)
+native.sys.getenv.HOME=(unset)
+native.sys.getenv.USER=(unset)
+native.sys.getenv.SHELL=(unset)
+native.sys.getenv.TMPDIR=(unset)
+native.sys.getenv.JAVA_HOME=(unset)
+native.sys.getenv.CLASSPATH=(unset)
+native.sys.getenv.ANDROID_SOCKET_zygote=(unset)
+native.sys.getenv.DISPLAY=(unset)
+native.sys.getenv.WAYLAND_DISPLAY=(unset)
+native.sys.getenv.XDG_RUNTIME_DIR=(unset)
+native.sys.getenv.BOOTCLASSPATH=(long, starts /apex)
+native.art.jmethodID.shape=pointer low_bit=0 aligned8=1
+native.art.jmethodID.delta=8
+native.art.jmethodID.equalsArtMethod=no
+native.art.artMethod.delta=32
+native.art.jfieldID.shape=pointer low_bit=0
+native.art.jfieldID.delta=128
+native.art.jmethodID.stable=1
+native.art.artMethodAtID.read=ok
+native.art.artMethodAtID.accessFlags@4=0xf925 low16match=0
+native.art.artMethodAtID.accessFlagsScan=-1
+native.art.artMethodAtID.dexMethodIndex@8=2950418848
+native.art.artMethodAtID.data@16=unresolved
+native.art.artMethodAtID.entry@24=unresolved
+native.art.nativeMethodAtID.read=ok
+native.art.nativeMethodAtID.accessFlags@4=0xf925 low16match=0
+native.art.nativeMethodAtID.accessFlagsScan=-1
+native.art.nativeMethodAtID.dexMethodIndex@8=55
+native.art.nativeMethodAtID.data@16=unresolved
+native.art.nativeMethodAtID.entry@24=unresolved
+native.art.GetVersion=0x10006
+native.art.refs.lowBits=local=0 global=2 weak=1
+native.art.refs.types=local=1 global=2 weak=3
+native.art.isCopy.string=critical=1 chars=1 utf=1
+native.art.isCopy.intArray=critical=0 elements=1
+native.art.isCopy.largeIntArray=elements=1
+native.art.JavaVM.sameAsOnLoad=1
+native.art.JNI_GetCreatedJavaVMs.default=no symbol
+native.art.JNI_GetCreatedJavaVMs.libnativehelper=ret=0 count=1 same=1 at=JNI_GetCreatedJavaVMs+0x0 (/apex/com.android.art/lib64/libnativehelper.so)
+native.art.JNI_GetCreatedJavaVMs.libart=no symbol
+native.art.JNI_GetDefaultJavaVMInitArgs.libnativehelper=no symbol
+native.art.JNI_CreateJavaVM.libnativehelper=no symbol
+native.jnithread.GetEnv.beforeAttach=-2
+native.jnithread.FindClass.appClass=NOT FOUND java.lang.ClassNotFoundException: hello.identity.Main
+native.jnithread.attachedThread=name=Thread-4 group=main comm=Thread-4
+END
