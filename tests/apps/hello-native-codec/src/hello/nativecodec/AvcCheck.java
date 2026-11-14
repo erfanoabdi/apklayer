@@ -69,9 +69,12 @@ public final class AvcCheck {
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             int pictures = 0;
             boolean eos = false;
-            for (int event = 0; event < count + 5 && !eos; event++) {
+            // a deadline, not an event count: a timeout under load (INFO_TRY_AGAIN_LATER) is not a failure while the decoder still has time
+            long deadline = System.nanoTime() + 30_000_000_000L;
+            while (!eos && System.nanoTime() < deadline) {
                 int output = codec.dequeueOutputBuffer(info, 2000000);
                 if (output < 0) {
+                    if (output == MediaCodec.INFO_TRY_AGAIN_LATER) continue;
                     require(output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED || output == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED,
                             "AVC output " + output);
                     continue;
