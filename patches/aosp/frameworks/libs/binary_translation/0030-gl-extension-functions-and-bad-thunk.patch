@@ -1,0 +1,158 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] proxied GL extension functions resolve through the host's eglGetProcAddress; a still missing host function answers 0 (named in the log) instead of aborting the process
+
+proxy_library_builder.cc takes the host function of a known proxied name from dlsym of the host library and, when that fails, gave it the thunk DoBadThunk, which was
+LOG_ALWAYS_FATAL. Mesa's libGLESv2.so exports only core GL: its EXT/OES/KHR/ANGLE extension functions (485 names of the guest libGLESv2 proxy) are reachable only through
+eglGetProcAddress. Gecko's GL loader tries eglGetProcAddress and then dlsym of the library, so it got a non-NULL pointer for such a name and calling it aborted
+Fennec's GPU process ("Bad thunk call before ..." in its component log). The parent's main thread then waited for ever for that process's sync IPC reply (MOZ_LOG ipc:
+"Send seqno=-29, xid=-29", never answered): no page request, no beacon. Now a GL library's missing function is looked up with the host libEGL's eglGetProcAddress
+(HostGlFunction); what the driver lacks too gets a thunk of its own (x86_64 host: a 22-byte stub per name) that logs the name and returns 0, as a driver without the
+function gives a caller that ignores a missing extension. Regression: tests/apps/hello-arm64 (missingGlFunctions). Module libberberis_arm64.
+
+diff --git a/proxy_loader/include/berberis/proxy_loader/proxy_library_builder.h b/proxy_loader/include/berberis/proxy_loader/proxy_library_builder.h
+index 2db4034a..fd954b6f 100644
+--- a/proxy_loader/include/berberis/proxy_loader/proxy_library_builder.h
++++ b/proxy_loader/include/berberis/proxy_loader/proxy_library_builder.h
+@@ -17,6 +17,7 @@
+ #ifndef BERBERIS_LOADER_PROXY_LIBRARY_BUILDER_H_
+ #define BERBERIS_LOADER_PROXY_LIBRARY_BUILDER_H_
+ 
++#include <cstdint>
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/runtime_primitives/host_function_wrapper_impl.h"  // TrampolineFunc
+ 
+@@ -36,7 +37,7 @@ struct KnownVariable {
+ };
+ 
+ // TODO(eaeltsin): these are stubs used by known trampolines, consider killing!
+-void DoBadThunk();
++uint64_t DoBadThunk();
+ void DoBadTrampoline(HostCode callee, ThreadState* state);
+ 
+ // region digitalis
+diff --git a/proxy_loader/proxy_library_builder.cc b/proxy_loader/proxy_library_builder.cc
+index 01e22339..72102bdd 100644
+--- a/proxy_loader/proxy_library_builder.cc
++++ b/proxy_loader/proxy_library_builder.cc
+@@ -29,6 +29,7 @@
+ // endregion
+ 
+ #include <cstring>
++#include <mutex>
+ 
+ #include "berberis/base/checks.h"
+ #include "berberis/base/logging.h"
+@@ -47,10 +48,74 @@
+ 
+ namespace berberis {
+ 
+-void DoBadThunk() {
+-  LOG_ALWAYS_FATAL("Bad thunk call before %p", __builtin_return_address(0));
++// apklayer patch: a known function whose host library lacks it (Mesa has no glCopyTextureCHROMIUM and the like) used to abort the process here: Fennec's GPU
++// process died ("Bad thunk call"), the parent's main thread then waited for ever for a sync IPC reply. Log and answer 0 (NULL/false/no error), as the guest
++// would get from a driver without the function; the name is logged where the thunk is chosen (InterceptSymbol).
++uint64_t DoBadThunk() {
++  ALOGE("berberis: call of a function the host library lacks, before %p: returning 0", __builtin_return_address(0));
++  return 0;
+ }
+ 
++namespace {
++
++extern "C" uint64_t BerberisHostLessFunctionCalled(const char* name) {
++  ALOGE("berberis: call of %s, which the host library lacks: returning 0", name);
++  return 0;
++}
++
++// A thunk of its own per name: `mov rdi, name; mov rax, BerberisHostLessFunctionCalled; jmp rax`, so the log says which function was called (the guest's
++// arguments are not needed for answering 0). x86_64 hosts only; elsewhere DoBadThunk.
++// The host's libGLESv2.so exports only the core entry points; extension functions (EXT, OES, KHR, ANGLE...) the driver supports are reached through
++// eglGetProcAddress only. The guest's libGLESv2 proxy knows them by name (Android's library exports them), so resolve those through the host's libEGL too.
++void* HostGlFunction(const char* library_name, const char* name) {
++  if (strncmp(library_name, "libGLES", 7) != 0) {
++    return nullptr;
++  }
++  using GetProc = void* (*)(const char*);
++  static const GetProc get_proc = [] {
++    void* egl = dlopen("libEGL.so", RTLD_NOW | RTLD_GLOBAL);
++    return egl ? reinterpret_cast<GetProc>(dlsym(egl, "eglGetProcAddress")) : nullptr;
++  }();
++  return get_proc ? get_proc(name) : nullptr;
++}
++
++void* NamedBadThunk(const char* library_name, const char* name) {
++#if defined(__x86_64__)
++  static std::mutex mutex;
++  static uint8_t* page = nullptr;
++  static size_t used = 0;
++  constexpr size_t kPage = 1 << 16, kStub = 32;
++  std::lock_guard<std::mutex> lock(mutex);
++  if (page == nullptr || used + kStub > kPage) {
++    void* mem = mmap(nullptr, kPage, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++    if (mem == MAP_FAILED) {
++      return reinterpret_cast<void*>(DoBadThunk);
++    }
++    page = static_cast<uint8_t*>(mem);
++    used = 0;
++  }
++  char* text = nullptr;
++  if (asprintf(&text, "%s %s", library_name, name) < 0) {
++    return reinterpret_cast<void*>(DoBadThunk);
++  }
++  uint8_t* code = page + used;
++  used += kStub;
++  auto fn = reinterpret_cast<uintptr_t>(&BerberisHostLessFunctionCalled);
++  code[0] = 0x48; code[1] = 0xBF;  // mov rdi, imm64
++  memcpy(code + 2, &text, 8);
++  code[10] = 0x48; code[11] = 0xB8;  // mov rax, imm64
++  memcpy(code + 12, &fn, 8);
++  code[20] = 0xFF; code[21] = 0xE0;  // jmp rax
++  return code;
++#else
++  (void)library_name;
++  (void)name;
++  return reinterpret_cast<void*>(DoBadThunk);
++#endif
++}
++
++}  // namespace
++
+ void DoBadTrampoline(HostCode callee, ThreadState* state) {
+   CHECK(state);
+   const char* name = static_cast<const char*>(callee);
+@@ -268,10 +333,11 @@ void ProxyLibraryBuilder::InterceptSymbol(GuestAddr guest_addr, const char* name
+       if (!thunk) {
+         // Default thunk.
+         thunk = dlsym(handle_, name);
++        if (!thunk) thunk = HostGlFunction(library_name_, name);  // apklayer patch
+       }
+       if (!thunk) {
+         // Assume no thunk needed, all work is done by trampoline.
+-        thunk = reinterpret_cast<void*>(DoBadThunk);
++        thunk = NamedBadThunk(library_name_, name);
+       }
+       if (function.marshal_and_call == DoBadTrampoline) {
+         // region digitalis - a primary-table entry marked DoBadTrampoline
+@@ -287,9 +353,10 @@ void ProxyLibraryBuilder::InterceptSymbol(GuestAddr guest_addr, const char* name
+           void* extra_thunk = extra->thunk;
+           if (!extra_thunk) {
+             extra_thunk = dlsym(handle_, name);
++            if (!extra_thunk) extra_thunk = HostGlFunction(library_name_, name);  // apklayer patch
+           }
+           if (!extra_thunk) {
+-            extra_thunk = reinterpret_cast<void*>(DoBadThunk);
++            extra_thunk = NamedBadThunk(library_name_, name);
+           }
+           MakeTrampolineCallable(guest_addr, false, extra->marshal_and_call, extra_thunk, name);
+           return;
+@@ -346,9 +413,10 @@ void ProxyLibraryBuilder::InterceptSymbol(GuestAddr guest_addr, const char* name
+     void* thunk = extra->thunk;
+     if (!thunk) {
+       thunk = dlsym(handle_, name);
++      if (!thunk) thunk = HostGlFunction(library_name_, name);  // apklayer patch
+     }
+     if (!thunk) {
+-      thunk = reinterpret_cast<void*>(DoBadThunk);
++      thunk = NamedBadThunk(library_name_, name);
+     }
+     if (extra->marshal_and_call == DoBadTrampoline) {
+       // Already inside the arm64-only block: a bad extra entry degrades loudly.
