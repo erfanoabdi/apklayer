@@ -61,7 +61,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Keystore: only pam_unix passwords, never locked.
 - libcore: `sun.misc.Cleaner`, `fstat(fd)`, SharedMemory `PROT_EXEC`/`PROT_NONE`.
 - Termux: under the sandbox, `getpwuid` names, no `/system/bin/sh` or `getprop`.
-- Direct buffer `array()` writes are lost. Only the default-route interface is a network.
+- Direct buffer `array()` writes are lost: an app's `allocateDirect` buffer reports an array that is a copy (ApklayerBuffers; on Android libcore backs it with the shared byte[], HotSpot cannot pin one). Not fixable without JVM pinning; kept for apps that write through it.
 
 ## Startup and memory
 - JDK 25: flatpak still names JDK 21; findJava prefers an installed 21 over 25.

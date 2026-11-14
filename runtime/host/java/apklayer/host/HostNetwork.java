@@ -23,14 +23,43 @@ import org.robolectric.shadows.ShadowNetworkInfo;
 /**
  * The host's real connectivity for ConnectivityManager and WifiManager: the interface of the default route (/proc/net/route) is the active network, Wi-Fi when it
  * has a wireless directory in sysfs and Ethernet otherwise, none (offline) without a default route; its LinkProperties come from HostLinkProperties. It is
- * the one network: Robolectric's stand-in mobile and Wi-Fi networks are removed. Changes come from `ip monitor route address` (events, no polling) and
- * reach registered network callbacks as onAvailable / onCapabilitiesChanged / onLinkPropertiesChanged / onLost.
+ * the active network, the stand-ins of Robolectric (mobile, Wi-Fi) are removed. The other up interfaces with an address (Wi-Fi beside Ethernet, a VPN's tun, wg)
+ * are further networks in getAllNetworks (own capabilities and LinkProperties; never the active one). Changes come from `ip monitor route address link`
+ * (events, no polling) and reach registered network callbacks as onAvailable / onCapabilitiesChanged / onLinkPropertiesChanged / onLost.
  */
 final class HostNetwork {
     private HostNetwork() {}
 
-    /** What the host offers right now: the default-route interface, its transport and link, or null when offline. */
-    record State(String iface, boolean wifi, LinkProperties link) {}
+    /** What the host offers right now: the default-route interface, its transport and link, and the other networks; null when offline. */
+    record State(String iface, boolean wifi, LinkProperties link, List<Other> others) {}
+
+    /** A network that is not the default one: {@code transport} is a NetworkCapabilities.TRANSPORT_*. */
+    record Other(String iface, int transport, LinkProperties link) {}
+
+    private static final java.util.regex.Pattern NOT_NETWORKS = java.util.regex.Pattern.compile("(lo|docker|veth|br-|virbr|vnet|lxc|cni|flannel|vboxnet|vmnet|waydroid|binder).*");
+    private static final java.util.regex.Pattern VPNS = java.util.regex.Pattern.compile("(tun|wg|ppp|tailscale|ipsec).*");
+
+    /** The up interfaces with an address besides {@code main} (an interface in /sys/class/net, not a bridge or container's), as Android lists a Wi-Fi, an Ethernet and a VPN network at once. */
+    private static List<Other> others(String main) {
+        List<Other> found = new java.util.ArrayList<>();
+        String[] names = new File("/sys/class/net").list();
+        if (names == null) return found;
+        java.util.Arrays.sort(names);
+        for (String name : names) {
+            if (name.equals(main) || NOT_NETWORKS.matcher(name).matches()) continue;
+            try {
+                int flags = Integer.decode(Files.readString(Path.of("/sys/class/net/" + name + "/flags")).trim());
+                String state = Files.readString(Path.of("/sys/class/net/" + name + "/operstate")).trim();
+                if ((flags & 1) == 0 || !(state.equals("up") || state.equals("unknown"))) continue;  // IFF_UP; a tun or dummy has no carrier state ("unknown")
+                LinkProperties link = HostLinkProperties.read(name);
+                if (link.getLinkAddresses().isEmpty()) continue;
+                int transport = VPNS.matcher(name).matches() ? NetworkCapabilities.TRANSPORT_VPN
+                        : new File("/sys/class/net/" + name + "/wireless").isDirectory() ? NetworkCapabilities.TRANSPORT_WIFI : NetworkCapabilities.TRANSPORT_ETHERNET;
+                found.add(new Other(name, transport, link));
+            } catch (IOException | NumberFormatException unreadable) { /* gone while looking */ }
+        }
+        return found;
+    }
 
     static State read() {
         try {
@@ -38,18 +67,20 @@ final class HostNetwork {
             for (String line : lines.subList(Math.min(1, lines.size()), lines.size())) {
                 String[] f = line.trim().split("\\s+");
                 if (f.length > 7 && f[1].equals("00000000") && (Integer.parseInt(f[3], 16) & 1) != 0) {  // destination 0.0.0.0, flag UP
-                    return new State(f[0], new File("/sys/class/net/" + f[0] + "/wireless").isDirectory(), HostLinkProperties.read(f[0]));
+                    return new State(f[0], new File("/sys/class/net/" + f[0] + "/wireless").isDirectory(), HostLinkProperties.read(f[0]), others(f[0]));
                 }
             }
         } catch (IOException | NumberFormatException unreadable) { /* offline */ }
         return null;
     }
 
-    static NetworkCapabilities capabilities(State state) {
+    static NetworkCapabilities capabilities(State state) { return capabilities(state.wifi() ? NetworkCapabilities.TRANSPORT_WIFI : NetworkCapabilities.TRANSPORT_ETHERNET); }
+
+    static NetworkCapabilities capabilities(int transport) {
         NetworkCapabilities caps = new NetworkCapabilities();
-        caps.addTransportType(state.wifi() ? NetworkCapabilities.TRANSPORT_WIFI : NetworkCapabilities.TRANSPORT_ETHERNET);
+        caps.addTransportType(transport);
         for (int c : new int[] {NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_VALIDATED, NetworkCapabilities.NET_CAPABILITY_NOT_METERED,
-                NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED, NetworkCapabilities.NET_CAPABILITY_NOT_VPN, NetworkCapabilities.NET_CAPABILITY_TRUSTED,
+                NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED, transport == NetworkCapabilities.TRANSPORT_VPN ? NetworkCapabilities.NET_CAPABILITY_TRUSTED : NetworkCapabilities.NET_CAPABILITY_NOT_VPN, NetworkCapabilities.NET_CAPABILITY_TRUSTED,
                 NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING, NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED, NetworkCapabilities.NET_CAPABILITY_FOREGROUND,
                 NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED,
                 NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED /* NetworkRequest.Builder asks for it by default (API 31): without it no request is satisfied (WorkManager's network constraint) */}) caps.addCapability(c);
@@ -72,7 +103,7 @@ final class HostNetwork {
     /** Runs {@code changed} on every route or address event of the host (the hub's job constraints, an app's networks). */
     static void watch(Runnable changed) {
         try {
-            Process monitor = new ProcessBuilder(HostProcess.dying("ip", "monitor", "route", "address")).redirectErrorStream(true).start();
+            Process monitor = new ProcessBuilder(HostProcess.dying("ip", "monitor", "route", "address", "link")).redirectErrorStream(true).start();
             Thread thread = new Thread(() -> {
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
                     while (in.readLine() != null) changed.run();
@@ -107,6 +138,14 @@ final class HostNetwork {
                 shadow.setNetworkCapabilities(network, capabilities(next));
                 shadow.setLinkProperties(network, next.link());
             }
+            int handle = FIRST_OTHER;
+            for (Other other : next.others()) {  // netIds clear of the types Robolectric's active network takes
+                Network extra = new Network(handle++);
+                shadow.addNetwork(extra, ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED, other.transport() == NetworkCapabilities.TRANSPORT_WIFI ? ConnectivityManager.TYPE_WIFI
+                        : other.transport() == NetworkCapabilities.TRANSPORT_VPN ? ConnectivityManager.TYPE_VPN : ConnectivityManager.TYPE_ETHERNET, 0, true, NetworkInfo.State.CONNECTED));
+                shadow.setNetworkCapabilities(extra, capabilities(other.transport()));
+                shadow.setLinkProperties(extra, other.link());
+            }
         }
         WifiManager wifi = app.getSystemService(WifiManager.class);
         if (wifi != null) wifi.setWifiEnabled(next != null && next.wifi());  // deprecated for apps, the shadow still takes it
@@ -120,6 +159,7 @@ final class HostNetwork {
         }
     }
 
+    private static final int FIRST_OTHER = 100;
     private static boolean initialized;
     private static java.util.function.BiConsumer<android.content.Intent, Boolean> hubSend;
 
