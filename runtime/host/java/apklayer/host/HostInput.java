@@ -168,6 +168,16 @@ final class HostInput {
                 return;
             }
         }
+        if (code == 0 && unicode > 0 && unicode < 128 && !Character.isISOControl(unicode)) {
+            // ASCII punctuation: a real keycode + shift meta, so KeyEvent.getUnicodeChar() works (Termux ignores ACTION_MULTIPLE)
+            KeyEvent[] ks = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD)
+                    .getEvents(new char[] { (char) unicode });
+            if (ks != null && ks.length > 0 && ks[0].getKeyCode() != 0) {
+                injectKey(new KeyEvent(now, now, act, ks[0].getKeyCode(), 0, meta | ks[0].getMetaState()),
+                        false);
+                return;
+            }
+        }
         if (code == 0) { // no Android keycode (non-US characters, symbols): type the character
             if (act == KeyEvent.ACTION_DOWN && unicode > 0)
                 inject(new KeyEvent(now, new String(Character.toChars(unicode)), 0, 0));
