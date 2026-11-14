@@ -1,9 +1,7 @@
 # Building in the LineageOS tree (how-to; the dated log of every build is in ../CHANGELOG.md, section "Build log")
 
-Authorization (user, 2026-10-27): build what is needed in `~/los24` (OrbStack VM `ubuntu22-x86`) autonomously. Rules that never change:
-- Only incremental builds of `gsi_arm64 userdebug` in the existing `out/` (115 GB, device build in `out/target/product/generic_arm64`):
-  `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
-- **Never wipe or clean `out/`**: no `rm -rf out`, `m clean`, `installclean`, no other product, no separate `OUT_DIR`, no `git clean`/`repo sync -d` that could remove it.
+Authorization, allowed products (gsi_arm64 and gsi_x86_64 userdebug) and the never-wipe-`out/` rule: `CLAUDE.md` "Builds in `~/los24`". The existing `out/` is 115 GB
+(device builds in `out/target/product/generic_arm64` and `generic_x86_64`): `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
 - Log each build in `CHANGELOG.md` ("Build log") before it runs: what, why it is necessary, command, result.
 - The tree's own projects carry apklayer's edits as plain patches, `patches/aosp/<project path>/*.patch` (each project's pinned commit in its `REVISION`):
   `patches/apply aosp ~/los24` applies them, idempotently (already-applied patches are skipped). Check without writing: `git -C ~/los24/<project> apply --check -R <patch>`.

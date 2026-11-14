@@ -26,6 +26,8 @@ public class ShadowHostVMRuntime extends ShadowVMRuntime {
     @Implementation protected int getTargetSdkVersion() { return targetSdkVersion; }
     @Implementation protected void setTargetSdkVersion(int target) { targetSdkVersion = target; }
     // hiddenapi exemptions an app's bypass library sets (GuestHiddenApi)
+    /** ART's native (dalvik_system_VMRuntime.cc): the base.apk's dexopt status; null ended Play Store (ShadowHostDexFile). */
+    @Implementation protected static dalvik.system.DexFile.OptimizationInfo getBaseApkOptimizationInfo() { return ShadowHostDexFile.info(); }
     @Implementation protected void setHiddenApiExemptions(String[] signaturePrefixes) { GuestHiddenApi.exempt(signaturePrefixes); }
 
     // AOSP's default; setTargetHeapUtilization retains its Java validation and synchronization.

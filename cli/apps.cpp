@@ -253,13 +253,13 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     removeTree(tmp);  // now, not at exit: reconvert --all-stale installs several in one run
     pending.clear();
     printf("apklayer: installed %s (%s) -> %s\n", pkg.c_str(), label.c_str(), dir.c_str());
-    // microG Services holds the cloud-messaging connection for every app: pushes reach closed apps only while the instance runs. Once per instance
+    // Play services (microG's or Google's own) holds the cloud-messaging connection for every app: pushes reach closed apps only while the instance runs. Once per instance
     // (its marker), so an update or a user's later `off` stays as it is
     const std::string asked = join(inst.stateDir, "autostart-microg");
     if (pkg == "com.google.android.gms" && !exists(asked)) {
         writeFile(asked, "1\n");
         if (!autostartOn(inst)) {
-            printf("apklayer: microG Services delivers push messages to closed apps: turning instance %s always on (`apklayer instance autostart %s off` undoes it)\n",
+            printf("apklayer: Play services delivers push messages to closed apps: turning instance %s always on (`apklayer instance autostart %s off` undoes it)\n",
                    inst.id.c_str(), inst.id.c_str());
             autostartCommand(l, {inst.id, "on"});
         }

@@ -63,6 +63,10 @@ public class ShadowHostPackageInstaller extends ShadowPackageInstaller {
     @Implementation
     @Override protected List<PackageInstaller.SessionInfo> getMySessions() { return sessions(true); }
 
+    /** No staged sessions (APEX and reboot installs; the hub's installer commits at once): an empty list, as Android with none staged. The framework's
+     *  call through the unbacked IPackageInstaller got null and threw in ParceledListSlice.getList (Play Store's start). */
+    @Implementation protected List<PackageInstaller.SessionInfo> getStagedSessions() { return List.of(); }
+
     private static List<PackageInstaller.SessionInfo> sessions(boolean mine) {
         if (!HubClient.connected()) return List.of();
         return hub().installSession(HubInstallSessions.LIST, request -> request.writeBoolean(mine), reply -> {

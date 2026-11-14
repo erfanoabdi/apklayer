@@ -70,7 +70,7 @@ system-apps/        the providers, DocumentsUI and webview.apk for the first run
 Install (what apklayer-manager does): unpack into `~/.local/share/apklayer/runtime/R/` (`$XDG_DATA_HOME` is honoured) and point the symlink
 `runtime/current` at `R`; by hand: `mkdir -p ~/.local/share/apklayer/runtime/R && tar --zstd -xf apklayer-runtime-<cpu>-R.tar.zst -C ~/.local/share/apklayer/runtime/R && ln -sfn R ~/.local/share/apklayer/runtime/current`.
 The installed CLI takes `runtime/current` (else `runtime/R` of its `versions`) as its native dir: on first use, and again after each package or runtime update, it runs
-`tools/setup-runtime.sh` (`tools/release/setup-runtime.sh`, under a lock) which links the package's half in (with its library mapping), puts the JNI shim into the framework jars
+`<share>/tools/setup-runtime.sh` (installed from `tools/release/setup-runtime.sh`; run under a lock) which links the package's half in (with its library mapping), puts the JNI shim into the framework jars
 and instruments the framework once (a few minutes). Without the bundle, commands that start Android code say where it is missing.
 Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still override every path; a source tree keeps working as before (no `versions` at its root).
 
@@ -134,11 +134,11 @@ downloads nothing. The code that looks releases.json up, downloads with a SHA256
 compiled into both the CLI and the manager.
 
 ```
-apklayer [--instance ID] setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]
+apklayer [--instance ID] setup [--check] [--update] [--bundle <file|file://|URL>] [--microg | --gapps] [--fdroid]
 apklayer setup --move-data <dir>
 ```
 
-Output, tab separated: `step <id> <state> <detail>` (ids: binder, java, runtime, providers, system-apps, microg, fdroid; states: todo, running, done,
+Output, tab separated: `step <id> <state> <detail>` (ids: binder, java, runtime, providers, system-apps, microg, gapps, fdroid; states: todo, running, done,
 failed, skipped), `progress <0..1|-1>`, and with `--check` (which changes nothing) `latest <version> <runtime version> <date>`. Idempotent: the runtime
 is fetched when none is installed (`--update`: when the release has a newer one), the system apps the runtime changed since the last setup (each APK's sha256 in `~/.local/share/apklayer/system-apps.sha256`; replaced with their data kept; `setup-done` marks the first setup).
 Space: the bundle downloads into `runtime/.downloads` (the runtime's file system, one place to check), and before a download or an unpack
