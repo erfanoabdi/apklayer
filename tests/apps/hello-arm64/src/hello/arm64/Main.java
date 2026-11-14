@@ -27,6 +27,11 @@ public class Main extends Activity {
     private static native String fidelity();
     private static native String oldHandlers();
     private static native String probeEnv();
+    private static String getPrimaryCpuAbi(android.content.pm.ApplicationInfo ai) { return field(ai, "primaryCpuAbi"); }
+    private static String getSecondaryCpuAbi(android.content.pm.ApplicationInfo ai) { return field(ai, "secondaryCpuAbi"); }
+    private static String field(Object o, String n) {
+        try { return String.valueOf(o.getClass().getField(n).get(o)); } catch (ReflectiveOperationException e) { return "n/a " + e; }
+    }
 
     static int twice(int v) { return 2 * v; }
 
@@ -81,6 +86,10 @@ public class Main extends Activity {
         log("errno " + (errno == 222 ? "ok" : "WRONG " + errno));
         int fault = fault();  // a guest null read its own SIGSEGV handler recovers from: the JVM lives on
         log("guest fault " + (fault == 1 ? "recovered" : "FAIL " + fault));
+        android.content.pm.ApplicationInfo ai = getApplicationInfo();
+        log("abi SUPPORTED_ABIS " + java.util.Arrays.toString(android.os.Build.SUPPORTED_ABIS) + " SUPPORTED_64 " + java.util.Arrays.toString(android.os.Build.SUPPORTED_64_BIT_ABIS)
+                + " CPU_ABI " + android.os.Build.CPU_ABI + " primaryCpuAbi " + getPrimaryCpuAbi(ai) + " secondaryCpuAbi " + getSecondaryCpuAbi(ai)
+                + " libdir " + ai.nativeLibraryDir + " is64 " + android.os.Process.is64Bit());
         log("env MOZ_LOG " + probeEnv());
         String handlers = oldHandlers();  // the previous actions sigaction reports are SIG_DFL, SIG_IGN or code (a chained crash handler calls them)
         log("old handlers " + (handlers.isEmpty() ? "ok" : "WRONG" + handlers));
