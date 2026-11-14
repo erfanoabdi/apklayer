@@ -16,10 +16,10 @@ final class ImeCheck implements Check {
         InputMethodManager imm = context.getSystemService(InputMethodManager.class);
         String chosen = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
         String seen = "installed " + imm.getInputMethodList().stream().map(InputMethodInfo::getId).toList() + ", enabled "
-                + imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).toList() + ", default " + chosen;
+                + imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).toList() + ", default " + chosen + " (location_mode " + Settings.Secure.getString(context.getContentResolver(), "location_mode") + ")";
         Check.require(imm.getInputMethodList().stream().map(InputMethodInfo::getId).anyMatch(id::equals), id + " not installed: " + seen);
         Check.require(imm.getEnabledInputMethodList().stream().map(InputMethodInfo::getId).anyMatch(id::equals), id + " not enabled: " + seen);
-        Check.require(id.equals(chosen), seen);
+        Check.require(chosen == null || id.equals(chosen), seen);  // null: the provider hides the setting from a targetSdk 34 app (as ENABLED_INPUT_METHODS); the hub log line "default input method" is the check (tests/vm/system-apps.sh)
         return seen;
     }
 }
