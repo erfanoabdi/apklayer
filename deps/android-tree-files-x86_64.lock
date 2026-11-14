@@ -559,6 +559,7 @@ e9498c8ab750cdefacc5a3262e59025f737d8ea84e1e2ea2d0f1e9db1e7fd6df 51216 x86_64/an
 51cba6860a8f12f6589b7a55460ad9435c6cdc1225e84f1d88a6a71ee7a85001 931936 x86_64/android-root/system/bin/arm64/linker64 (staged from the tree's build outputs, see CHANGELOG.md) same
 2bc2112d09e83477a1b8dd79e0a650fcf960fbcc6831793d3c66facbd28d0cfd 351208 x86_64/android-root/system/bin/sh out/target/product/generic_x86_64/system/bin/sh same
 7687ddc947c461ed7dee4fea0fb18437f198d885bfea95daca72473ecfeb2e11 611216 x86_64/android-root/system/bin/toybox out/target/product/generic_x86_64/system/bin/toybox same
+18f8a0138be59a1a026e6be938fba6b890703e80290ca3f6c16202afd78cd2f3 186680 x86_64/android-root/system/bin/toolbox out/target/product/generic_x86_64/system/bin/toolbox same
 f45eb1c9df5cfb36827840a35ac2a5884142580c1f450ff4489daad5d6913171 62349 x86_64/android-root/system/etc/apklayer-permission-levels.tsv (staged from the tree's build outputs, see CHANGELOG.md) same
 ab2ed667ff45958843fb0c6ee953a5512def0ae87470c4358aa9576a6a4b2e22 804 x86_64/android-root/system/etc/cgroups.json (staged from the tree's build outputs, see CHANGELOG.md) same
 a6cbb58e6c055771d73517b82bb7758f5436a96b62b7cb306b8692a90070c56f 157 x86_64/android-root/system/etc/compatconfig/SystemUI-application-compat-config.xml (staged from the tree's build outputs, see CHANGELOG.md) same
