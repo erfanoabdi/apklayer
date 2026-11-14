@@ -129,8 +129,11 @@ std::string findJava(const Layout& l) {
     std::string result = "java";
     // JDK 21 first (the tested one; the host patches java.base), any architecture's package name (arm64, amd64)
     // (temurin-21-jdk: Adoptium's RPM path, also the Sailfish OS package's: rpm/temurin-21-jdk.spec)
+    // (JDK 25 only when no 21 is installed: tools/release/jdk-image.sh builds its image without jmods; the AOT cache is not used, docs/PLAN.md)
     if ((glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", 0, nullptr, &found) == 0 ||
-         glob("/usr/lib/jvm/temurin-21-jdk*/bin/java", 0, nullptr, &found) == 0) && found.gl_pathc > 0) result = found.gl_pathv[0];
+         glob("/usr/lib/jvm/temurin-21-jdk*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||
+         glob("/usr/lib/jvm/java-25-openjdk-*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||
+         glob("/usr/lib/jvm/temurin-25-jdk*/bin/java", GLOB_APPEND, nullptr, &found) == 0) && found.gl_pathc > 0) result = found.gl_pathv[0];
     globfree(&found);
     return result;
 }
