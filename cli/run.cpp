@@ -112,7 +112,7 @@ std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, c
     }
     ensureUid(l, dir);
     std::string data = appDataDir(l, inst, package);
-    if (!sandboxOn()) reclaim(data);  // the sandbox ran it as the app's own uid; without it the app runs as the user
+    if (!sandboxOn()) { reclaim(data); reclaim(join(inst.dataDir, "system/users")); }  // the sandbox ran it as the app's own uid; without it the app runs as the user
     std::vector<std::string> a = {"-Dapklayer.data=" + data, "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                   "-Dapklayer.libdir=" + join(dir, "lib")};
     if (property(join(dir, "info.properties"), "system") == "true") a.push_back("-Dapklayer.system=true");  // ApplicationInfo.FLAG_SYSTEM of its own package

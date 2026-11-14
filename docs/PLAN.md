@@ -76,7 +76,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 ## Userspace binder
 - Fewer hops per call (futex doorbells, no second wakeup, busy-poll). Measure SurfaceFlinger and audio.
 - Halium without binderfs: host context is fixed at `/dev/binder`.
-- `binder` group: `ClassNotFoundException: apklayer.host.RealBinder` in a fresh tree.
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`).
@@ -186,8 +185,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - The NVIDIA tester's box with the INSTALL.md checklist.
 - Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
-- Spare-born processes start in the spare's cwd: a `chdir` to `APKLAYER_CWD` hung `hello.input` and the system-apps OtherProcess; find out why (`run.cpp` still sets the variable).
-- Sandboxed, these groups fail: `sysprov` (ANDROID_ID changes across `stop`), `hub-services` (`hub-unit.sh`), system-apps `location` (also unsandboxed).
+- Sandboxed, system-apps `location` fails (also unsandboxed); the other groups run sandboxed (sysprov, hub-services, binder, input, system-apps checked 2026-11-15).
 - Shared spare, cold component hosts.
 - Isolated processes run as the app uid. Design: own uid (AID_ISOLATED 99000+) in the userns map, a view kind in `sandbox-exec`, caller uid to package in the hub.
 
