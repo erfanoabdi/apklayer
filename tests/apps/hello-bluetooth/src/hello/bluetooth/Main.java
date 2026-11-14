@@ -46,6 +46,7 @@ public final class Main extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (System.getProperty("bt.halt") != null) { adapter = getSystemService(BluetoothManager.class).getAdapter(); halt(); return; }  // a server socket, then the process ends without closing it
         if (System.getProperty("bt.real") != null) { Real.start(this, System.getProperty("bt.real")); return; }  // against real devices (Real.java)
         adapter = getSystemService(BluetoothManager.class).getAdapter();
         log("feature le=" + getPackageManager().hasSystemFeature("android.hardware.bluetooth_le") + " scan-granted="
@@ -67,6 +68,15 @@ public final class Main extends Activity {
         try {
             log("discovery started=" + adapter.startDiscovery());
         } catch (SecurityException denied) { log("discovery SecurityException " + denied.getMessage()); }
+    }
+
+    private void halt() {
+        try {
+            BluetoothServerSocket server = adapter.listenUsingInsecureRfcommWithServiceRecord("apklayer-halt", ECHO);
+            new Thread(() -> { try { server.accept(); } catch (IOException closed) { } }).start();
+            log("halt listening pid=" + android.os.Process.myPid());
+            new Thread(() -> { try { Thread.sleep(1500); } catch (InterruptedException ignored) { } Runtime.getRuntime().halt(0); }).start();
+        } catch (IOException failed) { log("halt failed " + failed); }
     }
 
     private void received(Intent intent) {

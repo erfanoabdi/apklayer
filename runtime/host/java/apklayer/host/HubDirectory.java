@@ -630,6 +630,7 @@ final class HubDirectory extends Binder {
         activities.restartIfAlone(peer.name);
         startedServices.died(peer);
         gnss.died(peer);
+        bluetooth.died(peer);
         callAudio.died(peer);
         exitWhenIdle(IDLE_EXIT_MS);
     }

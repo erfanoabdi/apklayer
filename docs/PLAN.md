@@ -14,6 +14,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 ## Bugs
 - Droid-ify: the NPE in `ScreenFragment.getToolbar` seen on UTM after the F-Droid index sync does not show on Parallels (first frame, tabs and turns are fine; there the index never downloads: TLS handshake_failure). Needs the sync to finish (network with working TLS), then the cause. Group `fragment` covers the plain fragment lifecycle (passes).
 - F-Droid index download fails on Parallels with a TLS `handshake_failure` (it completes on UTM).
+- `webview` group fails in 3 of 4 runs on the PC at baseline (cookie assert).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
 - Termux: a failed exec in a forked child may still hang in `exit()` (fix untested in Termux itself).
@@ -41,8 +42,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- Shutter time is the request's time, not the frame's `timestamp_ns` (goldfish session). All streams scaled from the largest. NDK libcamera2ndk is a stub.
-- Portrait desktop monitor: a manager/`apklayer config` entry for the pipewire `mount=` option.
+- All streams scaled from the largest. NDK libcamera2ndk is a stub.
+- Portrait desktop monitor: the right camera mount degrees per monitor direction are unknown (no way to detect it).
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
@@ -206,7 +207,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Binder devices of a removed instance stay until reboot.
 
 ## Hardware
-- Vibrator effects. GNSS fd leak, x86_64 `libapklayer_gnss`.
+- Vibrator effects. x86_64 `libapklayer_gnss`.
 - USB: attach with no hub, interface filters, one chooser for several apps, sandbox node access.
 - Bluetooth: pairing paths, Sailfish agent, several clients per server socket, PendingIntent scans.
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.

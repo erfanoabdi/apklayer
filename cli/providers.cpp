@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -252,7 +253,13 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
             fprintf(stderr, "providers: %s: %s refused: %s\n", d->name, backend.c_str(), why.c_str());
             continue;
         }
-        services.push_back({d->name, d->front, backend, c.options, d->manifest});
+        std::vector<std::string> options = c.options;
+        // the camera-mount setting (cli/config.cpp) is the PipeWire camera's mount= unless the provider's own options name one
+        const std::string mount = getenvOr("APKLAYER_CAMERA_MOUNT", "");
+        if (!mount.empty() && backend.find("camera-pipewire") != std::string::npos &&
+            std::none_of(options.begin(), options.end(), [](const std::string& o) { return o.rfind("mount=", 0) == 0; }))
+            options.push_back("mount=" + mount);
+        services.push_back({d->name, d->front, backend, options, d->manifest});
     }
     return services;
 }

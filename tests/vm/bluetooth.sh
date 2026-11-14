@@ -14,7 +14,16 @@ python3 -m dbusmock --template bluez5 --system >/dev/null 2>&1 & mock=$!
 trap 'bin/apklayer stop >/dev/null 2>&1; kill $mock $daemon 2>/dev/null' EXIT
 gdbus wait --system --timeout 10 org.bluez && python3 tests/vm/bluez-mock.py || { echo "FAIL: no mock BlueZ"; exit 1; }
 bin/apklayer stop >/dev/null 2>&1
-{ python3 -u tests/vm/answer-dialog.py text:1234 40 && python3 -u tests/vm/answer-dialog.py yes 20; } > $out.pin 2>&1 & answer=$!  # mock-pin's PIN, mock-compare's passkey
+# an app that ends with a server socket open: the hub ends its service's dispatcher (the record goes from BlueZ), and none is left
+APKLAYER_JOPTS="-Dapklayer.runms=20000 -Dbt.halt=1" bin/apklayer run hello.bluetooth > $out.halt 2>&1 || true
+grep -a "\[bt\] halt" $out.halt
+haltpid=$(sed -n 's/^\[bt\] halt listening pid=\([0-9]*\)$/\1/p' $out.halt)
+[ -n "$haltpid" ] || { echo "FAIL: the halting server app did not listen"; exit 1; }
+! pgrep -f "[b]luez.py serve .*apklayer-bt-$haltpid-" >/dev/null || { echo "FAIL: a server socket's dispatcher outlived its app"; pgrep -af "[b]luez.py serve .*apklayer-bt-$haltpid-"; exit 1; }
+grep -a "bluetooth: ended the service record" "$APKLY_STATE/hub.log"
+bin/apklayer stop >/dev/null 2>&1
+python3 -u tests/vm/answer-dialog.py text:1234 40 > $out.pin 2>&1 & answer=$!  # mock-pin's PIN, mock-compare's passkey (answered by the second one: it skips the first question)
+python3 -u tests/vm/answer-dialog.py yes 40 1 >> $out.pin 2>&1 & answer="$answer $!"
 APKLAYER_JOPTS="-Dapklayer.runms=30000" bin/apklayer run hello.bluetooth > $out 2>&1 || true
 kill $answer 2>/dev/null; cat $out.pin
 grep -a "\[bt\]\|bluetooth" $out

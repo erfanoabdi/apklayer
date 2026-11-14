@@ -35,6 +35,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.Parcel", ShadowHostRealParcel.class.getName()),
                 Map.entry("android.os.Binder", ShadowHostRealBinder.class.getName()),
                 Map.entry("libcore.io.Linux", ShadowHostRealLinux.class.getName()),
+                Map.entry("libcore.io.BlockGuardOs", ShadowHostRealBlockGuardOs.class.getName()),
                 Map.entry("android.os.BinderProxy", ShadowHostRealBinderProxy.class.getName()),
                 Map.entry("com.android.internal.os.BinderInternal", ShadowHostRealBinderInternal.class.getName()),
                 Map.entry("android.os.Process", ShadowHostProcess.class.getName()),

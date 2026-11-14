@@ -10,3 +10,5 @@ bin/apklayer permissions grant hello.camera android.permission.CAMERA >/dev/null
 APKLAYER_JOPTS="-Dapklayer.runms=25000" bin/apklayer run hello.camera > $out 2>&1 || true
 grep -a "\[cam\]" $out
 grep -aq "\[cam\] PASS" $out || { tail -5 "$APKLY_STATE"/camera*.log 2>/dev/null; exit 1; }
+# the shutter time is the backend frame's timestamp_ns (the HAL says so once), not the request's
+grep -aq "shutter timestamps are the frames' own" "$APKLY_STATE"/camera.log || { echo "FAIL: the camera HAL's shutter timestamps are not the frames' own"; exit 1; }

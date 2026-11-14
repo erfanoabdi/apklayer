@@ -11,6 +11,7 @@
 #include <ui/GraphicBufferMapper.h>
 
 #include "goldfish/debug.h"
+#include "goldfish/metadata_utils.h"
 
 namespace android::hardware::camera::provider::implementation::hw {
 
@@ -38,6 +39,7 @@ void BackendCamera::onFrame(void* user, const apklayer_camera_frame* f) {
     Frame& out = self->mLatest;
     out.data.resize(w * h * 3 / 2);
     out.width = w, out.height = h;
+    out.timestampNs = f->timestamp_ns;
     uint8_t *y = out.data.data(), *u = y + w * h, *v = u + w * h / 4;
     const auto* p0 = static_cast<const uint8_t*>(f->data[0]);
     int r = -1;
@@ -112,6 +114,7 @@ bool BackendCamera::latestFrame(const Rect<uint16_t> size, Frame* out) {
     // the first frame after a start takes a moment: a file decodes, a device opens (an iPhone as a webcam over USB: about 4 s)
     if (!mFrameCond.wait_for(lock, std::chrono::seconds(8), [this] { return mLatest.width || mFailed; }) || mFailed) return FAILURE(false);
     const uint32_t sw = mLatest.width, sh = mLatest.height;
+    mUsedFrameNs = mLatest.timestampNs;
     // ANDROID_SCALER_ROTATE_AND_CROP: 90 and 270 take the centre slice of the frame at its aspect turned a quarter, and each output's crop is
     // taken from that (the field of view the metadata docs describe); the frame is turned after scaling. 90 turns the picture counterclockwise,
     // as the reference HAL (hardware/google/camera EmulatedFrameSource) reads it.
@@ -183,6 +186,8 @@ BackendCamera::processCaptureRequest(CameraMetadata metadataUpdate, Span<CachedS
     {
         std::lock_guard lock(mLock);
         failed = mFailed || !mStreaming;
+        // the sensor timestamp of the result is the frame's (CameraDeviceSession takes it for the shutter when it is newer than the last one)
+        if (mUsedFrameNs > 0) metadataSetShutterTimestamp(&resultMetadata, mUsedFrameNs);
     }
     return make_tuple(failed ? FAILURE(-1) : mFrameDurationNs, mSensorExposureDurationNs, std::move(resultMetadata), std::move(outputBuffers),
                       std::move(delayedOutputBuffers));

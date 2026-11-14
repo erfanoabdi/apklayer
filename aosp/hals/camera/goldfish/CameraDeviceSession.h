@@ -143,6 +143,8 @@ private:
     std::thread mDelayedCaptureThread;
 
     std::atomic<bool> mFlushing = false;
+    int64_t mLastShutterNs = 0;  // capture thread only
+    bool mFrameShutterLogged = false;  // capture thread only
 };
 
 }  // namespace implementation

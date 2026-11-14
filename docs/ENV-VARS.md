@@ -25,6 +25,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 | `pts-view` | `APKLAYER_PTS_VIEW` | app | host: all of the host's terminals | yes |
 | `raw-syscall-view` | `APKLAYER_RAW_SYSCALL_VIEW` | on | off: an app's own system calls see the host's /proc, /etc and identity | yes |
 | `webview-provider` | `APKLAYER_WEBVIEW_PROVIDER` | Chromium when installed | none, or the package of a provider | yes |
+| `camera-mount` | `APKLAYER_CAMERA_MOUNT` | none | `[NAME:]DEGREES` the PipeWire cameras are turned on the display (portrait monitor: 90); the provider option `mount=` wins | |
 | `audio-output` | `APKLAYER_AUDIO_TARGET` | the default sink | the PipeWire/PulseAudio sink apps play to | |
 | `audio-input` | `APKLAYER_AUDIO_TARGET_IN` | the default source | the source apps record from | |
 
