@@ -257,6 +257,10 @@ public final class HubClient {
     int[] requestPermissions(String[] names) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.PERMISSIONS_REQUEST, request -> request.writeStringArray(names), reply -> reply.createIntArray());
     }
+    /** ACTION_APP_NOTIFICATION_SETTINGS: the hub's settings page for this app; waits until the person closed it. */
+    void notificationSettings() {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFICATION_SETTINGS, request -> {}, reply -> null);
+    }
     /** RoleManager's request intent: whether the person makes this app the role's holder; waits for the answer. */
     boolean requestRole(String role) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ROLE_REQUEST, request -> request.writeString(role), reply -> reply.readBoolean());

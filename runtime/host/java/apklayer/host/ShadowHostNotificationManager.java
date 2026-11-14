@@ -2,6 +2,7 @@ package apklayer.host;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
+import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
 import android.content.Context;
 import org.robolectric.RuntimeEnvironment;
@@ -12,7 +13,7 @@ import org.robolectric.shadows.ShadowNotificationManager;
 /**
  * With the hub, the app's notifications also go to the hub, which owns them for every app and shows them on the desktop. The in-process state stays for the app's own queries.
  * Notification channels are the hub's, per package (HubNotificationChannels): every process of the app sees the same ones, and they outlive the process.
- * shortcut: channel groups stay per process (Robolectric's); move them to the hub when an app needs them across processes.
+ * The channel groups too.
  */
 @Implements(value = NotificationManager.class, isInAndroidSdk = false)
 public class ShadowHostNotificationManager extends ShadowNotificationManager {
@@ -57,6 +58,28 @@ public class ShadowHostNotificationManager extends ShadowNotificationManager {
     @Implementation @Override protected void deleteNotificationChannel(String id) {
         if (!hub()) { super.deleteNotificationChannel(id); return; }
         HubClient.current().notificationChannels(HubNotificationChannels.DELETE, request -> request.writeString(id), reply -> null);
+    }
+
+    @Implementation @Override protected void createNotificationChannelGroup(NotificationChannelGroup group) { createNotificationChannelGroups(java.util.List.of(group)); }
+
+    @Implementation @Override protected void createNotificationChannelGroups(java.util.List<NotificationChannelGroup> groups) {
+        if (!hub()) { super.createNotificationChannelGroups(groups); return; }
+        HubClient.current().notificationChannels(HubNotificationChannels.CREATE_GROUPS, request -> request.writeTypedList(groups), reply -> null);
+    }
+
+    @Implementation @Override public NotificationChannelGroup getNotificationChannelGroup(String id) {
+        if (!hub()) return super.getNotificationChannelGroup(id);
+        return HubClient.current().notificationChannels(HubNotificationChannels.GET_GROUP, request -> request.writeString(id), reply -> reply.readTypedObject(NotificationChannelGroup.CREATOR));
+    }
+
+    @Implementation @Override protected java.util.List<NotificationChannelGroup> getNotificationChannelGroups() {
+        if (!hub()) return super.getNotificationChannelGroups();
+        return HubClient.current().notificationChannels(HubNotificationChannels.LIST_GROUPS, request -> {}, reply -> reply.createTypedArrayList(NotificationChannelGroup.CREATOR));
+    }
+
+    @Implementation @Override protected void deleteNotificationChannelGroup(String id) {
+        if (!hub()) { super.deleteNotificationChannelGroup(id); return; }
+        HubClient.current().notificationChannels(HubNotificationChannels.DELETE_GROUP, request -> request.writeString(id), reply -> null);
     }
 
     @Implementation @Override protected void cancel(int id) { cancel(null, id); }

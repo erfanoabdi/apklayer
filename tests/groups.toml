@@ -245,7 +245,7 @@ run = ["python3 -u tests/vm/hub.py pendingintents broadcast", "python3 -u tests/
 
 [notifications]
 apps = ["hello-nt-poster"]
-run = ["python3 -u tests/vm/hub.py notifications click", "python3 -u tests/vm/hub.py notifications cancel", "python3 -u tests/vm/hub.py notifications muted", "python3 -u tests/vm/hub.py notifications channels"]
+run = ["python3 -u tests/vm/hub.py notifications click", "python3 -u tests/vm/hub.py notifications cancel", "python3 -u tests/vm/hub.py notifications muted", "python3 -u tests/vm/hub.py notifications channels", "python3 -u tests/vm/hub.py notifications settings"]
 
 [broadcasts]
 apps = ["hello-bc-receiver", "hello-bc-sender", "hello-bc-denied"]

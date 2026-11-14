@@ -118,6 +118,24 @@ final class HubPermissionPrompt {
         catch (Exception interrupted) { return new int[] {2, 0}; }
     }
 
+    /**
+     * Settings.ACTION_APP_NOTIFICATION_SETTINGS: the app's notification page (Settings' AppNotificationSettings, minimal): whether its notifications are on, its channels
+     * with their importance, one button to switch them (the app's POST_NOTIFICATIONS, as the manager does) and one to close. Returns when it is closed.
+     */
+    void notificationSettings(String pkg) {
+        String label = HubInstaller.labelOf(pkg, pkg), post = android.Manifest.permission.POST_NOTIFICATIONS;
+        boolean off = HubNotifications.muted(pkg);
+        String[] levels = {"none", "min", "low", "default", "high"};
+        String channels = HubNotificationChannels.list(pkg).stream().map(c -> c.getName() + " (" + levels[Math.max(0, Math.min(c.getImportance(), 4))] + ")").collect(java.util.stream.Collectors.joining(", "));
+        String body = "Notifications are " + (off ? "off" : "on") + "." + (channels.isEmpty() ? "" : "\nChannels: " + channels);  // one switch per visit: the app asks again to see the page
+        try {
+            if (!dialogs.submit(() -> HubInstallDialog.ask("Notifications of " + label, body, off ? "Turn on" : "Turn off", "Close")).get()) return;
+        }
+        catch (Exception interrupted) { return; }
+        if (off) HostRuntimePermissions.answer(pkg, post, true);
+        else { HostRuntimePermissions.answer(pkg, post, false); HostRuntimePermissions.answer(pkg, post, false); }  // twice: off for good, as the person's switch is
+    }
+
     /** RoleManager.createRequestRoleIntent: whether the person makes the app the role's holder ("Set <app> as your default browser app?"). */
     boolean role(String pkg, String role) {
         String name = role.substring(role.lastIndexOf('.') + 1).replace('_', ' ').toLowerCase();

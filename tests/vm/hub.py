@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
 every JVM is owned and reaped. Tests: providers (basic denied death observe files grant idle: basic, then the provider's host ends once idle), services (start selfstop sticky private filters own late oneway respawn rebind framework),
-activities (result explicit again private up), processes (kill: an activity in android:process ":remote"), pendingintents (broadcast targets cancel forresult), notifications (click cancel muted channels), webview (probe). HUB_VERBOSE=1: all lines."""
+activities (result explicit again private up), processes (kill: an activity in android:process ":remote"), pendingintents (broadcast targets cancel forresult), notifications (click cancel muted channels settings), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors
 import signal
@@ -89,6 +89,8 @@ if TEST == 'notifications' and PHASE == 'muted':  # the user turns the app's not
     subprocess.run([a.replace('%s', 'revoke') for a in MUTE], env=ENV, check=True)
 proc = None
 lines = []
+# the settings page of the app's notifications is a dialog of the hub: its first button twice (Turn off, then Turn on), started before what makes the hub ask
+answerers = [subprocess.Popen(['python3', 'tests/vm/answer-dialog.py', 'yes', '60', str(k)], env=ENV) for k in (0, 1)] if TEST == 'notifications' and PHASE == 'settings' else []
 try:
     proc = subprocess.Popen(['bin/apklayer', 'run', package], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     end = time.monotonic() + seconds
@@ -162,4 +164,7 @@ finally:
             if name.exists(): print('--- %s (tail)' % name.name, *[l[:200] for l in name.read_text(errors='replace').split('\n') if 'symbol may' not in l][-25:], sep='\n', flush=True)
     if proc is not None and proc.poll() is None: os.killpg(proc.pid, signal.SIGTERM)
     stop()
-    if TEST == 'notifications' and PHASE == 'muted': subprocess.run([a.replace('%s', 'grant') for a in MUTE], env=ENV, check=True)
+    for answerer in answerers:
+        if answerer.poll() is None: answerer.terminate()
+        answerer.wait()
+    if TEST == 'notifications' and PHASE in ('muted', 'settings'): subprocess.run([a.replace('%s', 'grant') for a in MUTE], env=ENV, check=True)

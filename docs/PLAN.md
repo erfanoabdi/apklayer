@@ -54,7 +54,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
-- No screen for `APP_NOTIFICATION_SETTINGS`. Channel groups stay per process.
 - Shared libraries: HIDL libraries, `<uses-native-library>`, resources.
 - Storage: no scoped-storage rules; `UNMOUNTABLE` not sent.
 - Every instance scans every drive. Eject can fail "busy" while MediaProvider maps an image.
