@@ -28,7 +28,6 @@ put "$P/common/android-all-16-robolectric-13921718.jar" "$stage/aosp/android-all
 put "$P/common/android-all-16-robolectric-13921718.jar" "$stage/aosp/android-all/android-all-current-robolectric-r0.jar"  # the SDK provider asks for both names
 put "$P/common/android-stub.jar" "$stage/android-stub.jar"
 for d in android-root/system android-libs aosp/sim-classes; do [ -d "$stage/$d" ] && [ ! -L "$stage/$d" ] || { echo "runtime-bundle: $d is missing or a link" >&2; exit 1; }; done
-python3 "$repo/tools/release/check-conscrypt.py" "$stage"/aosp/android-all/*.jar || { echo "runtime-bundle: android-all jars lack the patched NativeCryptoJni (restage the prebuilts)" >&2; exit 1; }
 [ ! -d "$stage/system-apps" ] || [ -n "$(ls "$stage/system-apps")" ] || { echo "runtime-bundle: system-apps is empty" >&2; exit 1; }
 contents="$(cd "$stage" && ls | sed 's/.*/"&"/' | paste -sd, -)"
 printf '{"version": "%s", "cpu": "%s", "main_commit": "%s", "contents": [%s, "runtime.json"]}\n' "$version" "$cpu" "$main" "$contents" > "$stage/runtime.json"

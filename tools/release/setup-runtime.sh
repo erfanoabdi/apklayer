@@ -21,6 +21,9 @@ tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
     if command -v zip >/dev/null; then zip -q -r -O "$j.new" "$j" dalvik com native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so
     else cp "$j" "$j.new" && "$(dirname "$(realpath "$(command -v "${APKLAYER_JAVA:-java}")")")/jar" uf "$j.new" native/linux dalvik com; fi  # no zip (Ubuntu Touch): the click's JDK has jar
     mv -f "$j.new" "$j"
+    # the unpatched NativeCryptoJni (371 bytes) fails to load Conscrypt: every WebView https load fails (the 0.4.18 bundle)
+    c=com/android/org/conscrypt/NativeCryptoJni.class
+    [ "$(unzip -p "$j" $c | wc -c)" = "$(wc -c < $c)" ] || { echo "apklayer: $j lacks the patched $c" >&2; exit 1; }
 done)
 # the framework jars instrumented once (apklayer.tools.PreInstrument), which app JVMs take while they are newer than their inputs (cli/env.cpp)
 out="$native/aosp/android-all-instrumented" done_jar=""

@@ -23,7 +23,7 @@ executable('btload', ['bionic_tls.c', 'btload.c', 'android_platform.c', 'propert
   c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
 # the LD_PRELOAD library (first in symbol lookup for every library of the process, first static TLS module): the path layer and bionic's TLS slots
 # and the userspace binder's route (binder_route.c: bionic_translation's fd hooks find it here, one copy per process)
-apklayer_preload = shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'proc_view.c', 'proc_task.c', 'raw_syscall.c', 'exec_preload.c', 'guest_exec_environment.c', 'bionic_tls.c', 'binder_route.c', 'broker.c', '../binderd/wire.c'],
+apklayer_preload = shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'proc_view.c', 'proc_task.c', 'raw_syscall.c', 'vma_names.c', 'exec_preload.c', 'guest_exec_environment.c', 'bionic_tls.c', 'binder_route.c', 'broker.c', '../binderd/wire.c'],
   link_args: ['-ldl', '-lpthread'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)
 # the host's libGLESv2 with extensions hidden from Android code (APKLAYER_GL_HIDE; cli/env.cpp maps libGLESv2.so here only then)
 gles_filter_glesv2 = dependency('glesv2', required: false)

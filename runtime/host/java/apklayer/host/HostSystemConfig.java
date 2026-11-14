@@ -84,10 +84,11 @@ final class HostSystemConfig {
             String[] v = vulkan.split("\\.");
             int minor = Integer.parseInt(v[0]) > 1 ? 3 : Math.min(3, Integer.parseInt(v[1]));
             config.versions.put("android.hardware.vulkan.version", 1 << 22 | minor << 12);  // VK_MAKE_API_VERSION(0, 1, minor, 0)
-            config.versions.put("android.hardware.vulkan.level", 0);
+            config.versions.put("android.hardware.vulkan.level", "1".equals(System.getenv("APKLAYER_VULKAN_LEVEL")) ? 1 : 0);  // the probe (cli/env.cpp)
             config.versions.put("android.hardware.vulkan.compute", 0);
             config.features.addAll(config.versions.keySet());
         }
+        if (System.getenv("APKLAYER_GLES_AEP") != null) config.features.add("android.hardware.opengles.aep");  // the host GLES lists the pack (cli/env.cpp)
         try {
             for (String line : java.nio.file.Files.readAllLines(new File(root, "etc/apklayer-permission-levels.tsv").toPath())) {
                 String[] parts = line.split("\t");

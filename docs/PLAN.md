@@ -12,13 +12,14 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- volumes-sandbox "catchup present internal file" fails 1 in 5 runs.
+- volumes and volumes-sandbox fail in a fresh tree (UTM, Parallels) at "volume listed" and "mediastore volume": MediaStore never learns the volume (not the sandbox, not the providers). The 1-in-5 catchup race is not reproduced.
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize.
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 when `debug.apklayer.log=1`.
 - Termux: a failed exec in a forked child may still hang in `exit()` (fix untested).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
+- Droid-ify: NPE in `ScreenFragment.getToolbar` (fragment view not created; same family as NewPipe's recreate NPE).
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR dies after 31 s to 3 min under the x86 translator. Cause unknown (CHANGELOG "ACE: what the runs of the day say").
@@ -29,15 +30,14 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Present fences signal at hand-over, not at the real present.
 - Swap interval 0: low frame rate; a waiting attach drops a release fence.
 - Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
-- Vulkan presentation untested on AMD. `vulkan.level` is declared 0.
-- Play feature list lacks sensors (no host provider yet), `opengles.aep` and `vulkan.level` 1 (both need a probe of the device).
+- Vulkan presentation untested on AMD.
+- Play feature list lacks sensors (no host provider yet).
 - GPU per instance: Vulkan device filter, copy fallback, VA plugin device, LINEAR on Intel.
 - OTR2 on the PC runs ~30 fps at 2448x1374.
 - Windows: smaller second output, output hotplug, no Back button under server-side decorations, KDE.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
 - Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
 - Sailfish keeps the letterbox; its rotation is unchecked.
-- weston's VNC output stalls with no client connected.
 
 ## Camera
 - Sensor timestamps: the shutter time is the request's CLOCK_MONOTONIC time, not the frame's `timestamp_ns` (goldfish session change). All streams scaled from the largest. NDK libcamera2ndk is a stub.
@@ -179,22 +179,19 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Unity: `hpatchz`, no backtrace in fault notes, the app log cap misses lines.
 
 ## Runtime identity (nothing blocking)
-- `/proc/self/map_files` still shows a host path first.
 - Hidden: `/home` and `/tmp` stay visible (host app dirs below them).
-- Missing paths: `app_process32`, `core-oj.jar`, `framework.jar`, `/data/dalvik-cache`, `/dev/socket/zygote`, `/vendor/lib64`.
-- maps: anon names (`scudo`, `libc_malloc`, `stack_and_tls`) via `prctl(PR_SET_VMA)`.
 - Modules: `dl_iterate_phdr` lists 270 of 320; libc exports `bionic_*` names.
 - x86: `HWCAP2` is 0, exe name `/system/bin/arm64/app_process64`, `dladdr` names, `/proc/net/unix`.
-- Process attributes: main thread id, `ANDROID_SOCKET_zygote`, property count 219 of 635.
+- Process attributes: main thread id, property count 231 of 635 (Waydroid's full list is not in `tests/identity/results`: only its 37 probed keys).
 - Termux: `TERMUX_APP__DATA_DIR` is a host path.
 - Launch leftovers: btload child `environ`, `#!/bin/sh` through the generic exec path.
-- Apps converted before converter ABI 9: no automatic reconvert.
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with the INSTALL.md checklist.
 - Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
-- Shared spare, cold component hosts, broker gaps in the granted home (utimes, xattrs, renameat2 flags, mkstemp/scandir opens; chmod, symlink, link done).
+- Spare-born processes start in the spare's cwd: a chdir to APKLAYER_CWD (spare_target.c, 1f8a8527) kept hello.input from coming up and hung the system-apps OtherProcess, so it was removed; find out why before putting it back (run.cpp still sets APKLAYER_CWD).
+- Shared spare, cold component hosts, broker gaps (utimes, xattrs, renameat2 flags, mkstemp, scandir).
 - Isolated processes run as the app uid; drive access is all or nothing.
 
 ## Packaging and releases
@@ -220,7 +217,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 
 ## Tests and tooling
 - Finish `tools/stage` in Python and fold `tools/release/*` into Meson.
-- Script store clients in the corpus (Aurora, F-Droid). Recheck HTTPS in Droid-ify, F-Droid, Aurora, Telegram.
+- Script store clients in the corpus (Aurora, Telegram: HTTPS needs scripted onboarding input to test).
 - Flaky: webview-input under load; native-media AVC (~1 in 2 on Parallels); audio-silent on the x86 PC.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 - Fresh test trees: meson downloads `bionic_translation` (use a local copy).

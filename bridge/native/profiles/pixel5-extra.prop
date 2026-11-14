@@ -46,3 +46,17 @@ init.svc.zygote=running
 init.svc.zygote_secondary=running
 init.svc.servicemanager=running
 init.svc.surfaceflinger=running
+# What a retail Android 13 Pixel reports the same on every unit and the tree's build.prop lacks (2026-11-14, from the identity matrix): adb needs an
+# authorised host, the USB state of an unlocked phone with no cable data, the A/B and dynamic-partition boot flags, the file-based encryption names.
+ro.adb.secure=1
+sys.usb.state=mtp
+sys.usb.config=mtp
+ro.bootmode=unknown
+ro.boot.dynamic_partitions=true
+ro.boot.vbmeta.hash_alg=sha256
+ro.boot.vbmeta.invalidate_on_error=yes
+ro.crypto.volume.filenames_mode=aes-256-cts
+ro.crypto.dm_default_key.options_format.version=2
+ro.carrier=unknown
+ro.com.android.dateformat=MM-dd-yyyy
+ro.com.android.dataroaming=true

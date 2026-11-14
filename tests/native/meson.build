@@ -84,6 +84,11 @@ if is_variable('apklayer_preload') and is_variable('dl_bio')
   endforeach
 endif
 
+if is_variable('shim')
+  test('fork-exit', executable('fork-exit-test', 'fork-exit.c', dependencies: [dependency('dl')]), args: [shim.full_path()],
+    env: ['LD_LIBRARY_PATH=' + fs.parent(dl_bio.full_path())], suite: 'bionic', timeout: 30)
+endif
+
 if is_variable('c_bio')
   environment_fixture = shared_module('environment-lib', 'environment-lib.c', link_args: ['-nostdlib'], c_args: ['-fno-stack-protector'])
   environment_test = executable('environment-test', 'environment.c', dependencies: [dependency('dl')], export_dynamic: true)
