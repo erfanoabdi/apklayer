@@ -111,8 +111,16 @@ def capture(name, app=None):
         return image
     env = dict(os.environ, XDG_RUNTIME_DIR=SESSION, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % SESSION, WAYLAND_DISPLAY='wayland-0',
                XDG_SESSION_TYPE='wayland', XDG_CURRENT_DESKTOP='GNOME')
-    # flameshot can wait forever on GNOME's screenshot portal: a bounded wait, so one stuck capture never stalls a run
-    subprocess.run(['flameshot', 'full', '-p', str(image)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=20)
+    # flameshot 12 (Qt 5, Ubuntu 24.04) starts only on X: through the session's Xwayland (as tests/vm/vmcapture.py). It can wait forever on
+    # GNOME's screenshot portal: a bounded wait and a retry, so one stuck capture never stalls a run
+    auth = sorted(Path(SESSION).glob('.mutter-Xwaylandauth.*'))
+    env.update(DISPLAY=':0', XAUTHORITY=str(auth[0]) if auth else '')
+    for attempt in range(2):
+        try:
+            subprocess.run(['flameshot', 'full', '-p', str(image)], env=env, stdout=subprocess.DEVNULL, stderr=open(OUT / 'flameshot.log', 'ab'), check=True, timeout=15)
+            break
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            if attempt: raise
     print('CAPTURED ' + str(image), flush=True)
     return image
 

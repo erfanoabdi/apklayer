@@ -68,6 +68,8 @@ static const struct zwp_text_input_v3_listener ti_listener = {
     .enter = ti_enter, .leave = ti_leave, .preedit_string = ti_preedit, .commit_string = ti_commit,
     .delete_surrounding_text = ti_delete, .done = ti_done };
 
+/* No enter key hint: text-input-v3 (content_type) has only hint and purpose; the Enter key's label or icon is the on-screen keyboard's own (GNOME's
+ * OSK derives it from purpose and hints). The EditorInfo's imeOptions action reaches only Maliit (maliit.c actionKey), as words. */
 /* Android's EditorInfo.inputType (class, variation, flags: android.text.InputType) as text-input-v3's content hint and purpose. */
 void text_input_kind(const struct window *w, uint32_t *hint, uint32_t *purpose)
 {
