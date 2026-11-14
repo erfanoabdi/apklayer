@@ -17,7 +17,19 @@ __attribute__((visibility("default"))) void *_ZN3art27JniNativeInterfaceFunction
 static void *art_invoke_table[VM_ENTRIES];
 static void *const art_slots_used[] __attribute__((used)) = { art_jni_slots, art_vm_slots };  /* the asm names the arrays: keep them */
 
+/* Guest-visible jmethodIDs are the synthetic ArtMethod pointers of java.lang.reflect.ApklayerArt (docs/PATCHES.md): they live in one arena (art_arena,
+ * 256 MB, mapped by jni_guest_surface.c); the entry's data_ (+16) holds the JVM's own id, bound when the id was handed out. A thunk whose
+ * function takes a jmethodID (argument position from art-jni.py: IDFIX_<n>, 9 = none) swaps an arena pointer for the JVM's id in the argument register
+ * (range check, one load) and jumps on; any other value (a JVM id, an unbound entry) passes unchanged. The functions that return ids are wrappers in
+ * jni_guest_surface.c. shortcut: arm64 only (x86_64 loads no libart.so), jfieldIDs stay the JVM's (no ArtField table). */
+__attribute__((visibility("hidden"))) unsigned long art_arena = 1UL << 62;  /* base; never matches an id until the runtime maps the arena */
 #if defined(__aarch64__)
+#define IDFIX(r) "adrp x16, art_arena\n ldr x16, [x16, :lo12:art_arena]\n sub x16, x" #r ", x16\n lsr x16, x16, #28\n cbnz x16, 1f\n ldr x16, [x" #r ", #16]\n cbz x16, 1f\n mov x" #r ", x16\n1:\n"
+#define IDFIX_0 IDFIX(0)
+#define IDFIX_1 IDFIX(1)
+#define IDFIX_2 IDFIX(2)
+#define IDFIX_3 IDFIX(3)
+#define IDFIX_9 ""
 #define THUNK(arr, i) "adrp x16, " arr "+8*" #i "\n ldr x16, [x16, :lo12:" arr "+8*" #i "]\n br x16\n"
 #define TYPE "%function"
 #define VA "St9__va_list"
@@ -28,27 +40,34 @@ static void *const art_slots_used[] __attribute__((used)) = { art_jni_slots, art
 #else
 #error "no thunk for this architecture"
 #endif
-#define THUNK_ASM(arr, i, sym) __asm__(".text\n.p2align 2\n.local " sym "\n.type " sym "," TYPE "\n" sym ":\n" THUNK(arr, i) ".size " sym ", .-" sym "\n");
+#if !defined(__aarch64__)
+#define IDFIX_0 ""
+#define IDFIX_1 ""
+#define IDFIX_2 ""
+#define IDFIX_3 ""
+#define IDFIX_9 ""
+#endif
+#define THUNK_ASM(arr, i, sym, id) __asm__(".text\n.p2align 2\n.local " sym "\n.type " sym "," TYPE "\n" sym ":\n" IDFIX_##id THUNK(arr, i) ".size " sym ", .-" sym "\n");
 
-#define X(i, sym) THUNK_ASM("art_jni_slots", i, sym)
-#define Y(i, sym) THUNK_ASM("art_vm_slots", i, sym)
+#define X(i, sym, id) THUNK_ASM("art_jni_slots", i, sym, id)
+#define Y(i, sym) THUNK_ASM("art_vm_slots", i, sym, 9)
 #include "art_jni_names.inc"
 #undef X
 #undef Y
 
-#define X(i, sym) extern void art_thunk_##i(void) __asm__(sym);
+#define X(i, sym, id) extern void art_thunk_##i(void) __asm__(sym);
 #define Y(i, sym) extern void art_vm_thunk_##i(void) __asm__(sym);
 #include "art_jni_names.inc"
 #undef X
 #undef Y
-#define X(i, sym) [i] = art_thunk_##i,
+#define X(i, sym, id) [i] = art_thunk_##i,
 #define Y(i, sym)
 static void *const jni_thunks[JNI_ENTRIES] = {
 #include "art_jni_names.inc"
 };
 #undef X
 #undef Y
-#define X(i, sym)
+#define X(i, sym, id)
 #define Y(i, sym) [i] = art_vm_thunk_##i,
 static void *const vm_thunks[VM_ENTRIES] = {
 #include "art_jni_names.inc"
@@ -56,7 +75,7 @@ static void *const vm_thunks[VM_ENTRIES] = {
 
 /* The runtime hands over its tables through the environment (the address of this struct, hex) when it loads the library: no exported symbol of
  * ours for a scanner to find. Each table entry is replaced by its thunk. */
-struct art_tables { void *vm; void **jni; void **invoke; unsigned long jni_entries; void *jni_copy, *invoke_copy; };
+struct art_tables { void *vm; void **jni; void **invoke; unsigned long jni_entries; void *jni_copy, *invoke_copy; unsigned long arena; };
 
 __attribute__((constructor)) static void bind(void)
 {
@@ -67,6 +86,7 @@ __attribute__((constructor)) static void bind(void)
     struct art_tables *t = (void *)value;
     unsetenv("APKLAYER_ART_TABLES");
     art_vm = t->vm;
+    if (t->arena) art_arena = t->arena;
     for (int i = 4; i < JNI_ENTRIES; i++) if (t->jni[i] && t->jni[i] != jni_thunks[i]) { art_jni_slots[i] = t->jni[i]; t->jni[i] = jni_thunks[i]; }
     for (int i = 3; i < VM_ENTRIES; i++) if (t->invoke[i] && t->invoke[i] != vm_thunks[i]) { art_vm_slots[i] = t->invoke[i]; t->invoke[i] = vm_thunks[i]; }
     unsigned long n = t->jni_entries < JNI_TABLE_MAX ? t->jni_entries : JNI_TABLE_MAX;
