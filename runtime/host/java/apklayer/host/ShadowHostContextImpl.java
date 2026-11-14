@@ -28,7 +28,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     /** Application.getApplicationContext() is the application from the first line of its onCreate on Android; here the loaded package learns of it later (Wikipedia, Thunderbird pass it on and get null). */
     @Implementation protected Context getApplicationContext() {
         Context app = Shadow.directlyOn(real, "android.app.ContextImpl", "getApplicationContext");
-        return app != null ? app : android.app.ActivityThread.currentApplication();
+        return app != null ? app : org.robolectric.android.internal.ApklayerBinding.hostApplication();
     }
     /** The app's own class loader (AppClassLoader), as LoadedApk's on Android; Robolectric answers with the sandbox's. */
     @Implementation @Override protected ClassLoader getClassLoader() {
@@ -38,7 +38,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         // A manager whose Robolectric shadow holds the system service's state (providers and fixes, battery, power, roles ...: the host fills the
         // application's at start, HostLocation & co.) is one per process, as the one service behind it on Android: an activity's own ContextImpl
         // (robolectric.createActivityContexts) got a fresh manager, and an activity's gps listener never got the fixes
-        android.app.Application app = android.app.ActivityThread.currentApplication();
+        android.app.Application app = org.robolectric.android.internal.ApklayerBinding.hostApplication();
         Context base = app == null ? null : app.getBaseContext();
         // an app that wraps its base context (attachBaseContext with a locale wrapper: MojoLauncher) would send the call back here forever
         while (base instanceof android.content.ContextWrapper) base = ((android.content.ContextWrapper) base).getBaseContext();
