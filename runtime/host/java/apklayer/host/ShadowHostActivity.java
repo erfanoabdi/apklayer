@@ -52,5 +52,5 @@ public class ShadowHostActivity extends ShadowActivity {
         real.startActivity(new android.content.Intent(upIntent).setComponent(dest));
         return true;
     }
-    @Implementation protected boolean isTaskRoot() { return !Boolean.getBoolean("apklayer.notaskroot") && ActivityTask.isTaskRoot(real); }
+    @Implementation protected boolean isTaskRoot() { return ActivityTask.isTaskRoot(real); }
 }

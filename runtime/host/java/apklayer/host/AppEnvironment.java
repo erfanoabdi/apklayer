@@ -1,7 +1,6 @@
 package apklayer.host;
 
 import android.app.Application;
-import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import java.io.IOException;
@@ -102,8 +101,8 @@ final class AppEnvironment {
     /** The sandbox configuration of every apklayer process (the same for every package; an install's description runs no Application of the app). */
     private static FixedConfiguration configuration(boolean describing) {
         Config.Builder builder = new Config.Builder()
-                .setSdk(Integer.getInteger("apklayer.sdk", 36))
-                .setQualifiers(System.getProperty("apklayer.qualifiers", "w480dp-h800dp"));
+                .setSdk(36)
+                .setQualifiers("w480dp-h800dp");
         // Install-time labels/icons need package resources, not the app's startup code.
         if (describing) builder.setApplication(Application.class);
         Config config = builder.build();
@@ -388,12 +387,6 @@ final class AppEnvironment {
         HostProviders.install(app);  // Android's security providers and TLS (Conscrypt); without it HostTrust's host-aware default trust manager (Chromium, X509TrustManagerExtensions)
         HostLocation.install(app);
         HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build
-        if (Boolean.getBoolean("apklayer.debugdata")) {
-            SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);
-            int launches = prefs.getInt("launches", 0) + 1;
-            prefs.edit().putInt("launches", launches).commit();
-            System.out.println("[apklayer] data: " + app.getDataDir() + " launches=" + launches);
-        }
 
         // Simulator.start(): real draws and animations, a paused Choreographer driven by the loop.
         ShadowView.setUseRealViewAnimations(true);

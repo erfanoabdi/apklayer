@@ -9,6 +9,7 @@ import { InstancesPage } from "instances.slint";
 import { PropsPage } from "props.slint";
 import { DevicePage } from "device.slint";
 import { HardwarePage } from "hardware.slint";
+import { SettingsPage } from "settings.slint";
 import { FirstRunPage, UpdateBanner } from "setup.slint";
 import { PageDialog } from "dialog.slint";
 
@@ -40,8 +41,9 @@ export component AppWindow inherits MaterialWindow {
         { icon: AppIcons.tune, text: "Properties" },
         { icon: AppIcons.memory, text: "Device" },
         { icon: AppIcons.sensors, text: "Hardware" },
+        { icon: AppIcons.tune, text: "Settings" },
     ];
-    property <[string]> titles: ["Apps", "Instances", "Properties", "Device", "Hardware"];
+    property <[string]> titles: ["Apps", "Instances", "Properties", "Device", "Hardware", "Settings"];
     property <string> fab-text: root.page == 0 ? "Install APK" : root.page == 1 ? "New instance" : root.page == 2 ? "Add property" : "";
     property <image> fab-icon: root.page >= 3 ? AppIcons.refresh : AppIcons.add;
 
@@ -128,6 +130,7 @@ export component AppWindow inherits MaterialWindow {
                 }
                 if root.page == 3 : DevicePage { width: 100%; height: 100%; }
                 if root.page == 4 : HardwarePage { width: 100%; height: 100%; }
+                if root.page == 5 : SettingsPage { width: 100%; height: 100%; }
                 if !root.wide && root.fab-text != "" && !(root.page == 0 && root.app-detail-open && Backend.has-current-app) : FloatingActionButton {
                     x: parent.width - self.width - MaterialStyleMetrics.padding_16;
                     y: parent.height - self.height - MaterialStyleMetrics.padding_16;

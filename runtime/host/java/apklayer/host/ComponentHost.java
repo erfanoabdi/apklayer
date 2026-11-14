@@ -30,8 +30,6 @@ public final class ComponentHost implements Runnable {
         StartTrace.mark("hub attached");
         System.out.println("[apklayer] component-host READY " + app.getPackageName() + " pid=" + android.os.Process.myPid());
         AppSpare.launchStarted();
-        String startService = System.getProperty("apklayer.startservice");  // exploration (PLAN archive P8): what system_server's startSystemUi does, by hand
-        if (startService != null) app.startService(new android.content.Intent().setClassName(app.getPackageName(), startService));
         // no cached processes (the owner's rule; Android keeps them until memory runs short): a host that runs no service, has no work queued and
         // was not called for IDLE_EXIT_MS ends, as its last service's end does (Services.exitIfIdle); a provider's next client starts it again
         // (RemoteProvider retries a dead provider through the hub). What runs in system_server on a device (android:process="system":

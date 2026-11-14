@@ -104,7 +104,6 @@ final class ScriptRunner {
             // DOWN/UP at the same uptimeMillis can be swallowed by tap-vs-scroll tracking;
             // put UP 50 ms in the future, like the shell path does.
             System.out.println("[apklayer] tap injected at " + x + "," + y);
-            if (Boolean.getBoolean("apklayer.debugclickables")) HostWindows.dumpClickables();
             input.inject(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0));
             input.inject(MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, x, y, 0));
         } else if (step.startsWith("key:")) { // key:<android keycode>[,unicode]: down+up via the host key path

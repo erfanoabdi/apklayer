@@ -400,7 +400,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     prop.argv = {join(n, "bin/aprop"), "set", "service.sf.cache_dir_available", "1"};
     runAndWait(prop);
 
-    if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, inst, ne);  // `run` asks again and fails on its own when this did not work
+    ensureShell(l, inst, ne);  // `run` asks again and fails on its own when this did not work
 
     std::vector<Service> running;
     auto spec = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args, const std::string& backend = "") {
@@ -419,7 +419,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     };
     // Services apps rarely use start on first use and end when their last client lets go, as AOSP's lazy services (an idle phone instance keeps
     // ~220 MB less): servicemanager writes each lookup of their names to this FIFO (aosp/hals/servicemanager/Access.cpp), clients wait for the
-    // service as on a device (waitForService, getService's polling: both look again). APKLAYER_LAZY_SERVICES=0 starts them all here and keeps them.
+    // service as on a device (waitForService, getService's polling: both look again).
     const std::map<std::string, std::vector<std::string>> lazyNames = {
         {"codec2", {"android.hardware.media.c2.IComponentStore/apklayer"}},
         {"media", {"media.player", "media.resource_manager", "media.resource_observer"}},
@@ -430,7 +430,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     int lazyFd = -1;
     // only with a servicemanager that reports lookups (an older runtime's never would start them)
     bool reports = readFile(join(l.androidLibs, "libapklayer_servicemanager.so")).value_or("").find("APKLAYER_LAZY_FIFO") != std::string::npos;
-    if (getenvOr("APKLAYER_LAZY_SERVICES", "1") == "1" && reports && !sandboxOn() && (mkfifo(fifo.c_str(), 0600) == 0 || errno == EEXIST))
+    if (reports && !sandboxOn() && (mkfifo(fifo.c_str(), 0600) == 0 || errno == EEXIST))
         lazyFd = open(fifo.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);  // read-write: never an end of file while no writer has it open
     auto lazy = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args) {
         if (lazyFd < 0) return start(name, lib, args);
