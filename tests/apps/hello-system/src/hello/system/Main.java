@@ -32,6 +32,7 @@ public final class Main extends Activity {
         CHECKS.put("storagestats", new StorageStatsCheck());
         CHECKS.put("vibrator", new VibratorCheck());
         CHECKS.put("toast", new ToastCheck());
+        CHECKS.put("toastqueue", new ToastQueueCheck());
         CHECKS.put("sysprops", new SysPropsCheck());
         CHECKS.put("hiddenservices", new HiddenServicesCheck());
         CHECKS.put("accounts", new AccountsCheck());

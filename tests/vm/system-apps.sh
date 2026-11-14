@@ -31,7 +31,7 @@ for scenario in ${@:-all wrappedbase}; do  # wrappedbase: its own launch (App wr
     out=$APKLY_STATE/sys-$scenario.out
     launch $scenario $out
     grep -a "^\[sys\] \(PASS\|FAIL\)" $out
-    if [ "$scenario" = all ]; then total=28; else total=1; fi
+    if [ "$scenario" = all ]; then total=29; else total=1; fi
     got=$(grep -ac "^\[sys\] PASS" $out); [ "$got" -eq "$total" ] || { status=1; grep -a "^\[sys\] FAIL" $out > /dev/null || echo "[sys] no report ($got of $total passed)"; }
 done
 # the IME choice applies to a running instance at once (HubProtocol.SETTINGS_CHANGED): a hub booted without it, then `ime enable`, then the app sees it the default
@@ -49,7 +49,7 @@ if [ -z "${*:-}" ] || [[ " $* " == *" ime "* ]]; then
     until grep -aq "^\[sys\] DONE" $out 2>/dev/null; do kill -0 $run 2>/dev/null || break; read -t 1 <> <(:) || true; done
     grep -a '^\[apklayer-hub\] boot count' $APKLY_STATE/sys-ime-live-hub.out | tail -1 | grep -q 'input methods \[\]' && same=yes || same=no  # the hub that booted without the choice served the launch
     kill $run 2>/dev/null; bin/apklayer stop >/dev/null 2>&1; wait $run $hub 2>/dev/null
-    if [[ $applied == *"applied now"* ]] && [ $same = yes ] && grep -aq "^\[sys\] PASS ime" $out; then echo "[sys] PASS ime live: $applied"
+    if [[ $applied == *"applied now"* ]] && [ $same = yes ] && grep -aq "^\[sys\] PASS ime" $out && grep -aq '^\[apklayer-hub\] default input method hello.system/.Ime' $APKLY_STATE/sys-ime-live-hub.out; then echo "[sys] PASS ime live: $applied"
     else echo "[sys] FAIL ime live ($applied, same hub $same): $(grep -a '^\[sys\] FAIL' $out)"; status=1; fi
 fi
 exit $status

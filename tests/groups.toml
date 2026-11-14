@@ -228,10 +228,10 @@ apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries t
 run = ["python3 -u tests/vm/installer.py"]
 
 [activities]
-apps = ["hello-act-target", "hello-act-caller", "hello-act-process"]
+apps = ["hello-act-target", "hello-act-caller", "hello-act-process", "hello-act-restart"]
 run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",
        "python3 -u tests/vm/hub.py activities private", "python3 -u tests/vm/hub.py activities up", "python3 -u tests/vm/relaunch.py",
-       "python3 -u tests/vm/hub.py processes kill", "python3 -u tests/vm/exit-deadline.py",
+       "python3 -u tests/vm/hub.py processes kill", "python3 -u tests/vm/hub.py restart saved", "python3 -u tests/vm/exit-deadline.py",
        "python3 -u tests/vm/exit-deadline.py held", "python3 -u tests/vm/exit-deadline.py spare"]
 
 [pendingintents]

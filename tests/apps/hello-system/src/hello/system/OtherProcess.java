@@ -18,6 +18,22 @@ public class OtherProcess extends Service {
     @Override public IBinder onBind(Intent intent) {
         return new Binder() {
             @Override protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) {
+                if (code == 2) {  // a toast of this process: reply with when it was shown and hidden (wall clock), once hidden (ToastQueueCheck)
+                    long[] at = new long[2];
+                    java.util.concurrent.CountDownLatch hidden = new java.util.concurrent.CountDownLatch(1);
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        android.widget.Toast toast = android.widget.Toast.makeText(OtherProcess.this, "apklayer toast other", android.widget.Toast.LENGTH_SHORT);
+                        toast.addCallback(new android.widget.Toast.Callback() {
+                            @Override public void onToastShown() { at[0] = System.currentTimeMillis(); }
+                            @Override public void onToastHidden() { at[1] = System.currentTimeMillis(); hidden.countDown(); }
+                        });
+                        toast.show();
+                    });
+                    try { hidden.await(20, TimeUnit.SECONDS); } catch (InterruptedException e) { return false; }
+                    reply.writeLong(at[0]);
+                    reply.writeLong(at[1]);
+                    return true;
+                }
                 if (code != 1) return false;
                 reply.writeString(Application.getProcessName());
                 reply.writeString(Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID));
