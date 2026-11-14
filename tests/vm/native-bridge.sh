@@ -12,6 +12,7 @@ bin/apklayer info hello.arm64 | grep -qx "nativeRoute	$route"
 APKLAYER_JOPTS=-Dapklayer.runms=8000 bin/apklayer run hello.arm64 > "$out" 2>&1 || true
 grep -E '\[hello-arm64\]|native bridge|CANNOT LINK' "$out"
 grep -q '\[hello-arm64\] PASS' "$out"
+! grep -q 'abi consistent MIXED' "$out"
 [ -n "${APKLAYER_NATIVE:-}" ] || exit 0
 ln -s "$(readlink -f "$APKLAYER_NATIVE")" "$link/current"
 bin/apklayer stop hello.arm64 >/dev/null 2>&1 || true

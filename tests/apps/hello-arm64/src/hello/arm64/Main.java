@@ -91,6 +91,7 @@ public class Main extends Activity {
         log("abi SUPPORTED_ABIS " + java.util.Arrays.toString(android.os.Build.SUPPORTED_ABIS) + " SUPPORTED_64 " + java.util.Arrays.toString(android.os.Build.SUPPORTED_64_BIT_ABIS)
                 + " CPU_ABI " + android.os.Build.CPU_ABI + " primaryCpuAbi " + getPrimaryCpuAbi(ai) + " secondaryCpuAbi " + getSecondaryCpuAbi(ai)
                 + " libdir " + ai.nativeLibraryDir + " is64 " + android.os.Process.is64Bit());
+        log("abi consistent " + (android.os.Build.CPU_ABI.equals(getPrimaryCpuAbi(ai)) && android.os.Build.SUPPORTED_ABIS[0].equals(android.os.Build.CPU_ABI) ? "ok" : "MIXED"));
         log("env MOZ_LOG " + probeEnv());
         String handlers = oldHandlers();  // the previous actions sigaction reports are SIG_DFL, SIG_IGN or code (a chained crash handler calls them)
         log("old handlers " + (handlers.isEmpty() ? "ok" : "WRONG" + handlers));

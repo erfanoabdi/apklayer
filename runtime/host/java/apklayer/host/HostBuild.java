@@ -44,16 +44,24 @@ final class HostBuild {
         String date = android.os.SystemProperties.get("ro.build.date.utc");
         if (!date.isEmpty()) set(Build.class, "TIME", Long.parseLong(date) * 1000);
         String[] abis32 = list("ro.product.cpu.abilist32");
-        set(Build.class, "SUPPORTED_ABIS", list("ro.product.cpu.abilist"));
-        set(Build.class, "SUPPORTED_64_BIT_ABIS", list("ro.product.cpu.abilist64"));
+        set(Build.class, "SUPPORTED_ABIS", appFirst(list("ro.product.cpu.abilist")));
+        set(Build.class, "SUPPORTED_64_BIT_ABIS", appFirst(list("ro.product.cpu.abilist64")));
         set(Build.class, "SUPPORTED_32_BIT_ABIS", abis32);
         set(Build.class, "CPU_ABI", appAbi());  // the app's ABI: Gecko reads <abi>/greprefs.js from its omni.ja (an arm64 Fennec on x86_64 died: the archive has no x86_64 entry)
-        set(Build.class, "CPU_ABI2", abis32.length > 0 ? abis32[0] : "");
+        // Build.java: CPU_ABI = SUPPORTED_64_BIT_ABIS[0], CPU_ABI2 = [1] if any; an app ABI that is not the host's has no secondary (an arm64 device answers "")
+        set(Build.class, "CPU_ABI2", !appAbi().equals(ABI) ? "" : abis32.length > 0 ? abis32[0] : "");
         // what Build's class initialiser derives from TYPE and ro.debuggable (root and debug detection reads them)
         set(Build.class, "IS_ENG", "eng".equals(Build.TYPE));
         set(Build.class, "IS_USERDEBUG", "userdebug".equals(Build.TYPE));
         set(Build.class, "IS_USER", "user".equals(Build.TYPE));
         set(Build.class, "IS_DEBUGGABLE", android.os.SystemProperties.getInt("ro.debuggable", 0) == 1);
+    }
+
+    /** The list with the app's ABI first (real Android derives CPU_ABI from SUPPORTED_64_BIT_ABIS[0]; a bridged process keeps the host's ABI second). */
+    private static String[] appFirst(String[] abis) {
+        String app = appAbi();
+        if (!java.util.Arrays.asList(abis).contains(app)) return abis;
+        return java.util.stream.Stream.concat(java.util.stream.Stream.of(app), java.util.Arrays.stream(abis).filter(a -> !a.equals(app))).toArray(String[]::new);
     }
 
     /** The property store's value (the real SystemProperties native, as libandroid_runtime registers it), "" when unset. */
