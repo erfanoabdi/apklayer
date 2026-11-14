@@ -161,7 +161,8 @@ final class HubAccounts extends IAccountManager.Stub {
             private void done() { bindings.unbind(caller, asBinder()); }
         };
         Intent intent = new Intent(AccountManager.ACTION_AUTHENTICATOR_INTENT).setComponent(authenticator.service());
-        if (!bindings.bind(caller, intent, connection, Context.BIND_AUTO_CREATE, null))
+        // as AccountManagerService binds from system_server: Play services' authenticator (its AccountAuthenticator service) is not exported
+        if (!bindings.bind(caller, intent, connection, Context.BIND_AUTO_CREATE, null, true))
             error(response, AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "cannot bind the authenticator " + authenticator.service());
     }
 

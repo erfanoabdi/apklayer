@@ -36,11 +36,16 @@ final class HubServiceBindings {
     });
     HubServiceBindings(HubDirectory directory, HubPackages packages) { this.directory = directory; this.packages = packages; }
     boolean bind(HubDirectory.Peer caller, Intent intent, IServiceConnection connection, int flags, String instance) {
+        return bind(caller, intent, connection, flags, instance, false);
+    }
+
+    /** system: the hub binds for one of its own services, as system_server does (AccountManagerService and an authenticator that is not exported). */
+    boolean bind(HubDirectory.Peer caller, Intent intent, IServiceConnection connection, int flags, String instance, boolean system) {
         if (intent == null || connection == null) throw new IllegalArgumentException("Missing binding arguments");
         ServiceInfo info = packages.service(intent);
         if (info == null) return false;
-        if (!caller.name().equals(info.packageName) && !info.exported) throw new SecurityException("Service is not exported");
-        packages.enforceServicePermission(caller.name(), info);
+        if (!system && !caller.name().equals(info.packageName) && !info.exported) throw new SecurityException("Service is not exported");
+        if (!system) packages.enforceServicePermission(caller.name(), info);
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
         String key = HubDirectory.key(info.packageName, instance);
         System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " bind " + key + " " + info.name + " flags=0x" + Integer.toHexString(flags) + " from " + caller.name());

@@ -35,9 +35,21 @@ final class HubStartedServices {
         // host, keyed as a bind keys it (HubServices.ownProcess); the package's process would refuse it
         String process = info.processName != null ? info.processName : info.packageName;
         boolean own = (info.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(info.packageName);
-        HubDirectory.Peer target = broadcasts.process(HubDirectory.key(info.packageName, own ? info.name : null));
-        if (target == null) throw new IllegalStateException("Cannot start " + info.packageName);
-        return deliver(target, explicit, explicit);
+        String key = HubDirectory.key(info.packageName, own ? info.name : null);
+        HubDirectory.Peer target = directory.peer(key);
+        if (target != null) return deliver(target, explicit, explicit);
+        // the process is not running: launched, and the start delivered once it is up, while the caller goes on (ActivityManagerService queues
+        // the start until the process attaches). Waiting here deadlocked Play services: its main process starts a service of its ":persistent"
+        // process from attachBaseContext, and that process, still starting, asks the main one (its gservices provider)
+        Thread later = new Thread(() -> {
+            HubDirectory.Peer started = broadcasts.process(key);
+            if (started == null) { System.out.println("[apklayer-hub] could not start " + key + " for " + explicit.getComponent().flattenToShortString()); return; }
+            try { deliver(started, explicit, explicit); }
+            catch (RuntimeException failed) { System.out.println("[apklayer-hub] start of " + explicit.getComponent().flattenToShortString() + " failed: " + failed); }
+        }, "hub-start-" + info.name);
+        later.setDaemon(true);
+        later.start();
+        return explicit.getComponent();
     }
 
     private ComponentName deliver(HubDirectory.Peer target, Intent explicit, Intent delivered) {
