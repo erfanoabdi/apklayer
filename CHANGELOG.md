@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: Droid-ify index sync completes: the JDK no longer denies SHA-1 signed jars
+- After the RSASSA-PSS fix, f-droid.org and izzysoft downloaded but Droid-ify threw "index.jar must be signed by a single code signer" (JarFile.getCodeSigners empty: `jdk.jar.disabledAlgorithms` has `SHA1 denyAfter 2019-01-01`, Android has no such rule). HostProviders sets the property without the SHA1 entry. UTM, own tree, APKLAYER_LOGCAT=1: the sync fills the 59 MB database in about a minute, the Explore tab lists the apps, no `ScreenFragment.getToolbar` NPE. docs/PLAN.md line removed.
+
 ## 2026-11-15: TLS handshake_failure from f-droid.org in apps with their own TLS stack (Droid-ify): RSASSA-PSS
 - Not a Parallels/UTM difference: the stock JDK, F-Droid (Conscrypt) and the `tls` group pass on both; Droid-ify's index sync failed on both (fresh trees, Parallels and UTM). Its JDK SunJSSE ClientHello lacked every rsa_pss_* signature scheme (and ed448/x448): `Signature.getInstance("RSASSA-PSS")` resolved in none of Android's providers (SunRsaSign is not in Android's list), so f-droid.org (RSA certificate) could not do TLS 1.3 and answered handshake_failure; izzysoft's ECDSA servers worked.
 - Fix: `HostProviders.HarmonyJsse` also serves SunRsaSign's RSASSA-PSS (Signature, KeyFactory, KeyPairGenerator, AlgorithmParameters), as it does SunEC's XDH. hello-tls: handshakes with f-droid.org and github.com (protocol, suite, chain) and an RSASSA-PSS check. Droid-ify after clear-data, both hosts: 0 fatal alerts, 4 ServerHellos. Trees ~/apklayer-tls4 deleted.

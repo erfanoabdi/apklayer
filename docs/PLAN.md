@@ -12,7 +12,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- Droid-ify: the NPE in `ScreenFragment.getToolbar` seen on UTM after the F-Droid index sync does not show on Parallels (first frame, tabs and turns are fine; there the index never downloads: TLS handshake_failure). Needs the sync to finish (network with working TLS), then the cause. Group `fragment` covers the plain fragment lifecycle (passes).
 - `webview` group fails in 3 of 4 runs on the PC at baseline (cookie assert).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
