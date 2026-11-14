@@ -126,7 +126,7 @@ static bool data_path(char **path)
  * they do not exist. <uid> is its Android uid: without the sandbox the process runs as the user, and Android code is told the app uid (its ids,
  * the owner of the user's files: bionic_translation 0056) and the supplementary <gid>s zygote gives an app (getgroups: 0061); under the sandbox
  * the real ids are the app's and nothing changes. */
-struct own_data { char *env, *pkg, *dir, *device; long uid; int ngroups; gid_t groups[16]; };
+struct own_data { char *env, *pkg, *dir, *device, *apps; long uid; int ngroups; gid_t groups[16]; };
 static struct own_data *own_data;
 
 /* the app uid bionic code sees, or -1 (none known, or the real uid is the app's: the sandbox) */
@@ -166,6 +166,19 @@ void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const 
     if (!o || strchr(pkg, ':') || strchr(groups, ':') || asprintf(&o->env, "APKLAYER_OWN_DATA=%s:%ld%s%s:%s", pkg, uid, *groups ? "," : "", groups, root) < 0
         || !(o->pkg = strdup(pkg)) || asprintf(&o->dir, "%s/app", root) < 0 || asprintf(&o->device, "%s/device", root) < 0) return;
     o->uid = uid;
+    {   /* the installed code, <dataHome>/apklayer/apps/<pkg> (base.apk, splits, lib/), from the data root <dataHome>/apklayer/<n>/app-data/<pkg>: for own_apk_path */
+        char *tail = NULL;
+        if (asprintf(&tail, "/app-data/%s", pkg) >= 0) {
+            size_t n = strlen(root), t = strlen(tail);
+            if (n > t && !strcmp(root + n - t, tail)) {
+                char *top = strndup(root, n - t);          /* <dataHome>/apklayer/<n> */
+                char *slash = top ? strrchr(top, '/') : NULL;
+                if (slash) { *slash = 0; if (asprintf(&o->apps, "%s/apps/%s", top, pkg) < 0) o->apps = NULL; }
+                free(top);
+            }
+            free(tail);
+        }
+    }
     for (char *end; *groups && o->ngroups < (int)(sizeof o->groups / sizeof *o->groups); groups = end + (*end == ',')) {
         o->groups[o->ngroups] = (gid_t)strtoul(groups, &end, 10);
         if (end == groups || (*end && *end != ',')) break;
@@ -227,6 +240,30 @@ static bool own_data_path(char **path)
         return true;
     }
     return false;
+}
+
+/* The app's installed code under Android's spelling: /data/app/~~<tag>/<pkg>-<tag>/base.apk, split_<name>.apk, lib/<abi>/<lib>.so (Android 11+; the tag is random there
+ * and any here). The installer keeps base.apk, the splits and a flat lib/ in <dataHome>/apklayer/apps/<pkg>, so this maps the first two as they are and lib/<abi>/x
+ * to lib/x. Only the app's own package. Always on: no other file has such a name; whether the app is shown these spellings (ApplicationInfo.sourceDir, nativeLibraryDir)
+ * is the Java side's APKLAYER_APK_PATHS=android (AppEnvironment). */
+static bool own_apk_path(char **path)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!o || !o->apps || strncmp(*path, "/data/app/~~", 12)) return false;
+    const char *dir = strchr(*path + 12, '/');
+    if (!dir) return false;
+    dir++;
+    size_t k = strlen(o->pkg);
+    if (strncmp(dir, o->pkg, k) || dir[k] != '-') return false;
+    const char *rest = strchr(dir, '/');
+    rest = rest ? rest : "";
+    char *mapped;
+    if (!strncmp(rest, "/lib", 4) && (!rest[4] || rest[4] == '/')) {        /* lib or lib/<abi>[/...] */
+        const char *abi = rest[4] == '/' ? strchr(rest + 5, '/') : NULL;
+        if (asprintf(&mapped, "%s/lib%s", o->apps, abi ? abi : "") < 0) return false;
+    } else if (asprintf(&mapped, "%s%s", o->apps, rest) < 0) return false;
+    *path = mapped;
+    return true;
 }
 
 /* /system/bin/linker64 is the file of Android code's linker, bionic_translation's libdl (its getauxval(AT_BASE), 0054): hook libraries
@@ -493,7 +530,7 @@ bool apklayer_apply_path_overrides(char **path)
         if (gone) { *path = gone; return true; }
     }
     if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
-    if (binder_device(path) || storage_path(path) || own_data_path(path) || data_path(path) || linker_path(path)) return true;
+    if (binder_device(path) || storage_path(path) || own_data_path(path) || own_apk_path(path) || data_path(path) || linker_path(path)) return true;
     /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */
     const char *own = own_env;
     return (own && own[0] && from_root(own, path)) || from_root(root(), path);
@@ -534,6 +571,20 @@ static long own_data_spelling(char *buf, long n)
 {
     const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
     if (!o || !o->dir || !o->device || n <= 0) return n;
+    if (o->apps) {   /* the installed code: <apps>/base.apk, split_*.apk and lib/x as /data/app/~~apklayer/<pkg>-apklayer/..., lib/<abi>/x. Only when it fits: the caller's buffer holds n bytes */
+        long k = (long)strlen(o->apps);
+        if (n >= k && !strncmp(buf, o->apps, (size_t)k) && (n == k || buf[k] == '/')) {
+            char spelled[PATH_MAX];
+            const char *rest = buf + k;
+            int restn = (int)(n - k), m;
+            if (restn >= 4 && !strncmp(rest, "/lib", 4) && (restn == 4 || rest[4] == '/'))
+                m = snprintf(spelled, sizeof spelled, "/data/app/~~apklayer/%s-apklayer/lib%s%.*s", o->pkg, sizeof(void *) == 8 ? "/arm64" : "/arm", restn - 4, rest + 4);
+            else
+                m = snprintf(spelled, sizeof spelled, "/data/app/~~apklayer/%s-apklayer%.*s", o->pkg, restn, rest);
+            if (m > 0 && m < (int)sizeof spelled && m <= n) { memcpy(buf, spelled, (size_t)m); return m; }
+            return n;
+        }
+    }
     const char *const hosts[2] = { o->dir, o->device };
     const char *const androids[2] = { "/data/user/0/", "/data/user_de/0/" };
     for (int i = 0; i < 2; i++) {
