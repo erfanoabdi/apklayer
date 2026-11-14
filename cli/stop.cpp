@@ -55,13 +55,17 @@ void stopStack(const Layout& l, const Instance& inst) {
     // The hub JVM, then its launcher: the next hub can take hub.lock as soon as stop returns
     if (auto hub = readFile(join(inst.stateDir, "hub.pid")))
         for (const std::string& pid : split(*hub, '\n')) terminate(atoi(pid.c_str()));
-    for (const std::string& f : listDir(inst.stateDir)) {  // launches of this instance: their JVM and window sink
-        if (f.rfind("run.", 0) != 0) continue;
-        auto record = readFile(join(inst.stateDir, f));
-        if (record) for (const std::string& pid : split(*record, '\n')) terminate(atoi(pid.c_str()));
-        unlink(join(inst.stateDir, f).c_str());
-    }
+    auto endLaunches = [&] {  // launches of this instance: their JVM and window sink
+        for (const std::string& f : listDir(inst.stateDir)) {
+            if (f.rfind("run.", 0) != 0) continue;
+            auto record = readFile(join(inst.stateDir, f));
+            if (record) for (const std::string& pid : split(*record, '\n')) terminate(atoi(pid.c_str()));
+            unlink(join(inst.stateDir, f).c_str());
+        }
+    };
+    endLaunches();
     if (stack) terminate(atoi(stack->c_str()));
+    endLaunches();  // a spare's record written while the hub and the stack ended (a launch that was already starting)
     // the userspace binder (docs/BINDER.md): it would end by itself once its clients are gone; stop means now
     if (auto binderd = readFile(join(binderSocketDir(l.runtimeHome), inst.id + ".pid"))) terminate(atoi(binderd->c_str()));
     // what started while the above ran (a launch racing the stop, the spare holder it started): the instance's processes until none is left.

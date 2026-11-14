@@ -22,7 +22,6 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - The boot broadcast may wake every app with a boot receiver at once (each a JVM; 14 receivers on Parallels): check, it is ordered since 2026-11-08.
 - FCL: after a window resize no new frame reached the shell (window looked frozen); not diagnosed.
 - An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
-- `--spare` JVM still running after `apklayer stop` (4 in ~120 stops, not reproduced since): candidate fix, a second records pass after the hub.
 - An installer run once hung after its self update waiting on `apklayer.stack.ready` with no stack (not reproduced).
 - Phone with the deb: after 4-5 NewPipe launches `HubStartup.connect` blocked in `pingBinder` (swap full); restarting the instance cleared it.
 - volumes-sandbox "catchup present internal file" failed once in five (scan sent, not indexed in 30 s).
