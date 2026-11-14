@@ -29,6 +29,8 @@ final class HubVolumes {
     /** fs uuid -> the volume as last seen mounted; and the uuids unmounted whose device is still there (vold's STATE_UNMOUNTED). */
     private final Map<String, VolumeInfo> mounted = new HashMap<>();
     private final Map<String, VolumeInfo> unmounted = new HashMap<>();
+    /** fs uuid -> the block device it was mounted from (the mount table, when first seen): after the unmount, a device that is gone or empty was pulled out while mounted. */
+    private final Map<String, String> devices = new HashMap<>();
 
     HubVolumes(HubDirectory directory) { this.directory = directory; this.media = new HubMediaWatch(directory); }
 
@@ -164,6 +166,8 @@ final class HubVolumes {
             if (before != null && before.path.equals(volume.path) && before.state == volume.state) continue;
             unmounted.remove(volume.fsUuid);
             mounted.put(volume.fsUuid, volume);
+            String device = source(HostVolumes.Removable.mountPoint(volume));
+            if (device != null) devices.put(volume.fsUuid, device);
             if (before == null) {  // vold checks the file system first (ACTION_MEDIA_CHECKING); already mounted and only changed (read-only) it does not
                 changed(state(volume, VolumeInfo.STATE_CHECKING), VolumeInfo.STATE_UNMOUNTED);
                 changed(volume, VolumeInfo.STATE_CHECKING);
@@ -175,7 +179,7 @@ final class HubVolumes {
             mounted.remove(gone.fsUuid);
             media.remove(gone.path);
             // shortcut: the device already gone when the unmount is seen counts as pulled out while mounted (a clean eject followed at once by removal looks the same)
-            if (!Files.exists(Path.of("/dev/disk/by-uuid", gone.fsUuid))) changed(state(gone, VolumeInfo.STATE_BAD_REMOVAL), VolumeInfo.STATE_MOUNTED);
+            if (!Files.exists(Path.of("/dev/disk/by-uuid", gone.fsUuid)) || vanished(devices.remove(gone.fsUuid))) changed(state(gone, VolumeInfo.STATE_BAD_REMOVAL), VolumeInfo.STATE_MOUNTED);
             changed(state(gone, VolumeInfo.STATE_EJECTING), VolumeInfo.STATE_MOUNTED);
             changed(state(gone, VolumeInfo.STATE_UNMOUNTED), VolumeInfo.STATE_EJECTING);
             unmounted.put(gone.fsUuid, state(gone, VolumeInfo.STATE_UNMOUNTED));
@@ -187,6 +191,14 @@ final class HubVolumes {
         }
         HostVolumes.Removable.removeStale(mounted.keySet());
         record();
+    }
+
+    /** A block device whose node is gone or whose size is 0 (a loop device cleared by its last unmount, a pulled drive's node): udev's by-uuid link may outlive it briefly. */
+    private static boolean vanished(String device) {
+        if (device == null) return false;
+        if (!Files.exists(Path.of(device))) return true;
+        try { return Long.parseLong(Files.readString(Path.of("/sys/class/block", Path.of(device).getFileName().toString(), "size")).trim()) == 0; }
+        catch (IOException | RuntimeException none) { return false; }
     }
 
     private static Path recordFile() { return Path.of(System.getProperty("apklayer.storage", "/nonexistent")).getParent().resolve("volumes-mounted"); }
