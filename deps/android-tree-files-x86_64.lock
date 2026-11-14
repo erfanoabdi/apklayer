@@ -521,6 +521,7 @@ a25412b0e3923e2a7fdd07dacf8b9002343c514c11e38171236be07195ddeaf3 134368 x86_64/a
 772e0ed351430207fe70d3a7145d3c3b5956be93f73be8c25dd3029b19733e24 101904 x86_64/android-libs/lib64/spatializer-aidl-cpp.so out/target/product/generic_x86_64/system/lib64/spatializer-aidl-cpp.so same
 6ce83063712314fc0f9e8dc0b2c487375e923f01b0bc5b244fdb47d84f59e9b8 51872 x86_64/android-libs/lib64/volumegroupcallback-aidl-cpp.so out/target/product/generic_x86_64/system/lib64/volumegroupcallback-aidl-cpp.so same
 b49ddff857a106c4637acbcff3dde3f1a7c47de097b7a93a7e603b00b61338e8 69512 x86_64/android-libs/lib64/vulkan.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/vulkan/vulkan.apklayer/android_x86_64_shared/vulkan.apklayer.so apklayer
+c3dbf5c9d141c466fc18189458e119cde1fcd81b5ff068ae2966fa896dea2c6f 36696 x86_64/android-root/apex/com.android.art/lib64/libart.so (aarch64 build of bridge/native/libart_*.c: tools/lib/build-libart-arm64.sh; not from the tree's build outputs) apklayer
 41a711319e141ef185031258e1757ebdf250bb5803fc60ad50e966ebfd35df1e 1619 x86_64/android-root/apex/com.android.i18n/etc/aconfig_flags.pb (staged from the tree's build outputs, see CHANGELOG.md) same
 b5f86375fba25eed594a019cc7d3a9c569a95837e6296be9c9e3acefd73ea226 42 x86_64/android-root/apex/com.android.i18n/etc/flag.info (staged from the tree's build outputs, see CHANGELOG.md) same
 899de6ad1d3e3d52d6b4da267e82957b385594b4a70852177fb04f832dfa7875 289 x86_64/android-root/apex/com.android.i18n/etc/flag.map (staged from the tree's build outputs, see CHANGELOG.md) same

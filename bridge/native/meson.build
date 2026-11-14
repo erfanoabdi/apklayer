@@ -14,8 +14,9 @@ if jni_dep.found()
 endif
 # the ELF at Android's libart.so path (the path layer serves /apex/com.android.art/lib64/libart.so from the Android root): ART's symbols as stubs and the JNI
 # tables' thunks, loaded by jni_art.c (docs/runtime-identity-matrix.md)
+# aarch64 hosts only: an x86_64 host's guest is arm64 code under the native bridge and gets the aarch64 build from the prebuilts' android-root (tools/lib/build-libart-arm64.sh)
 shared_module('art', ['libart_jni.c', 'libart_symbols.c'], name_prefix: 'lib', c_args: native_cargs, override_options: native_opts,
-  install: true, install_dir: native_dir / 'android-root/apex/com.android.art/lib64')
+  install: host_machine.cpu_family() == 'aarch64', install_dir: native_dir / 'android-root/apex/com.android.art/lib64')
 # the launcher for Android executables built as libraries (btload --main)
 executable('btload', ['bionic_tls.c', 'btload.c', 'android_platform.c', 'properties.c', 'paths.c', 'binder_compat.c', 'android_stubs.c'],
   export_dynamic: true, link_with: dl_bio, dependencies: dependency('threads'),  # threads: libpthread before glibc 2.34 (pthread_getcpuclockid)
