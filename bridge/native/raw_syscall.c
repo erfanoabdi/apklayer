@@ -96,13 +96,6 @@ static long guest_syscall(long nr, const long a[6])
         }
         return r < 0 ? -errno : r;
     }
-    case __NR_rt_sigprocmask:  /* SIG_BLOCK/SIG_SETMASK of SIGSYS would kill the process at the next trap: never blocked */
-        if (a[1] && a[3] == 8 && (a[0] == SIG_BLOCK || a[0] == SIG_SETMASK)) {
-            unsigned long set = *(unsigned long *)a[1] & ~(1UL << (SIGSYS - 1));
-            r = syscall(nr, a[0], &set, a[2], a[3]);
-            return r == -1 ? -errno : r;
-        }
-        break;
     case __NR_rt_sigaction:  /* SIGSYS only (the filter): the handler is ours, the guest's is never installed (a Go runtime installs its own through the kernel) */
         if (a[2]) memset((void *)a[2], 0, 3 * sizeof(unsigned long));  /* the old action (the kernel's arm64 struct: handler, flags, mask) reads as the default */
         return 0;
@@ -128,7 +121,17 @@ static void on_sigsys(int sig, siginfo_t *info, void *context)
     long a[6];
     for (int i = 0; i < 6; i++) a[i] = (long)uc->uc_mcontext.regs[i];
     long nr = (long)uc->uc_mcontext.regs[8];
-    long r = guest_syscall(nr, a);
+    long r;
+    if (nr == __NR_rt_sigprocmask && a[3] == 8) {  /* the handler's own mask is restored at sigreturn: the guest's mask is the saved one, SIGSYS never in it */
+        unsigned long *m = (unsigned long *)&uc->uc_sigmask, was = *m & ~(1UL << (SIGSYS - 1));
+        r = 0;
+        if (a[2]) *(unsigned long *)a[2] = was;
+        if (a[1]) {
+            unsigned long set = *(unsigned long *)a[1];
+            if (a[0] == SIG_BLOCK) was |= set; else if (a[0] == SIG_UNBLOCK) was &= ~set; else if (a[0] == SIG_SETMASK) was = set; else r = -EINVAL;
+            if (!r) *m = was & ~(1UL << (SIGSYS - 1));
+        }
+    } else r = guest_syscall(nr, a);
     uc->uc_mcontext.regs[0] = (unsigned long)r;
     errno = saved;
 }
