@@ -13,6 +13,10 @@ struct art_tables { void *vm; void **jni; void **invoke; };
 
 void apklayer_art_load(JavaVM *vm, void *jni_table, void *invoke_table)
 {
+#if !defined(__aarch64__)
+    (void)vm; (void)jni_table; (void)invoke_table;  /* x86_64: the guest is translated arm64 code with the translator's own tables; libart.so there is an aarch64 file the host cannot load */
+    return;
+#endif
     static const char suffix[] = "/apex/com.android.art/lib64/libart.so";
     const char *roots[2] = { getenv("APKLAYER_ANDROID_ROOT"), NULL };
     const char *native = getenv("APKLAYER_NATIVE");

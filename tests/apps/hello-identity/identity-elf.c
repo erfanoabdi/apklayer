@@ -103,7 +103,7 @@ static void libraries(struct buf *b)
             char err[400];
             snprintf(err, sizeof err, "%s", e ? e : "?");
             char *app = strstr(err, "/data/app/");
-            if (app) strcpy(app, "/data/app/<APP>");
+            if (app) { char *end = strchr(app, '"'); memmove(app + 15, end ? end : app + strlen(app), strlen(end ? end : "") + 1); memcpy(app, "/data/app/<APP>", 15); }  /* keep the rest of the message */
             put(b, key, "FAIL %s", err);
             continue;
         }
