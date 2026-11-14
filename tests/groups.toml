@@ -19,6 +19,11 @@ run = ["meson test -C b --suite bionic --print-errorlogs"]
 apps = ["hello-runtime"]
 run = ["python3 -u tests/vm/runtime-identity.py"]
 
+[tls]
+# real HTTPS through Android's security providers (Conscrypt over libjavacrypto): good and bad certificates, a pinned store, the system CA store
+apps = ["hello-tls"]
+run = ["tests/vm/tls.sh"]
+
 [identity-matrix]
 # runtime identity probes for docs/runtime-identity-matrix.md (a measurement: tests/identity/collect.sh compares them with Android)
 apps = ["hello-identity"]

@@ -21,6 +21,7 @@
 
 bool apklayer_apply_path_overrides(char **path);
 int apklayer_proc_fd(int fd);
+int apklayer_proc_prctl_view(int option, long *result);  /* proc_task.c; declared before the syscall() wrapper uses it (gcc 15: implicit declarations are errors) */
 long apklayer_proc_getdents64(int fd, void *buf, size_t count);
 FILE *apklayer_proc_file(FILE *file);
 int apklayer_proc_pid_hidden(const char *name);
@@ -362,7 +363,6 @@ long syscall(long nr, ...)
 
 /* What an Android app's prctl answers about its own security state (proc_task.c: not dumpable, no_new_privs, a seccomp filter); the real process keeps its
  * attributes. The JVM's own prctl calls (thread names, PR_SET_VMA) are not queries of these. */
-int apklayer_proc_prctl_view(int option, long *result);
 int prctl(int option, ...)
 {
     va_list ap;
