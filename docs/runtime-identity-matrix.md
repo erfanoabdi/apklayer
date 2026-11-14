@@ -48,7 +48,7 @@ The judged matrix below groups those keys into 116 probes. A row counts as "matc
 | total | 116 | 29 | 13 | 73 | 1 |
 
 ### Top mismatches by severity
-1. **`JNI_GetCreatedJavaVMs` (H, crash).** On x86 the call aborts the process: berberis' nativehelper trampoline hits `CHECK(*output_size == 1u)` because the host libnativehelper returns 0 VMs. On ARM64 it returns `count=0`. Android returns 1, the app's VM. FCL (`libterracotta`), many SDKs and Unity/Unreal-style engines call it.
+1. **FIXED 2026-11-14: `JNI_GetCreatedJavaVMs` (H, crash).** (Before the fix:) On x86 the call aborts the process: berberis' nativehelper trampoline hits `CHECK(*output_size == 1u)` because the host libnativehelper returns 0 VMs. On ARM64 it returns `count=0`. Android returns 1, the app's VM. FCL (`libterracotta`), many SDKs and Unity/Unreal-style engines call it.
 2. **`/proc/self/status` read through libc fails on ARM64 (H).** `open`+`read` returns EBADF (`native.proc.status=ERR 9`). The raw syscall works but shows the **host uid 1000**. TracerPid readers (libunity, libjingle, WebView, DisplayLink in the corpus) get an error.
 3. **Raw syscalls on native ARM64 bypass every view (H for anti-tamper).** `svc #0` getuid returns 1000 (libc says 10000). `openat(/proc/self/maps)` shows `libjvm.so` and no `libart.so`. x86 translation gets these right (libart, uid 10000), because the translator filters syscalls.
 4. **Host JVM inside the process (H).**
@@ -59,8 +59,7 @@ The judged matrix below groups those keys into 116 probes. A row counts as "matc
    - cgroup is the desktop's `user.slice/...apklayer-mx1-app...scope`.
 5. **JNI functions do not live in libart (H for anti-hook, M otherwise).**
    - `dladdr` of the `JNIEnv` table and functions: Android names `libart.so` (`gJniNativeInterface`). ARM64 names `libandroid_runtime.so` in a Robolectric temp dir. x86 is `unresolved`.
-   - `GetVersion` is `0x150000` (Android: `0x10006`).
-   - FindClass of an app class from an attached native thread **succeeds**. On Android it fails, because that thread gets the system loader.
+   - `GetVersion` and FindClass from an attached thread: FIXED 2026-11-14 (guest callers now get 0x10006 and ClassNotFoundException). Only the `dladdr` naming above remains (item 14: needs a real libart ELF).
 6. **Host libraries are dlopen-able (M/H).** On ARM64, `dlopen("libjvm.so")`, `libjava.so`, `libc.so.6`, `libjavacore.so`, `libbinder.so` and `libandroid_runtime.so` all succeed (Android: "not found"). `dladdr(malloc)` reports `/usr/lib/aarch64-linux-gnu/libc.so.6`. x86 translation hides these, and its dladdr shows `/system/lib64/arm64/libc.so`.
 7. **libart.so is a name, not a file (H for ElfImg-style resolvers, M otherwise).** The maps line exists, but opening the path fails (ENOENT). There are no `.dynsym`/`.symtab` ART symbols. Waydroid opens it and finds 12/12 symbols whose code matches memory.
 8. **ArtMethod/ArtField layout (M; H for hook frameworks and HiddenApiBypass).**
@@ -201,16 +200,17 @@ The judged matrix below groups those keys into 116 probes. A row counts as "matc
 | jmethodID adjacent delta / == artMethod | 32 / yes | 8 / n.a. | 8 / n.a. | mismatch | H for hookers | ART emulation |
 | ArtMethod at jmethodID: access_flags @4, dex_method_index @8, data_ @16 (native: == JNI fn), entry @24 (in libart) | all as ART | garbage, no match, unresolved | same | mismatch | H for hookers (Pine/SandHook/LSPlant/Frida-java) | ART emulation |
 | jfieldID delta | 16 (ArtField) | -736 | -110208 | mismatch | M | ART emulation |
-| JNI GetVersion | 0x10006 | 0x150000 | 0x150000 | mismatch | M (some libs refuse > 1.6, or detect JDK) | translator/bionic patch (JNIEnv wrapper GetVersion) |
+| JNI GetVersion | 0x10006 | 0x10006 | 0x10006 | **match (fixed 2026-11-14)** | M | bridge/native/jni_guest_surface.c (guest callers only; the JDK's libraries keep 0x150000) |
 | Reference low bits (local/global/weak) | 1 / 2 / 7 (ART IndirectRef kinds) | 0 / 2 / 1 (HotSpot handles) | same | mismatch | L (GetObjectRefType agrees: 1/2/3) | ART emulation |
 | isCopy: string critical/chars/utf, int[] critical/elements | 1,1,1 / 0,1 | same | same | match | M | - |
 | isCopy large (1 MB) int[] elements | 0 (large-object space, non-moving) | 1 | 1 | mismatch | M (code relying on direct pointers into big arrays) | ART emulation (non-moving large arrays, PLAN item) |
 | JavaVM from GetJavaVM == JNI_OnLoad's | yes | yes | yes | match | H | - |
-| JNI_GetCreatedJavaVMs (libnativehelper) | ret 0, count 1, same VM | **count 0** | **process abort** (berberis CHECK) | mismatch | **H** | translator (nativehelper trampoline) + host libnativehelper stub (return the JVM) |
-| JNI_GetCreatedJavaVMs (RTLD_DEFAULT) | no symbol | resolves to libandroid_runtime stub, count 0 | no symbol | mismatch ARM64 | M | bionic patch |
+| JNI_GetCreatedJavaVMs (libnativehelper) | ret 0, count 1, same VM | ret 0, count 1, same VM | ret 0, count 1, same VM | **match (fixed 2026-11-14)** | H | jni_guest_surface.c binds libnativehelper's JniInvocation table to the JVM; Berberis' CHECK holds unchanged, no translator patch |
+| JNI_GetDefaultJavaVMInitArgs / JNI_CreateJavaVM (libnativehelper) | -1 / -1 (JNI_ERR) | -1 / -1 | -1 / -1 | **match (fixed 2026-11-14; both aborted or were unbound before)** | M | same |
+| JNI_GetCreatedJavaVMs (RTLD_DEFAULT) | no symbol | resolves to libandroid_runtime stub (now count 1, the VM) | no symbol | partial ARM64 (symbol still resolves; answer is right) | L | bionic patch (global symbol scope, item 4) |
 | GetEnv on unattached thread | JNI_EDETACHED (-2) | -2 | -2 | match | H | - |
-| FindClass(app class) from an attached native thread | **ClassNotFoundException** (system loader) | found | found | mismatch | M (apps that work on apklayer would fail on Android: harmless; detectors use it) | translator/Java shadow (use the system loader without a Java frame) |
-| Attached thread name / group / comm | Thread-3 / main / Thread-3 | Thread-4 / main / comm `hello.identity` | same | partial (comm not set) | L | bionic patch (AttachCurrentThread sets the native thread name) |
+| FindClass(app class) from an attached native thread | **ClassNotFoundException** (system loader) | ClassNotFoundException | ClassNotFoundException | **match (fixed 2026-11-14)** | M | jni_guest_surface.c: guest callers on a thread with no Java frame get the Android answer for app-loader classes; framework/JDK classes and calls from a native method or JNI_OnLoad still resolve through the app loader |
+| Attached thread name / group / comm | Thread-3 / main / Thread-3 | Thread-4 / main / comm Thread-4 | same | **match (fixed 2026-11-14; numbering differs)** | L | jni_guest_surface.c (AttachCurrentThread names the native thread, ART's SetThreadName rule) |
 
 ## Corpus evidence (which apps probe what)
 

@@ -258,7 +258,7 @@ User requested: fix ART internals, Java runtime clues, process identity and othe
 - Process identity: UID/file owner, own status Uid/Gid and `/proc` directory visibility now pass the existing native-bridge checks on UTM ARM64 and the x86 translator with userspace binder. Supplementary groups in status now share the bionic app group list. Broader consistency (other proc files, namespace/security semantics) still needs comparison and coverage.
 - Waydroid baseline: Android 13 standalone dalvikvm64 confirms ART version 2.1.0, library libart.so, Java version 0/runtime 0.9, ART home, real PathClassLoader, and absence of HotSpot/Robolectric/apklayer classes. VMRuntime ISA/width and heap-hint clamp agree; default utilization is configuration/version dependent (.75 there, .6 in the current local ART reference). This is not an Android app sandbox comparison. Apklayer tests explicitly select APKLAYER_BINDER=userspace.
 - Gap matrix (2026-11-14): `docs/runtime-identity-matrix.md` compares Android 13 against apklayer ARM64 and x86. The Android column is Waydroid on the x86 PC, running hello-identity as a real installed app. Of 116 judged probes: 29 match, 13 partial, 73 mismatch. Probes: `tests/apps/hello-identity`; results and tools: `tests/identity/`; group: `identity-matrix`. The ranked work that follows, most real-app impact first:
-  1. **JNI_GetCreatedJavaVMs.** x86 aborts the process (berberis nativehelper trampoline `CHECK(*output_size == 1u)`), and ARM64 returns 0 VMs. Make the host libnativehelper/libandroid_runtime stub report the app JVM, and make the trampoline tolerate 0. Translator + bridge/native.
+  1. **JNI_GetCreatedJavaVMs.** Done 2026-11-14 (bridge/native/jni_guest_surface.c): returns the app JVM with count 1 on ARM64 and x86; JNI_CreateJavaVM/JNI_GetDefaultJavaVMInitArgs return JNI_ERR as ART's do. Left: `dlsym(RTLD_DEFAULT, "JNI_GetCreatedJavaVMs")` still resolves on ARM64 (item 4, symbol scope).
   2. **ARM64 `/proc/self/status` through libc returns EBADF** (the raw syscall works). Fix the proc view status snapshot read path. Also set the status `Name`, comm and `PR_GET_NAME` to the package, not `java` (both arches). Proc view + launcher.
   3. **Host JVM traces in native views** (both arches):
      - fd readlinks (Robolectric_all.jar, the JDK `modules`, apklayer jars at host paths);
@@ -306,13 +306,7 @@ User requested: fix ART internals, Java runtime clues, process identity and othe
       - TMPDIR/BOOTCLASSPATH are unset.
 
       Launcher + bionic patch + translator.
-  11. **JNI surface.**
-      - GetVersion returns 0x150000 (Android: 0x10006);
-      - JNIEnv functions do not resolve to libart.so in dladdr;
-      - FindClass of an app class from an attached native thread succeeds (Android: ClassNotFoundException);
-      - AttachCurrentThread leaves comm unchanged.
-
-      Translator/bionic patch JNI wrapper.
+  11. **JNI surface.** Done 2026-11-14 except one: GetVersion 0x10006, attached-thread FindClass of app classes fails as on Android, attach names the native thread (guest callers only). Left: JNIEnv functions do not resolve to libart.so in `dladdr` (needs the real libart ELF, item 14).
   12. **Exception messages.** Rewrite to ART text: NPE, AIOOBE/SIOOBE, CCE, ArrayStoreException, ArithmeticException, NoSuchMethodException, and UnsatisfiedLinkError (`dlopen failed: library "x" not found`). Java shadow.
   13. **Hidden-API policy for target SDK >= 28.** Blocked VMRuntime/VMDebug members are open today, and `getTargetSdkVersion` returns 10000. Apply the blocklist on app reflection and return the app's real target SDK. Java shadow.
   14. **ART structures (largest, last).**
