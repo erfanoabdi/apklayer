@@ -52,11 +52,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Permissions and Android rules
 - Shared libraries: HIDL libraries, `<uses-native-library>`, resources.
-- Storage: no scoped-storage rules; `UNMOUNTABLE` not sent.
-- Every instance scans every drive. Eject can fail "busy" while MediaProvider maps an image.
+- Storage: no scoped-storage rules; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
+- Every instance scans every drive.
 - Call audio: oldest `MODE_IN_COMMUNICATION` requester wins.
-- Keystore: only pam_unix passwords, never locked.
-- libcore: `sun.misc.Cleaner`, `fstat(fd)`, SharedMemory `PROT_EXEC`/`PROT_NONE`.
+- Keystore: only pam_unix passwords.
+- libcore: `sun.misc.Cleaner`; SharedMemory `PROT_EXEC`/`PROT_NONE` (needs a JNI mprotect call and a native rebuild).
 - Termux under `APKLAYER_SANDBOX=1` is not tested.
 - Direct buffer `array()` writes are lost (HotSpot cannot pin an app's `allocateDirect` buffer; `ApklayerBuffers` returns a copy).
 
@@ -101,7 +101,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Updates outside the manager leave running instances on old programs.
 - Flatpak: launcher portal dialog; `flatpak run` keeps a pipe on stdout.
 - amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
-- First command after install blocks ~75 s for runtime setup.
+- First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 - Sailfish: libhybris in every Android process, a Chum/OBS repository, no text input in the manager.
 - Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
