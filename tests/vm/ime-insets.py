@@ -58,8 +58,8 @@ def run(mode):
             _, _, _, low = state(lambda v, b, c, f: f > 400, n)  # the number field has focus, under where the keyboard comes
             n = len(seen)
             instance.inject(PKG, 'ime:%d' % KEYBOARD)
-            # the pan animates (ViewRootImpl's scroller): until the field (48 px) sits above the keyboard in the 579 px window
-            _, _, content, focus = state(lambda v, b, c, f: v and b == KEYBOARD and f + 48 <= 580 - KEYBOARD, n)  # (1 px: ViewRootImpl rounds the rect)
+            # the pan animates (ViewRootImpl's scroller): until the field (48 px) sits above the keyboard in the 600 px window
+            _, _, content, focus = state(lambda v, b, c, f: v and b == KEYBOARD and f + 48 <= 601 - KEYBOARD, n)  # (1 px: ViewRootImpl rounds the rect)
             assert content == full, 'adjustPan resized the content: %d -> %d' % (full, content)
             result = 'adjustPan: ime insets %d px, the content keeps %d px, the focused field panned from %d to %d' % (KEYBOARD, full, low, focus)
         else:
