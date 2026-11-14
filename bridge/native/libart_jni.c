@@ -10,6 +10,11 @@
 
 static void *art_jni_slots[JNI_ENTRIES], *art_vm_slots[VM_ENTRIES];
 static void *art_vm;
+/* The tables a guest's `*env` and `*vm` point to: data of this library, as ART's (dladdr of *env names gJniNativeInterface, libart.so; the invoke
+ * table is a local const in ART, no symbol). jni_art.c points the JNIEnvs and the JavaVM here. */
+#define JNI_TABLE_MAX 256
+__attribute__((visibility("default"))) void *_ZN3art27JniNativeInterfaceFunctionsILb0EE19gJniNativeInterfaceE[JNI_TABLE_MAX];
+static void *art_invoke_table[VM_ENTRIES];
 static void *const art_slots_used[] __attribute__((used)) = { art_jni_slots, art_vm_slots };  /* the asm names the arrays: keep them */
 
 #if defined(__aarch64__)
@@ -51,7 +56,7 @@ static void *const vm_thunks[VM_ENTRIES] = {
 
 /* The runtime hands over its tables through the environment (the address of this struct, hex) when it loads the library: no exported symbol of
  * ours for a scanner to find. Each table entry is replaced by its thunk. */
-struct art_tables { void *vm; void **jni; void **invoke; };
+struct art_tables { void *vm; void **jni; void **invoke; unsigned long jni_entries; void *jni_copy, *invoke_copy; };
 
 __attribute__((constructor)) static void bind(void)
 {
@@ -59,11 +64,16 @@ __attribute__((constructor)) static void bind(void)
     if (!address) return;
     unsigned long value = 0;  /* not strtoul: glibc's C23 name of it (__isoc23_strtoul) is not in bionic */
     for (const char *c = address; (*c >= '0' && *c <= '9') || (*c >= 'a' && *c <= 'f'); c++) value = value * 16 + (*c <= '9' ? *c - '0' : *c - 'a' + 10);
-    const struct art_tables *t = (void *)value;
+    struct art_tables *t = (void *)value;
     unsetenv("APKLAYER_ART_TABLES");
     art_vm = t->vm;
     for (int i = 4; i < JNI_ENTRIES; i++) if (t->jni[i] && t->jni[i] != jni_thunks[i]) { art_jni_slots[i] = t->jni[i]; t->jni[i] = jni_thunks[i]; }
     for (int i = 3; i < VM_ENTRIES; i++) if (t->invoke[i] && t->invoke[i] != vm_thunks[i]) { art_vm_slots[i] = t->invoke[i]; t->invoke[i] = vm_thunks[i]; }
+    unsigned long n = t->jni_entries < JNI_TABLE_MAX ? t->jni_entries : JNI_TABLE_MAX;
+    for (unsigned long i = 0; i < n; i++) _ZN3art27JniNativeInterfaceFunctionsILb0EE19gJniNativeInterfaceE[i] = t->jni[i];
+    for (int i = 0; i < VM_ENTRIES; i++) art_invoke_table[i] = t->invoke[i];
+    t->jni_copy = _ZN3art27JniNativeInterfaceFunctionsILb0EE19gJniNativeInterfaceE;
+    t->invoke_copy = art_invoke_table;
 }
 
 /* art/runtime/jni/java_vm_ext.cc: the invocation API ART exports */

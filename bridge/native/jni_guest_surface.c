@@ -148,11 +148,14 @@ static int host_module(const void *pc)
     return dladdr(pc, &info) != 0;  /* glibc-loaded: the JVM, this shim, host libraries */
 }
 
+extern void *apklayer_art_jni_table;  /* jni_art.c */
+
 static jint attach(JavaVM *vm, void **penv, void *args, int daemon, const void *pc)
 {
     void *existing = NULL;
     int fresh = invoke_next->GetEnv(vm, &existing, JNI_VERSION_1_6) == JNI_EDETACHED;
     jint r = daemon ? invoke_next->AttachCurrentThreadAsDaemon(vm, penv, args) : invoke_next->AttachCurrentThread(vm, penv, args);
+    if (r == JNI_OK && fresh && apklayer_art_jni_table) *(void **)*(void **)penv = apklayer_art_jni_table;  /* a fresh JNIEnv: functions = libart.so's table */
     if (r == JNI_OK && fresh && !host_module(pc)) name_attached(*(JNIEnv **)penv);
     return r;
 }
