@@ -17,8 +17,11 @@
 #include <ui/Fence.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cstring>
 
+#include "../../HostEnvironment.h"
 #include "EglHost.h"
 #include "gralloc_handle.h"
 
@@ -102,6 +105,52 @@ sp<GraphicBuffer> wrap(void* bo, uint32_t w, uint32_t h, int format, uint64_t us
 }
 
 }  // namespace
+
+// Test hook (APKLAYER_RUNTIME_DEBUG=egl-import-fail): every dmabuf import of a window frame fails, so each frame takes the CPU copy.
+bool importForcedToFail() {
+    static const bool fail = [] { const char* v = apklayer::hostGetenv("APKLAYER_RUNTIME_DEBUG"); return v && !strcmp(v, "egl-import-fail"); }();
+    return fail;
+}
+
+// The frame the GPU path could not import (an EGLImage of the gbm bo or of the window buffer failed), copied through the CPU instead of being
+// lost: the bo mapped for reading (Mesa's gbm detiles a tiled bo itself), the window buffer locked for writing (the mapper gives a linear view
+// of a tiled buffer: graphics.c's upload). Only 8-bit RGB; false when it cannot, the frame is then lost.
+bool cpuCopy(void* bo, ANativeWindowBuffer* dst, uint32_t w, uint32_t h) {
+    HandleData d;
+    uint32_t fourcc = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
+    auto bgra = [](uint32_t f) { return f == DRM_FORMAT_ARGB8888 || f == DRM_FORMAT_XRGB8888; };  // B first in memory
+    auto rgb8 = [&](uint32_t f) { return bgra(f) || f == DRM_FORMAT_ABGR8888 || f == DRM_FORMAT_XBGR8888; };
+    if (!decode(dst->handle, &d) || !rgb8(fourcc) || !rgb8(d.fourcc)) {
+        ALOGW("CPU copy: formats 0x%x -> 0x%x are not 8-bit RGB (or not our buffer)", fourcc, d.fourcc);
+        return false;
+    }
+    uint32_t sstride = 0;
+    void* map = nullptr;
+    void* src = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, void**)>("gbm_bo_map")(bo, 0, 0, w, h, 1 /* GBM_BO_TRANSFER_READ */, &sstride, &map);
+    if (!src) { ALOGW("CPU copy: gbm_bo_map failed"); return false; }
+    bool ok = false;
+    sp<GraphicBuffer> gb = GraphicBuffer::from(dst);
+    void* out = nullptr;
+    if (gb->lock(GraphicBuffer::USAGE_SW_WRITE_OFTEN, &out) == android::OK && out) {
+        uint32_t cols = std::min<uint32_t>(w, dst->width), rows = std::min<uint32_t>(h, dst->height);
+        bool swap = bgra(fourcc) != bgra(d.fourcc), opaque = fourcc == DRM_FORMAT_XRGB8888 || fourcc == DRM_FORMAT_XBGR8888;
+        for (uint32_t y = 0; y < rows; y++) {
+            auto* s = reinterpret_cast<const uint32_t*>(static_cast<const char*>(src) + y * sstride);
+            auto* o = reinterpret_cast<uint32_t*>(static_cast<char*>(out) + y * dst->stride * 4);
+            for (uint32_t x = 0; x < cols; x++) {
+                uint32_t p = s[x];
+                if (swap) p = (p & 0xff00ff00) | ((p & 0xff) << 16) | ((p >> 16) & 0xff);
+                o[x] = opaque ? p | 0xff000000 : p;
+            }
+        }
+        gb->unlock();
+        ok = true;
+    } else {
+        ALOGW("CPU copy: lock of the window buffer failed");
+    }
+    gbmFn<void (*)(void*, void*)>("gbm_bo_unmap")(bo, map);
+    return ok;
+}
 
 WindowAttach* WindowAttach::create(ANativeWindow* nw) {
     int type = 0;

@@ -28,11 +28,10 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Graphics
 - Present fences signal at hand-over, not at the real present.
-- Swap interval 0: low frame rate; a waiting attach drops a release fence.
 - Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
 - Vulkan presentation untested on AMD.
 - Play feature list lacks sensors (no host provider yet).
-- GPU per instance: Vulkan device filter, copy fallback, VA plugin device, LINEAR on Intel.
+- GPU per instance: VA plugin device, LINEAR on Intel.
 - OTR2 on the PC runs ~30 fps at 2448x1374.
 - Windows: smaller second output, output hotplug, no Back button under server-side decorations, KDE.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.

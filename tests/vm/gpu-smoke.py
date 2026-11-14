@@ -2,6 +2,7 @@
 """GPU smoke test: UiBench starts on the GPU route, buffers reach the shell, and SurfaceFlinger's picture of its window shows a drawn UI.
 Window, dialog and resize behaviour: the gpu-window group (tests/vm/gpu-window-run.py)."""
 import locale
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,9 @@ import pixels  # noqa: E402
 
 PKG = 'com.android.test.uibench'
 print('locale', locale.setlocale(locale.LC_ALL, ''))  # raises when LANG/LC_ALL names a locale the host lacks: the run would test nothing
-env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_JOPTS='-Dapklayer.runms=12000 ' + instance.ENV.get('APKLAYER_EXTRA_JOPTS', ''))
+# APKLAYER_RUNTIME_DEBUG=egl-import-fail (group gpu-import-fail): every dmabuf import of a window frame fails, the frames take the CPU copy
+DEBUG = os.environ.get('APKLAYER_RUNTIME_DEBUG', '1')
+env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG=DEBUG, APKLAYER_JOPTS='-Dapklayer.runms=12000 ' + instance.ENV.get('APKLAYER_EXTRA_JOPTS', ''))
 proc = None
 try:
     instance.stop()
@@ -20,7 +23,8 @@ try:
     imported = 0
     shot = None
     for line in proc.stdout:
-        if 'apklayer.egl: imported buffer' in line or 'apklayer.egl: attached buffer' in line:  # a copied or an attached window buffer
+        if 'apklayer.egl: imported buffer' in line or 'apklayer.egl: attached buffer' in line or (  # a copied or an attached window buffer
+                DEBUG == 'egl-import-fail' and 'copied on the CPU' in line):
             imported += 1
             if imported == 3 and shot is None:  # the app is presenting GPU buffers: take the picture now
                 shot = instance.capture('gpu', PKG)
@@ -32,6 +36,7 @@ finally:
 assert not unclean, 'services did not end cleanly at stop: %s' % unclean  # SurfaceFlinger's exit-time SIGSEGV (bionic_translation 0029)
 assert code == 0, 'UiBench JVM exited with %d' % code
 assert shot, 'no GPU buffer reached the compositor'
+assert DEBUG != 'egl-import-fail' or imported >= 1, 'the forced import failure did not take the CPU copy'
 count = pixels.colors(shot)
 assert count > 100, 'the window shows no drawn UI (%d colours)' % count
 print('PASS GPU smoke: UiBench drew its window, %d colours (%s)' % (count, shot))
