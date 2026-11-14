@@ -43,6 +43,10 @@ final class HostProviders {
             Provider p = have.get(name);
             if (p != null) order.add(p);
         }
+        // libcore's security.properties: the JDK's defaults (SunX509 key managers, PKCS12) name algorithms Android's providers do not have
+        Security.setProperty("ssl.KeyManagerFactory.algorithm", "PKIX");
+        Security.setProperty("ssl.TrustManagerFactory.algorithm", "PKIX");
+        Security.setProperty("keystore.type", "BKS");
         for (Provider p : Security.getProviders()) Security.removeProvider(p.getName());
         for (Provider p : order) Security.addProvider(p);
         if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] security providers: " + order.stream().map(Provider::getName).toList());
