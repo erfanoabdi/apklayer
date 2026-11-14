@@ -136,7 +136,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Finish `tools/stage` in Python and fold `tools/release/*` into Meson.
 - Script store clients in the corpus (Aurora, F-Droid). Recheck HTTPS in Droid-ify, F-Droid, Aurora, Telegram.
 - Flaky: webview-input under load; native-media AVC (~1 in 2 on Parallels); audio-silent on the x86 PC.
-- x86 PC lead home has no system apps; prebuilts need `x86_64/system-apps/` and `common/gfxstream`.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 - Fresh test trees: delete stale classes in `inst/.../jdk-patch`; meson downloads `bionic_translation` (use a local copy).
 
