@@ -16,6 +16,10 @@ class TestEngine(IBus.Engine):
         super().__init__(*args, **kwargs)
         self.preedit = ''
 
+    def do_set_surrounding_text(self, text, cursor_pos, anchor_pos):
+        # characters, as Mutter converts the shell's byte offsets (text-input-v3 set_surrounding_text)
+        print(f'ENGINE surrounding {text.get_text()} {cursor_pos} {anchor_pos}', flush=True)
+
     def do_process_key_event(self, keyval, keycode, state):
         if state & IBus.ModifierType.CONTROL_MASK:
             return False
