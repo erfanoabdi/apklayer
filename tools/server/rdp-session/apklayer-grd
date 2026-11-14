@@ -1,0 +1,15 @@
+#!/bin/bash
+# RDP daemon of the headless session, on the shell's private bus. Restarting this never touches gnome-shell.
+# RDP user/password live in ~/.local/share/gnome-remote-desktop/credentials.ini.
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+D=${RDP_DIR:-$HOME/apklayer-pgr-test}
+for i in $(seq 150); do   # the shell unit writes the bus address, then wayland-0 appears
+  [ -S "$XDG_RUNTIME_DIR/wayland-0" ] && [ -s "$XDG_RUNTIME_DIR/apklayer-session-bus" ] && break; sleep 0.2
+done
+export DBUS_SESSION_BUS_ADDRESS=$(cat "$XDG_RUNTIME_DIR/apklayer-session-bus")
+grdctl --headless rdp set-tls-cert "$D/rdp.crt"
+grdctl --headless rdp set-tls-key "$D/rdp.key"
+grdctl rdp disable-view-only   # the non-headless form is the one that writes the setting the daemon reads
+gsettings set org.gnome.desktop.remote-desktop.rdp enable true
+# bus gone (shell restarted) => the daemon exits and systemd restarts it onto the new bus
+exec /usr/libexec/gnome-remote-desktop-daemon --headless

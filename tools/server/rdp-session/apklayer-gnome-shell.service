@@ -1,0 +1,10 @@
+[Unit]
+Description=Headless GNOME Wayland session (windows live as long as this unit runs)
+
+[Service]
+ExecStart=/usr/bin/dbus-run-session -- %h/.local/bin/apklayer-gnome-shell
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

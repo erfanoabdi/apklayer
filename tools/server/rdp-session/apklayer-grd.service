@@ -1,0 +1,13 @@
+[Unit]
+Description=GNOME Remote Desktop (RDP :3389) for the headless session
+After=apklayer-gnome-shell.service
+Wants=apklayer-gnome-shell.service
+# not PartOf/BindsTo: stopping or restarting this unit must never touch the shell
+
+[Service]
+ExecStart=%h/.local/bin/apklayer-grd
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

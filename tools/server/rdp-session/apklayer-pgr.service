@@ -1,8 +1,7 @@
 [Unit]
 Description=apklayer instance pgr (Punishing Gray Raven) in the headless GNOME session
-After=apklayer-gnome-headless.service
-Wants=apklayer-gnome-headless.service
-PartOf=apklayer-gnome-headless.service
+After=apklayer-gnome-shell.service
+Requires=apklayer-gnome-shell.service
 
 [Service]
 Environment=XDG_RUNTIME_DIR=%t WAYLAND_DISPLAY=wayland-0
