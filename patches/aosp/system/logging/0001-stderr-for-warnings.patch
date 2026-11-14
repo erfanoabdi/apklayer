@@ -1,0 +1,28 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] liblog: the logd writer prints warnings and worse to stderr
+
+The translated guest's liblog (/system/lib64/arm64/liblog.so, run by the native bridge) writes to logd, which does not exist on the desktop, and has no logger hook
+installed by the host (bridge/native/android_platform.c installs it in the host-side liblog only), so a guest library's log lines were lost (Fennec's Gecko under x86
+translation). The logd writer now also prints warnings and worse, and everything with the property debug.apklayer.log=1 (the guest's environment hides APKLAYER_*),
+to fd 2 as `[log N] tag: message`, the host hook's format. Where the host's hook is installed it replaces this writer. Module liblog.
+
+diff --git a/liblog/logger_write.cpp b/liblog/logger_write.cpp
+--- a/liblog/logger_write.cpp
++++ b/liblog/logger_write.cpp
+@@ -347,6 +347,16 @@
+   vec[1].iov_len = strlen(log_message->tag) + 1;
+   vec[2].iov_base = const_cast<void*>(static_cast<const void*>(log_message->message));
+   vec[2].iov_len = strlen(log_message->message) + 1;
++  // apklayer patch: no logd on the desktop; warnings and worse (all with the property debug.apklayer.log=1: the guest's environment hides APKLAYER_*)
++  // go to stderr as the host liblog's logger does
++#ifdef __ANDROID__
++  char all[PROP_VALUE_MAX] = {};
++  if (log_message->priority >= ANDROID_LOG_WARN || (__system_property_get("debug.apklayer.log", all) > 0 && all[0] == '1')) {
++    char line[1200];
++    int n = snprintf(line, sizeof(line), "[log %d] %s: %s\n", log_message->priority, log_message->tag, log_message->message);
++    if (n > 0) (void)!write(2, line, n < (int)sizeof(line) ? n : sizeof(line) - 1);
++  }
++#endif
+ 
+   write_to_log(static_cast<log_id_t>(buffer_id), vec, 3, timestamp);
+ }

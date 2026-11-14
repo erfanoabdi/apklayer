@@ -337,12 +337,16 @@ long syscall(long nr, ...)
 #endif
              ;
     int two = nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat;  /* (fd, path, fd, path, ...) */
-    const char *path = at ? (const char *)a[1] : NULL, *path2 = two ? (const char *)a[3] : NULL;
+    /* the other spellings (a translated Gecko's profile lock is symlinkat(target, fd, "<profile>/lock"), ENOENT on a host without /data/data): the
+     * link's own path is argument 3, its target text is the caller's; truncate and statfs take the path first */
+    int link = nr == SYS_symlinkat, first = nr == SYS_truncate || nr == SYS_statfs;
+    const char *path = at ? (const char *)a[1] : link ? (const char *)a[2] : first ? (const char *)a[0] : NULL, *path2 = two ? (const char *)a[3] : NULL;
     if (at) PROC_GONE((int)a[0], path);
+    if (link) PROC_GONE((int)a[1], path);
     if (two) PROC_GONE((int)a[2], path2);
     MAP(m, path && path[0] == '/' ? path : NULL);
     MAP(m2, path2 && path2[0] == '/' ? path2 : NULL);
-    if (m) a[1] = (long)m;
+    if (m) a[link ? 2 : first ? 0 : 1] = (long)m;
     if (m2) a[3] = (long)m2;
     long r = ((long (*)(long, ...))REAL(syscall))(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
     DONE(m);

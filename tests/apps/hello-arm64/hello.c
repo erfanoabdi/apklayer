@@ -87,6 +87,42 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_fault(JNIEnv *env, jclass c)
     return r == SIGSEGV;
 }
 
+/* The previous action sigaction reports (an app's crash handler, Gecko's, chains to it): SIG_DFL, SIG_IGN or code, never a data address. Checked
+ * for signals this library never touched, then for each one it installs a handler for and puts the previous one back. The guest's
+ * /proc/self/maps lists the mappings it may see (the host process's code is hidden as read-only anonymous ranges): a handler inside a writable one is data. */
+static int bad_handler(const struct sigaction *old)
+{
+    if (old->sa_handler == SIG_DFL || old->sa_handler == SIG_IGN) return 0;
+    uintptr_t a = (uintptr_t)old->sa_handler;
+    FILE *f = fopen("/proc/self/maps", "r");
+    char line[512]; int bad = 0;
+    while (f && fgets(line, sizeof line, f)) {
+        unsigned long lo, hi; char perms[8];
+        if (sscanf(line, "%lx-%lx %7s", &lo, &hi, perms) == 3 && a >= lo && a < hi && perms[1] == 'w' && perms[2] != 'x') bad = 1;
+    }
+    if (f) fclose(f);
+    return bad;
+}
+JNIEXPORT jstring JNICALL Java_hello_arm64_Main_oldHandlers(JNIEnv *env, jclass c)
+{
+    (void)c;
+    char out[512] = "";
+    size_t n = 0;
+#define NOTE(...) (n += snprintf(out + n, sizeof out - n, __VA_ARGS__))
+    static const int sigs[] = {SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGUSR1, SIGPIPE};
+    struct sigaction old;
+    for (unsigned i = 0; i < sizeof sigs / sizeof *sigs; i++)
+        if (sigaction(sigs[i], NULL, &old) != 0 || bad_handler(&old)) NOTE(" sig%d=%p", sigs[i], (void *)old.sa_handler);
+    struct sigaction mine = {.sa_handler = on_fault}, first, second;
+    for (unsigned i = 0; i < sizeof sigs / sizeof *sigs; i++) {
+        if (sigaction(sigs[i], &mine, &first) != 0) { NOTE(" set%d", sigs[i]); continue; }
+        if (bad_handler(&first)) NOTE(" prev%d=%p", sigs[i], (void *)first.sa_handler);
+        if (sigaction(sigs[i], &first, &second) != 0 || second.sa_handler != on_fault) NOTE(" swap%d=%p", sigs[i], (void *)second.sa_handler);
+    }
+#undef NOTE
+    return (*env)->NewStringUTF(env, out);
+}
+
 /* errno of failing libc calls made from guest code: open of a missing file (a translated syscall) ENOENT, then clock_gettime of a bad clock
  * (a host call through the bridge's proxy libc) EINVAL, as open*100 + clock (222). */
 JNIEXPORT jint JNICALL Java_hello_arm64_Main_errnos(JNIEnv *env, jclass c)

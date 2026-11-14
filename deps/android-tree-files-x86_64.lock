@@ -238,7 +238,7 @@ e903458390a1d5b67c3b38ce9d51ce9d44072ae816ebeceb37fb198daf1b0f4d 355816 x86_64/a
 77af007831084e3cea8bd1090c192c0c7938bdb88a77493a49b3c1abb17f8733 234736 x86_64/android-libs/lib64/libbase.so out/target/product/generic_x86_64/system/lib64/libbase.so same
 3b7ff646ee3d428ab95b2e67cf2d4a072831ef25eb1883603dad4ddd4efb75d2 35784 x86_64/android-libs/lib64/libbattery.so out/target/product/generic_x86_64/system/lib64/libbattery.so same
 ac51566ee1b6b15cce1f4a9ce40c55d1f708edde36a48063975547ca8879d25b 51912 x86_64/android-libs/lib64/libbatterystats_aidl.so out/target/product/generic_x86_64/system/lib64/libbatterystats_aidl.so same
-e49d7f176032424ea850942d27cf6619adaa1f5dbf4a57c84abefbf41f281a97 3248216 x86_64/android-libs/lib64/libberberis_arm64.so out/soong/.intermediates/frameworks/libs/binary_translation/libberberis_arm64/android_x86_64_shared/libberberis_arm64.so same
+a12caa15e1a7f4ee0eaa0eef54f623986dabe8c066ed90608cef873c4ba8c6d3 3248216 x86_64/android-libs/lib64/libberberis_arm64.so out/soong/.intermediates/frameworks/libs/binary_translation/libberberis_arm64/android_x86_64_shared/libberberis_arm64.so same
 2f552cd8de89081b137362f36e836117935a29d04945955d283980edcb091e43 591704 x86_64/android-libs/lib64/libberberis_exec_region.so out/target/product/generic_x86_64/system/lib64/libberberis_exec_region.so same
 7714e426833a94b72c1e72a517e8de1b2335e4595ebc902e45a647149d39f1b9 508848 x86_64/android-libs/lib64/libberberis_proxy_libEGL.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libEGL.so same
 6f4e86c64d7b479947183372a7d16a881db98af47ad3a9ba4b2302158f047f91 52440 x86_64/android-libs/lib64/libberberis_proxy_libGLESv1_CM.so out/target/product/generic_x86_64/system/lib64/libberberis_proxy_libGLESv1_CM.so same
@@ -1012,7 +1012,7 @@ c1507c0b10d3563c69dc405746f244b9ba7cb73f680a9bb24840f4c37f214fd3 70600 x86_64/an
 196d44a8e4c0ea3c7f094ff0fe43d4c233220d6babd560d077945e62ba200e31 2846320 x86_64/android-root/system/lib64/arm64/libicui18n.so (staged from the tree's build outputs, see CHANGELOG.md) same
 b11ee8751b1adf34a72521f4843116d49e6cb4aba5d2a133014a779088059ff9 2035792 x86_64/android-root/system/lib64/arm64/libicuuc.so (staged from the tree's build outputs, see CHANGELOG.md) same
 314e33a0c176e34939394b3a6e8ffe9db4ab3374aaaf50af339f152d98a37722 36400 x86_64/android-root/system/lib64/arm64/libjnigraphics.so (staged from the tree's build outputs, see CHANGELOG.md) same
-747d8769149a6d7a8dc27a93725ad05c854ad2735168b76b794da04ebd842896 102624 x86_64/android-root/system/lib64/arm64/liblog.so (staged from the tree's build outputs, see CHANGELOG.md) same
+a42ac50ddb43e1ef51b539bd9e22b23485027170cf7b2e4059508c5edc55786f 102632 x86_64/android-root/system/lib64/arm64/liblog.so (staged from the tree's build outputs, see CHANGELOG.md) same
 974f7c3b2c294e26d4de3c4353b3140657f782d520078df151e5f6d3c62563e4 200168 x86_64/android-root/system/lib64/arm64/liblzma.so (staged from the tree's build outputs, see CHANGELOG.md) same
 a466083eafc6c0dcf7a9f7f4c35b85289206037c3f751f030bc6eb1201820278 281624 x86_64/android-root/system/lib64/arm64/libm.so (staged from the tree's build outputs, see CHANGELOG.md) same
 f75fb173b61d60a8dcddca26ada897febcebea92e2a3f2cf059982b8d9809fd1 135424 x86_64/android-root/system/lib64/arm64/libmediandk.so (staged from the tree's build outputs, see CHANGELOG.md) same
