@@ -177,7 +177,9 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_sigqueue(JNIEnv *env, jclass c)
     sigaction(SIGUSR2, &sa, &old);
     union sigval v;
     v.sival_int = 4242;
-    int r = pthread_sigqueue(pthread_self(), SIGUSR2, v);
+    /* the NDK's headers lack it: bionic exports it, looked up by name */
+    int (*sigqueue_fn)(pthread_t, int, union sigval) = (int (*)(pthread_t, int, union sigval))dlsym(RTLD_DEFAULT, "pthread_sigqueue");
+    int r = sigqueue_fn ? sigqueue_fn(pthread_self(), SIGUSR2, v) : -1;
     sigaction(SIGUSR2, &old, NULL);
     return r == 0 && sigq_got == 4242;
 }
