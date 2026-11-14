@@ -89,7 +89,7 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_fault(JNIEnv *env, jclass c)
 
 /* The previous action sigaction reports (an app's crash handler, Gecko's, chains to it): SIG_DFL, SIG_IGN or code, never a data address. Checked
  * for signals this library never touched, then for each one it installs a handler for and puts the previous one back. The guest's
- * /proc/self/maps lists the mappings it may see (the host process's are hidden): a handler inside a visible non-executable one is wrong. */
+ * /proc/self/maps lists the mappings it may see (the host process's code is hidden as read-only anonymous ranges): a handler inside a writable one is data. */
 static int bad_handler(const struct sigaction *old)
 {
     if (old->sa_handler == SIG_DFL || old->sa_handler == SIG_IGN) return 0;
@@ -98,7 +98,7 @@ static int bad_handler(const struct sigaction *old)
     char line[512]; int bad = 0;
     while (f && fgets(line, sizeof line, f)) {
         unsigned long lo, hi; char perms[8];
-        if (sscanf(line, "%lx-%lx %7s", &lo, &hi, perms) == 3 && a >= lo && a < hi && perms[2] != 'x') bad = 1;
+        if (sscanf(line, "%lx-%lx %7s", &lo, &hi, perms) == 3 && a >= lo && a < hi && perms[1] == 'w' && perms[2] != 'x') bad = 1;
     }
     if (f) fclose(f);
     return bad;
@@ -109,7 +109,7 @@ JNIEXPORT jstring JNICALL Java_hello_arm64_Main_oldHandlers(JNIEnv *env, jclass 
     char out[512] = "";
     size_t n = 0;
 #define NOTE(...) (n += snprintf(out + n, sizeof out - n, __VA_ARGS__))
-    static const int sigs[] = {SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGUSR1, SIGPIPE};  /* not SIGABRT/SIGTERM: the JVM's, reserved */
+    static const int sigs[] = {SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGUSR1, SIGPIPE};
     struct sigaction old;
     for (unsigned i = 0; i < sizeof sigs / sizeof *sigs; i++)
         if (sigaction(sigs[i], NULL, &old) != 0 || bad_handler(&old)) NOTE(" sig%d=%p", sigs[i], (void *)old.sa_handler);
