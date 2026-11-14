@@ -26,7 +26,7 @@ int main(void){
   { /* the filter judges processes by cgroup: only meaningful when this process is alone in its own */
     char c1[256] = "", path[600], line[64]; int others = 0;
     /* the kernel's cgroup line: the app's /proc/self/cgroup is Android-shaped (uid_N/pid_N) once the package is mapped, no path to cgroup.procs */
-    long (*raw)(long, ...) = dlsym(RTLD_NEXT, "syscall");
+    long (*raw)(long, ...) = dlsym(dlopen("libc.so.6", RTLD_NOW), "syscall");  /* glibc's own, past the preload's */
     int cg = raw(SYS_openat, AT_FDCWD, "/proc/self/cgroup", O_RDONLY | O_CLOEXEC, 0);
     FILE *f = cg >= 0 ? fdopen(cg, "r") : NULL;
     if (f && fgets(c1, sizeof c1, f)) { c1[strcspn(c1, "\n")] = 0; snprintf(path, sizeof path, "/sys/fs/cgroup%s/cgroup.procs", c1 + 3); }
