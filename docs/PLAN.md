@@ -40,7 +40,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- Sensor timestamps: the shutter time is the request's CLOCK_MONOTONIC time, not the frame's `timestamp_ns` (goldfish session change). All streams scaled from the largest. NDK libcamera2ndk is a stub.
+- All streams scaled from the largest. NDK libcamera2ndk is a stub.
 - Portrait desktop monitor: `mount=[NAME:]DEGREES` exists on the pipewire backend (`providers set camera pipewire mount=90`); the right degrees per monitor direction are open.
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.

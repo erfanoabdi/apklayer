@@ -39,6 +39,7 @@ struct BackendCamera : public BaseQemuCamera {
     struct Frame {  // I420, tightly packed
         std::vector<uint8_t> data;
         uint32_t width = 0, height = 0;
+        int64_t timestampNs = 0;  // the backend's capture time (CLOCK_MONOTONIC)
     };
 
     static void onFrame(void* user, const apklayer_camera_frame* frame);
@@ -57,6 +58,7 @@ struct BackendCamera : public BaseQemuCamera {
     std::mutex mLock;
     std::condition_variable mFrameCond;
     Frame mLatest;  // guarded by mLock
+    int64_t mUsedFrameNs = 0;  // timestamp of the frame the request's buffers were last filled from (guarded by mLock)
     bool mFailed = false;
     uint8_t mRotateAndCrop = ANDROID_SCALER_ROTATE_AND_CROP_NONE;  // the requests' ANDROID_SCALER_ROTATE_AND_CROP (cameraserver resolves AUTO)
 };
