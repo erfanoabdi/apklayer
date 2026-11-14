@@ -10,7 +10,9 @@
 
 extern void *bionic_dlopen(const char *filename, int flag);
 
-struct art_tables { void *vm; void **jni; void **invoke; unsigned long jni_entries; void *jni_copy, *invoke_copy; };
+struct art_tables { void *vm; void **jni; void **invoke; unsigned long jni_entries; void *jni_copy, *invoke_copy; unsigned long arena; };
+
+extern unsigned long apklayer_art_arena;  /* jni_guest_surface.c */
 
 /* The JNIEnv's function table is libart.so's own data (libart_jni.c): every thread's env points to it, as ART's do. The tables of the JVM stay behind it. */
 void *apklayer_art_jni_table;
@@ -34,7 +36,7 @@ void apklayer_art_load(JavaVM *vm, void *jni_table, void *invoke_table)
     if (native) { snprintf(fallback, sizeof fallback, "%s/android-root", native); roots[1] = fallback; }
     for (int i = 0; i < 2; i++) {
         if (!roots[i] || snprintf(path, sizeof path, "%s%s", roots[i], suffix) >= (int)sizeof path || access(path, R_OK)) continue;
-        struct art_tables tables = { vm, jni_table, invoke_table, sizeof(jniNativeInterface) / sizeof(void *), NULL, NULL };
+        struct art_tables tables = { vm, jni_table, invoke_table, sizeof(jniNativeInterface) / sizeof(void *), NULL, NULL, apklayer_art_arena };
         char address[32];
         snprintf(address, sizeof address, "%lx", (unsigned long)&tables);
         setenv("APKLAYER_ART_TABLES", address, 1);
