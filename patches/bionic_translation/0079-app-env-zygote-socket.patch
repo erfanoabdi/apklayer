@@ -1,0 +1,18 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 14 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: the app environment has ANDROID_SOCKET_zygote and ANDROID_SOCKET_usap_pool_primary
+
+apklayer patch (docs/PATCHES.md). Zygote opens its sockets before it forks an app and exports their descriptor numbers; an Android app reads
+ANDROID_SOCKET_zygote=17 (Waydroid, Android 13) and the usap pool's. The numbers are the ones Waydroid shows; no such descriptor is open here.
+
+--- a/libc/libc-environment.cpp
++++ b/libc/libc-environment.cpp
+@@ -231,6 +231,7 @@
+   "ANDROID_DATA=/data", "ANDROID_STORAGE=/storage", "ANDROID_ART_ROOT=/apex/com.android.art",
+   "ANDROID_I18N_ROOT=/apex/com.android.i18n", "ANDROID_TZDATA_ROOT=/apex/com.android.tzdata",
+   "EXTERNAL_STORAGE=/sdcard", "ASEC_MOUNTPOINT=/mnt/asec",
++  "ANDROID_SOCKET_zygote=17", "ANDROID_SOCKET_usap_pool_primary=18",
+   "PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/apex/com.android.virt/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin",
+   "BOOTCLASSPATH=" APK_BOOTCLASSPATH, "DEX2OATBOOTCLASSPATH=" APK_BOOTCLASSPATH,
+   nullptr

@@ -9,7 +9,9 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/syscall.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -555,29 +557,74 @@ static int desktop_root_path(const char *path)
     return 0;
 }
 
-/* apklayer patch: /data/local/tmp (Android's, empty and writable) lives in the instance's data; /system/bin/app_process64 is the ELF stand-in of
- * /proc/self/exe (proc_view.c), written once beside it. Both are made on first use. */
+/* apklayer patch: Android paths an app can stat and this machine has no file for, as stand-ins in the instance's data (made on first use, once). /data/local/tmp is
+ * Android's, empty and writable; /system/bin/app_process64 (and 32) is the ELF stand-in of /proc/self/exe (proc_view.c); /data/dalvik-cache and /vendor/lib64
+ * are empty directories; /dev/socket/zygote is a bound unix socket nobody listens on; /system/framework/framework.jar links to the Robolectric framework jar
+ * of the runtime, /apex/com.android.art/javalib/core-oj.jar is an empty zip (the runtime has no such jar). Exactly these paths, nothing below them. */
 extern size_t apklayer_app_process_elf(unsigned char *out) __attribute__((weak));
+
+static void make_stand_in(char kind, const char *file)
+{
+    if (!syscall(SYS_faccessat, AT_FDCWD, file, F_OK)) return;
+    char target[PATH_MAX];
+    long fd;
+    switch (kind) {
+    case 'd': syscall(SYS_mkdirat, AT_FDCWD, file, 0771); break;
+    case 'e': {
+        if (!apklayer_app_process_elf) break;
+        unsigned char elf[128];
+        size_t n = apklayer_app_process_elf(elf);
+        fd = syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0755);
+        if (fd >= 0) { syscall(SYS_write, fd, elf, n); syscall(SYS_close, fd); }
+        break; }
+    case 'z': {  /* the end-of-central-directory record of an empty archive */
+        static const unsigned char empty_zip[22] = {'P', 'K', 5, 6};
+        fd = syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd >= 0) { syscall(SYS_write, fd, empty_zip, sizeof empty_zip); syscall(SYS_close, fd); }
+        break; }
+    case 'j': {
+        char jar[PATH_MAX];
+        snprintf(target, sizeof target, "%s/../aosp/android-all/android-all-current-robolectric-r0.jar", root());
+        if (!realpath(target, jar) || syscall(SYS_symlinkat, jar, AT_FDCWD, file)) make_stand_in('z', file);
+        break; }
+    case 's': {  /* bound through the directory's /proc/self/fd path: a socket path holds 107 characters, the instance's data path may be longer */
+        char dir[PATH_MAX], *slash;
+        snprintf(dir, sizeof dir, "%s", file);
+        if (!(slash = strrchr(dir, '/'))) break;
+        *slash = 0;
+        long dirfd = syscall(SYS_openat, AT_FDCWD, dir, O_PATH | O_DIRECTORY | O_CLOEXEC, 0);
+        fd = syscall(SYS_socket, AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        struct sockaddr_un sa = {.sun_family = AF_UNIX};
+        snprintf(sa.sun_path, sizeof sa.sun_path, "/proc/self/fd/%ld/%s", dirfd, slash + 1);
+        if (dirfd >= 0 && fd >= 0) syscall(SYS_bind, fd, &sa, sizeof sa);
+        if (fd >= 0) syscall(SYS_close, fd);
+        if (dirfd >= 0) syscall(SYS_close, dirfd);
+        break; }
+    }
+}
 
 static bool android_stub_path(char **path)
 {
+    static const struct { const char *path, *file; char kind; } stand_ins[] = {
+        {"/system/bin/app_process64", "local/.app_process64", 'e'}, {"/system/bin/app_process32", "local/.app_process64", 'e'},
+        {"/data/dalvik-cache", "dalvik-cache", 'd'}, {"/vendor/lib64", "local/.vendor-lib64", 'd'}, {"/dev/socket/zygote", "local/.zygote", 's'},
+        {"/system/framework/framework.jar", "local/.framework.jar", 'j'}, {"/apex/com.android.art/javalib/core-oj.jar", "local/.core-oj.jar", 'z'},
+    };
     const char *p = *path, *data = data_env;
-    if (!data[0]) return false;
-    int exe = !strcmp(p, "/system/bin/app_process64");
-    if (!exe && strncmp(p, "/data/local/tmp", 15)) return false;
+    if (!data[0] || p[0] != '/') return false;
+    int local = !strncmp(p, "/data/local/tmp", 15), found = -1;
+    for (size_t i = 0; i < sizeof stand_ins / sizeof *stand_ins && !local; i++) if (!strcmp(p, stand_ins[i].path)) found = (int)i;
+    if (!local && found < 0) return false;
     char dir[PATH_MAX], file[PATH_MAX];
     snprintf(dir, sizeof dir, "%s/local", data);
     syscall(SYS_mkdirat, AT_FDCWD, dir, 0771);
-    snprintf(dir, sizeof dir, "%s/local/tmp", data);
-    syscall(SYS_mkdirat, AT_FDCWD, dir, 0771);
-    if (!exe) return false;  /* data_path maps it */
-    snprintf(file, sizeof file, "%s/local/.app_process64", data);
-    if (syscall(SYS_faccessat, AT_FDCWD, file, F_OK) && apklayer_app_process_elf) {
-        unsigned char elf[128];
-        size_t n = apklayer_app_process_elf(elf);
-        long fd = syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0755);
-        if (fd >= 0) { syscall(SYS_write, fd, elf, n); syscall(SYS_close, fd); }
+    if (local) {
+        snprintf(dir, sizeof dir, "%s/local/tmp", data);
+        syscall(SYS_mkdirat, AT_FDCWD, dir, 0771);
+        return false;  /* data_path maps it */
     }
+    snprintf(file, sizeof file, "%s/%s", data, stand_ins[found].file);
+    make_stand_in(stand_ins[found].kind, file);
     char *m = strdup(file);
     if (!m) return false;
     *path = m;
