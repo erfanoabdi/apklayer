@@ -48,7 +48,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
-- text-input-v3: no surrounding text, no show/hide request.
+- text-input-v3: no show/hide request in the protocol (surrounding text is sent, untested on a compositor with an IME).
 - WebView fields send no surrounding text. Enter labels are words, not icons.
 - Maliit slide-in sends ~10 CONFIGUREs.
 - Recheck IME target and `FLAG_ALT_FOCUSABLE_IM` windows.

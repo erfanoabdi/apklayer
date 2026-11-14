@@ -111,6 +111,26 @@ static void apply_enabled(void)
     if (debug_input) fprintf(stderr, "[shell] text input %s (hint 0x%x, purpose %u)\n", enable ? "enabled" : "disabled", hint, purpose);
 }
 
+/* The field's text around the cursor ({chars} from the host) as set_surrounding_text (byte offsets); the protocol's text limit is 4000 bytes.
+ * shortcut: char counts are taken as code points (UTF-16 pairs shift offsets by one), fine for text without astral characters */
+void text_input_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len)
+{
+    if (!text_input || w != ime_window || len > 4000) return;
+    char *t = strndup(text, len);
+    if (!t) return;
+    int off[2] = { cursor, anchor }, pos[2] = { 0, 0 };
+    for (int k = 0; k < 2; k++) {
+        size_t i = 0;
+        for (int n = 0; n < off[k] && i < len; n++) for (i++; i < len && (t[i] & 0xc0) == 0x80; i++);
+        pos[k] = (int)i;
+    }
+    zwp_text_input_v3_set_surrounding_text(text_input, t, pos[0], pos[1]);
+    zwp_text_input_v3_set_text_change_cause(text_input, ZWP_TEXT_INPUT_V3_CHANGE_CAUSE_OTHER);
+    zwp_text_input_v3_commit(text_input);
+    ti_serial++;
+    free(t);
+}
+
 /* Track fields per window: an inactive JVM must not replace the focused IME. */
 void text_input_enable(struct window *w, int enable)
 {
