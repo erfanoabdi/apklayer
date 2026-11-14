@@ -78,9 +78,15 @@ public final class GuestTraces {
                 : new StackTraceElement(frame.substring(0, dot), frame.substring(dot + 1, paren), where.substring(0, colon), Integer.parseInt(where.substring(colon + 1)));
     }
 
+    /** ART's runtime threads the JVM has no counterpart of: unstarted stand-ins in the list (no host thread, empty trace). */
+    private static final Thread[] ART_ONLY = {new Thread(null, null, "FinalizerWatchdogDaemon", 0), new Thread(null, null, "HeapTaskDaemon", 0),
+            new Thread(null, null, "Jit thread pool worker thread 0", 0), new Thread(null, null, "Profile Saver", 0)};
+    static { for (Thread t : ART_ONLY) t.setDaemon(true); }
+
     /** What Android has: the JVM's and apklayer's service threads are not an app's to see. */
     static Map<Thread, StackTraceElement[]> threads(Map<Thread, StackTraceElement[]> all) {
         Map<Thread, StackTraceElement[]> out = new LinkedHashMap<>();
+        for (Thread t : ART_ONLY) out.put(t, new StackTraceElement[0]);
         for (Map.Entry<Thread, StackTraceElement[]> e : all.entrySet()) {
             String name = e.getKey().getName();
             if (e.getKey().threadId() == 1) continue;  // the launcher's own main thread, parked below the sandbox's

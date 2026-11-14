@@ -40,6 +40,7 @@ final class JdkIdentityPatch {
         wrap(dir, "java/lang/NullPointerException", "getMessage", "()Ljava/lang/String;", "npe", "(Ljava/lang/String;)Ljava/lang/String;");
         message(dir, "java/lang/ArrayIndexOutOfBoundsException", JdkHooks.INDEX);
         message(dir, "java/lang/StringIndexOutOfBoundsException", JdkHooks.INDEX);
+        message(dir, "java/lang/IndexOutOfBoundsException", JdkHooks.LIST);
         message(dir, "java/lang/ClassCastException", JdkHooks.CAST);
         message(dir, "java/lang/ArithmeticException", JdkHooks.ARITHMETIC);
         message(dir, "java/lang/NoSuchMethodException", JdkHooks.METHOD);

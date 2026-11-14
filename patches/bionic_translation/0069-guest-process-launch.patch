@@ -89,7 +89,7 @@ takes the guest exec entry.
  {
 --- /dev/null
 +++ b/libc/libc-spawn.cpp
-@@ -0,0 +1,488 @@
+@@ -0,0 +1,513 @@
 +/*
 + * Copyright (C) 2017 The Android Open Source Project
 + * All rights reserved.
@@ -232,20 +232,25 @@ takes the guest exec entry.
 +}
 +
 +/* POSIX_SPAWN_CLOEXEC_DEFAULT (no glibc flag): bionic marks fds 3 and up close-on-exec before the file actions, so what they
-+ * open or dup2 survives. The same result: after the actions, close every inherited fd they did not make. */
++ * open or dup2 survives. The same result: after the actions, close every inherited fd they did not make. Race-free: not the fds
++ * open at this scan but every number up to the highest one (a close of an fd that is not open is ignored), and closefrom above it,
++ * so an fd another thread opens meanwhile is closed in the child too. */
 +static int close_inherited(const bionic_file_actions *b, posix_spawn_file_actions_t *h) {
 +  DIR *dir = opendir("/proc/self/fd");
 +  if (!dir) return errno;
-+  int e = 0, own = dirfd(dir);
-+  for (dirent *entry; !e && (entry = readdir(dir));) {
++  int e = 0, own = dirfd(dir), top = 2;
++  for (dirent *entry; (entry = readdir(dir));) {
 +    char *end;
 +    long fd = strtol(entry->d_name, &end, 10);
 +    if (*end || end == entry->d_name || fd < 3 || fd == own || fd > INT_MAX) continue;
-+    int flags = fcntl((int)fd, F_GETFD);
-+    if (flags >= 0 && !(flags & FD_CLOEXEC) && !action_target(b, (int)fd)) e = posix_spawn_file_actions_addclose(h, (int)fd);
++    if (fd > top) top = (int)fd;
 +  }
 +  closedir(dir);
-+  return e;
++  for (const bionic_file_action *a = b ? b->head : nullptr; a; a = a->next)
++    if ((a->what == kOpen || a->what == kDup2) && a->new_fd > top) top = a->new_fd;
++  for (int fd = 3; !e && fd <= top; ++fd)
++    if (!action_target(b, fd)) e = posix_spawn_file_actions_addclose(h, fd);
++  return e ? e : posix_spawn_file_actions_addclosefrom_np(h, top + 1);
 +}
 +
 +static int add_path(posix_spawn_file_actions_t *h, const bionic_file_action *a) {
@@ -290,6 +295,23 @@ takes the guest exec entry.
 +  return e;
 +}
 +
++/* The child's directory once its file actions ran (the last chdir or fchdir); posix_spawnp resolves a relative PATH entry there, not
++ * in the parent. NULL: the parent's, or not an absolute directory. */
++static const char *child_directory(const bionic_file_actions *b, char *buf) {
++  const char *dir = nullptr;
++  for (const bionic_file_action *a = b ? b->head : nullptr; a; a = a->next) {
++    if (a->what == kChdir) dir = a->path[0] == '/' ? a->path : nullptr;
++    if (a->what == kFchdir) {
++      char link[64];
++      snprintf(link, sizeof link, "/proc/self/fd/%d", a->fd);
++      ssize_t n = readlink(link, buf, PATH_MAX - 1);
++      buf[n > 0 ? n : 0] = 0;
++      dir = n > 0 ? buf : nullptr;
++    }
++  }
++  return dir;
++}
++
 +static bool runnable(const char *candidate) {
 +  char *path = const_cast<char *>(candidate);
 +  bool mapped = path[0] == '/' && libc_bio_apply_path_overrides(&path);
@@ -299,8 +321,8 @@ takes the guest exec entry.
 +  return ok;
 +}
 +
-+static int search(pid_t *pid, const char *file, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
-+                  char *const argv[], char *const envp[]) {
++static int search(pid_t *pid, const char *file, const bionic_file_actions *b, const posix_spawn_file_actions_t *actions,
++                  const posix_spawnattr_t *attr, char *const argv[], char *const envp[]) {
 +  if (!*file) return ENOENT;
 +  if (strchr(file, '/')) return launch_file(pid, file, actions, attr, argv, envp);
 +  if (bionic_environment_slot() == &environ) return posix_spawnp(pid, file, actions, attr, argv, envp);  // services: host PATH (0068)
@@ -318,6 +340,9 @@ takes the guest exec entry.
 +    memcpy(candidate, dir, used);
 +    if (used && dir[used - 1] != '/') candidate[used++] = '/';
 +    memcpy(candidate + used, file, length + 1);
++    char full[PATH_MAX], base[PATH_MAX];
++    const char *child = candidate[0] == '/' ? nullptr : child_directory(b, base);
++    if (child && snprintf(full, sizeof full, "%s/%s", child, candidate) < (int)sizeof full) memcpy(candidate, full, strlen(full) + 1);
 +    if (runnable(candidate)) { e = launch_file(pid, candidate, actions, attr, argv, envp); break; }
 +  }
 +  free(list);
@@ -340,7 +365,7 @@ takes the guest exec entry.
 +  const posix_spawn_file_actions_t *ha = a || cloexec_default ? &host_file_actions : nullptr;
 +  const posix_spawnattr_t *hb = b ? &host_attributes : nullptr;
 +  char *const *envp = env ? env : guest_environ();
-+  e = path_search ? search(pid, path, ha, hb, argv, envp) : launch(pid, path, ha, hb, argv, envp);
++  e = path_search ? search(pid, path, a, ha, hb, argv, envp) : launch(pid, path, ha, hb, argv, envp);
 +  if (ha) posix_spawn_file_actions_destroy(&host_file_actions);
 +  if (hb) posix_spawnattr_destroy(&host_attributes);
 +  return as_bionic(e, pid);

@@ -10,10 +10,10 @@ const char *dlerror(void);
 int dladdr(const void *, dl_info_t *);
 int dl_iterate_phdr(int (*)(struct phdr_info *, size_t, void *), void *);
 
-long raw_sys(long n, long a, long b, long c, long d)
+long raw_sys(long n, long a, long b, long c, long d, long e)
 {
-    register long x8 __asm__("x8") = n, x0 __asm__("x0") = a, x1 __asm__("x1") = b, x2 __asm__("x2") = c, x3 __asm__("x3") = d;
-    __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3) : "memory");
+    register long x8 __asm__("x8") = n, x0 __asm__("x0") = a, x1 __asm__("x1") = b, x2 __asm__("x2") = c, x3 __asm__("x3") = d, x4 __asm__("x4") = e;
+    __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4) : "memory");
     return x0;
 }
 
