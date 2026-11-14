@@ -98,7 +98,8 @@ final class HubVolumes {
             if (before != null && before.path.equals(volume.path) && before.state == volume.state) continue;
             unmounted.remove(volume.fsUuid);
             mounted.put(volume.fsUuid, volume);
-            changed(volume, VolumeInfo.STATE_UNMOUNTED);
+            changed(state(volume, VolumeInfo.STATE_CHECKING), VolumeInfo.STATE_UNMOUNTED);  // vold: unmounted, checking (ACTION_MEDIA_CHECKING), mounted
+            changed(volume, VolumeInfo.STATE_CHECKING);
             media.add(Path.of(HostVolumes.Removable.mountPoint(volume)), volume.path, -1);
         }
         for (VolumeInfo gone : List.copyOf(mounted.values())) {
