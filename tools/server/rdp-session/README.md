@@ -7,7 +7,7 @@ systemd user units for a server (user `ubuntu`) so every RDP connect lands in on
 - `apklayer-pgr.service`: optional (not enabled by default), `apklayer --instance pgr run <pkg>` after the shell; it never restarts the session.
 - RDP user/password are stored once with `grdctl --headless rdp set-credentials USER PASS` (kept in `~/.local/share/gnome-remote-desktop/credentials.ini`); nothing secret is in these files.
 
-Each RDP connection adds a virtual monitor `Meta-1` ("Virtual remote monitor") beside the always-present `Meta-0` (2560x1440, not streamed); disconnecting removes it. gnome-shell keeps running through that. The old single unit (shell and grd in one) was restarted as a whole by hand-restarts of that unit, which closed every window.
+Each RDP connection adds a virtual monitor `Meta-1` ("Virtual remote monitor") beside the always-present `Meta-0` (1280x720, not streamed); disconnecting removes it. gnome-shell keeps running through that. The old single unit (shell and grd in one) was restarted as a whole by hand-restarts of that unit, which closed every window.
 
 Install:
 

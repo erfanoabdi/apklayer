@@ -10,4 +10,4 @@ gsettings set org.gnome.desktop.screensaver lock-enabled false
 gsettings set org.gnome.desktop.screensaver idle-activation-enabled false
 gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type nothing
 gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type nothing
-exec gnome-shell --headless --wayland --no-x11 --virtual-monitor 2560x1440
+exec gnome-shell --headless --wayland --no-x11 --virtual-monitor 1280x720
