@@ -96,14 +96,14 @@ static int is_data_dir(DIR *d) { for (int i = 0; i < 8; i++) if (__atomic_load_n
 int closedir(DIR *d) { for (int i = 0; i < 8; i++) { DIR *z = d; __atomic_compare_exchange_n(&data_dirs[i], &z, NULL, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE); } return ((int (*)(DIR *))REAL(closedir))(d); }
 DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *))REAL(opendir))(m);
     if (!r) { int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1); if (fd >= 0 && !(r = fdopendir(fd))) close(fd); } if (r && apklayer_is_data_root(path)) data_dir_note(r); DONE(m); return r; }
-long apklayer_android_spelling(char *buf, long n);
-long apklayer_android_spelling_own_data(char *buf, long n);  /* paths.c: only the app's own data directory's host path -> /data/user/0/<pkg> (realpath, getcwd) */
+long apklayer_android_spelling(char *buf, long n, long size);  /* paths.c: size is the buffer: the Android spelling may be longer than the host path */
+long apklayer_android_spelling_own_data(char *buf, long n, long size);  /* paths.c: only the app's own data directory's host path -> /data/user/0/<pkg> (realpath, getcwd) */
 /* /proc links (an fd, the executable) to a file the overlay served read as its Android path (paths.c) */
 long apklayer_proc_link_view(const char *path, char *buf, long n, size_t size);  /* proc_task.c: exe and fd links as an Android app process shows them */
 int apklayer_proc_prctl_view(int option, long *result);
 static ssize_t proc_link(const char *path, char *buf, ssize_t r, size_t size)
 {
-    if (r > 0 && path && !strncmp(path, "/proc/", 6)) { r = apklayer_android_spelling(buf, r); r = apklayer_proc_link_view(path, buf, r, size); }
+    if (r > 0 && path && !strncmp(path, "/proc/", 6)) { r = apklayer_android_spelling(buf, r, (long)size); r = apklayer_proc_link_view(path, buf, r, size); }
     return r;
 }
 ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r, n); }
@@ -211,6 +211,37 @@ static char *drive_spelling(const char *path, const char *storage, size_t n, cha
     return copy;
 }
 
+/* The app's own directories under Android's names in a path a libc call returned. The Android spelling can be longer than the host path, so a buffer is never grown in
+ * place: a caller's buffer (room = its size, or 0 for none) is rewritten only when the new name fits, a malloc'd result (glibc sizes it exactly: realpath(p, NULL),
+ * getcwd(NULL, 0), get_current_dir_name) is replaced by a new allocation. */
+static char *own_spelled(char *r, size_t room, int heap)
+{
+    if (!r) return r;
+    char tmp[PATH_MAX];
+    size_t len = strlen(r);
+    if (len >= sizeof tmp) return r;
+    memcpy(tmp, r, len + 1);
+    long spelled = apklayer_android_spelling_own_data(tmp, (long)len, (long)sizeof tmp - 1);
+    if (spelled == (long)len && !memcmp(tmp, r, len)) return r;
+    tmp[spelled] = 0;
+    if (heap) { char *n = strdup(tmp); if (!n) return r; free(r); return n; }
+    if ((size_t)spelled + 1 <= room) memcpy(r, tmp, (size_t)spelled + 1);
+    return r;
+}
+
+/* The working directory under its Android name: an app is started in its install directory (cli/run.cpp), which the path layer spells /data/app/~~apklayer/<pkg>-apklayer
+ * (paths.c own_apk_path and its reverse); getcwd and get_current_dir_name would otherwise name the host's path. The real directory is unchanged: relative opens still
+ * resolve in it, and chdir back to the spelled name maps there. In place (the spelling is never longer than the host path). */
+char *getcwd(char *buf, size_t size)
+{
+    char *r = ((char *(*)(char *, size_t))REAL(getcwd))(buf, size);
+    return own_spelled(r, buf ? size : 0, buf == NULL);
+}
+char *get_current_dir_name(void)
+{
+    return own_spelled(((char *(*)(void))REAL(get_current_dir_name))(), 0, 1);
+}
+
 /* A resolved path below the storage directory is spelled as Android's again (/storage/...): callers compare it with the volume paths. */
 char *realpath(const char *path, char *resolved)
 {
@@ -220,7 +251,7 @@ char *realpath(const char *path, char *resolved)
     size_t n = storage ? strlen(storage) : 0;
     if (r && n >= 8 && !strncmp(r, storage, n) && (r[n] == 0 || r[n] == '/')) { memcpy(r, "/storage", 8); memmove(r + 8, r + n, strlen(r + n) + 1); }
     else if (r && n >= 8 && path) r = drive_spelling(path, storage, n, r, resolved);
-    if (r) { long len = (long)strlen(r), spelled = apklayer_android_spelling_own_data(r, len); if (spelled != len) r[spelled] = 0; }  /* the app's own data directory as /data/user/0/<pkg> */
+    r = own_spelled(r, resolved ? PATH_MAX : 0, resolved == NULL);  /* the app's own directories as /data/user/0/<pkg>, /data/app/~~... */
     DONE(m);
     return r;
 }

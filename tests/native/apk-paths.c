@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
     assert(n > 0);
     got[n] = 0;
     printf("host file reads back as: %s\n", got);
-    assert(!strcmp(got, "/data/app/~~apklayer/" PKG "-apklayer/base.apk") || strstr(tmp, "/tmp/") == NULL);
+    assert(!strcmp(got, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" PKG "-Zl3q8XvKc0bYtqN2dHkP5Q==/base.apk") || strstr(tmp, "/tmp/") == NULL);
     close(fd);
     snprintf(host, sizeof host, "%s/apklayer/apps/" PKG "/lib/libgame.so", tmp);
     fd = open(host, O_RDONLY);
@@ -61,8 +61,23 @@ int main(int argc, char **argv) {
     n = readlink(link, got, sizeof got - 1);
     got[n > 0 ? n : 0] = 0;
     printf("lib reads back as: %s\n", got);
-    assert(strstr(got, "/lib/arm64/libgame.so") != NULL || n > (ssize_t)strlen("/data/app/~~apklayer/" PKG "-apklayer/lib/arm64/libgame.so"));
+    assert(strstr(got, "/lib/arm64/libgame.so") != NULL || n > (ssize_t)strlen("/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" PKG "-Zl3q8XvKc0bYtqN2dHkP5Q==/lib/arm64/libgame.so"));
     close(fd);
+    snprintf(host, sizeof host, "%s/apklayer/apps/" PKG, tmp);                         /* the app's working directory is its install directory */
+    assert(chdir(host) == 0);
+    char *cwd = getcwd(NULL, 0);
+    assert(cwd && !strcmp(cwd, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" PKG "-Zl3q8XvKc0bYtqN2dHkP5Q=="));
+    free(cwd);
+    char fixed[PATH_MAX];
+    assert(getcwd(fixed, sizeof fixed) && !strcmp(fixed, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" PKG "-Zl3q8XvKc0bYtqN2dHkP5Q=="));
+    char small[80];                                                                   /* the Android name (112+ bytes here) does not fit: the host path stays */
+    assert(getcwd(small, sizeof small) == NULL || strncmp(small, "/data/app/~~", 12) != 0 || strlen(small) < sizeof small);
+    char *real = realpath(".", NULL);                                                 /* a heap result is replaced by the Android spelling */
+    assert(real && !strcmp(real, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" PKG "-Zl3q8XvKc0bYtqN2dHkP5Q=="));
+    free(real);
+    assert(access("base.apk", F_OK) == 0);                                            /* the real directory is unchanged: relative opens resolve in it */
+    assert(chdir(fixed) == 0 && access("base.apk", F_OK) == 0);                       /* and the spelled name maps back */
+    assert(chdir("/") == 0);
     char cmd[800];
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmp);
     assert(!strncmp(tmp, "/tmp/apklayer-apk-paths-", 24) && system(cmd) == 0);

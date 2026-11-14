@@ -18,7 +18,7 @@
 
 const char *apklayer_own_data_env(void);
 long apklayer_app_uid(void);
-long apklayer_android_spelling(char *buf, long n);
+long apklayer_android_spelling(char *buf, long n, long size);
 const char *apklayer_proc_jdk_root(void);  /* proc_view.c: the JDK's directory (libjvm's maps line), "" when unknown */
 
 static long raw(long nr, long a, long b, long c, long d)
@@ -127,12 +127,15 @@ const char *apklayer_proc_map_name(const char *host, char *out, size_t size)
     int saved = errno;
     const char *result = NULL;
     snprintf(out, size, "%s", host);
-    long n = apklayer_android_spelling(out, (long)strlen(out));
+    long n = apklayer_android_spelling(out, (long)strlen(out), (long)size - 1);
     out[n] = 0;
     if (strcmp(out, host)) result = out;
     else {
         const char *libs = strstr(host, "/android-libs/"), *base = strrchr(host, '/');
-        if (libs && base && strstr(base, ".so")) { snprintf(out, size, "/system/lib64/%s", base + 1); result = out; }
+        /* the translator and its proxy libraries (libberberis_*.so) exist only here: no Android device has a file of that name. The mapping is the memory of the
+         * native bridge, which Android's own bridge (libhoudini, libndk_translation) also shows; it keeps its place in the view without a name that exists nowhere */
+        if (libs && base && !strncmp(base + 1, "libberberis_", 12)) result = "";
+        else if (libs && base && strstr(base, ".so")) { snprintf(out, size, "/system/lib64/%s", base + 1); result = out; }
         else if (strstr(host, "/robolectric-nativeruntime-assets/") && base && strstr(host, "/fonts/")) { snprintf(out, size, "/system/fonts/%s", base + 1); result = out; }
         else if ((libs = runtime_file(host))) { snprintf(out, size, "%s", libs); result = out; }
         else {  /* the desktop's libraries (glibc, Mesa, X/Wayland, ICU...) and apklayer's own host libraries: no Android name exists, so no name at all */
