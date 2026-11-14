@@ -141,6 +141,12 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         return name.startsWith("org.robolectric.") || name.startsWith("apklayer.") && !appHelper(name);
     }
 
+    /** Test apps (-Dapklayer.testClasses=a.B,c.D in APKLAYER_JOPTS) reach the named host classes by Class.forName; no app has the property. */
+    private static boolean testClass(String name) {
+        String list = System.getProperty("apklayer.testClasses");
+        return list != null && (',' + list + ',').contains(',' + name + ',');
+    }
+
     /** The converter's targets in the app's classes (DenyInstrument): resolved by the app's own loader. */
     private static boolean appHelper(String name) {
         return name.startsWith("apklayer.relocated.") || name.startsWith("apklayer.loader.") || switch (name) {
@@ -194,7 +200,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         if (name.startsWith("[")) return Class.forName(name.replace('/', '.'), false, definingLoader);  // ART's loaders answer array names (Chromium's JNI asks)
         name = name.replace('/', '.');  // ... and binary names with slashes (Paddleboat)
-        if (hiddenName(name) || (jdkOnly(name) || name.startsWith("apklayer.")) && byForName()) throw new ClassNotFoundException(name);  // not on Android's boot class path
+        if (!testClass(name) && (hiddenName(name) || (jdkOnly(name) || name.startsWith("apklayer.")) && byForName())) throw new ClassNotFoundException(name);  // not on Android's boot class path
         // No lock of ours is held while the parent loads: a thread in the sandbox's loadClass (holding its lock) may be defining an app class here through
         // apply, whose superclass then comes through this method; apply itself copes with two threads defining one class.
         Class<?> c = libraries == null || name.startsWith("java.") ? null : libraries.apply(name);
