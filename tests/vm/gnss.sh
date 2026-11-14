@@ -30,6 +30,7 @@ echo "hub: $events"
 [ "$events" = "gnss: client started,gnss: client ended,died hello.gps," ] || fail "the hub's GNSS client did not run only while hello.gps had its request"
 grep -aq "^\[gps\] hello.gps fix 47.37690 8.54170 accuracy 6.0" "$APKLY_STATE/gnss-hello.gps.out" && grep -aq "^\[gps\] hello.gps PASS" "$APKLY_STATE/gnss-hello.gps.out" ||
     fail "hello.gps did not get GeoClue's fixes"
+grep -aq "^\[gps\] hello.gps PFD close PASS" "$APKLY_STATE/gnss-hello.gps.out" || fail "a closed ParcelFileDescriptor left its descriptor open in the app"
 grep -a "gnss geoclue:" "$APKLY_STATE"/*.log | tail -3
 grep -aq "fix 37.42200 -122.08406" "$APKLY_STATE/gnss-hello.gps.out" && fail "the HAL reported the AOSP example's mock location before GeoClue's fix"
 
