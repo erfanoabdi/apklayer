@@ -71,7 +71,10 @@ if host_machine.system() == 'linux'
   # bionic_translation at its pinned revision (subprojects/bionic_translation.wrap) with our series applied (patches/apply, idempotent; an edited
   # patch resets it to that revision first, below), plus patches/bionic_translation/compat where the toolchain is older
   bt_src = meson.project_source_root() / 'subprojects/bionic_translation'
-  if not fs.is_dir(bt_src)
+  local_bt = run_command('sh', '-c', 'echo "$APKLAYER_BIONIC_TRANSLATION"', check: true).stdout().strip()  # a local checkout: no network
+  if not fs.is_dir(bt_src) and local_bt != ''
+    run_command('cp', '-a', local_bt, bt_src, check: true)
+  elif not fs.is_dir(bt_src)
     run_command(find_program('meson'), 'subprojects', 'download', '--sourcedir', meson.project_source_root(), 'bionic_translation', check: true)
   endif
   apply = find_program('patches/apply')
