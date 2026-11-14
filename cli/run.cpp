@@ -192,6 +192,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         ne32.env["APKLAYER_ARM32_PRELOAD"] = ne32.env["LD_PRELOAD"];
         ne32.env.erase("LD_PRELOAD");
     }
+    nj.env["APKLAYER_CWD"] = dir;  // a spare-born process changes to it (spare_target.c); a cold JVM starts there (app.cwd)
     if (mode == RunMode::Component) nj.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
     // under the sandbox a launch's intent file goes with it as text (its place is not in the app's view, and the app could not delete it there):
     // one line, newlines as \x1f (spare.cpp hands launch variables over as lines; Properties.store never writes control characters raw)
@@ -270,7 +271,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
     int status = 0;
-    // shortcut: SIGKILL to this waiter (the hub's stuck-host path) leaves a spare-born JVM to `apklayer stop` (its record); upgrade when the hub tracks JVM pids
+    // SIGKILL to this waiter closes its socket: the spare's holder ends the JVM (runAppSpare)
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
     else {
         passSignalsTo(jvmPid);

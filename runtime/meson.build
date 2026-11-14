@@ -40,6 +40,9 @@ overlay_jar = custom_target('overlay.jar', input: overlay_sources, depend_files:
 custom_target('jdk-patch', input: host_jar, output: 'jdk-patch',
   command: ['sh', '-c', 'rm -rf "$1" && exec "$2" -cp "$3" apklayer.host.JdkPatch "$1"', 'sh', '@OUTPUT@', java, host_cp],
   install: true, install_dir: native_dir)
+# an install adds and replaces, it never removes: classes no longer built would stay in the installed jdk-patch (and in the JDK image made from it)
+meson.add_install_script('sh', '-c', 'd="$MESON_INSTALL_DESTDIR_PREFIX/$1/jdk-patch"; cd "$d" 2>/dev/null && find . -type f | while read -r f; do [ -e "$2/jdk-patch/$f" ] || rm -f "$f"; done; exit 0',
+  'sh', fs.relative_to(native_dir, get_option('prefix')), meson.current_build_dir())
 
 # @CriticalNative methods (apklayer.host.CriticalNatives) of the framework's javac output (the prebuilts' javac-shards), plus the ones of classes
 # the shards lack (bridge/native/critical-natives-extra.txt)
