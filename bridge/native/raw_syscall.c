@@ -39,6 +39,7 @@ const char *apklayer_own_data_env(void);
 long apklayer_app_uid(void);
 int apklayer_app_groups(gid_t *out, size_t capacity);
 __attribute__((weak)) int apklayer_uname_view(struct utsname *u);  /* the uname view of the process, when something provides one */
+static void default_uname(struct utsname *u) { strcpy(u->nodename, "localhost"); }  /* Android's nodename; the desktop's leaked */
 
 int apklayer_raw_syscall_active;  /* the filter is in place: SIGSYS is ours (bionic_translation's sigaction leaves it alone) */
 static unsigned long window_base, window_next;
@@ -76,8 +77,25 @@ static long guest_syscall(long nr, const long a[6])
     }
     case __NR_uname:
         r = syscall(nr, a[0]);
-        if (r == 0 && apklayer_uname_view) apklayer_uname_view((struct utsname *)a[0]);
+        if (r == 0) { if (apklayer_uname_view) apklayer_uname_view((struct utsname *)a[0]); else default_uname((struct utsname *)a[0]); }
         return r < 0 ? -errno : r;
+    case __NR_newfstatat: case __NR_statx: {  /* the owner ids of the real result are the desktop's: show the app's (files the app owns read as the desktop user) */
+        r = syscall(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+        long uid = apklayer_app_uid();
+        if (r == 0 && uid >= 0) {
+            long host = syscall(__NR_getuid);
+            if (nr == __NR_statx) {  /* struct statx: stx_uid @20, stx_gid @24 */
+                unsigned *o = (unsigned *)((char *)a[4] + 20);
+                if (o[0] == host) o[0] = (unsigned)uid;
+                if (o[1] == host) o[1] = (unsigned)uid;
+            } else {  /* arm64 struct stat: st_uid @24, st_gid @28 */
+                unsigned *o = (unsigned *)((char *)a[2] + 24);
+                if (o[0] == host) o[0] = (unsigned)uid;
+                if (o[1] == host) o[1] = (unsigned)uid;
+            }
+        }
+        return r < 0 ? -errno : r;
+    }
     case __NR_rt_sigaction:  /* SIGSYS only (the filter): the handler is ours, the guest's is never installed (a Go runtime installs its own through the kernel) */
         if (a[2]) memset((void *)a[2], 0, 3 * sizeof(unsigned long));  /* the old action (the kernel's arm64 struct: handler, flags, mask) reads as the default */
         return 0;
@@ -103,7 +121,17 @@ static void on_sigsys(int sig, siginfo_t *info, void *context)
     long a[6];
     for (int i = 0; i < 6; i++) a[i] = (long)uc->uc_mcontext.regs[i];
     long nr = (long)uc->uc_mcontext.regs[8];
-    long r = guest_syscall(nr, a);
+    long r;
+    if (nr == __NR_rt_sigprocmask && a[3] == 8) {  /* the handler's own mask is restored at sigreturn: the guest's mask is the saved one, SIGSYS never in it */
+        unsigned long *m = (unsigned long *)&uc->uc_sigmask, was = *m & ~(1UL << (SIGSYS - 1));
+        r = 0;
+        if (a[2]) *(unsigned long *)a[2] = was;
+        if (a[1]) {
+            unsigned long set = *(unsigned long *)a[1];
+            if (a[0] == SIG_BLOCK) was |= set; else if (a[0] == SIG_UNBLOCK) was &= ~set; else if (a[0] == SIG_SETMASK) was = set; else r = -EINVAL;
+            if (!r) *m = was & ~(1UL << (SIGSYS - 1));
+        }
+    } else r = guest_syscall(nr, a);
     uc->uc_mcontext.regs[0] = (unsigned long)r;
     errno = saved;
 }
@@ -112,9 +140,9 @@ static void on_sigsys(int sig, siginfo_t *info, void *context)
 static int install_filter(unsigned long base)
 {
     static const int numbers[] = { __NR_getuid, __NR_geteuid, __NR_getgid, __NR_getegid, __NR_getresuid, __NR_getresgid, __NR_getgroups,
-        __NR_openat, __NR_readlinkat, __NR_uname };
+        __NR_openat, __NR_readlinkat, __NR_uname, __NR_newfstatat, __NR_statx, __NR_rt_sigprocmask };
     enum { N = sizeof numbers / sizeof *numbers };
-    struct sock_filter f[8 + N + 6];
+    struct sock_filter f[8 + N + 6];  /* rt_sigprocmask passes the SIGSYS test below only for numbers listed above, so it is trapped for every call */
     int n = 0;
 #define OFF_NR 0
 #define OFF_ARCH 4

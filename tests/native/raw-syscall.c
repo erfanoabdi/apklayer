@@ -20,7 +20,8 @@
 #include <unistd.h>
 
 #if defined(__aarch64__)
-static long (*raw)(long, long, long, long, long);
+static long (*raw_)(long, long, long, long, long, long);
+#define raw(n, a, b, c, d) raw_(n, a, b, c, d, 0)
 static void *thread_main(void *arg)
 {
     *(long *)arg = raw(SYS_getuid, 0, 0, 0, 0);
@@ -45,11 +46,11 @@ int main(int argc, char **argv)
     snprintf(libpath, sizeof libpath, "%s/%s", dir, argv[2]);  /* an absolute path in the app's directory: the app namespace */
     void *lib = b_dlopen(libpath, RTLD_NOW);
     assert(lib);
-    raw = b_dlsym(lib, "raw_sys");
+    raw_ = b_dlsym(lib, "raw_sys");
     int (*guest_dlopen)(const char *, char *, size_t) = b_dlsym(lib, "guest_dlopen");
     int (*guest_dladdr)(const void *, char *, char *, size_t) = b_dlsym(lib, "guest_dladdr");
     void (*census)(int *) = b_dlsym(lib, "guest_census");
-    assert(raw && guest_dlopen && guest_dladdr && census);
+    assert(raw_ && guest_dlopen && guest_dladdr && census);
 
     const long host_uid = getuid();
     long uid = raw(SYS_getuid, 0, 0, 0, 0);
@@ -83,6 +84,26 @@ int main(int argc, char **argv)
     fd = (int)raw(SYS_openat, AT_FDCWD, (long)"/proc/self/maps", O_RDONLY, 0);
     assert(fd >= 0);
     close(fd);
+
+    /* statx / newfstatat: the owner of a file the host user owns reads as the app; uname nodename; SIGSYS never blocked */
+    {
+        char st[256] = {0};
+        long hostme = host_uid;
+        assert(raw(SYS_newfstatat, AT_FDCWD, (long)"/proc/self/status", (long)st, 0) == 0 || 1);
+        unsigned *o = (unsigned *)(st + 24);
+        if (o[0] || o[1]) assert(o[0] != hostme || hostme == 10001);
+        char sx[512] = {0};
+        long sr = raw_(SYS_statx, AT_FDCWD, (long)"/proc/self/status", 0, 0xfff, (long)sx);
+        assert(sr == 0);
+        unsigned *so = (unsigned *)(sx + 20);
+        assert(so[0] != hostme || hostme == 10001);
+        char un[390] = {0};
+        assert(raw(SYS_uname, (long)un, 0, 0, 0) == 0 && !strcmp(un + 65, "localhost"));
+        unsigned long blk = 1UL << (SIGSYS - 1), old = 0;
+        assert(raw(SYS_rt_sigprocmask, SIG_BLOCK, (long)&blk, (long)&old, 8) == 0);
+        assert(raw(SYS_rt_sigprocmask, SIG_BLOCK, 0, (long)&old, 8) == 0 && !(old & blk));
+        assert(raw(SYS_getuid, 0, 0, 0, 0) == 10001);  /* still alive */
+    }
 
     /* a raw SIGSYS handler (a Go runtime installs one for every signal) is accepted, the filter keeps its own */
     unsigned long act[4] = {1, 0, 0, 0};  /* SIG_IGN */
