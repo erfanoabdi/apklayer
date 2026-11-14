@@ -4,7 +4,7 @@ import java.nio.file.*;
 /** A real HotSpot process must present ART to app file APIs without losing its mappings. */
 class ArtMaps {
     public static void main(String[] args) throws Exception {
-        String art = "/apex/com.android.art/" + (System.getProperty("sun.arch.data.model").equals("64") ? "lib64" : "lib") + "/libart.so";
+        String art = "/apex/com.android.art/" + (System.getProperty("sun.arch.data.model").equals("64") ? "lib64" : "lib") + "/libopenjdkjvm.so";
         for (String path : new String[]{"/proc/self/maps", "/proc/thread-self/maps"}) {
             StringBuilder maps = new StringBuilder();
             try (BufferedReader in = new BufferedReader(new FileReader(path))) {
