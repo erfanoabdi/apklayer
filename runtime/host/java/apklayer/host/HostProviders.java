@@ -49,6 +49,8 @@ final class HostProviders {
         Security.setProperty("ssl.KeyManagerFactory.algorithm", "PKIX");
         Security.setProperty("ssl.TrustManagerFactory.algorithm", "PKIX");
         Security.setProperty("keystore.type", "BKS");
+        // Android verifies SHA-1 signed jars (F-Droid's index.jar, Droid-ify: "must be signed by a single code signer"); the JDK denies SHA1 after 2019
+        Security.setProperty("jdk.jar.disabledAlgorithms", "MD2, MD5, RSA keySize < 1024, DSA keySize < 1024");
         for (Provider p : Security.getProviders()) Security.removeProvider(p.getName());
         for (Provider p : order) Security.addProvider(p);
         // libcore's HttpsURLConnection verifies host names with okhttp's verifier; the JDK's default one refuses every name (it relies on its own TLS stack's check)
