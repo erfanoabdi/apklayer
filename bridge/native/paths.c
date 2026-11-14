@@ -173,6 +173,10 @@ void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const 
     }
     __atomic_store_n(&own_data, o, __ATOMIC_RELEASE);  /* every thread's file calls read it: published whole, an earlier one stays allocated (a reader may hold it) */
     push_app_uid();
+    {   /* AT_EXECFN names the JDK's java in the stack's string: an app process reads app_process64 (proc_task.c, the preload's) */
+        extern void apklayer_proc_rewrite_execfn(void) __attribute__((weak));
+        if (apklayer_proc_rewrite_execfn) apklayer_proc_rewrite_execfn();
+    }
     /* and in the instance's /data as directories, as on Android: a walk that reaches them component by component (mkdir -p: /data/data, then
      * "com.termux" relative to it) lands in the app's tree, not in a new one (errors ignored: the sandbox's view has its own) */
     const char *links[][3] = { {"data", "", o->dir}, {"user", "/0", o->dir}, {"user_de", "/0", o->device} };
@@ -244,11 +248,14 @@ static bool linker_path(char **path)
  * the processes in its cgroup (the app's systemd scope: its JVM, translator threads, children); another pid's /proc/<pid>[/...] is ENOENT. Not hidden:
  * /proc, /proc/self, /proc/thread-self and everything not numeric. The kernel's own answer is read with raw syscalls (the wrappers call this).
  * APKLAYER_PROC_VIEW=host turns it off. Without a scope for the app (no systemd) nothing is hidden: every process shares the cgroup. */
+__thread volatile int apklayer_proc_raw;  /* set while the filter itself reads a cgroup: proc_view.c must not project that read (it judges processes by the real value) */
 static int cgroup_read(long pid, char *out, size_t n)
 {
     char p[48];
     snprintf(p, sizeof p, "/proc/%ld/cgroup", pid);
+    apklayer_proc_raw = 1;
     int fd = (int)syscall(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC);
+    apklayer_proc_raw = 0;
     if (fd < 0) return -1;
     ssize_t r = read(fd, out, n - 1);
     close(fd);
@@ -569,5 +576,9 @@ void apklayer_install_path_layer(void)
     void (*set)(bool (*)(char **)) = dlsym(RTLD_DEFAULT, "libc_bio_set_apply_path_overrides_func");
     if (set) set(apklayer_apply_path_overrides);
     push_app_uid();
+    {   /* this process's exec environment where another process of the app can read it (its /proc/<pid>/environ view, proc_task.c) */
+        extern int apklayer_proc_publish_environment(void) __attribute__((weak));
+        if (apklayer_proc_publish_environment) apklayer_proc_publish_environment();
+    }
     if (getenv("APKLAYER_PATHS_DEBUG")) fprintf(stderr, "[paths] path layer %s\n", set ? "installed" : "NOT installed (libc_bio not loaded)");
 }

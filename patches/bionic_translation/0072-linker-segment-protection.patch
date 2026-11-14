@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 14 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: read-only segments lose their write access after
+ relocation
+
+apklayer patch (docs/PATCHES.md). The loader maps every read-only PT_LOAD
+segment writable for relocation and meant to protect it again afterwards, but
+it kept the range in uint32_t fields: no 64-bit load address fits, the check
+never passed, and every Android library's text stayed rwx (259 W+X mappings,
+62 MB, in an ARM64 app's /proc/self/maps; Android has none). After linking each
+read-only segment gets its own protection back (r-x text, r-- rodata); a page
+shared with a writable segment stays as that segment mapped it.
+
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -3099,10 +3099,23 @@
+ 	 * the program headers again and mprotect all the read-only segments.
+ 	 * To prevent re-scanning the program header, we would have to build a
+ 	 * list of loadable segments in si, and then scan that instead. */
+-	if (si->wrprotect_start != 0xffffffff && si->wrprotect_end != 0) {
+-		mprotect((void *)(intptr_t)si->wrprotect_start,
+-			 si->wrprotect_end - si->wrprotect_start,
+-			 PROT_READ | PROT_EXEC);
++	/* apklayer patch: give each read-only PT_LOAD segment its own protection back (r-x text, r-- rodata). wrprotect_start/end are
++	 * uint32_t: on 64-bit no load address fits, so the range check never passed and every text segment stayed rwx after relocation.
++	 * A page shared with a writable segment stays writable (that segment's mapping owns it). */
++	for (size_t i = 0; si->phdr && i < si->phnum; i++) {
++		const ElfW(Phdr) *ro = &si->phdr[i];
++		if (ro->p_type != PT_LOAD || (ro->p_flags & PF_W) || !ro->p_memsz)
++			continue;
++		uintptr_t start = (si->base + ro->p_vaddr) & ~(uintptr_t)PAGE_MASK;
++		uintptr_t end = (si->base + ro->p_vaddr + ro->p_memsz + PAGE_MASK) & ~(uintptr_t)PAGE_MASK;
++		for (size_t j = 0; j < si->phnum; j++) {
++			const ElfW(Phdr) *rw = &si->phdr[j];
++			uintptr_t w = (si->base + rw->p_vaddr) & ~(uintptr_t)PAGE_MASK;
++			if (rw->p_type == PT_LOAD && (rw->p_flags & PF_W) && w >= start && w < end)
++				end = w;
++		}
++		if (end > start)
++			mprotect((void *)start, end - start, PFLAGS_TO_PROT(ro->p_flags));
+ 	}
+ #endif
+ 

@@ -98,8 +98,13 @@ DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *
 long apklayer_android_spelling(char *buf, long n);
 long apklayer_android_spelling_own_data(char *buf, long n);  /* paths.c: only the app's own data directory's host path -> /data/user/0/<pkg> (realpath, getcwd) */
 /* /proc links (an fd, the executable) to a file the overlay served read as its Android path (paths.c) */
-static ssize_t proc_link(const char *path, char *buf, ssize_t r) { return r > 0 && path && !strncmp(path, "/proc/", 6) ? apklayer_android_spelling(buf, r) : r; }
-ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r); }
+long apklayer_proc_link_view(const char *path, char *buf, long n, size_t size);  /* proc_task.c: exe and fd links as an Android app process shows them */
+static ssize_t proc_link(const char *path, char *buf, ssize_t r, size_t size)
+{
+    if (r > 0 && path && !strncmp(path, "/proc/", 6)) { r = apklayer_android_spelling(buf, r); r = apklayer_proc_link_view(path, buf, r, size); }
+    return r;
+}
+ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r, n); }
 
 /* readdir on /proc leaves out the processes the app does not see (paths.c apklayer_proc_pid_hidden); the directory is told by its device and inode */
 static int is_proc_dir(DIR *d)
@@ -239,7 +244,7 @@ int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev) { PROC_GONE(dir
     int r = f ? ((int (*)(int, const char *, mode_t, dev_t))f)(dirfd, use, mode, dev) : (int)SYSCALL(SYS_mknodat, (long)dirfd, (long)use, (long)mode, (long)dev); DONE(m); return r; }
 WRAPAT(int, fchownat, (int dirfd, const char *path, uid_t u, gid_t g, int flags), (int, const char *, uid_t, gid_t, int), dirfd, use, u, g, flags)
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
-    ssize_t r = ((ssize_t (*)(int, const char *, char *, size_t))REAL(readlinkat))(dirfd, use, buf, n); DONE(m); return proc_link(path, buf, r); }
+    ssize_t r = ((ssize_t (*)(int, const char *, char *, size_t))REAL(readlinkat))(dirfd, use, buf, n); DONE(m); return proc_link(path, buf, r, n); }
 /* the fortified spellings (Android code built with FORTIFY: Berberis's guest readlink): the buffer is at least n here */
 ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlinkat(dirfd, path, buf, n); }
 ssize_t __readlink_chk(const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlink(path, buf, n); }
@@ -347,5 +352,21 @@ long syscall(long nr, ...)
         || nr == SYS_open
 #endif
     ) return apklayer_proc_fd((int)r);
-    return nr == SYS_readlinkat ? proc_link(path, (char *)a[2], r) : r;
+    if (nr == SYS_prctl) { long v; if (r >= 0 && apklayer_proc_prctl_view((int)a[0], &v)) return v; }
+    return nr == SYS_readlinkat ? proc_link(path, (char *)a[2], r, (size_t)a[3]) : r;
+}
+
+/* What an Android app's prctl answers about its own security state (proc_task.c: not dumpable, no_new_privs, a seccomp filter); the real process keeps its
+ * attributes. The JVM's own prctl calls (thread names, PR_SET_VMA) are not queries of these. */
+int apklayer_proc_prctl_view(int option, long *result);
+int prctl(int option, ...)
+{
+    va_list ap;
+    va_start(ap, option);
+    unsigned long a2 = va_arg(ap, unsigned long), a3 = va_arg(ap, unsigned long), a4 = va_arg(ap, unsigned long), a5 = va_arg(ap, unsigned long);
+    va_end(ap);
+    int r = (int)((long (*)(long, ...))REAL(syscall))(SYS_prctl, (long)option, a2, a3, a4, a5);
+    long v;
+    if (r >= 0 && apklayer_proc_prctl_view(option, &v)) return (int)v;
+    return r;
 }
