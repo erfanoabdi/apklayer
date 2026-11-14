@@ -54,17 +54,27 @@ std::vector<Gpu> listGpus(const Layout& l) {
     std::vector<Gpu> gpus;
     std::string compositor = compositorDevice(l);
     std::vector<std::string> byPath = listDir("/dev/dri/by-path");
-    for (const std::string& n : listDir("/sys/class/drm")) {
-        if (n.rfind("renderD", 0) != 0) continue;
+    std::vector<std::string> drm = listDir("/sys/class/drm");
+    std::vector<std::string> renderDevices;  // the sysfs devices that have a render node
+    for (const std::string& n : drm)
+        if (n.rfind("renderD", 0) == 0) renderDevices.push_back(realPath("/sys/class/drm/" + n + "/device"));
+    for (const std::string& n : drm) {
+        bool render = n.rfind("renderD", 0) == 0;
+        bool card = n.size() > 4 && n.rfind("card", 0) == 0 && n.find_first_not_of("0123456789", 4) == std::string::npos;  // not card1-Virtual-1 (a connector)
+        if (!render && !card) continue;
+        std::string sysDevice = realPath("/sys/class/drm/" + n + "/device");
+        // a device without a render node (vkms) is offered by its card node: the only way to allocate on it, software rendering (Mesa kms_swrast)
+        if (card && std::find(renderDevices.begin(), renderDevices.end(), sysDevice) != renderDevices.end()) continue;
         Gpu g;
+        g.cardOnly = card;
         g.node = "/dev/dri/" + n;
-        g.device = realPath("/sys/class/drm/" + n + "/device");
+        g.device = sysDevice;
         g.driver = baseName(realPath(join(g.device, "driver")));
         std::string vendor = hexId(join(g.device, "vendor")), device = hexId(join(g.device, "device"));
         if (exists(join(g.device, "config")) && !vendor.empty()) g.vendorDevice = vendor + ":" + device;  // PCI (config space): the ids name the chip
         for (const std::string& link : byPath)
-            if (link.size() > 7 && link.substr(link.size() - 7) == "-render" && realPath("/dev/dri/by-path/" + link) == g.node)
-                g.id = link.substr(0, link.size() - 7);
+            if (link.size() > 7 && link.substr(link.size() - (g.cardOnly ? 5 : 7)) == (g.cardOnly ? "-card" : "-render") && realPath("/dev/dri/by-path/" + link) == g.node)
+                g.id = link.substr(0, link.size() - (g.cardOnly ? 5 : 7));
         if (g.id.empty()) g.id = g.device;
         g.compositor = !compositor.empty() && compositor == g.device;
         gpus.push_back(g);
@@ -82,9 +92,12 @@ const Gpu* instanceGpu(const std::vector<Gpu>& gpus, const Instance& inst) {
             if (want == g.id || want == g.node) return &g;
         fprintf(stderr, "apklayer: GPU %s of instance %s is not present: using the default\n", want.c_str(), inst.id.c_str());
     }
+    // no choice: the compositor's GPU, else real hardware, else a software (card-only) device, else whatever there is (vgem allocates nothing)
+    auto rank = [](const Gpu& g) { return g.compositor ? 0 : !g.cardOnly && g.driver != "faux_driver" ? 1 : g.cardOnly ? 2 : 3; };
+    const Gpu* best = nullptr;
     for (const Gpu& g : gpus)
-        if (g.compositor) return &g;
-    return gpus.empty() ? nullptr : &gpus[0];
+        if (!best || rank(g) < rank(*best)) best = &g;
+    return best;
 }
 
 int gpusCommand(const Layout& l, const Instance& inst) {

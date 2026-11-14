@@ -190,6 +190,7 @@ permissions close to others.
 - "the shell did not listen": no Wayland session (`echo $WAYLAND_DISPLAY`); apklayer does not run on X11 or a text console.
 - An app that closes at once: its log names the cause; `bin/apklayer info <package>` shows what was installed. Converted classes are cached: after an
   apklayer update that changed dex2jvm, install the app again.
+- A host without a GPU (a cloud VM, a container host): `sudo modprobe vkms` (the kernel's virtual KMS device; `echo vkms | sudo tee /etc/modules-load.d/vkms.conf` keeps it) and be in the `video` group. `apklayer gpus` then lists vkms by its card node (`/dev/dri/card<n>`, it has no render node) and an instance with no other GPU runs on it: Mesa renders on the CPU (kms_swrast/llvmpipe), buffers are dumb buffers. Slow (a game at a few frames per second at best), for tests. vgem (render node `renderD128` on such hosts) allocates nothing and is never the default (`apklayer-gfx: ... allocates no buffers`).
 - Apps draw with software (llvmpipe) only with the sandbox on (`APKLAYER_SANDBOX=1`), on NVIDIA or any GPU: send these to the developers.
   1. `ls -l /dev/dri /dev/nvidia*` and `getfacl /dev/nvidia* /dev/dri/renderD*`; `grep -r NVreg_DeviceFile /etc/modprobe.d /lib/modprobe.d`
      (Debian makes NVIDIA's nodes 0660 group video; app uids reach them only through apklayerd's broker).
