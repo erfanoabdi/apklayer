@@ -28,6 +28,8 @@ endif
 # the path layer's LD_PRELOAD library (bridge/native/paths_preload.c): /storage mapped for the functions glibc does not route through open/stat
 if is_variable('apklayer_preload')
   test('path-layer', executable('path-layer-test', 'path-layer.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
+  # the sandbox's file broker as the app's uid (tests/vm/sandbox.sh runs it in `apklayer sandbox-exec`)
+  executable('broker-test', 'broker.c')
   # needs its own cgroup scope, as proc-leaks: `systemd-run --user --scope meson test proc-host-tools`; skipped (77) where every process shares one
   test('proc-host-tools', executable('proc-host-tools-test', 'proc-host-tools.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('apk-paths', executable('apk-paths-test', 'apk-paths.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)

@@ -17,6 +17,7 @@
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
@@ -38,6 +39,9 @@ int apklayer_broker_openat(int dirfd, const char *path, int flags, int mode, int
 /* mkdir, unlink, rmdir, rename, access, chmod, symlink, link in the granted home: 0 in place of the caller's failed result when apklayerd did it */
 int apklayer_broker_change(const char *op, int dirfd, const char *path, int dirfd2, const char *to, int x, int failed);
 #define CHANGE(r, op, dirfd, p, x) r = apklayer_broker_change(op, dirfd, p, AT_FDCWD, NULL, x, r)
+int apklayer_broker_utimes(int dirfd, const char *path, const struct timespec t[2], int nofollow, int failed);
+int apklayer_broker_fdpath(int fd, char *out, size_t n);
+long apklayer_broker_xattr(const char *op, const char *path, const char *name, const void *value, void *buf, size_t size, int flags, int nofollow, long failed);
 #ifndef AT_STATX_SYNC_TYPE
 #define AT_STATX_SYNC_TYPE 0x6000
 #endif
@@ -141,7 +145,14 @@ WRAP(int, chown, (const char *path, uid_t u, gid_t g), (const char *, uid_t, gid
 WRAP(int, lchown, (const char *path, uid_t u, gid_t g), (const char *, uid_t, gid_t), m, u, g)
 WRAP(int, truncate, (const char *path, off_t n), (const char *, off_t), m, n)
 WRAP(int, truncate64, (const char *path, off64_t n), (const char *, off64_t), m, n)
-WRAP(int, utimes, (const char *path, const struct timeval t[2]), (const char *, const struct timeval *), m, t)
+/* utimes, lutimes, utimensat, futimens: refused to the app's uid in the granted home (not the file's owner): apklayerd sets the times */
+static int times_of(const struct timeval *t, struct timespec ts[2]) { if (!t) return 0; for (int i = 0; i < 2; i++) { ts[i].tv_sec = t[i].tv_sec; ts[i].tv_nsec = t[i].tv_usec * 1000; } return 1; }
+int utimes(const char *path, const struct timeval t[2]) { MAP(m, path); struct timespec ts[2]; int r = ((int (*)(const char *, const struct timeval *))REAL(utimes))(m, t);
+    r = apklayer_broker_utimes(AT_FDCWD, m, times_of(t, ts) ? ts : NULL, 0, r); DONE(m); return r; }
+int lutimes(const char *path, const struct timeval t[2]) { MAP(m, path); struct timespec ts[2]; int r = ((int (*)(const char *, const struct timeval *))REAL(lutimes))(m, t);
+    r = apklayer_broker_utimes(AT_FDCWD, m, times_of(t, ts) ? ts : NULL, 1, r); DONE(m); return r; }
+int futimens(int fd, const struct timespec t[2]) { char p[4096]; int r = ((int (*)(int, const struct timespec *))REAL(futimens))(fd, t);
+    if (r != 0 && (errno == EACCES || errno == EPERM) && apklayer_broker_fdpath(fd, p, sizeof p)) r = apklayer_broker_utimes(AT_FDCWD, p, t, 0, r); return r; }
 WRAP(int, statvfs, (const char *path, struct statvfs *s), (const char *, struct statvfs *), m, s)
 WRAP(int, statvfs64, (const char *path, struct statvfs64 *s), (const char *, struct statvfs64 *), m, s)
 WRAP(int, statfs, (const char *path, struct statfs *s), (const char *, struct statfs *), m, s)
@@ -185,7 +196,9 @@ int unlinkat(int dirfd, const char *path, int flags) { AT(m, path); int r = ((in
     CHANGE(r, (flags & AT_REMOVEDIR) ? "rmdir" : "unlink", dirfd, m_use, 0); DONE(m); return r; }
 int fchmodat(int dirfd, const char *path, mode_t mode, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     int r = ((int (*)(int, const char *, mode_t, int))REAL(fchmodat))(dirfd, use, mode, flags); if (!flags) CHANGE(r, "chmod", dirfd, use, (int)mode); DONE(m); return r; }
-WRAPAT(int, utimensat, (int dirfd, const char *path, const struct timespec t[2], int flags), (int, const char *, const struct timespec *, int), dirfd, use, t, flags)
+int utimensat(int dirfd, const char *path, const struct timespec t[2], int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+    int r = ((int (*)(int, const char *, const struct timespec *, int))REAL(utimensat))(dirfd, use, t, flags);
+    r = apklayer_broker_utimes(dirfd, use, t, flags & AT_SYMLINK_NOFOLLOW, r); DONE(m); return r; }
 int rename(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(rename))(a, b);
     r = apklayer_broker_change("rename", AT_FDCWD, a, AT_FDCWD, b, 0, r); DONE(a); DONE(b); return r; }
 int link(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(link))(a, b);
@@ -258,7 +271,6 @@ char *realpath(const char *path, char *resolved)
     return r;
 }
 char *__realpath_chk(const char *path, char *resolved, size_t n) { (void)n; return realpath(path, resolved); }  /* the JDK's libjava and libnio are built with fortify */
-WRAP(int, lutimes, (const char *path, const struct timeval t[2]), (const char *, const struct timeval *), m, t)
 int renameat(int fd1, const char *from, int fd2, const char *to) {
     MAP(a, from && from[0] == '/' ? from : NULL); MAP(b, to && to[0] == '/' ? to : NULL);
     int r = ((int (*)(int, const char *, int, const char *))REAL(renameat))(fd1, a ? a : from, fd2, b ? b : to);
@@ -284,25 +296,79 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { PROC_GONE
 ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlinkat(dirfd, path, buf, n); }
 ssize_t __readlink_chk(const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlink(path, buf, n); }
 int symlinkat(const char *target, int dirfd, const char *path) { if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(const char *, int, const char *))REAL(symlinkat))(target, dirfd, use); DONE(m); return r; }
-WRAP(int, setxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
-WRAP(int, lsetxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
-WRAP(ssize_t, getxattr, (const char *path, const char *name, void *v, size_t n), (const char *, const char *, void *, size_t), m, name, v, n)
-WRAP(ssize_t, lgetxattr, (const char *path, const char *name, void *v, size_t n), (const char *, const char *, void *, size_t), m, name, v, n)
-WRAP(ssize_t, listxattr, (const char *path, char *list, size_t n), (const char *, char *, size_t), m, list, n)
-WRAP(ssize_t, llistxattr, (const char *path, char *list, size_t n), (const char *, char *, size_t), m, list, n)
-WRAP(int, removexattr, (const char *path, const char *name), (const char *, const char *), m, name)
-WRAP(int, lremovexattr, (const char *path, const char *name), (const char *, const char *), m, name)
+/* extended attributes: refused to the app's uid on the user's files in the granted home (user.* needs the file's permissions): apklayerd does them */
+#define XSET(name, nf) int name(const char *path, const char *n, const void *v, size_t sz, int f) { MAP(m, path); \
+    int r = ((int (*)(const char *, const char *, const void *, size_t, int))REAL(name))(m, n, v, sz, f); r = (int)apklayer_broker_xattr("setxattr", m, n, v, NULL, sz, f, nf, r); DONE(m); return r; }
+#define XGET(name, nf) ssize_t name(const char *path, const char *n, void *v, size_t sz) { MAP(m, path); \
+    ssize_t r = ((ssize_t (*)(const char *, const char *, void *, size_t))REAL(name))(m, n, v, sz); r = apklayer_broker_xattr("getxattr", m, n, NULL, v, sz, 0, nf, r); DONE(m); return r; }
+#define XLIST(name, nf) ssize_t name(const char *path, char *list, size_t sz) { MAP(m, path); \
+    ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(name))(m, list, sz); r = apklayer_broker_xattr("listxattr", m, NULL, NULL, list, sz, 0, nf, r); DONE(m); return r; }
+#define XREMOVE(name, nf) int name(const char *path, const char *n) { MAP(m, path); \
+    int r = ((int (*)(const char *, const char *))REAL(name))(m, n); r = (int)apklayer_broker_xattr("removexattr", m, n, NULL, NULL, 0, 0, nf, r); DONE(m); return r; }
+XSET(setxattr, 0) XSET(lsetxattr, 1) XGET(getxattr, 0) XGET(lgetxattr, 1) XLIST(listxattr, 0) XLIST(llistxattr, 1) XREMOVE(removexattr, 0) XREMOVE(lremovexattr, 1)
+/* the fd forms (java.nio's UserDefinedFileAttributeView): by the path the fd names */
+#define FPATH(r_, call) char p_[4096]; if (r_ < 0 && (errno == EACCES || errno == EPERM) && apklayer_broker_fdpath(fd, p_, sizeof p_)) r_ = call
+int fsetxattr(int fd, const char *n, const void *v, size_t sz, int f) { int r = ((int (*)(int, const char *, const void *, size_t, int))REAL(fsetxattr))(fd, n, v, sz, f);
+    FPATH(r, (int)apklayer_broker_xattr("setxattr", p_, n, v, NULL, sz, f, 0, r)); return r; }
+ssize_t fgetxattr(int fd, const char *n, void *v, size_t sz) { ssize_t r = ((ssize_t (*)(int, const char *, void *, size_t))REAL(fgetxattr))(fd, n, v, sz);
+    FPATH(r, apklayer_broker_xattr("getxattr", p_, n, NULL, v, sz, 0, 0, r)); return r; }
+ssize_t flistxattr(int fd, char *list, size_t sz) { ssize_t r = ((ssize_t (*)(int, char *, size_t))REAL(flistxattr))(fd, list, sz);
+    FPATH(r, apklayer_broker_xattr("listxattr", p_, NULL, NULL, list, sz, 0, 0, r)); return r; }
+int fremovexattr(int fd, const char *n) { int r = ((int (*)(int, const char *))REAL(fremovexattr))(fd, n);
+    FPATH(r, (int)apklayer_broker_xattr("removexattr", p_, n, NULL, NULL, 0, 0, 0, r)); return r; }
 int inotify_add_watch(int fd, const char *path, uint32_t mask) { MAP(m, path); int r = ((int (*)(int, const char *, uint32_t))REAL(inotify_add_watch))(fd, m, mask); DONE(m); return r; }
 int linkat(int fd1, const char *from, int fd2, const char *to, int flags) {
     AT(a, from); AT(b, to); int r = ((int (*)(int, const char *, int, const char *, int))REAL(linkat))(fd1, a_use, fd2, b_use, flags); DONE(a); DONE(b); return r;
 }
 int renameat2(int fd1, const char *from, int fd2, const char *to, unsigned int flags) {
     AT(a, from); AT(b, to); int r = ((int (*)(int, const char *, int, const char *, unsigned int))REAL(renameat2))(fd1, a_use, fd2, b_use, flags);
-    if (!flags) r = apklayer_broker_change("rename", fd1, a_use, fd2, b_use, 0, r);  /* RENAME_NOREPLACE/EXCHANGE: not brokered */
+    r = apklayer_broker_change("rename", fd1, a_use, fd2, b_use, (int)flags, r);  /* RENAME_NOREPLACE and RENAME_EXCHANGE too */
     DONE(a); DONE(b); return r;
 }
 FILE *freopen(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen))(m, mode, f); DONE(m); return apklayer_proc_file(r); }
 FILE *freopen64(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen64))(m, mode, f); DONE(m); return apklayer_proc_file(r); }
+/* A folder of the granted home the app's uid may not read: scandir's own opendir is glibc-internal, so the list is made here from the broker's fd
+ * (struct dirent and dirent64 are one layout on 64-bit). */
+static int broker_scandir(const char *m, struct dirent64 ***list, int (*filter)(const struct dirent64 *), int (*compare)(const struct dirent64 **, const struct dirent64 **))
+{
+    int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1);
+    DIR *d = fd >= 0 ? fdopendir(fd) : NULL;
+    if (!d) { if (fd >= 0) close(fd); return -1; }
+    struct dirent64 **v = NULL, *e;
+    size_t n = 0, cap = 0;
+    while ((e = readdir64(d))) {
+        if (filter && !filter(e)) continue;
+        struct dirent64 *c = malloc(e->d_reclen > sizeof *e ? e->d_reclen : sizeof *e);
+        void *grown = n == cap ? realloc(v, (cap ? cap * 2 : 16) * sizeof *v) : v;
+        if (grown && n == cap) { v = grown; cap = cap ? cap * 2 : 16; }
+        if (!c || !grown) { free(c); while (n) free(v[--n]); free(v); closedir(d); errno = ENOMEM; return -1; }
+        memcpy(c, e, e->d_reclen > sizeof *e ? e->d_reclen : sizeof *e);
+        v[n++] = c;
+    }
+    closedir(d);
+    if (compare && n) qsort(v, n, sizeof *v, (int (*)(const void *, const void *))compare);
+    *list = v;
+    return (int)n;
+}
+/* mkstemp and mkdtemp in such a folder: glibc's names are random too, so the same is made here (mapped path t, its last suffix + 6 characters the template) */
+static int broker_template(char *t, size_t suffix, int flags, int dir)
+{
+    size_t len = strlen(t);
+    if (len < suffix + 6) { errno = EINVAL; return -1; }  /* glibc checked the X's before it failed on the folder, and left random ones */
+    static const char set[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    static unsigned seed;
+    if (!seed) seed = (unsigned)getpid() * 2654435761u ^ (unsigned)time(NULL);
+    for (int tries = 0; tries < 100; tries++) {
+        for (int i = 0; i < 6; i++) t[len - suffix - 6 + i] = set[rand_r(&seed) % (sizeof set - 1)];
+        errno = EACCES;
+        int fd = dir ? apklayer_broker_change("mkdir", AT_FDCWD, t, AT_FDCWD, NULL, 0700, -1)
+                     : apklayer_broker_open(t, ((flags & ~O_ACCMODE) | O_RDWR | O_CREAT | O_EXCL), 0600, -1);
+        if (fd >= 0) return fd;
+        if (errno != EEXIST) return -1;
+    }
+    errno = EEXIST;
+    return -1;
+}
 /* scandir reads the directory inside glibc, past the readdir above: the pids of other cgroups (and, in /data/data, other packages) leave the list.
  * The kept entries are moved to the front in order and the rest freed; the count shrinks, the array keeps its allocation (the caller frees the array and each kept entry). */
 static int proc_dir_path(const char *path) { return path && (!strcmp(path, "/proc") || !strcmp(path, "/proc/")); }
@@ -314,30 +380,34 @@ static int proc_dir_path(const char *path) { return path && (!strcmp(path, "/pro
 int scandir(const char *path, struct dirent ***list, int (*filter)(const struct dirent *), int (*compare)(const struct dirent **, const struct dirent **)) {
     MAP(m, path); int proc = proc_dir_path(path), data = apklayer_is_data_root(path);
     int r = ((int (*)(const char *, struct dirent ***, void *, void *))REAL(scandir))(m, list, filter, compare);
+    if (r < 0 && errno == EACCES) r = broker_scandir(m, (struct dirent64 ***)list, (void *)filter, (void *)compare);
     if (r > 0 && (proc || data)) SCANDIR_FILTER(list, r, proc, data);
     DONE(m); return r;
 }
 int scandir64(const char *path, struct dirent64 ***list, int (*filter)(const struct dirent64 *), int (*compare)(const struct dirent64 **, const struct dirent64 **)) {
     MAP(m, path); int proc = proc_dir_path(path), data = apklayer_is_data_root(path);
     int r = ((int (*)(const char *, struct dirent64 ***, void *, void *))REAL(scandir64))(m, list, filter, compare);
+    if (r < 0 && errno == EACCES) r = broker_scandir(m, list, (void *)filter, (void *)compare);
     if (r > 0 && (proc || data)) SCANDIR_FILTER(list, r, proc, data);
     DONE(m); return r;
 }
 /* The mkstemp family fills the template's last characters in: the mapped copy differs only in its prefix, so its tail is the caller's name. */
-#define TEMPLATE(ret, name, params, types, tail, ...) ret name params { \
+#define TEMPLATE(ret, name, params, types, tail, fl, ...) ret name params { \
     MAP(m, path); ret r = ((ret (*) types)REAL(name))(__VA_ARGS__); \
+    if (r < 0 && errno == EACCES) r = broker_template(m, (tail) - 6, fl, 0); \
     if (m_alloc) { size_t n_ = (tail), lp_ = strlen(path), lm_ = strlen(m); if (n_ <= lp_ && n_ <= lm_) memcpy(path + lp_ - n_, m + lm_ - n_, n_); free(m); } \
     return r; }
-TEMPLATE(int, mkstemp, (char *path), (char *), 6, m)
-TEMPLATE(int, mkstemp64, (char *path), (char *), 6, m)
-TEMPLATE(int, mkostemp, (char *path, int flags), (char *, int), 6, m, flags)
-TEMPLATE(int, mkostemp64, (char *path, int flags), (char *, int), 6, m, flags)
-TEMPLATE(int, mkstemps, (char *path, int suffix), (char *, int), 6 + (size_t)suffix, m, suffix)
-TEMPLATE(int, mkostemps, (char *path, int suffix, int flags), (char *, int, int), 6 + (size_t)suffix, m, suffix, flags)
-TEMPLATE(int, mkstemps64, (char *path, int suffix), (char *, int), 6 + (size_t)suffix, m, suffix)
-TEMPLATE(int, mkostemps64, (char *path, int suffix, int flags), (char *, int, int), 6 + (size_t)suffix, m, suffix, flags)
+TEMPLATE(int, mkstemp, (char *path), (char *), 6, 0, m)
+TEMPLATE(int, mkstemp64, (char *path), (char *), 6, 0, m)
+TEMPLATE(int, mkostemp, (char *path, int flags), (char *, int), 6, flags, m, flags)
+TEMPLATE(int, mkostemp64, (char *path, int flags), (char *, int), 6, flags, m, flags)
+TEMPLATE(int, mkstemps, (char *path, int suffix), (char *, int), 6 + (size_t)suffix, 0, m, suffix)
+TEMPLATE(int, mkostemps, (char *path, int suffix, int flags), (char *, int, int), 6 + (size_t)suffix, flags, m, suffix, flags)
+TEMPLATE(int, mkstemps64, (char *path, int suffix), (char *, int), 6 + (size_t)suffix, 0, m, suffix)
+TEMPLATE(int, mkostemps64, (char *path, int suffix, int flags), (char *, int, int), 6 + (size_t)suffix, flags, m, suffix, flags)
 char *mkdtemp(char *path) {
     MAP(m, path); char *r = ((char *(*)(char *))REAL(mkdtemp))(m);
+    if (!r && errno == EACCES && broker_template(m, 0, 0, 1) == 0) r = m;
     if (m_alloc) { size_t lp = strlen(path), lm = strlen(m); if (lp >= 6 && lm >= 6) memcpy(path + lp - 6, m + lm - 6, 6); free(m); }
     return r ? path : NULL;
 }

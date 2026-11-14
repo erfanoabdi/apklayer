@@ -33,6 +33,9 @@ bin/apklayer home-access hello.sandbox on
 APKLAYER_JOPTS="-Dapklayer.runms=15000 $jopts" bin/apklayer run hello.sandbox > "$out.home" 2>&1
 grep -a "\[sandbox\] \(home\|other\|private\|privdir\|write\|change\)" "$out.home"
 written=$(stat -c %U "$home/written.txt" 2>/dev/null)
+# the calls Java cannot make (tests/native/broker.c) as the app's uid, the path layer preloaded: times, xattrs, renameat2's flags, mkstemp, scandir in the 0700 folder
+native=$(ls "$PWD"/inst/lib/apklayer/native/libapklayer-preload.so 2>/dev/null | head -1)
+brk=$(APKLAYER_SANDBOX_PRELOAD=$native bin/apklayer sandbox-exec hello.sandbox -- "$PWD/b/tests/native/broker-test" "$home/private" 2>&1 | grep -a "^\[broker\]"); echo "$brk"
 # a launch with an intent file takes the app's spare (prepared after the launch above): the file's text goes with it (cli/run.cpp)
 printf 'action=hello.SANDBOX\nextra.hello.extra=fromspare\ncomponent=hello.sandbox.Main\n' > "$home/intent2.properties"
 APKLAYER_INTENT_FILE=$home/intent2.properties APKLAYER_JOPTS="-Dapklayer.runms=10000 $jopts" bin/apklayer run hello.sandbox > "$out.spare" 2>&1
@@ -61,6 +64,9 @@ grep -aq "\[sandbox\] change mkdir=true write=true rename=true delete=true rmdir
     { echo "FAIL: home-access on: the broker did not mkdir, write, rename, delete or answer access in a 0700 folder"; ok=0; }
 grep -aq "\[sandbox\] change2 chmod=ok symlink=true link=true" "$out.home" ||
     { echo "FAIL: home-access on: the broker did not chmod, symlink or link in a 0700 folder"; ok=0; }
+for want in utimes utimensat futimens xattr-path xattr-list xattr-fd-remove renameat2-noreplace renameat2-exchange renameat2-new-name mkstemp mkdtemp scandir opendir-readdir; do
+    echo "$brk" | grep -aq "^\[broker\] $want ok" || { echo "FAIL: home-access on: the broker call $want"; ok=0; }
+done
 grep -aq "\[sandbox\] intent hello.SANDBOX extra=fromspare" "$out.spare" && [ "$spared" -ge 1 ] && [ $consumed2 = 1 ] ||
     { echo "FAIL: the intent-file launch did not take the app spare with its intent ($spared)"; ok=0; }
 grep -aq "\[sandbox\] private denied" "$out" || { echo "FAIL: home-access off: the private file was readable"; ok=0; }

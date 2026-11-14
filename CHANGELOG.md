@@ -13,6 +13,14 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Not fixed: the captcha still draws nothing (page and its images load, `showBox` is called, no window content). libgtcore's `Core.getData` throws first: `NameNotFoundException com.android.vending` without the store, then (with microG's Companion/Services installed from ~/TestApps/microg-extra) `NullPointerException at java.io.File.<init>` from native code (a `new File(null)`, which argument is not known: the Java frames name no caller). Installing microG changed the game's billing result from 3 to 6 only.
 - Server (ubuntu@13.50.240.148): headless shell's virtual monitor 2560x1440 -> 1280x720 (tools/server/rdp-session/apklayer-gnome-shell, README), screenshots 1280x720.
 - Needs a human: solving the Geetest challenge itself (an interactive captcha; not automated).
+## 2026-11-15: sandbox file broker gaps closed (times, xattrs, renameat2 flags, mkstemp, mkdtemp, scandir)
+- apklayerd's broker (cli/broker.cpp, bridge/native/broker.c, paths_preload.c) now also does, in the granted home as the user: utimes/lutimes/utimensat/futimens,
+  setxattr/getxattr/listxattr/removexattr (path, l* and f* forms; reads answer "ok <n>" NUL data), renameat2 with RENAME_NOREPLACE/RENAME_EXCHANGE (the rename
+  request carries the flags). mkstemp family, mkdtemp and scandir (glibc opens inside itself, past the wrappers) fall back to names/lists made through the broker.
+- Groups run with APKLAYER_SANDBOX=1 on UTM: activities (exit-deadline.py finds the launcher's record, apklayerd runs it), services broadcasts providers pendingintents
+  notifications files keystore webview permissions devices portal properties view gpu gpu-window pass; system-apps passes but `location` (also unsandboxed;
+  hello-system's sysprops tells the sandbox by the os uid now); sysprov and hub-services fail (docs/PLAN.md); binder fails in a fresh tree sandboxed or not (RealBinder not found).
+- Test: tests/native/broker.c (`broker-test`) runs as the app's uid in `apklayer sandbox-exec` with the preload; tests/vm/sandbox.sh asserts 14 lines of it. Group sandbox passes (UTM, own tree).
 
 ## 2026-11-14: symbols in WebView text fields over RDP
 - Before 3591e113 every ASCII symbol (`! @ # $ % ^ & * ( ) - _ = + [ { ] } ; : ' " ` ~ \ | , < . > / ?`) was lost in a WebView `<input>` (letters, digits and capitals worked): the shell sends them as keycode 0 + unicode, HostInput made an ACTION_MULTIPLE text event, which Chromium and Termux ignore. With 3591e113 (real keycode + shift meta from KeyCharacterMap) all keys arrive in the WebView and in a native EditText. New `tests/vm/symbol-keys.py` (groups `input`, `webview-input`): evdev keys with Shift, every symbol, digit and capital, the field compared with what was typed; on the old HostInput it fails with exactly the symbols above.
