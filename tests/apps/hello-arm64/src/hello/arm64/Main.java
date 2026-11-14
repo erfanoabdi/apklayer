@@ -19,6 +19,7 @@ public class Main extends Activity {
     private static native int ownStack();
     private static native int auxv();
     private static native int vdsoVerdef();
+    private static native int missingGlFunctions();
     private static native int ignoreTerm();
     private static native int uid();
     private static native int ownerUid(String path);
@@ -102,6 +103,7 @@ public class Main extends Activity {
         log("auxv " + (auxv == 1 ? "ok" : "WRONG"));
         int verdef = vdsoVerdef();  // the guest vdso defines LINUX_2.6.39 (Go's vdso parser dereferences its verdef)
         log("vdso verdef " + (verdef == 1 ? "ok" : "WRONG"));
+        log("missing host GL functions called " + missingGlFunctions() + " ok");  // returns (not an abort) from functions the host library lacks
         // the app's uid as the arm64 code sees it, and as the owner of its own files: Android's (Process.myUid), not the desktop user's
         int uid = uid(), owner = ownerUid(getFilesDir().getPath()), app = android.os.Process.myUid();
         boolean ids = uid == app && owner == app;
