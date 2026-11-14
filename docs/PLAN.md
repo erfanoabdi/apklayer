@@ -13,7 +13,9 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Bugs
 - `webview` group fails in 3 of 4 runs on the PC at baseline (cookie assert).
-- `services` group fails "service survived stopSelf" on UTM (also on the old preload).
+- UTM cold start has silent gaps of 3-6 s with idle CPU after "hub registered" (around `HostProviders`/`HostLocation`): `input` and `identity-matrix` fail 3 of 3 runs there, also at commit 52787c75.
+- The app log cap (256 MB, `APKLAYER_APP_LOG_CAP`) is not strict: a few lines from a writer other than the launcher's pipe arrive after the cap note.
+- `system-apps` `location`: mode 3, network false (fails unsandboxed too).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
 - Termux: a failed exec in a forked child may still hang in `exit()` (fix untested in Termux itself).
