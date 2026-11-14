@@ -74,7 +74,7 @@ public final class Main extends Activity {
         try {
             BluetoothServerSocket server = adapter.listenUsingInsecureRfcommWithServiceRecord("apklayer-halt", ECHO);
             new Thread(() -> { try { server.accept(); } catch (IOException closed) { } }).start();
-            log("halt listening");
+            log("halt listening pid=" + android.os.Process.myPid());
             new Thread(() -> { try { Thread.sleep(1500); } catch (InterruptedException ignored) { } Runtime.getRuntime().halt(0); }).start();
         } catch (IOException failed) { log("halt failed " + failed); }
     }

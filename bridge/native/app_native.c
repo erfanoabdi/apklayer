@@ -151,7 +151,14 @@ static void throw_errno(JNIEnv *env, const char *function, int error)
     (*env)->Throw(env, (jthrowable)(*env)->NewObject(env, cls, init, name, error));
 }
 
-static void linux_close(JNIEnv *env, jobject self, jobject fd) { (void)self; if (close(fd_of(env, fd)) < 0) throw_errno(env, "close", errno); }
+static void linux_close(JNIEnv *env, jobject self, jobject fd)  /* as libcore's Linux_close: the descriptor is cleared first, so a second close cannot hit a reused number */
+{
+    (void)self;
+    if (!fd) return;
+    int n = fd_of(env, fd);
+    (*env)->SetIntField(env, fd, fd_field(env), -1);
+    if (n >= 0 && close(n) < 0) throw_errno(env, "close", errno);
+}
 static jobject linux_dup(JNIEnv *env, jobject self, jobject fd) { (void)self; int n = dup(fd_of(env, fd)); if (n < 0) { throw_errno(env, "dup", errno); return NULL; } return fd_make(env, n); }
 static jobject linux_dup2(JNIEnv *env, jobject self, jobject fd, jint to) { (void)self; int n = dup2(fd_of(env, fd), to); if (n < 0) { throw_errno(env, "dup2", errno); return NULL; } return fd_make(env, n); }
 static jint linux_fcntl_int(JNIEnv *env, jobject self, jobject fd, jint cmd, jint arg) { (void)self; int n = fcntl(fd_of(env, fd), cmd, arg); if (n < 0) throw_errno(env, "fcntl", errno); return n; }
