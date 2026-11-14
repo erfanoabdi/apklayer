@@ -1018,7 +1018,7 @@ a42ac50ddb43e1ef51b539bd9e22b23485027170cf7b2e4059508c5edc55786f 102632 x86_64/a
 974f7c3b2c294e26d4de3c4353b3140657f782d520078df151e5f6d3c62563e4 200168 x86_64/android-root/system/lib64/arm64/liblzma.so (staged from the tree's build outputs, see CHANGELOG.md) same
 a466083eafc6c0dcf7a9f7f4c35b85289206037c3f751f030bc6eb1201820278 281624 x86_64/android-root/system/lib64/arm64/libm.so (staged from the tree's build outputs, see CHANGELOG.md) same
 f75fb173b61d60a8dcddca26ada897febcebea92e2a3f2cf059982b8d9809fd1 135424 x86_64/android-root/system/lib64/arm64/libmediandk.so (staged from the tree's build outputs, see CHANGELOG.md) same
-16fa23fcfe216f196e8600fba0f1341b4b72ec5252b5211f8ee9719d34661e5a 34712 x86_64/android-root/system/lib64/arm64/libnative_bridge_vdso.so (staged from the tree's build outputs, see CHANGELOG.md) same
+e7d9ce069a2c12601fd18aa5eeff378935f8b53810a4d2e5f23aede1d5824937 34912 x86_64/android-root/system/lib64/arm64/libnative_bridge_vdso.so (staged from the tree's build outputs, see CHANGELOG.md) same
 603ef6b5e3f89f9d07338c6de08fedc9adb13b371d2b653bc062f9f562c7dd54 36536 x86_64/android-root/system/lib64/arm64/libnativehelper.so (staged from the tree's build outputs, see CHANGELOG.md) same
 b6a367cbfe60c7645855bee66451846951a633d1471d40592eb03924a6f3f464 37056 x86_64/android-root/system/lib64/arm64/libnativewindow.so (staged from the tree's build outputs, see CHANGELOG.md) same
 1096cdc14d7acc6f0c1e0d351614c8d88e2514090b0327c10f8a861dc0953514 37088 x86_64/android-root/system/lib64/arm64/libneuralnetworks.so (staged from the tree's build outputs, see CHANGELOG.md) same

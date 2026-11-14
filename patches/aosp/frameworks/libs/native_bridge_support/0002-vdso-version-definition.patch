@@ -1,0 +1,29 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] libnative_bridge_vdso carries a version definition (DT_VERDEF) like a kernel vdso
+
+Go (runtime/vdso_linux.go, any c-shared or executable Go runtime on linux/arm64, e.g. Rethink DNS's libgojni) parses the guest's AT_SYSINFO_EHDR image
+for __kernel_clock_gettime: vdsoFindVersion dereferences info.verdef without a nil check, because every kernel vdso defines LINUX_2.6.39. Our vdso had no
+DT_VERDEF, so Go's `ldrh w3,[x2,#2]` (verdef->vd_flags) read address 2: a SIGSEGV in Go's early init, survived only while the old action of SIGSEGV was
+the fatal stub, a death (SIG_DFL, binary_translation 0028) after. A version script defines LINUX_2.6.39 over all symbols; Go then finds no
+__kernel_clock_gettime and falls back to the syscall, as on a kernel without the vdso entries. Test: tests/apps/hello-arm64 "vdso verdef".
+
+diff --git a/android_api/vdso/Android.bp b/android_api/vdso/Android.bp
+--- a/android_api/vdso/Android.bp
++++ b/android_api/vdso/Android.bp
+@@ -39,6 +39,8 @@
+         },
+     },
+     export_include_dirs: ["include"],
++    // apklayer patch: a version definition, as every kernel vdso has (Go's vdso parser needs it)
++    version_script: "vdso.map",
+     // Make sure we do not drag any dependencies for vdso library (-Wl,--exclude-libs,ALL)
+     ldflags: [
+         "-Wl,--exclude-libs,ALL",
+diff --git a/android_api/vdso/vdso.map b/android_api/vdso/vdso.map
+new file mode 100644
+--- /dev/null
++++ b/android_api/vdso/vdso.map
+@@ -0,0 +1,3 @@
++LINUX_2.6.39 {
++  global: *;
++};

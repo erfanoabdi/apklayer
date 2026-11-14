@@ -18,6 +18,7 @@ public class Main extends Activity {
     private static native int errnos();
     private static native int ownStack();
     private static native int auxv();
+    private static native int vdsoVerdef();
     private static native int ignoreTerm();
     private static native int uid();
     private static native int ownerUid(String path);
@@ -99,6 +100,8 @@ public class Main extends Activity {
         log("own stack " + (stack == 1 ? "ok" : "WRONG"));
         int auxv = auxv();  // /proc/self/auxv's hwcaps are getauxval's (the guest's, not the host's)
         log("auxv " + (auxv == 1 ? "ok" : "WRONG"));
+        int verdef = vdsoVerdef();  // the guest vdso defines LINUX_2.6.39 (Go's vdso parser dereferences its verdef)
+        log("vdso verdef " + (verdef == 1 ? "ok" : "WRONG"));
         // the app's uid as the arm64 code sees it, and as the owner of its own files: Android's (Process.myUid), not the desktop user's
         int uid = uid(), owner = ownerUid(getFilesDir().getPath()), app = android.os.Process.myUid();
         boolean ids = uid == app && owner == app;
@@ -114,7 +117,7 @@ public class Main extends Activity {
         String zd = zipDiff();
         for (String line : zd.split("\n")) log("zipdiff " + line);  // Fennec x86 part 8: identical lines on arm64 and under the translator
         boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1
-                && auxv == 1 && handlers.isEmpty() && ids && proc == 15
+                && auxv == 1 && verdef == 1 && handlers.isEmpty() && ids && proc == 15
                 && zd.contains("found 700 wrong 0") && zd.contains("greprefs@0") && zd.contains("siglongjmp=7");
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         long t7 = System.nanoTime();

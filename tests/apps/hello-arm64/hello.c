@@ -176,6 +176,37 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_auxv(JNIEnv *env, jclass c)
     return n > 0 && hwcap == getauxval(AT_HWCAP) && hwcap2 == getauxval(AT_HWCAP2);
 }
 
+/* Go's vdso parser (runtime/vdso_linux.go) reads the AT_SYSINFO_EHDR image's DT_VERDEF without a nil check: a vdso with no version definition made
+ * `ldrh [verdef,#2]` fault at address 2 in libgojni's early init (Rethink DNS). 1 if the vdso defines LINUX_2.6.39, as a kernel's does. */
+#include <elf.h>
+#include <link.h>
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_vdsoVerdef(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    const ElfW(Ehdr) *eh = (const void *)getauxval(AT_SYSINFO_EHDR);
+    if (!eh) return 0;
+    const ElfW(Phdr) *ph = (const void *)((const char *)eh + eh->e_phoff), *dyn = NULL;
+    uintptr_t bias = 0;
+    for (int i = 0; i < eh->e_phnum; i++) {
+        if (ph[i].p_type == PT_LOAD && !bias) bias = (uintptr_t)eh + ph[i].p_offset - ph[i].p_vaddr;
+        if (ph[i].p_type == PT_DYNAMIC) dyn = &ph[i];
+    }
+    if (!dyn) return 0;
+    const ElfW(Verdef) *vd = NULL;
+    const char *strtab = NULL;
+    for (const ElfW(Dyn) *d = (const void *)(bias + dyn->p_vaddr); d->d_tag != DT_NULL; d++) {
+        if (d->d_tag == DT_VERDEF) vd = (const void *)(bias + d->d_un.d_ptr);
+        if (d->d_tag == DT_STRTAB) strtab = (const char *)(bias + d->d_un.d_ptr);
+    }
+    if (!vd || !strtab) return 0;
+    for (;;) {
+        const ElfW(Verdaux) *aux = (const void *)((const char *)vd + vd->vd_aux);
+        if (!strcmp(strtab + aux->vda_name, "LINUX_2.6.39")) return 1;
+        if (!vd->vd_next) return 0;
+        vd = (const void *)((const char *)vd + vd->vd_next);
+    }
+}
+
 /* The app uid as translated code sees it (binary_translation 0015): bionic's getuid() is a raw syscall the translator answers with the app's
  * uid, as host-side code gets it (bionic_translation 0056); without apklayer's sandbox the kernel would say the desktop user (often 1000). */
 JNIEXPORT jint JNICALL Java_hello_arm64_Main_uid(JNIEnv *env, jclass c)
