@@ -367,6 +367,7 @@ fe5b368452ad15ad8c9f24b679a8dc6a0f67cce402b03399528b664ed6a4d9c1 2084880 x86_64/
 7d133e55e5eaba581dc64bbc4c638d7557b6b06be41ca93cba9e5eee8875c624 218464 x86_64/android-libs/lib64/libincfs.so out/target/product/generic_x86_64/system/lib64/libincfs.so same
 1841821ae1a8abb5cfa5bbdd298bb50220fef8a9e9350f59b4d33d6eb541bb98 3512456 x86_64/android-libs/lib64/libinput.so out/target/product/generic_x86_64/system/lib64/libinput.so same
 550ab6efa882288cdf33278feef0685fb7435815faea7b71f4ecdbc92504da49 259904 x86_64/android-libs/lib64/libjavacore.so out/target/product/generic_x86_64/apex/com.android.art.debug/lib64/libjavacore.so same
+225c5f07456f32b206caff3be2fa4e943556090b04be922cd511f1c8437068ab 263272 x86_64/android-libs/lib64/libjavacrypto.so out/target/product/generic_x86_64/apex/com.android.conscrypt/lib64/libjavacrypto.so same
 81e47e01dfa7f94bc17a46673a0344dc1818469b4707bcba74552925268903ab 36392 x86_64/android-libs/lib64/libjnigraphics.so out/target/product/generic_x86_64/system/lib64/libjnigraphics.so same
 adebf080f492a997f85d32b5dc84bd3a5bea2f1e19f7eb857cbf361dcf77162a 648904 x86_64/android-libs/lib64/libjpeg.so out/target/product/generic_x86_64/system/lib64/libjpeg.so same
 22721116835f0cfa4ab70790813cedc59a5b38666f95ea36b037f0e62c6a6ade 36008 x86_64/android-libs/lib64/libjpegdecoder.so out/target/product/generic_x86_64/system/lib64/libjpegdecoder.so same
@@ -460,6 +461,7 @@ fecd92eea9df0757e212ed4c6c73033b52e64dfdfeded8daf1a006ec98422017 801800 x86_64/a
 b50822bcd424f0a36a15caf4217fd9cb1303edcf4af7ee6ae65a683b241ccc61 119368 x86_64/android-libs/lib64/libsounddose.so out/target/product/generic_x86_64/system/lib64/libsounddose.so same
 7088eeea6bafdff5f722ffab9c0108b213a5d5b6a1a50ee97916b6a69fd2618b 51632 x86_64/android-libs/lib64/libspeexresampler.so out/target/product/generic_x86_64/system/lib64/libspeexresampler.so same
 6a0d49e384ec957222f61b6e1c304deb4e7e356861cc8006a25e44a9ac175bd9 1604352 x86_64/android-libs/lib64/libsqlite.so out/target/product/generic_x86_64/system/lib64/libsqlite.so same
+c4f5cfce4e7f2e74cc6e00ef14e226ac0e83d0bc9a38b664d19f20acb6f550e7 654112 x86_64/android-libs/lib64/libssl.so out/target/product/generic_x86_64/system/lib64/libssl.so same
 0739ecdee667abe2ac1e0591f5ccc5da68a99dcf345b33cfe0062a8c0789f667 2510608 x86_64/android-libs/lib64/libstagefright.so out/target/product/generic_x86_64/system/lib64/libstagefright.so same
 a0da002c023f239d396e45afbf37c2d441b977d795cf441f230e46eb6c837fbf 185440 x86_64/android-libs/lib64/libstagefright_aidl_bufferpool2.so out/target/product/generic_x86_64/system/lib64/libstagefright_aidl_bufferpool2.so same
 8d326b83e6c2802ae1a20957c41504b602bd1939cd9ce2d6264e9eb9a818fa31 102480 x86_64/android-libs/lib64/libstagefright_amrnb_common.so out/target/product/generic_x86_64/system/lib64/libstagefright_amrnb_common.so same

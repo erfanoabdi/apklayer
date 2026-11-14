@@ -238,7 +238,17 @@ final class JavaProbes {
             for (java.security.Provider p : java.security.Security.getProviders()) b.append(p.getName()).append(' ');
             return b.toString().trim();
         });
-        Out.probe("java.ssl.default", () -> javax.net.ssl.SSLContext.getDefault().getProvider().getName());
+        Out.probe("java.ssl.default", () -> {
+            try { return javax.net.ssl.SSLContext.getDefault().getProvider().getName(); }
+            catch (Throwable t) { StringBuilder b = new StringBuilder(); for (; t != null; t = t.getCause()) b.append(t).append(" <- "); return b.toString(); }
+        });
+        Out.probe("java.ssl.tmf", () -> { javax.net.ssl.TrustManagerFactory f = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            return f.getAlgorithm() + " " + f.getProvider().getName(); });
+        Out.probe("java.ssl.kmf", () -> { javax.net.ssl.KeyManagerFactory f = javax.net.ssl.KeyManagerFactory.getInstance(javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+            return f.getAlgorithm() + " " + f.getProvider().getName(); });
+        Out.probe("java.ssl.tls", () -> javax.net.ssl.SSLContext.getInstance("TLS").getProvider().getName());
+        Out.probe("java.keystore.cacerts", () -> { java.security.KeyStore k = java.security.KeyStore.getInstance("AndroidCAStore"); k.load(null); return k.getProvider().getName() + " aliases>100=" + (java.util.Collections.list(k.aliases()).size() > 100); });
+        Out.probe("java.securerandom", () -> new java.security.SecureRandom().getProvider().getName() + " " + java.security.MessageDigest.getInstance("SHA-256").getProvider().getName());
         Out.probe("java.charset", () -> java.nio.charset.Charset.defaultCharset().name());
         Out.probe("java.methodhandle.class", () -> java.lang.invoke.MethodHandles.lookup()
                 .findVirtual(String.class, "length", java.lang.invoke.MethodType.methodType(int.class)).getClass().getName());
