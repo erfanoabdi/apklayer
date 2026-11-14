@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-14: symbols in WebView text fields over RDP
+- Before 3591e113 every ASCII symbol (`! @ # $ % ^ & * ( ) - _ = + [ { ] } ; : ' " ` ~ \ | , < . > / ?`) was lost in a WebView `<input>` (letters, digits and capitals worked): the shell sends them as keycode 0 + unicode, HostInput made an ACTION_MULTIPLE text event, which Chromium and Termux ignore. With 3591e113 (real keycode + shift meta from KeyCharacterMap) all keys arrive in the WebView and in a native EditText. New `tests/vm/symbol-keys.py` (groups `input`, `webview-input`): evdev keys with Shift, every symbol, digit and capital, the field compared with what was typed; on the old HostInput it fails with exactly the symbols above.
+- Characters without an Android keycode (accents, euro: AltGr) go through the focused field's InputConnection (`HostInput.textCommit` -> `HostTextBridge.ime`), ACTION_MULTIPLE only without a focused field. Script step `uchar:<code point>` stands in for such a key in tests (checked: e-acute and euro in both field kinds).
+- UTM own tree `~/apklayer-symkeys` removed at the end.
 ## 2026-11-14: jmethodID == Executable.artMethod (runtime identity item 4, ARM64)
 - The guest's jmethodIDs are the synthetic ArtMethod entries: arena + `ApklayerArt.of`, wrappers for the three id-returning functions (jni_guest_surface.c), input swap in the generated libart thunks (art-jni.py column, libart_jni.c). Probe `hello-identity` `jmethodID.equalsArtMethod=yes stable=1 callThrough=parseInt=42 length=2`, access flags at +4 and index at +8 read at the id. jfieldID unchanged (no ArtField table). UTM own tree `~/apklayer-jids`: identity-matrix, providers, gpu PASS (gpu failed once with 124 while 3 groups ran at once, passed alone). Tree and prebuilts copy removed.
 ## 2026-11-14: blank WebView pages on the 0.4.18 arm64 host (PGR registration page)
