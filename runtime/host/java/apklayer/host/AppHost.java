@@ -418,6 +418,27 @@ public final class AppHost implements Runnable {
                 });
     }
 
+    /** Activity.recreate() from the app (NewPipe's onResume): the configuration-change relaunch with every change unhandled; Robolectric's own leaves the new window unattached and NPEs in windowFocusChanged. */
+    static void recreate(Activity a) {
+        AppHost host = running;
+        if (host == null || a.isDestroyed()) return;
+        for (ActivityController<? extends Activity> c : stack) {
+            if (c.get() != a) continue;
+            ActivityController<? extends Activity> top = stack.peek();
+            if (host.task.stopped.contains(a)) return;  // a stopped activity is relaunched at its restart: not modelled
+            android.content.res.Resources res = org.robolectric.RuntimeEnvironment.getApplication().getResources();
+            c.configurationChange(new android.content.res.Configuration(res.getConfiguration()), res.getDisplayMetrics(), ~android.content.pm.ActivityInfo.CONFIG_WINDOW_CONFIGURATION);
+            c.get().setRequestedOrientation(a.getRequestedOrientation());
+            host.task.recreated(a, c.get());
+            setVisible(c.visible(), true);
+            HostWindows.focus(c, c == top && host.windowActive);
+            System.out.println("[apklayer] Activity.recreate(): " + a.getClass().getName());
+            return;
+        }
+        // asked while the activity is still launching (onResume runs before ActivityTask pushes it): ActivityThread runs it after the resume
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> recreate(a), 50);
+    }
+
     /**
      * Window state from the shell (PLAN archive P2.9), as in Android's freeform multi-window: an inactive window stays resumed and only
      * loses window focus and top-resumed (SDL and game loops pause on onPause); a minimized one is stopped, restored it restarts.
