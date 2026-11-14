@@ -144,7 +144,7 @@ apps = ["hello-permissions"]
 run = ["python3 -u tests/vm/permissions.py", "python3 -u tests/vm/permission-mobile.py"]
 
 [host-binder]
-run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
+run = ["python3 tests/vm/host-binder.py", "g++ -std=c++20 -I common tests/native/halium-detect.cpp -o /tmp/halium-detect-$APKLAYER_INSTANCE && /tmp/halium-detect-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/halium-detect-$APKLAYER_INSTANCE; exit $r"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
 
 [host-binder-kernel]  # the same on the kernel's binder (apklayer binder kernel, the option next to the userspace default)
 binder = "kernel"
