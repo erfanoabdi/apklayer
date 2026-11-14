@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: starting a process from an app JVM took ~1.1 s: jspawnhelper crashed (exec_preload `execvpe`)
+- Cause (strace -ff of the JVMs on UTM, own tree): in an app JVM (own-data mapping set) the JDK's `jspawnhelper` died with SIGSEGV at NULL in the preload's `execvpe` for a ProcessBuilder without environment (host code: `ip monitor`, `udevadm monitor`, `udisksctl`): `target()` allocates from the exec arena, and `execvpe` never called `arena_enter()` (the buffer is mapped there), so it wrote to NULL. The vfork parent waited for apport's core dump (~1.05 s; 7.4 s under strace) and the JDK took the EOF as a started child: the monitors never ran in app JVMs. The hub JVM has no own-data mapping and was fine; the app's own ProcessBuilder calls (GuestEnvironment) go through `execve` and were fine too.
+- Fix: `execvpe` enters/rewinds the arena like the other entries. Native test `exec-vp` (fails on the old preload after 1.06 s, passes in 0.00 s). `ip monitor` start in the app JVM, measured in `HostNetwork.watch`: 1078 ms -> 4 ms, alive. New test app hello-spawn and group `spawn` (20 x ProcessBuilder, mean ~0.7 ms; a plain `tests/vm/spawn.sh /usr/bin/true`).
+- Also: `HubProtocol.EJECT_VOLUME` was 64 like `NOTIFICATION_SETTINGS` (duplicate case label: `HubDirectory` did not compile since the merge of both); now 65. Groups spawn, startup, activities, files, native guest-exec/guest-spawn pass; `services` fails the same way before and after ("service survived stopSelf", not from this change).
+
 ## 2026-11-15: libcore fstat(fd) is the real one; setup-runtime.sh 21 s -> 10 s
 - `Os.fstat(fd)` stats `/proc/self/fd/<fd>` (mode, size, uid real; EBADF for a closed one); `files` and `system-apps` (MediaProvider scan) pass with it on Parallels.
 - `tools/release/setup-runtime.sh`: jars patched one job per jar, the JDK image built beside the instrumenting, "1/3..3/3" progress lines. Fresh dir on Parallels (12 cores): 21 s -> 10 s; the 75 s on a phone is mostly the single PreInstrument JVM (cores) and jlink.
