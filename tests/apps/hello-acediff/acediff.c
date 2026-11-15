@@ -345,6 +345,17 @@ static uint64_t t_signals(void)
     pid = fork();
     if (pid == 0) { struct sigaction sb = {.sa_sigaction = child_bus, .sa_flags = SA_SIGINFO}; sigemptyset(&sb.sa_mask); sigaction(SIGBUS, &sb, NULL); struct sigaction s3 = {.sa_flags = 0}; s3.sa_handler = (void (*)(int))((uintptr_t)on_wild | 2); sigemptyset(&s3.sa_mask); sigaction(SIGUSR1, &s3, NULL); raise(SIGUSR1); _exit(7); }
     if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal misaligned-handler child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
+    /* a signal the process sends itself, with the default disposition (reset with signal(), the handler run() left is gone): the process ends with that signal
+     * (WIFSIGNALED, the same number), not in HotSpot's crash handler (SIGABRT) */
+    static const int dsigs[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT}; static const char *dvia[] = {"kill", "raise", "tgkill", "abort"};
+    for (int si = 0; si < 5; si++) for (int via = 0; via < 4; via++) {
+        if (via == 3 && dsigs[si] != SIGABRT) continue;
+        pid = fork();
+        if (pid == 0) { signal(dsigs[si], SIG_DFL);
+            if (via == 0) kill(getpid(), dsigs[si]); else if (via == 1) raise(dsigs[si]); else if (via == 2) syscall(SYS_tgkill, getpid(), gettid(), dsigs[si]); else abort();
+            _exit(7); }
+        if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal default-action %s via %s: %s %d", strsignal(dsigs[si]), dvia[via], WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
+    }
     /* a pc fault at a misaligned address: br, blr and ret to it (hardware: SIGBUS BUS_ADRALN, si_addr = the target); a mapped non-executable page is SEGV_ACCERR */
     { uintptr_t t = (uintptr_t)t_signals | 2; static const char *K[3] = {"br", "blr", "ret"};
       for (int k = 0; k < 3; k++) {
