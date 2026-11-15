@@ -18,6 +18,16 @@ final class HubStartedServices {
     private final HubPackages packages;
     private final HubBroadcasts broadcasts;
     private final Map<ComponentName, Started> started = new HashMap<>();
+    // per target process, in order: starts (and stops) are delivered off the caller's thread, as ActivityManagerService schedules them
+    private final Map<String, java.util.concurrent.ExecutorService> queues = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private java.util.concurrent.ExecutorService queue(String key) {
+        return queues.computeIfAbsent(key, k -> java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "hub-start-" + k);
+            thread.setDaemon(true);
+            return thread;
+        }));
+    }
 
     HubStartedServices(HubDirectory directory, HubPackages packages, HubBroadcasts broadcasts) { this.directory = directory; this.packages = packages; this.broadcasts = broadcasts; }
 
@@ -33,19 +43,17 @@ final class HubStartedServices {
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
         String key = processKey(info);
         directory.noteIsolated(key, info);
-        HubDirectory.Peer target = directory.peer(key);
-        if (target != null) return deliver(target, explicit, explicit);
-        // the process is not running: launched, and the start delivered once it is up, while the caller goes on (ActivityManagerService queues
-        // the start until the process attaches). Waiting here deadlocked Play services: its main process starts a service of its ":persistent"
-        // process from attachBaseContext, and that process, still starting, asks the main one (its gservices provider)
-        Thread later = new Thread(() -> {
-            HubDirectory.Peer started = broadcasts.process(key);
-            if (started == null) { System.out.println("[apklayer-hub] could not start " + key + " for " + explicit.getComponent().flattenToShortString()); return; }
-            try { deliver(started, explicit, explicit); }
+        // the caller goes on while the start is delivered (ActivityManagerService schedules it, and queues it until a process that is not running
+        // attaches). Waiting here deadlocked Play services twice: its main process starts a service of its ":persistent" process from
+        // attachBaseContext while that process, still starting, asks the main one (its gservices provider); and a worker of ":persistent" that
+        // holds a lock sends a PendingIntent for a service of its own process, whose main thread waits for that lock
+        queue(key).execute(() -> {
+            HubDirectory.Peer target = directory.peer(key);
+            if (target == null) target = broadcasts.process(key);
+            if (target == null) { System.out.println("[apklayer-hub] could not start " + key + " for " + explicit.getComponent().flattenToShortString()); return; }
+            try { deliver(target, explicit, explicit); }
             catch (RuntimeException failed) { System.out.println("[apklayer-hub] start of " + explicit.getComponent().flattenToShortString() + " failed: " + failed); }
-        }, "hub-start-" + info.name);
-        later.setDaemon(true);
-        later.start();
+        });
         return explicit.getComponent();
     }
 
@@ -78,12 +86,19 @@ final class HubStartedServices {
         ComponentName name = new ComponentName(info.packageName, info.name);
         // the process that runs it, as for a start: the package's main process does not have a ":persistent" service and sent the stop back here
         // (Play services' stopService of one at BOOT_COMPLETED recursed until a StackOverflowError ended its main process)
-        HubDirectory.Peer target = directory.peer(processKey(info));
-        synchronized (started) { started.remove(name); }
-        if (target == null) return false;
-        boolean stopped = HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_STOP, request -> request.writeTypedObject(new Intent().setComponent(name), 0), reply -> reply.readBoolean());
-        directory.exitIfIdle(target);
-        return stopped;
+        String key = processKey(info);
+        // behind the starts queued before it (a stop right after a start must not overtake it); its answer is the service's own, so it is waited for
+        java.util.concurrent.Future<Boolean> stopped = queue(key).submit(() -> {
+            HubDirectory.Peer target = directory.peer(key);
+            synchronized (started) { started.remove(name); }
+            if (target == null) return false;
+            boolean here = HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_STOP, request -> request.writeTypedObject(new Intent().setComponent(name), 0), reply -> reply.readBoolean());
+            directory.exitIfIdle(target);
+            return here;
+        });
+        try { return stopped.get(); }
+        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); return false; }
+        catch (java.util.concurrent.ExecutionException failure) { throw failure.getCause() instanceof RuntimeException r ? r : new IllegalStateException(failure.getCause()); }
     }
 
     /** The service stopped itself (stopSelf). */
