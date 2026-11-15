@@ -28,6 +28,7 @@ run_dir = Path(tempfile.mkdtemp(prefix='apklayer-kwin-', dir=instance.SESSION)) 
 os.chmod(run_dir, 0o700)
 host = dict(os.environ, XDG_RUNTIME_DIR=str(run_dir))
 for k in ('DISPLAY', 'WAYLAND_DISPLAY'): host.pop(k, None)
+for k in ('XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME'): host[k] = str(run_dir / k.lower())  # KWin remembers outputs' scale and windows' state: every run starts clean
 bus = subprocess.run(['dbus-daemon', '--session', '--fork', '--print-address=1', '--print-pid=1'], env=host, capture_output=True, text=True, check=True).stdout.split()
 host.update(DBUS_SESSION_BUS_ADDRESS=bus[0], WAYLAND_DISPLAY=str(run_dir / 'kdenest'))
 os.environ.update(DBUS_SESSION_BUS_ADDRESS=bus[0])  # kwin.py's qdbus6 calls
@@ -278,6 +279,31 @@ def do(action):
         kwin.act(PKG, action, instance.OUT)
 
 
+def startup_off():
+    """`navbar off` set before the app starts: the window is created without the bar (the display HAL's first message carries the setting)."""
+    settings('set', 'navbar', 'off')
+    env = dict(ENV, APKLAYER_JOPTS='-Dhello.backlog=1 -Dapklayer.runms=9000 -Dapklayer.script=5000:hover:1,0')
+    p = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    sel, seen, got, end = selectors.DefaultSelector(), b'', [], time.monotonic() + 60
+    sel.register(p.stdout, selectors.EVENT_READ)
+    try:
+        while sel.select(30) and time.monotonic() < end:
+            data = os.read(p.stdout.fileno(), 65536)
+            if not data: break
+            seen += data
+            if b'script: hover:1,0' in seen and not got:
+                got.append(cfg())
+                instance.inject(PKG, 'click:%d,%d' % (got[0]['w'] // 4, got[0]['h'] - NAV // 2))
+        c = got[0] if got else None
+        case('navbar off before the launch: the window starts without the bar and the inset', bool(c) and c['nav'] == 0 and c['nav_px'] == 0 and seen.count(b'back pressed') == 0,
+             'first configure %s, Backs %d; shell: %s' % (c, seen.count(b'back pressed'), [l for l in shell_log().splitlines() if 'navigation bar' in l or 'decorations' in l or ' style' in l][:6]))
+    finally:
+        settings('unset', 'navbar')
+        instance.stop()
+        if p.poll() is None: os.killpg(p.pid, signal.SIGKILL)
+        (instance.STATE / 'shell.log').unlink(missing_ok=True)
+
+
 instance.stop()
 (instance.STATE / 'shell.log').unlink(missing_ok=True)
 kwp = subprocess.Popen(['kwin_wayland', '--virtual', '--socket', 'kdenest', '--width', '1280', '--height', '800', '--no-lockscreen'], env=host,
@@ -285,7 +311,7 @@ kwp = subprocess.Popen(['kwin_wayland', '--virtual', '--socket', 'kdenest', '--w
 app = None
 try:
     assert subprocess.run(['gdbus', 'wait', '--session', '--timeout', '20', 'org.kde.KWin'], env=host).returncode == 0, 'KWin did not start: ' + (run_dir / 'kwin.log').read_text()[-800:]
-    settings('unset', 'navbar')
+    startup_off()
     app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
@@ -311,7 +337,7 @@ try:
                     try: do(SEQUENCE[step - 1][0])
                     except Exception as e: case('action ' + SEQUENCE[step - 1][0], False, 'error: %r' % (e,))
     failed = [n for n, ok in results if not ok]
-    ok = results and not failed and len(results) >= 20
+    ok = results and not failed and len(results) >= 25
     print('%s KDE navigation bar: %d cases, %d failed %s' % ('PASS' if ok else 'FAIL', len(results), len(failed), failed), flush=True)
     sys.exit(0 if ok else 1)
 finally:

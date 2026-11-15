@@ -172,9 +172,9 @@ static struct apklayer_display *display_open(const char *name, uint32_t width, u
     memcpy(hello + 4, name, nl);
     send_msg(d, MSG_HELLO, hello, (uint32_t)(4 + nl), NULL, 0);
     /* apklayer patch: the window's style (`apklayer settings` window-mode, cli/run.cpp), before the window, so it is created in it */
-    const char *mode = getenv("APKLAYER_WINDOW_MODE");
-    if (mode && *mode) {
-        const char *nb = getenv("APKLAYER_NAVBAR");  /* the navigation bar on desktop windows: auto, on, off */
+    const char *mode = getenv("APKLAYER_WINDOW_MODE"), *nb = getenv("APKLAYER_NAVBAR");  /* nb: the navigation bar on desktop windows: auto, on, off */
+    if ((mode && *mode) || (nb && *nb)) {
+        if (!mode) mode = "auto";
         int32_t wm[3] = { WINDOW_ID, !strcmp(mode, "mobile") ? 2 : !strcmp(mode, "desktop") ? 1 : 0, nb && !strcmp(nb, "on") ? 1 : nb && !strcmp(nb, "off") ? 2 : 0 };
         send_msg(d, 15 /* MSG_WINDOW_MODE */, wm, sizeof wm, NULL, 0);
     }

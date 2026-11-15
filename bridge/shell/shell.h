@@ -54,7 +54,8 @@
  *                                    (160 * scale on a desktop, the handheld's physical density bucket: mobile.c); navigation bar: the
  *                                    bottom inset the shell's navigation bar covers in mobile style (navbar.c), 0 without one; keyboard:
  *                                    the app pixels the host's on-screen keyboard covers at the bottom (maliit.c), the app's IME inset
- *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
+ *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode[, i32 navbar]}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
+ *                                   navbar: 0 auto, 1 on, 2 off: the navigation bar on a desktop window (auto: where the compositor draws the title bar);
  *                                   sent before WINDOW_CREATE it sets the new window's style, later it switches it (mobile.c)
  *                 16 NAVBAR         {i32 id, i32 visible}: the app shows or hides the navigation bar (immersive mode)
  *                 18 FULLSCREEN     {i32 id, i32 on}: the app hides (1) or shows (0) the status bar, Android's fullscreen: the shell asks the
