@@ -36,6 +36,10 @@ grep -aq "PASS sensors through SensorService" $tool && grep -aq "last 0.500 9.50
 bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
 grep -a "PASS\|Check failed" $tool; grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq "PASS vibrator AIDL" $tool && grep -aq "vibrator: on 120 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "vibrator AIDL: the backend did not get on 120 ms at 0.5"
+# the fake backend composes: two primitives (CLICK at 0.5, THUD at 1.0 after 50 ms) and a 60 ms PWLE ramp 0.2..0.8 as 20 ms steps
+grep -aq "PASS vibrator compose and PWLE" $tool && [ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -5 | tr '\n' ' ')" = \
+  "vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 1.00 vibrator: on 20 ms amplitude 0.30 vibrator: on 20 ms amplitude 0.50 vibrator: on 20 ms amplitude 0.70 " ] \
+    || fail "vibrator AIDL: compose/composePwle did not reach the backend as steps"
 bin/apklayer stack libapklayer_gnss.so --client 2 >/dev/null 2>&1
 grep -a "^location\|PASS\|Check failed" $tool
 grep -aq "PASS gnss AIDL" $tool && grep -aq "^location 48.8584000 2.2945000 3.0" $tool || fail "gnss AIDL: no fix at the configured location"
