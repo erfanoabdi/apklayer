@@ -56,8 +56,8 @@ final class HostSharedLibraries {
             if (name != null && !libs.containsKey(name)) libs.put(name, !"false".equals(e.attributes().get(ATTR_REQUIRED)));
         }
         // PackageBackwardCompatibility's updaters, in their order (frameworks/base/services/core/java/com/android/server/pm/parsing/library)
-        for (String onBootClassPath : new String[] {"wear-sdk", "android.net.ipsec.ike", "com.google.android.maps", "android.hidl.base", "android.hidl.manager"})
-            libs.remove(onBootClassPath);  // on the boot class path, or dropped for apps (maps; HIDL for non-system apps)
+        for (String onBootClassPath : new String[] {"wear-sdk", "android.net.ipsec.ike", "com.google.android.maps", "android.hidl.base-V1.0-java", "android.hidl.manager-V1.0-java"})
+            libs.remove(onBootClassPath);  // on the boot class path (the framework carries android.hidl.base/manager's classes, docs/HIDL.md), or dropped for apps (maps)
         if (targetSdk > 0 && targetSdk < 28) prefixRequired(libs, "org.apache.http.legacy");  // OrgApacheHttpLegacyUpdater: targets below P
         prefixImplicit(libs, "android.test.runner", "android.test.mock");  // AndroidTestRunnerSplitUpdater
         if (targetSdk > 0 && targetSdk <= 29) prefixRequired(libs, "android.test.base");  // AndroidTestBaseUpdater: targets up to Q

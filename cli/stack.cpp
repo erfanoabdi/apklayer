@@ -396,7 +396,16 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, gatekeeper(l), "apklayer-gatekeeper.xml", "aosp/hals/security/gatekeeper-manifest.xml");
     // the hardware providers of providers.toml: their HALs are declared for this stack's lifetime (servicemanager reads the manifests once)
     std::vector<ProviderService> providers = providerServices(l, inst);
-    writeHostHals(l, inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
+    const bool hostHals = writeHostHals(l, inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
+    // An instance hwservicemanager (docs/HIDL.md) for the HIDL clients of old system apps. libhwbinder takes the real manager when
+    // /system/bin/hwservicemanager exists, so the file is made in the instance's own root only: an instance with host HALs keeps libhidl's stand-in,
+    // which forwards the listed names to the host (libhidl 0001-0003).
+    const bool hidl = !hostHals && staged(l, "libapklayer_hwservicemanager.so");
+    stageManifest(inst, l, hidl, "apklayer-hwservicemanager.xml", "aosp/hals/hwservicemanager/manifest.xml", "system");
+    if (hidl) {
+        makeDirs(join(join(inst.runtimeDir, "android-root"), "system/bin"));
+        writeFile(join(join(inst.runtimeDir, "android-root"), "system/bin/hwservicemanager"), "");
+    }
     for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
     if (deviceGraphics(l, inst)) undeclareOwnGraphics(inst, l);
     if (deviceDomain(l, inst, "media")) stageDeviceCodecXml(inst);
@@ -460,6 +469,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         int pid = spawn(s);
         running.push_back({"servicemanager", pid, pidfdOpen(pid), s});
     }
+    if (hidl) start("hwservicemanager", "libapklayer_hwservicemanager.so", {});  // HIDL clients wait for its hwservicemanager.ready
     start("permission", "libapklayer_permission.so", {});  // libbinder's checkPermission() asks this (no system_server PermissionController)
     if (!deviceGraphics(l, inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
     start("composer", "libapklayer_composer.so", {});

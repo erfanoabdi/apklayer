@@ -88,6 +88,20 @@ int apklayer_register_binder(JNIEnv *env, void *runtime)
         return -1;
     }
     fprintf(stderr, "[runtime] real android.os.Binder natives registered\n");
+    /* HwBinder, HwParcel and the rest of HIDL's Java side (old system apps call android.hardware.* HAL proxies; docs/HIDL.md): the framework's own
+     * registrations in AndroidRuntime's order. Optional: a runtime without them leaves HwBinder natives unlinked and nothing else changes. */
+    static const char *const hidl[] = {
+        "_ZN7android30register_android_os_HidlMemoryEP7_JNIEnv", "_ZN7android31register_android_os_HidlSupportEP7_JNIEnv",
+        "_ZN7android28register_android_os_HwBinderEP7_JNIEnv", "_ZN7android26register_android_os_HwBlobEP7_JNIEnv",
+        "_ZN7android28register_android_os_HwParcelEP7_JNIEnv", "_ZN7android34register_android_os_HwRemoteBinderEP7_JNIEnv",
+        "_ZN7android32register_android_os_NativeHandleEP7_JNIEnv"};
+    for (size_t i = 0; i < sizeof hidl / sizeof *hidl; i++) {
+        int (*hreg)(JNIEnv *) = bionic_dlsym(runtime, hidl[i]);
+        if (hreg && (hreg(env) < 0 || (*env)->ExceptionCheck(env))) {
+            fprintf(stderr, "[runtime] cannot register %s\n", hidl[i]);
+            if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        }
+    }
     return 0;
 }
 

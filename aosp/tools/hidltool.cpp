@@ -4,6 +4,7 @@
 //   atrace [INSTANCE]   IAtraceDevice@1.0 (the test HAL: a small HIDL interface still in the tree): its categories, enableCategories
 //   cameras [INSTANCE]  ICameraProvider@2.4 (default instance internal/0): the camera ids (getCameraIdList only, nothing opened)
 //   codecs [INSTANCE]   media.c2@1.0 IComponentStore (default "default"): the component names (listComponents only)
+//   manager             the instance's own hwservicemanager (libapklayer_hwservicemanager, docs/HIDL.md): getTransport and list of its own entry
 // The client commands find the HAL like any HIDL client (IFoo::getService); libhidl asks the host for names in host_hals.conf.
 #include <android/hardware/camera/provider/2.4/ICameraProvider.h>
 #include <android/hardware/media/c2/1.0/IComponentStore.h>
@@ -11,6 +12,7 @@
 #include <android/hidl/manager/1.0/IServiceManager.h>
 #include <hidl/HidlBinderSupport.h>
 #include <hidl/HidlTransportSupport.h>
+#include <hidl/ServiceManagement.h>
 #include <hwbinder/Binder.h>
 #include <hwbinder/IPCThreadState.h>
 #include <hwbinder/ProcessState.h>
@@ -114,6 +116,19 @@ extern "C" int main(int argc, char** argv) {
         printf("codecs: %zu\n", n);
         return r.isOk() && n > 0 ? 0 : 1;
     }
-    fprintf(stderr, "usage: hidltool device | atrace [INSTANCE] | cameras [INSTANCE] | codecs [INSTANCE]\n");
+    if (!strcmp(cmd, "manager")) {
+        const std::string self = "android.hidl.manager@1.0::IServiceManager";
+        sp<IServiceManager> sm = android::hardware::defaultServiceManager();
+        if (sm == nullptr) { printf("manager: none\n"); return 1; }
+        Return<IServiceManager::Transport> transport = sm->getTransport(self, "default");
+        bool listed = false;
+        Return<void> r = sm->list([&](const hidl_vec<hidl_string>& names) {
+            for (const auto& n : names) listed |= std::string(n) == self + "/default";
+        });
+        bool hwbinder = transport.isOk() && transport == IServiceManager::Transport::HWBINDER;
+        printf("manager: transport %s, listed %d\n", hwbinder ? "hwbinder" : "other", listed);
+        return r.isOk() && hwbinder && listed ? 0 : 1;
+    }
+    fprintf(stderr, "usage: hidltool device | atrace [INSTANCE] | cameras [INSTANCE] | codecs [INSTANCE] | manager\n");
     return 2;
 }

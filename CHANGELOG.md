@@ -4,6 +4,9 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: HIDL libraries for old system apps (HwBinder JNI, an instance hwservicemanager)
+- Build log (arm64, `gsi_arm64 userdebug`, incremental, under `flock -n ~/los24-build.lock`): `m libapklayer_hwservicemanager libapklayer_hidltool`. Why: no module runs hwservicemanager on bionic_translation (the tree has the binary only; loaders take libraries); `libapklayer_hwservicemanager` is system/hwservicemanager's sources as a library (patches/aosp/system/hwservicemanager 0001, allow-all AccessControl in aosp/hals/hwservicemanager) and `hidltool manager` is its native check. A new module: soong regenerates its graph once. Design and state: docs/HIDL.md.
+
 ## 2026-11-15: binder route spins for the answer (client side of the busy-poll)
 - bridge/native/binder_route.c: after a BINDER_WRITE_READ that wrote something (not O_NONBLOCK fds), the thread polls its socket for up to 60 us before the blocking read sleeps (binderd already spins the same way), so the reply's wakeup is skipped. Idle threads cost nothing (no write, no spin). Own tree ~/apklayer-binspin on UTM, `hello-binder-client` BENCH, 3 runs each: two-way median 26/26/26 us (was 32 to 42; 42 with binderd's spin only), oneway 10 us each (was 33 to 36). SurfaceFlinger per frame (glbench window-novsync clear): 1636/2007 fps with, 1836/1795 without: no difference (a frame is GPU/vsync-bound; vsync mode 60 fps either way). Groups binder, services, hub-services, audio-aidl, audio-track, audio-system, native-audio pass. Not done: futex doorbells (the sockets' wakeups are what is left; the spin already removes them on the hot path).
 ## 2026-11-15: x86 PC system-apps downloads and input ime-insets
