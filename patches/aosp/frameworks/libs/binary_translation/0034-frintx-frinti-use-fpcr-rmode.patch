@@ -1,0 +1,46 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: scalar FRINTX/FRINTI follow FPCR.RMode
+
+FPCR.RMode is mirrored into MXCSR.RC by the interpreter (msr fpcr), and the vector FRINTX/FRINTI already used MXCSR. The scalar forms in the lite and heavy
+translators used a fixed RNE ROUND immediate, so lrint/rint (frintx) ignored the rounding mode set by fesetround. They now use the MXCSR immediates (4, and 12 for
+FRINTI, which does not signal inexact). Module libberberis_arm64.
+
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -4890,8 +4896,8 @@ void HeavyOptimizerFrontend::FpDataProc1(const Decoder::FpDataProc1Args& args) {
+       case 0b001001: round_imm = int8_t{0x02}; break;  // FRINTP (toward +inf)
+       case 0b001010: round_imm = int8_t{0x01}; break;  // FRINTM (toward -inf)
+       case 0b001011: round_imm = int8_t{0x03}; break;  // FRINTZ (toward zero)
+-      case 0b001110: round_imm = int8_t{0x00}; break;  // FRINTX (FPCR; RNE)
+-      case 0b001111: round_imm = int8_t{0x08}; break;  // FRINTI (SAE+RNE)
++      case 0b001110: round_imm = int8_t{0x04}; break;  // FRINTX (apklayer patch 0034: MXCSR.RC, set from FPCR.RMode)
++      case 0b001111: round_imm = int8_t{0x0c}; break;  // FRINTI (apklayer patch 0034)
+       default: is_frint = false; break;
+     }
+     if (is_frint) {
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
+@@ -165,8 +165,8 @@
+         case 0b001001: round_imm = 0x02; break;     // FRINTP
+         case 0b001010: round_imm = 0x01; break;     // FRINTM
+         case 0b001011: round_imm = 0x03; break;     // FRINTZ
+-        case 0b001110: round_imm = 0x00; break;     // FRINTX
+-        case 0b001111: round_imm = 0x08; break;     // FRINTI
++        case 0b001110: round_imm = 0x04; break;     // FRINTX (apklayer patch 0034: MXCSR.RC, set from FPCR.RMode)
++        case 0b001111: round_imm = 0x0c; break;     // FRINTI (apklayer patch 0034)
+         default:
+           // Unknown FP16 unary opcode -> interpreter.
+           success_ = false;
+@@ -439,8 +439,8 @@
+       case 0b001001: round_imm = 0x02; break;     // FRINTP
+       case 0b001010: round_imm = 0x01; break;     // FRINTM
+       case 0b001011: round_imm = 0x03; break;     // FRINTZ
+-      case 0b001110: round_imm = 0x00; break;     // FRINTX
+-      case 0b001111: round_imm = 0x08; break;     // FRINTI
++      case 0b001110: round_imm = 0x04; break;     // FRINTX (apklayer patch 0034: MXCSR.RC, set from FPCR.RMode)
++      case 0b001111: round_imm = 0x0c; break;     // FRINTI (apklayer patch 0034)
+       default:
+         // Unknown FP unary opcode -> interpreter.
+         success_ = false;
