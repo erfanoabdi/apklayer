@@ -12,7 +12,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- UTM cold start has silent gaps of 3-6 s with idle CPU after "hub registered" (around `HostProviders`/`HostLocation`): `input` and `identity-matrix` fail 3 of 3 runs there, also at commit 52787c75.
 - The app log cap (256 MB, `APKLAYER_APP_LOG_CAP`) is not strict: a few lines from a writer other than the launcher's pipe arrive after the cap note.
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86 with a profile lacking the test prefs: the Gecko parent aborts ~45 s in (Breakpad hides the first fault; a spare JVM ends in `pthread_join` SEGV at 0x8; guest `libmegazord` double free is quarantined). `debug.apklayer.log` is not the cause.
@@ -64,6 +63,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - JDK 25: flatpak still names JDK 21; findJava prefers an installed 21 over 25.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
+- Cold hub boot takes 5-10 s when the shared data dir holds ~146 packages (`LIST_PACKAGES` + `GET_PACKAGE` registration): consider lazy registration.
 - Cold-start costs: Hyphenator `nInit`; `JNI_OnLoad` ~150 ms (eager libraries); the keystore step waits 1.3-4.4 s for the hub's gatekeeper enrollment on every cold start (async would let an early `isDeviceSecure()` see false).
 - SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
 - A sound server started later is used only from the next stack start.
