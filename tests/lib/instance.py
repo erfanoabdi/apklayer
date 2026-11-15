@@ -195,6 +195,16 @@ if __name__ == '__main__':  # for shell tests: python3 tests/lib/instance.py sto
 _libc = ctypes.CDLL(None, use_errno=True)
 
 
+def probe_dir(data):
+    """(host path, name in the app) of the folder a test shares with an app's shell: the app's home (~) without the sandbox; with APKLAYER_SANDBOX=1 the
+    app's data is its own uid's (0700, the user can neither read nor write it), so the instance's shared storage, which every app and the user may use."""
+    if ENV.get('APKLAYER_SANDBOX') != '1': return data / 'app/files/home', '~'
+    shared = data.parent.parent / 'storage/emulated/0/apklayer-probe'
+    shared.mkdir(exist_ok=True)
+    shared.chmod(0o777)
+    return shared, '/sdcard/apklayer-probe'
+
+
 def wait_file(path, needle, seconds):
     """Block on inotify (no polling) until the file contains the needle; returns the text."""
     fd = _libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)

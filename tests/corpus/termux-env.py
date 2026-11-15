@@ -20,8 +20,8 @@ out.mkdir(parents=True, exist_ok=True)
 info = subprocess.check_output(['bin/apklayer', 'info', PKG], env=instance.ENV, text=True)
 data = Path(dict(line.split('\t', 1) for line in info.splitlines() if '\t' in line)['dataDir'])
 assert '/%s/app-data/' % instance.INSTANCE in str(data), data
-home = data / 'app/files/home'
-assert (data / 'app/files/usr/bin/bash').exists(), 'Termux is not bootstrapped in ' + str(data)
+home, P = instance.probe_dir(data)  # the folder shared with the shell (the sandbox's data is its own uid's: the group boots Termux once), and its name there
+assert instance.ENV.get('APKLAYER_SANDBOX') == '1' or (data / 'app/files/usr/bin/bash').exists(), 'Termux is not bootstrapped in ' + str(data)
 probe, result = home / 'envprobe.sh', home / 'envprobe.txt'
 result.unlink(missing_ok=True)
 probe.write_text('''{
@@ -33,8 +33,8 @@ echo "== child: /system/bin/sh -c env"; /system/bin/sh -c env | sort
 echo "== grandchild: sh -c 'sh -c env'"; sh -c 'sh -c env' | sort
 echo "== grandchild: /system/bin/sh -c '/system/bin/sh -c env'"; /system/bin/sh -c '/system/bin/sh -c env' | sort
 echo "== grandchild: /system/bin/sh -c \\$PREFIX/bin/env"; /system/bin/sh -c "$PREFIX/bin/env" | sort
-} > ~/envprobe.txt 2>&1; echo PROBE_DONE >> ~/envprobe.txt
-''')
+} > @P@/envprobe.txt 2>&1; echo PROBE_DONE >> @P@/envprobe.txt
+'''.replace('@P@', P))
 
 env = dict(instance.ENV, APKLAYER_JOPTS='-Dapklayer.runms=90000')
 shell = instance.STATE / 'shell.log'
@@ -46,7 +46,7 @@ try:
         process = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=log, stderr=subprocess.STDOUT)
         subprocess.run(['python3', 'tests/corpus/first-frame.py', str(shell), '0', '60', '1', '2'], check=True)
         # text through Termux's input connection: its key path drops punctuation (key events of - = ; . / ~ type nothing, 2026-11-13)
-        instance.inject(PKG, 'focus', 'text:export PROBE_X=%s; . ~/envprobe.sh' % VALUE, 'key:28')
+        instance.inject(PKG, 'focus', 'text:export PROBE_X=%s; . %s/envprobe.sh' % (VALUE, P), 'key:28')
         try: text = instance.wait_file(result, 'PROBE_DONE', 60)
         finally: instance.capture('termux-env', PKG)  # the terminal as typed into (also when the probe never ran)
 finally:

@@ -196,7 +196,8 @@ void apply(const std::vector<Step>& steps) {
     for (const Step& s : steps) {
         if (s.kind == Step::Tmpfs) {
             makeDirs(s.path);
-            if (mount("tmpfs", s.path.c_str(), "tmpfs", MS_NOSUID | MS_NODEV, "mode=0755") != 0) die("cannot hide " + s.path + ": " + strerror(errno));
+            std::string options = s.owner == (uid_t)-1 ? "mode=0755" : "mode=0755,uid=" + std::to_string(s.owner) + ",gid=" + std::to_string(s.owner);
+            if (mount("tmpfs", s.path.c_str(), "tmpfs", MS_NOSUID | MS_NODEV, options.c_str()) != 0) die("cannot hide " + s.path + ": " + strerror(errno));
         } else if (s.kind == Step::Bind) {
             makeMountPoint(s.path, s.file);
             if (move_mount(s.tree, "", AT_FDCWD, s.path.c_str(), MOVE_MOUNT_F_EMPTY_PATH) != 0) die("cannot mount " + s.path + " in the sandbox: " + strerror(errno));
@@ -320,7 +321,7 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     // Android's /data as an app sees it: nothing but its own (above) and what the system exposes (WebView's command line, the HAL list); a system
     // app (SettingsProvider: the system uid on Android) also /data/system
     std::string androidData = realPath(inst.dataDir);
-    steps.push_back({Step::Tmpfs, androidData});
+    steps.push_back({Step::Tmpfs, androidData, -1, false, isolated ? (uid_t)-1 : uid});  // the app's own: its path layer makes /data/data and /data/user/0 in it (paths.c apklayer_map_own_data; Termux's `mkdir -p /data/data/...`)
     for (const char* shown : {"local/tmp", "apklayer"})
         if (isDir(join(androidData, shown))) bind(join(androidData, shown), join(androidData, shown), false);
     if (property(join(appDir(l, package), "info.properties"), "system") == "true") bind(join(androidData, "system"), join(androidData, "system"), true);

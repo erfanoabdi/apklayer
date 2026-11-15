@@ -18,13 +18,13 @@ out.mkdir(parents=True, exist_ok=True)
 info = subprocess.check_output(['bin/apklayer', 'info', PKG], env=instance.ENV, text=True)
 data = Path(dict(line.split('\t', 1) for line in info.splitlines() if '\t' in line)['dataDir'])
 assert '/%s/app-data/' % instance.INSTANCE in str(data), data
-home = data / 'app/files/home'
-assert (data / 'app/files/usr/bin/bash').exists(), 'Termux is not bootstrapped in ' + str(data)
+home, P = instance.probe_dir(data)  # the folder shared with the shell (the sandbox's data is its own uid's: the group boots Termux once), and its name there
+assert instance.ENV.get('APKLAYER_SANDBOX') == '1' or (data / 'app/files/usr/bin/bash').exists(), 'Termux is not bootstrapped in ' + str(data)
 result = home / 'exec-probe.txt'
 result.unlink(missing_ok=True)
-line = ("/data/data/com.termux/files/usr/bin/missing-cmd; echo A1 >> ~/exec-probe.txt; "
-        "printf '#!/missing/interpreter\\necho hi\\n' > ~/bad.sh; chmod +x ~/bad.sh; ./bad.sh; echo A2 >> ~/exec-probe.txt; "
-        "sh -c 'exec /missing/cmd'; echo A3 >> ~/exec-probe.txt; echo DONE >> ~/exec-probe.txt")
+line = ("/data/data/com.termux/files/usr/bin/missing-cmd; echo A1 >> %s/exec-probe.txt; "
+        "printf '#!/missing/interpreter\\necho hi\\n' > ~/bad.sh; chmod +x ~/bad.sh; ./bad.sh; echo A2 >> %s/exec-probe.txt; "
+        "sh -c 'exec /missing/cmd'; echo A3 >> %s/exec-probe.txt; echo DONE >> %s/exec-probe.txt") % (P, P, P, P)
 env = dict(instance.ENV, APKLAYER_JOPTS='-Dapklayer.runms=120000')
 shell = instance.STATE / 'shell.log'
 instance.assert_clean()
