@@ -3,8 +3,8 @@
 # Ubuntu Touch X23 (UBPORTS in tests/vm/local.conf, key auth), sfos the Sailfish Quintus (SAILFISH). Copies tools/halium's helpers, spare-race.py and the hello
 # apps (the apks of $APKLAYER_APKS, default the repo's build/; tests/apps/build.sh builds them) into a scratch directory, runs phone-checks.sh there in an
 # instance of its own (ptest), prints PASS/FAIL per group, removes what it made (scratch, instance) and, on ut, locks the phone again when it woke it.
-# Groups: hello newpipe providers hidl camera sensors race (both), rotate (sfos). ut: the screen is woken and the PIN typed (ut-unlock.sh; apps are stopped while the
-# phone is locked). sfos: unlock the phone by hand first (its lock code is not in local.conf; sf-unlock.sh takes it on stdin).
+# Groups: hello newpipe providers hidl camera sensors race (both), rotate (sfos). both: the screen is woken and the lock code typed (unlock.sh; apps are stopped while
+# the phone is locked; sfos needs SAILFISH_LOCK in local.conf).
 set -u
 os=${1:-}; shift || true
 [ -n "$os" ] && [ $# -gt 0 ] || { sed -n '2,8p' "$0" >&2; exit 2; }
@@ -21,15 +21,13 @@ apks=${APKLAYER_APKS:-$repo/build}
 ssh() { command ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" "$@"; }
 h=$repo/tools/halium
 ssh "mkdir -p $R/apks" || exit 2
-scp -q $h/phone-checks.sh $h/ut-shot.sh $h/hidl-list.sh $h/ut-unlock.sh $h/ut-uikeys.py $h/ut-uitap.py $repo/tests/vm/spare-race.py "$host:$R/"
+scp -q $h/phone-checks.sh $h/ut-shot.sh $h/hidl-list.sh $repo/tests/vm/spare-race.py "$host:$R/"
 for app in hello-input hello-camera hello-hardware; do [ -e "$apks/$app.apk" ] && scp -q "$apks/$app.apk" "$host:$R/apks/"; done
 woke=0
-if [ $os = ut ]; then
-    out=$(get UBPORTS_PASSWORD | ssh "bash $R/ut-unlock.sh on $R"); echo "ut-unlock: $out"
-    [ "$out" = unlocked ] && woke=1
-fi
+out=$($h/unlock.sh $os); echo "unlock: $out"
+[ "$out" = unlocked ] && woke=1
 ssh "A=$A R=$R bash $R/phone-checks.sh $os $*"; rc=$?
-[ $woke = 1 ] && echo "ut-lock: $(ssh "bash $R/ut-unlock.sh off $R")"
+[ $woke = 1 ] && [ $os = ut ] && echo "ut-lock: $($h/unlock.sh ut off)"
 ssh "APKLAYER_INSTANCE=ptest $A stop >/dev/null 2>&1; APKLAYER_INSTANCE=ptest $A instance remove ptest >/dev/null 2>&1; pkill -f '[-]-instance ptest ' >/dev/null 2>&1; rm -rf $R"  # a delayed app-spare outlives stop and blocks the next race run
 echo "phone-test $os: $([ $rc = 0 ] && echo PASS || echo FAIL)"
 exit $rc
