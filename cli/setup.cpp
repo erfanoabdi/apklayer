@@ -276,6 +276,11 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         std::string e = installFromIndex(fresh, instance, id, index, packages);
         step(id, e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
     };
+    // microG and Google's own share package names under other signers: Google's go first (with their data), as --gapps removes microG's
+    if (o.microg && gappsInstalled(fresh)) {
+        std::string e = removeGapps(fresh, instance, [](const std::string& detail) { step("microg", "running", detail); });
+        if (!e.empty()) { step("microg", "failed", e); o.microg = false; }
+    }
     if (o.microg) extra("microg", envOr("APKLAYER_MICROG_INDEX", "https://microg.org/fdroid/repo/index-v1.json"), {"com.google.android.gms", "com.android.vending"});
     if (o.gapps) {
         std::string e = installGapps(fresh, instance, [](const std::string& detail) { step("gapps", "running", detail); }, progress);

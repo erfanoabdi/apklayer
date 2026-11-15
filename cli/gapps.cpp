@@ -41,7 +41,32 @@ void copyConfig(const Layout& layout) {
     s.env = currentEnv();
     runAndWait(s);
 }
+// Google's XMLs out of the runtime's android-root again: the files <data>/apklayer/google-apps/etc holds (the runtime ships none of those names)
+void removeConfig(const Layout& layout, const std::string& from, const std::string& rel = "") {
+    for (const std::string& name : listDir(join(from, rel))) {
+        const std::string sub = rel.empty() ? name : join(rel, name);
+        if (isDir(join(from, sub))) removeConfig(layout, from, sub);
+        else unlink(join(join(layout.native, "android-root/system/etc"), sub).c_str());
+    }
+}
+// Google's packages, the reverse of the install order (the Services Framework last: the others use its provider)
+const char* const kPackages[] = {"com.google.android.syncadapters.calendar", "com.google.android.syncadapters.contacts", "com.android.vending",
+                                 "com.google.android.gms", "com.google.android.gsf"};
 }  // namespace
+
+bool gappsInstalled(const Layout& layout) { return exists(appDir(layout, "com.google.android.gsf")); }
+
+std::string removeGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report) {
+    for (const char* pkg : kPackages) {
+        if (!exists(appDir(layout, pkg))) continue;
+        report(std::string("Removing Google's ") + pkg);
+        if (cli(layout, {"--instance", instance.id, "uninstall", pkg}) != 0) return std::string("Could not remove Google's ") + pkg;
+    }
+    const std::string etc = join(gappsDir(layout), "etc");
+    if (isDir(etc)) removeConfig(layout, etc);
+    removeTree(gappsDir(layout));  // its allowlists and the installed build's marker: a later --gapps downloads again
+    return "";
+}
 
 // only while Google's own apps are installed (the Services Framework is theirs alone): after a removal a new runtime stays without them
 void applyGappsConfig(const Layout& layout) {
