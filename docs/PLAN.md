@@ -14,7 +14,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 ## Bugs
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
-- FCL: no new frame after a window resize (Vulkan game window). Not reproduced on Parallels (`tests/run resize-frame` passes); needs the game window on the x86 PC (`RESIZE_PKG` picks the app); suspect `bridge/shell/vsync.c`'s single shared frame callback.
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
@@ -55,25 +54,15 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
 - Hub ready is ~2.0 s with 148 packages; left: JVM main to Robolectric ready 0.8 s and the settings provider's `installProviders` 0.34 s.
 - `tests/lib/instance.wait_file` races with app-log rotation (exists, then read_text).
-- Cold start: an app with ~20 packages whose `Application.onCreate` takes ~2 s (not reproduced; needs such an app).
 - Composer GL context ~80 MB: measure on a phone while an app draws.
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
-- Fennec on x86: a guest `libmegazord` double free is quarantined (not a crash). A crash seen once at libxul+0x3e88716 in another PC tree did not reproduce on main (6 of 6 pass).
 - No translation cache across starts.
 - Telegram has no x86_64 FOSS APK to test.
-- The guest JVM finds the host's `libjsig`: watch for a later SIGSEGV handler.
 - Unity: `hpatchz`.
-
-## Runtime identity (nothing blocking)
-- Path-layer leftovers: `/data/local/tmp` stays writable for apps (Android: EACCES; mode 0111 broke `rm -rf` of an instance); `/proc/self/cwd/..` from the data dir shows the host parent (needs a textual rewrite in `paths.c`, the kernel resolves the symlink first); stat owner vs `/proc/self/status` Uid is mapped by bionic's libc and `raw_syscall.c`, not in glibc-level calls.
-- Modules: `dl_iterate_phdr` lists 285 of 320 (Waydroid's full module list is not in the repo; waydroid.txt is cut at 16 KB). Not loaded: libEGL/libGLESv*/libvulkan (libEGL stalled the app), ~30 libs not staged (libheif, libion, libbufferhub, libRS, HAL/aidl libs, libcgrouprc); ART libs and boot*.oat cannot exist. libc exports `bionic_*` names.
-- x86: (`HWCAP2` 0 is deliberate: matrix row 152), exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the x86 guest matches a real phone; arm64 native can read it: owner to decide whether to deny it for app uids).
-- Process attributes: main thread id; the property count is 421 (Waydroid's full list is not in the repo; some values are plausible, not verified).
-- Java: ArrayStoreException text, StackOverflow depth and main thread id 2 are JVM limits (`docs/ART-DEFERRED.md`).
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with the INSTALL.md checklist (the broker now runs `nvidia-modprobe` for missing nodes; only the argument mapping is tested).
@@ -91,7 +80,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 - Sailfish: libhybris in every Android process, a Chum/OBS repository, no text input in the manager.
 - Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
-- Server RDP: after a shell restart or a client of another size, re-run the monitor config (`tools/server/rdp-session/README.md`); nothing automates it.
 
 ## Manager
 - Apps installed before 2026-11-04 need a reinstall for permissions.
@@ -106,7 +94,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- Flaky, not reproduced: native-media AVC on Parallels (4/4 on UTM), audio-silent on the x86 PC (6/6): watch for a recurrence with its log.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
