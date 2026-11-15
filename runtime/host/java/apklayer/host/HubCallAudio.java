@@ -19,12 +19,15 @@ import java.util.concurrent.Executors;
  * listeners (ENDPOINT_CALL_AUDIO: OnModeChangedListener, OnCommunicationDeviceChangedListener); a mute change is ACTION_MICROPHONE_MUTE_CHANGED.
  */
 final class HubCallAudio {
-    private record Request(HubDirectory.Peer peer, int mode, AudioDeviceAttributes device, boolean privileged) {}
+    private record Request(HubDirectory.Peer peer, int mode, AudioDeviceAttributes device, boolean privileged, long since) {}
+    private static final long GRACE_MS = 6000, NATIVE_POLL_MS = 1000;  // AudioService.CHECK_MODE_FOR_UID_PERIOD_MS; how often a native stream's start or end is looked for
     private final List<Request> modes = new ArrayList<>(), routes = new ArrayList<>();  // oldest first
     private final HubPackages packages;
     private final HubDirectory directory;
     private final ExecutorService pushes = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "hub-call-audio"); t.setDaemon(true); return t; });  // in order, off the caller's lock
-    private final java.util.Set<Integer> playing = new java.util.HashSet<>();  // pids of the processes with a player or recorder started
+    private final java.util.Set<Integer> playing = new java.util.HashSet<>(), reporters = new java.util.HashSet<>();  // pids of the processes with a player or recorder started; of those that ever reported one
+    private final java.util.concurrent.ScheduledExecutorService timer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> { Thread t = new Thread(r, "hub-call-audio-timer"); t.setDaemon(true); return t; });
+    private boolean polling;
     private int appliedMode = AudioSystem.MODE_NORMAL, appliedOwner = -1;  // the owner's pid
     private AudioDeviceAttributes appliedDevice;
     private int strategy = -1;
@@ -41,15 +44,16 @@ final class HubCallAudio {
             return appliedMode;
         }
         modes.removeIf(request -> request.peer().pid() == peer.pid());
-        if (mode != AudioSystem.MODE_NORMAL) modes.add(new Request(peer, mode, null, privileged));
+        if (mode != AudioSystem.MODE_NORMAL) modes.add(new Request(peer, mode, null, privileged, System.nanoTime() / 1_000_000));
         apply(peer);
+        if (mode == AudioSystem.MODE_IN_COMMUNICATION) timer.schedule(this::recheck, GRACE_MS + 100, java.util.concurrent.TimeUnit.MILLISECONDS);  // the new requester's grace ends
         return appliedMode;
     }
 
     /** AudioDeviceBroker.setCommunicationDevice: {@code device} null clears this requester's choice. */
     synchronized void setCommunicationDevice(HubDirectory.Peer peer, AudioDeviceAttributes device) {
         routes.removeIf(request -> request.peer().pid() == peer.pid());
-        if (device != null) routes.add(new Request(peer, 0, device, false));
+        if (device != null) routes.add(new Request(peer, 0, device, false, 0));
         apply(peer);
     }
     synchronized AudioDeviceAttributes communicationDevice() { return appliedDevice; }
@@ -73,35 +77,56 @@ final class HubCallAudio {
 
     /** The caller's process has a player or recorder started, or none (PlayerBase/AudioRecord, ShadowHostPlayerBase): who owns the mode may change. */
     synchronized void activity(HubDirectory.Peer peer, boolean on) {
+        reporters.add(peer.pid());
         if (on ? playing.add(peer.pid()) : playing.remove(peer.pid())) apply(null);
     }
 
     synchronized void died(HubDirectory.Peer peer) {
         playing.remove(peer.pid());
+        reporters.remove(peer.pid());
         if (modes.removeIf(request -> request.peer().pid() == peer.pid()) | routes.removeIf(request -> request.peer().pid() == peer.pid())) apply(null);
     }
 
     /**
      * AudioService.getAudioModeOwnerHandler over the requests. Its activity (SetModeDeathHandler.isActive): privileged requesters, MODE_RINGTONE and
-     * MODE_CALL_SCREENING always; MODE_IN_COMMUNICATION while the requester plays or records, and the newest such requester wins. AudioService counts a
-     * new requester active for its first 6 s; here only the processes' reports count (activity).
-     * shortcut: native (AAudio/OpenSL) streams send no report, so with no reporting requester the oldest MODE_IN_COMMUNICATION one stays the owner
-     * (a lone native call app keeps its mode); upgrade with the policy's active tracks.
+     * MODE_CALL_SCREENING always; MODE_IN_COMMUNICATION while the requester plays or records (the processes' reports, activity) or in its first 6 s
+     * (GRACE_MS), and the newest such requester wins. A native (AAudio/OpenSL) stream sends no report: a requester whose process never reported counts
+     * as playing while the audio policy has a voice call stream or a voice communication capture active (it cannot say whose it is).
+     * shortcut: that policy answer is the instance's, not the process's, and is looked for every NATIVE_POLL_MS while it can matter (two or more
+     * communication requesters, one of them silent in reports); upgrade with the per-client playback configurations of the policy service.
+     * With no active requester the oldest MODE_IN_COMMUNICATION one stays the owner (a lone native call app keeps its mode).
      */
     private Request owner() {
         Request privileged = null, active = null, oldestCommunication = null, assistant = null;
+        long now = System.nanoTime() / 1_000_000;
         for (Request request : modes) {  // oldest first: a later one replaces an earlier one
             if (request.privileged() && request.mode() != AudioSystem.MODE_ASSISTANT_CONVERSATION) privileged = request;
-            else if (request.mode() == AudioSystem.MODE_IN_COMMUNICATION) { if (oldestCommunication == null) oldestCommunication = request; if (playing.contains(request.peer().pid())) active = request; }
+            else if (request.mode() == AudioSystem.MODE_IN_COMMUNICATION) {
+                if (oldestCommunication == null) oldestCommunication = request;
+                if (playing.contains(request.peer().pid()) || now - request.since() < GRACE_MS || (!reporters.contains(request.peer().pid()) && nativeActive())) active = request;
+            }
             else if (request.mode() == AudioSystem.MODE_RINGTONE || request.mode() == AudioSystem.MODE_CALL_SCREENING) active = request;
             else if (request.mode() == AudioSystem.MODE_ASSISTANT_CONVERSATION) assistant = request;
         }
         return privileged != null ? privileged : active != null ? active : oldestCommunication != null ? oldestCommunication : assistant;
     }
 
+    private Boolean nativeActive;  // the policy's answer within one owner() pass
+    private boolean nativeActive() {
+        if (nativeActive == null) {
+            NativeMedia.ensureInitialized();
+            nativeActive = AudioSystem.isStreamActive(AudioSystem.STREAM_VOICE_CALL, 0) || AudioSystem.isSourceActive(7);  // MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        }
+        return nativeActive;
+    }
+
+    private synchronized void recheck() { polling = false; apply(null); }
+
     /** Sets what the requests ask on the policy; a change goes to every app but {@code requester} (its own listeners run in its process). */
     private void apply(HubDirectory.Peer requester) {
+        nativeActive = null;
         Request owner = owner();
+        if (!polling && nativeAmbiguous()) { polling = true; timer.schedule(this::recheck, NATIVE_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS); }
         int mode = owner == null ? AudioSystem.MODE_NORMAL : owner.mode();
         boolean changed = false;
         int uid = owner == null ? android.os.Process.SYSTEM_UID : owner.peer().appUid();
@@ -127,6 +152,14 @@ final class HubCallAudio {
                 catch (IllegalStateException gone) { /* it ended meanwhile */ }
             }
         });
+    }
+
+    /** Two or more communication requesters, one of whose processes never reported a stream: a native stream's start or end may change the owner. */
+    private boolean nativeAmbiguous() {
+        int communication = 0;
+        boolean silent = false;
+        for (Request request : modes) if (request.mode() == AudioSystem.MODE_IN_COMMUNICATION) { communication++; silent |= !reporters.contains(request.peer().pid()); }
+        return communication >= 2 && silent;
     }
 
     /** AudioDeviceBroker.initRoutingStrategyIds: the strategy of STREAM_VOICE_CALL. */

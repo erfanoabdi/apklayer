@@ -1,0 +1,26 @@
+apklayer patch: ShadowView.performHapticFeedback(int) runs View's own code (ViewRootImpl, then the vibrator_manager's haptic feedback in HubVibrator)
+instead of only recording the constant and answering true: an app's View.performHapticFeedback reaches the vibrator HAL as on Android.
+Against external/robolectric 87aa52b08 (REVISION). Applied by runtime/meson.build onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowView.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowView.java
+@@ -891,6 +891,9 @@
+     void setOnTouchListener(View.OnTouchListener onTouchListener);
+ 
+     @Direct
++    boolean performHapticFeedback(int hapticFeedbackType);  // apklayer patch
++
++    @Direct
+     boolean post(Runnable action);
+ 
+     @Direct
+@@ -971,7 +974,7 @@
+   @Implementation
+   protected boolean performHapticFeedback(int hapticFeedbackType) {
+     hapticFeedbackPerformed = hapticFeedbackType;
+-    return true;
++    return reflector(ViewReflector.class, realView).performHapticFeedback(hapticFeedbackType);  // apklayer patch: the real view's, to the vibrator
+   }
+ 
+   @Implementation

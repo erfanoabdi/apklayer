@@ -16,6 +16,8 @@ import android.os.vibrator.IHapticGeneratorSessionCallback;
 import android.os.vibrator.IVibrationSessionCallback;
 import android.os.vibrator.PrebakedSegment;
 import android.os.vibrator.PrimitiveSegment;
+import android.os.vibrator.BasicPwleSegment;
+import android.os.vibrator.PwleSegment;
 import android.os.vibrator.StepSegment;
 import android.os.vibrator.VibrationEffectSegment;
 import java.util.function.BiPredicate;
@@ -37,6 +39,7 @@ final class HubVibrator extends IVibratorManagerService.Stub {
     private static final int CAP_AMPLITUDE_CONTROL = 4, CAP_COMPOSE_EFFECTS = 32, PRIMITIVES = 9;  // CompositePrimitive NOOP..LOW_TICK
 
     private final BiPredicate<Integer, String> holds;  // uid, permission
+    private static final int RAMP_STEP_MS = 20;
     private Thread playing;
 
     private HubVibrator(BiPredicate<Integer, String> holds) {
@@ -116,8 +119,7 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         player.start();
     }
 
-    // shortcut: step, primitive and prebaked segments only (createOneShot, createWaveform, startComposition, createPredefined); ramp (PWLE) segments are
-    // skipped (the HAL plays composePwle, nothing here asks it to), and a repeating waveform plays once
+    // shortcut: ramp (PWLE, PwleSegment and BasicPwleSegment) segments play as amplitude steps (the HAL's composePwle needs its frequency map), and a repeating waveform plays once
     private void play(VibrationEffect.Composed effect) {
         try {
             for (VibrationEffectSegment segment : effect.getSegments()) {
@@ -143,17 +145,10 @@ final class HubVibrator extends IVibratorManagerService.Stub {
                     Thread.sleep(primitive.getDelay() + hal(GET_PRIMITIVE_DURATION, ints(primitive.getPrimitiveId())));
                     continue;
                 }
+                if (segment instanceof PwleSegment pwle) { ramp(pwle.getStartAmplitude(), pwle.getEndAmplitude(), pwle.getDuration()); continue; }
+                if (segment instanceof BasicPwleSegment pwle) { ramp(pwle.getStartIntensity(), pwle.getEndIntensity(), pwle.getDuration()); continue; }
                 if (!(segment instanceof StepSegment step) || step.getDuration() <= 0) continue;
-                float amplitude = step.getAmplitude() == VibrationEffect.DEFAULT_AMPLITUDE ? 1f : step.getAmplitude();
-                if (amplitude > 0) {
-                    Parcel a = Parcel.obtain();
-                    a.writeFloat(amplitude);
-                    if ((hal(GET_CAPABILITIES, null) & CAP_AMPLITUDE_CONTROL) != 0) hal(SET_AMPLITUDE, a); else a.recycle();
-                    Parcel on = ints((int) step.getDuration());
-                    on.writeStrongBinder(null);  // no completion callback: this thread times the steps
-                    hal(ON, on);
-                } else hal(OFF, null);
-                Thread.sleep(step.getDuration());
+                step(step.getAmplitude() == VibrationEffect.DEFAULT_AMPLITUDE ? 1f : step.getAmplitude(), step.getDuration());
             }
             hal(OFF, null);
         } catch (InterruptedException cancelled) {
@@ -161,6 +156,27 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         } catch (RemoteException gone) {
             System.out.println("[apklayer-hub] vibrator: " + gone);
         }
+    }
+
+    /** A ramp (PWLE) as steps of RAMP_STEP_MS at the amplitude of each step's middle, as Android's RampToStepAdapter does where the HAL has no PWLE. */
+    private void ramp(float from, float to, long duration) throws RemoteException, InterruptedException {
+        for (long t = 0; t < duration; t += RAMP_STEP_MS) {
+            long ms = Math.min(RAMP_STEP_MS, duration - t);
+            step(from + (to - from) * (t + ms / 2f) / duration, ms);
+        }
+    }
+
+    /** One step on the HAL: on for {@code ms} at {@code amplitude} (0 is off, and without amplitude control a step is full), timed here. */
+    private void step(float amplitude, long ms) throws RemoteException, InterruptedException {
+        if (amplitude > 0) {
+            Parcel a = Parcel.obtain();
+            a.writeFloat(amplitude);
+            if ((hal(GET_CAPABILITIES, null) & CAP_AMPLITUDE_CONTROL) != 0) hal(SET_AMPLITUDE, a); else a.recycle();
+            Parcel on = ints((int) ms);
+            on.writeStrongBinder(null);  // no completion callback: this thread times the steps
+            hal(ON, on);
+        } else hal(OFF, null);
+        Thread.sleep(ms);
     }
 
     @Override public void cancelVibrate(int usageFilter, IBinder token) {
