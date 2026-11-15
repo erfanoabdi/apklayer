@@ -28,7 +28,8 @@ std::map<std::string, std::vector<std::string>> launches(const Layout& l, const 
         if (!cmd) continue;
         std::string pkg;
         const std::string key = "-Dapklayer.package=";
-        if (size_t at = cmd->find(key); at != std::string::npos) pkg = cmd->substr(at + key.size(), cmd->find('\0', at) - at - key.size());
+        if (pids.size() >= 3 && !pids[2].empty()) pkg = pids[2].substr(0, pids[2].find(':'));  // run.cpp's record: the process the launch runs (a spare's JVM is unnamed at first)
+        else if (size_t at = cmd->find(key); at != std::string::npos) pkg = cmd->substr(at + key.size(), cmd->find('\0', at) - at - key.size());
         else pkg = cmd->substr(0, cmd->find_first_of(std::string(":\0", 2)));
         if (!pkg.empty() && isDir(appDir(l, pkg))) byPackage[pkg].push_back(f);
     }

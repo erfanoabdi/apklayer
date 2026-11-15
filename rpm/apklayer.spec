@@ -121,6 +121,7 @@ update-mime-database %{_datadir}/mime >/dev/null 2>&1 || :
 %{_datadir}/apklayer
 %{_datadir}/icons/hicolor/*/apps/apklayer.*
 %{_datadir}/desktop-directories/apklayer.directory
+%{_datadir}/polkit-1/actions/org.apklayer.vpn.policy
 %config(noreplace) %{_sysconfdir}/xdg/menus/applications-merged/apklayer.menu
 %{_unitdir}/apklayer-binder.service
 %config(noreplace) %{_sysconfdir}/apklayer/instances
