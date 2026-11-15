@@ -7,7 +7,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - GitHub releases only (debs, Sailfish RPM, Ubuntu Touch click, Flatpak bundles).
 - No per-app hacks; the corpus (`tests/corpus/`) measures compatibility. CTS last.
 - Hardware only through Android's own interfaces (AIDL/HIDL HALs, framework classes).
-- Halium: device HALs only for vibrator, camera, media; never sensors or GNSS.
+- Halium: sensors come through sensorfw, location through GeoClue (Sailfish) or Lomiri's location service; vibrator, camera and media use the device HALs.
 - No cached app processes; always-on only for push/background.
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 

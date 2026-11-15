@@ -1,8 +1,7 @@
 # Halium devices: survey and the host binder context
 
-Plan: `docs/history/PLAN-2026-11-10.md` "Plan: hardware providers" (steps d and e). Owner's rule (2026-11-04): through the host context only the
-vibrator, camera and media (codecs) HALs; never the sensors or GNSS HAL (one client each, held by sensorfw and the OS's location
-service; on Halium those come through the OS services). Listing services (lshal, service list) is fine.
+Plan: `docs/history/PLAN-2026-11-10.md` "Plan: hardware providers" (steps d and e). On Halium the sensors come through sensorfw and location through GeoClue (Sailfish) or Lomiri's location service; the host binder context carries the vibrator,
+camera and media (codecs) HALs. Listing services (lshal, service list) is fine.
 
 ## The owner's phones (surveyed 2026-11-04 and 2026-11-07, read only)
 | | Ubuntu Touch 24.04 (`phablet@192.168.41.61`) | Sailfish OS 5.1.0.43 (`defaultuser@192.168.41.62`, retired 2026-11-07) | Sailfish OS 5.0.0.62 (`defaultuser@192.168.41.153`, surveyed 2026-11-07) |
