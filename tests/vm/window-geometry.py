@@ -96,9 +96,9 @@ try:
                     landscape = configures()[-1]
                     assert landscape[0] > landscape[1], 'the landscape request did not reshape the window: %s' % (landscape,)
                     # turned, the window fills 85% of the work area as the first (portrait) one does: grown, not only shrunk (bridge/shell/geometry.c fit_size)
-                    # fit_size reserves DECOR_H also for a compositor's own bar
+                    # the bar is ours (DECOR_H) or the compositor's (0): fit_size reserves only our own
                     bw, bh = (int(n) for n in re.search(r'first configure: display \d+x\d+, bounds (\d+)x(\d+)', (instance.STATE / 'shell.log').read_text(errors='replace')).groups())
-                    assert bw <= 0 or abs(landscape[0] - bw * 85 // 100) <= 1 or abs(landscape[1] - (bh * 85 // 100 - DECOR_H)) <= 1, \
+                    assert bw <= 0 or abs(landscape[0] - bw * 85 // 100) <= 1 or abs(landscape[1] - (bh * 85 // 100 - bar_h)) <= 1, \
                         'the landscape window %s does not fill 85%% of the %dx%d work area' % (landscape[:2], bw, bh)
                     expect(*landscape[:3])
                     count = len(configures())

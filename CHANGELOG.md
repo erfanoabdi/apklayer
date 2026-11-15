@@ -4,6 +4,11 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: first window under server-side decorations, manager test fixes
+- `bridge/shell/geometry.c` `fit_size`: the 46 px (`DECOR_H`) is reserved only where the bar is ours (`!w->ssd`); under server-side decorations the compositor's bar is outside the window geometry, so the first window gets the full 85% of the work area (588 px, not 542). `tests/vm/window-geometry.py` uses its `bar_h` (0 under ssd) in the landscape check; group `decoration` (sway) asserts the first window fills 85% of the bounds.
+- Manager `Properties` navbar row (`navbar auto|on|off`) is in the sources and compiles in the host build (built on the UTM VM); `manager/tests/ui.sh` now clicks On and checks `apklayer settings`.
+- `manager/tests/ui-updater.sh`: cause of the failure: at 400x840 the first-run page's Skip/Set up buttons lie below the fold (no label found; clicks ran 100 ms after show); its first-run clicks now use 400x1400. It also needs an installed package's CLI (`setup` refuses a source tree), so it skips unless `APKLAYER_CLI` is set.
+- Checked on the UTM VM: window-geometry, decoration PASS; ui.sh up to the instance step. Not run: kde-window (no KWin on the VM), ui-updater end to end.
 ## 2026-11-15: a dev tree's CLI no longer relinks an installed runtime
 - A meson-installed dev tree's CLI without `APKLAYER_NATIVE` ran `setup-runtime.sh` on the shared `~/.local/share/apklayer/runtime/<ver>` and relinked it into the dev tree; deleting the tree left the tester PC's runtime dangling. `tools/release/setup-runtime.sh` now refuses (exit 1, says so and names `APKLAYER_NATIVE`) when the runtime's `native-runtime.jar` link resolves into a different package half; a dangling owner is repaired as before, an update of the same package (same half path) is unchanged. Group `setup-runtime-foreign` (tests/vm/setup-runtime-foreign.sh). docs/RELEASES.md.
 - Checked: the group's script on the UTM VM (PASS). Not run: a full CLI run from a dev tree on a real installed runtime.

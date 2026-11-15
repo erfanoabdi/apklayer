@@ -3,6 +3,7 @@
 gets the compositor's title bar and none of ours: the shell says "server-side decorations" and configures the content with a 0 px bar. GNOME
 (no such global) keeps ours: gpu-window, window-geometry. Sway when it is installed, else the session's compositor (also APKLY_DECORATION=session:
 KDE Plasma); the session must then offer zxdg_decoration_manager_v1 (wayland-info), or the test says it cannot run."""
+import re
 import os
 import shutil
 import subprocess
@@ -40,6 +41,10 @@ try:
     assert 'server-side decorations' in shell, 'no server-side decorations:\n' + shell[-2000:] + out.stdout[-1500:] + (sway_log.read_text(errors='replace')[-1500:] if sway_log else '')
     configures = [l for l in shell.splitlines() if 'configure content' in l]
     assert configures and all('title bar 0 logical' in l for l in configures), 'our title bar is still there:\n' + '\n'.join(configures)
+    bounds = re.search(r'first configure: display \d+x\d+, bounds (\d+)x(\d+)', shell)  # the first window fills 85% of the work area, no 46 px bar taken off (geometry.c fit_size)
+    if bounds and int(bounds[1]) > 0:
+        cw, ch = (int(n) for n in re.search(r'configure content (\d+)x(\d+)', configures[0]).groups())
+        assert abs(cw - int(bounds[1]) * 85 // 100) <= 1 or abs(ch - int(bounds[2]) * 85 // 100) <= 1, 'first window %dx%d in %sx%s bounds' % (cw, ch, bounds[1], bounds[2])
     assert 'dmabuf frame 2 ' in shell, 'the app drew no GPU frames'
     print('PASS server-side decorations under %s: %s' % ('the session compositor' if session else 'sway', configures[-1].split('configure ', 1)[1]), flush=True)
 finally:
