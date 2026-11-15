@@ -87,7 +87,8 @@ if host_machine.cpu_family() == 'aarch64'
   if loader != ''
     install_symlink('linker64', pointing_to: loader, install_dir: runtime_apex / 'bin')
   endif
-  if android_libs != '' and fs.exists(android_libs / 'libjavacore.so')
-    install_symlink('libjavacore.so', pointing_to: android_libs / 'libjavacore.so', install_dir: native_dir / 'android-root/apex/com.android.art/lib64')
+  # relative, into the install's own android-libs link; a package without the Android half (-Dandroid_runtime=false) has none: setup-runtime.sh links it
+  if get_option('android_runtime') and android_libs != '' and fs.exists(android_libs / 'libjavacore.so')
+    install_symlink('libjavacore.so', pointing_to: '../../../../android-libs/libjavacore.so', install_dir: native_dir / 'android-root/apex/com.android.art/lib64')
   endif
 endif

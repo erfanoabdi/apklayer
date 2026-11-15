@@ -34,6 +34,8 @@ override_dh_auto_install:
 	mv debian/apklayer/usr/include debian/apklayer-dev/usr/
 	mv debian/apklayer/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig debian/apklayer-dev/usr/lib/$(DEB_HOST_MULTIARCH)/
 	rmdir debian/apklayer/usr/lib/$(DEB_HOST_MULTIARCH)
+	# no link of the package may dangle or point into this build root (the RPM's libjavacore.so did)
+	APKLAYER_BUILD_ROOT=$(CURDIR) sh tools/check-runtime-links.sh debian/apklayer
 
 override_dh_auto_test:
 
