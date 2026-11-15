@@ -26,6 +26,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <map>
+#include <vector>
 #include <string>
 #include <condition_variable>
 #include <mutex>
@@ -85,10 +86,51 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         t.setDisplaySize(mToken, mWidth, mHeight);
         // apklayer patch: a turned app (a phone showing an orientation it is not held in) is composed rotated into the window's shape, as a
         // phone's display rotates (WindowManager's setDisplayProjection): the layer stack has the app's (swapped) size
-        Rect stack = mTurn ? Rect(mHeight, mWidth) : Rect(mWidth, mHeight);
-        t.setDisplayProjection(mToken, mTurn == 90 ? ui::ROTATION_90 : mTurn == 270 ? ui::ROTATION_270 : ui::ROTATION_0, stack, stack);
-        if (mBar != nullptr) t.setPosition(mBar, 0, static_cast<float>(mHeight) - mBarH);  // the bar stays at the bottom edge
+        // a turned stack shows the bar's strip too, on the side that is the panel's bottom: after the app (90, app x = panel y) or before it (270,
+        // the stack's rectangle starts a bar's thickness left of 0); the app has the stack less the bar
+        int32_t bar = mBarShown ? mBarH : 0, left = mTurn == 270 ? -bar : 0;
+        Rect stack = mTurn ? Rect(left, 0, left + static_cast<int32_t>(mHeight), static_cast<int32_t>(mWidth)) : Rect(mWidth, mHeight);
+        Rect frame = mTurn ? Rect(mHeight, mWidth) : Rect(mWidth, mHeight);
+        t.setDisplayProjection(mToken, mTurn == 90 ? ui::ROTATION_90 : mTurn == 270 ? ui::ROTATION_270 : ui::ROTATION_0, stack, frame);
+        if (mBar != nullptr) {
+            if (mBarGb != nullptr) t.setBuffer(mBar, buildBar());  // the strip's turn changed
+            placeBar(t);
+        }
         t.apply(/*synchronous=*/true);
+    }
+
+    // where the bar's layer sits in the layer stack: the bottom edge, or turned the side of the panel's bottom
+    void placeBar(SurfaceComposerClient::Transaction& t) {
+        float x = 0, y = static_cast<float>(mHeight) - mBarH;
+        if (mTurn == 90) { x = static_cast<float>(mHeight) - mBarH; y = 0; }
+        else if (mTurn == 270) { x = -static_cast<float>(mBarH); y = 0; }
+        t.setPosition(mBar, x, y);
+    }
+
+    // the bar's pixels (kept as the shell sent them: the panel's frame) as a buffer of the stack's frame: turned 90 the stack is turned clockwise
+    // onto the panel, so the strip is turned back counter-clockwise (R(x, y) = B(W - 1 - y, x)); 270 the other way (R(x, y) = B(y, h - 1 - x))
+    sp<GraphicBuffer> buildBar() {
+        int32_t w = mBarImgW, h = mBarH, rw = mTurn ? h : w, rh = mTurn ? w : h;
+        auto gb = sp<GraphicBuffer>::make(rw, rh, PIXEL_FORMAT_RGBA_8888, 1,
+                                          GraphicBuffer::USAGE_SW_WRITE_OFTEN | GraphicBuffer::USAGE_HW_TEXTURE | GraphicBuffer::USAGE_HW_COMPOSER,
+                                          "apklayer-navbar");
+        void* dst = nullptr;
+        if (gb->initCheck() != OK || gb->lock(GraphicBuffer::USAGE_SW_WRITE_OFTEN, &dst) != OK) {
+            ALOGE("navigation bar: no %dx%d buffer", rw, rh);
+            return nullptr;
+        }
+        for (int32_t y = 0; y < rh; y++) {  // XRGB8888 (bytes B G R X) -> RGBA_8888 (R G B A), opaque
+            uint8_t* d = static_cast<uint8_t*>(dst) + static_cast<size_t>(y) * gb->getStride() * 4;
+            for (int32_t x = 0; x < rw; x++, d += 4) {
+                int32_t bx = x, by = y;
+                if (mTurn == 90) { bx = w - 1 - y; by = x; }
+                else if (mTurn == 270) { bx = y; by = h - 1 - x; }
+                const uint8_t* s = mBarPx.data() + (static_cast<size_t>(by) * w + bx) * 4;
+                d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = 0xff;
+            }
+        }
+        gb->unlock();
+        return gb;
     }
 
     // The shell's navigation bar (fd: w x h XRGB8888, -1: hidden): copied into a buffer of a layer over the app's, at the bottom edge.
@@ -99,28 +141,22 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         if (fd < 0 || w <= 0 || h <= 0) {
             if (fd >= 0) close(fd);
             if (self->mBar != nullptr) t.hide(self->mBar).apply();
+            if (self->mBarShown) { self->mBarShown = false; if (self->mTurn == 270) self->applyDisplay(); }
             return;
         }
         size_t len = static_cast<size_t>(w) * h * 4;
         void* px = mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
         close(fd);
         if (px == MAP_FAILED) return;
-        auto gb = sp<GraphicBuffer>::make(w, h, PIXEL_FORMAT_RGBA_8888, 1,
-                                          GraphicBuffer::USAGE_SW_WRITE_OFTEN | GraphicBuffer::USAGE_HW_TEXTURE | GraphicBuffer::USAGE_HW_COMPOSER,
-                                          "apklayer-navbar");
-        void* dst = nullptr;
-        if (gb->initCheck() != OK || gb->lock(GraphicBuffer::USAGE_SW_WRITE_OFTEN, &dst) != OK) {
-            ALOGE("navigation bar: no %dx%d buffer", w, h);
-            munmap(px, len);
-            return;
-        }
-        for (int32_t y = 0; y < h; y++) {  // XRGB8888 (bytes B G R X) -> RGBA_8888 (R G B A), opaque
-            const uint8_t* s = static_cast<const uint8_t*>(px) + static_cast<size_t>(y) * w * 4;
-            uint8_t* d = static_cast<uint8_t*>(dst) + static_cast<size_t>(y) * gb->getStride() * 4;
-            for (int32_t x = 0; x < w; x++, s += 4, d += 4) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = 0xff; }
-        }
-        gb->unlock();
+        self->mBarPx.assign(static_cast<const uint8_t*>(px), static_cast<const uint8_t*>(px) + len);
         munmap(px, len);
+        bool turnedShape = self->mBarShown != true || self->mBarImgW != w || self->mBarH != h;
+        self->mBarImgW = w;
+        self->mBarH = h;
+        self->mBarShown = true;
+        auto gb = self->buildBar();
+        if (gb == nullptr) return;
+        self->mBarGb = gb;
         if (self->mBar == nullptr) {
             self->mBar = SurfaceComposerClient::getDefault()->createSurface(String8("apklayer-navbar"), w, h, PIXEL_FORMAT_RGBA_8888,
                                                                             ISurfaceComposerClient::eFXSurfaceBufferState);
@@ -130,12 +166,12 @@ class Sink : public ConsumerBase::FrameAvailableListener {
             t.setFlags(self->mBar, layer_state_t::eLayerOpaque, layer_state_t::eLayerOpaque);
             ALOGI("navigation bar layer %dx%d", w, h);
         }
-        self->mBarH = h;
-        t.setPosition(self->mBar, 0, static_cast<float>(self->mHeight) - h);
+        self->placeBar(t);
         t.setBuffer(self->mBar, gb);
         if (self->mFramed) t.show(self->mBar);
         else t.hide(self->mBar);  // shown with the app's first frame (presentLoop): the shell's splash stays until then
         t.apply();
+        if (self->mTurn == 270 && turnedShape) self->applyDisplay();  // the stack's rectangle follows the bar's thickness
     }
 
     // a finished frame of the virtual display: SurfaceFlinger's queueBuffer (a binder call into this process) only wakes the present thread,
@@ -267,7 +303,10 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     sp<Surface> mSurface;
     sp<IBinder> mToken;
     sp<SurfaceControl> mBar;  // the navigation bar's layer, once the shell sent one
-    int32_t mBarH = 0;
+    sp<GraphicBuffer> mBarGb;
+    std::vector<uint8_t> mBarPx;  // its XRGB8888 pixels, mBarImgW x mBarH, in the panel's frame
+    int32_t mBarH = 0, mBarImgW = 0;
+    bool mBarShown = false;
     bool mFramed = false;  // the display presented a frame: until then the bar stays hidden, or its layer alone makes the first frame (no splash)
     apklayer_display* mDisplay = nullptr;
     std::mutex mLock;
