@@ -90,8 +90,7 @@ the TUN and a `protect()`ed one does not, `ip route` identical afterwards). The 
 ## Untested / needs a person
 
 - The hub's pkexec path (`HubVpnNet.viaHelper`: only the helper binary was run, as root through `sudo`, never from the hub through pkexec).
-- Establishing through the real OpenVPN for Android and WireGuard (local corpus APKs): both install and start (WireGuard's libwg-go loads), the UI was not
-  driven to a connection (WireGuard needs a tunnel created in its UI; OpenVPN a profile and a reachable server).
+- Real VPN apps (2026-11-16, UTM VM, scripted input): WireGuard 1.0.20260102 (import from file, toggle) establishes against a WireGuard peer that answers (a local one: handshake, ping through the tunnel, host routes, manager disconnect with onRevoke, device and connection gone); with the owner's config the server never answered. OpenVPN for Android 0.7.41 starts, connects over TCP and does TLS with the owner's server, which then wants an OAuth2 web login (no tunnel). Open: `protect()` before `establish()`, the first WireGuard handshake through the TUN, Go raw syscalls at Android paths (PLAN).
 - The pkexec dialog on a real desktop (the helper's logic is tested as root through `sudo -n` with `PKEXEC_UID`).
 - A real VPN provider end to end; Sailfish; KDE/Lomiri polkit agents; the default-route case against a working VPN resolver (the test checks that
   resolved lists the app's DNS as the default route, not that names resolve through it).
