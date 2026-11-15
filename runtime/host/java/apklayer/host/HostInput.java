@@ -171,6 +171,9 @@ final class HostInput {
                 return;
             }
         }
+        // a non-ASCII character (Cyrillic, Arabic, Hebrew...) comes with its key's physical (US) keycode, which a shortcut (Ctrl, Alt, Meta held) uses;
+        // without a shortcut modifier the character is typed whatever the keycode says
+        if (unicode >= 128 && (meta & (0x2 | 0x1000 | 0x10000)) == 0) code = 0;
         if (code == 0 && unicode > 0 && unicode < 128 && !Character.isISOControl(unicode)) {
             // ASCII punctuation: a real keycode + shift meta, so KeyEvent.getUnicodeChar() works (Termux ignores ACTION_MULTIPLE)
             KeyEvent[] ks = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD)

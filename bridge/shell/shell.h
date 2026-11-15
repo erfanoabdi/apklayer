@@ -111,7 +111,7 @@ enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
  * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's); close: the compositor's close
  * (xdg_toplevel.close, Lipstick's qt_extended_surface.close); ime {app px}: the host keyboard's area as maliit.c sets it. x, y: logical content pixels, y < 0 = the title bar. */
-enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME, TEST_OUTPUT };
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME, TEST_OUTPUT, TEST_LAYOUT };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -256,6 +256,7 @@ void client_read(struct client *c);  /* client.c */
 uint32_t kb_android_meta(void);  /* keyboard.c */
 long long now_ms(void);  /* keyboard.c */
 void key_event(uint32_t evdev, int down);  /* keyboard.c */
+int keyboard_inject_layout(const char *spec);  /* keyboard.c: test input */
 struct window *window_for_surface(struct wl_surface *s);  /* window.c */
 struct window *window_find(struct client *c, int id);
 struct window *window_find_input(struct client *c, int id);  /* window.c */

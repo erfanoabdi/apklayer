@@ -138,14 +138,14 @@ def keys(*steps, **kw):
 
 MODS = {'alt': 56, 'ctrl': 29, 'shift': 42, 'super': 125}  # evdev codes of combo:<mod>+<code>
 TEST_INPUT, TEST_DONE = 11, 115  # bridge/shell/shell.h
-FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE, IME, OUTPUT = range(11)
+FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE, IME, OUTPUT, LAYOUT = range(12)
 
 
 def inject(window, *steps, secret=False):
     """Test input into one window of this instance's shell (bridge/shell/testinput.c): no desktop, no focus, so groups that use it run in
     parallel. The events take the shell's own path from the seat on (focus, xkb, pointer, touch, text-input, configure). window: the app's
     package. Steps (x, y: logical pixels in the window's content, y < 0: its title bar):
-      focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | xclick:<x>,<y> (the back button) | output:<n> (wl_surface.enter of the n-th output) | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | delete:<n> | resize:<w>,<h>
+      focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | xclick:<x>,<y> (the back button) | output:<n> (wl_surface.enter of the n-th output) | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | delete:<n> (UTF-8 bytes, as text-input-v3) | layout:<layout[,layout2]>[:<variant>[:<options>]] (the xkb keymap the key steps use, e.g. ru, us,ara:,:grp:caps_toggle) | resize:<w>,<h>
       | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>] | close
       | ime:<px> (the host's on-screen keyboard covers the bottom px app pixels, 0: hidden; as the phones' Maliit keyboard)"""
     print('INJECT %s %s' % (window, ' '.join('text:***' if secret and s.startswith('text:') else s for s in steps)), flush=True)  # secret: a password typed in
@@ -166,6 +166,7 @@ def inject(window, *steps, secret=False):
         elif kind in ('press', 'release', 'move'): messages.append((TOUCH, ('press', 'release', 'move').index(kind), *xy, ''))
         elif kind in ('text', 'preedit'): messages.append((TEXT, int(kind == 'preedit'), 0, 0, arg))
         elif kind == 'delete': messages.append((TEXT, 2, 0, 0, arg))  # the IME deletes <n> characters before the cursor
+        elif kind == 'layout': messages.append((LAYOUT, 0, 0, 0, arg))
         elif kind == 'resize': messages.append((RESIZE, *xy, 0, ''))
         elif kind == 'scale': messages.append((SCALE, int(arg), 0, 0, ''))
         elif kind == 'output': messages.append((OUTPUT, int(arg), 0, 0, ''))  # the surface enters the n-th output (wl_surface.enter), -1: none
