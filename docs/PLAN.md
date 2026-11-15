@@ -38,7 +38,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- All streams scaled from the largest. NDK libcamera2ndk is a stub.
+- NDK camera: the first `getCameraIdList` can be empty for ~200 ms after cameraserver's lazy start (check the Java path too).
 - Portrait desktop monitor: the right camera mount degrees per monitor direction are unknown (no way to detect it).
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
