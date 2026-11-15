@@ -44,8 +44,10 @@ Changing host routes needs privilege; two ways, tried in order, neither needs th
    and activate connections without a password (`org.freedesktop.NetworkManager.settings.modify.system`, `network-control`: `yes` for the active
    session). The connection is in memory only (`save no`), `autoconnect no`; the device is persistent and owned by the user. Addresses, routes (metric 50),
    DNS (and exclusive DNS, `dns-priority -1`, when the VPN takes everything) come from the Builder. The MTU of the TUN stays 1500: NM has no tun MTU
-   property (the route-level `ipv4.mtu` is not used). Needs the hub to run in the user's session: apklayerd is a systemd user service, so it does; a
-   login over ssh (a remote, inactive session) is asked for a password by polkit and falls through to 2.
+   property (the route-level `ipv4.mtu` is not used). Needs the hub (and its `nmcli` children) to run where polkit sees the user's local active
+   session: under the user manager (`systemd-run --user`, a user unit) or inside the desktop session. A plain ssh login is a remote session: polkit says
+   `auth` there and the VPN falls through to 2. (On the test VM the hub started by `apklayer run` from an ssh login got `yes`: apklayer starts the stack through
+   its daemon/user scopes; which one decides is not pinned down here.)
 2. **pkexec helper** `apklayer-vpn-helper` (cli/vpn_helper.cpp, polkit action `org.apklayer.vpn`, `data/org.apklayer.vpn.policy.in`): the user's password
    at the click of the consent dialog's flow (polkit's agent). A small root program that only makes a TUN owned by `PKEXEC_UID`, sets MTU, addresses,
    routes (metric 50) and the DNS (`resolvectl`), says `ready`, and removes the device when its stdin closes, on SIGTERM/SIGHUP or, with `--watchdog N`,
@@ -53,8 +55,8 @@ Changing host routes needs privilege; two ways, tried in order, neither needs th
    with an empty environment. The deb installs both files (`meson install`: `<prefix>/lib/apklayer/cli/apklayer-vpn-helper` and
    `/usr/share/polkit-1/actions/org.apklayer.vpn.policy`; `Recommends: pkexec` is there already).
 
-The consent dialog says plainly that the app will route the traffic of the whole computer, and, where only the pkexec path is possible, that the host password
-is asked next.
+The consent dialog (`HubVpnUi.ask`) says plainly that the traffic of the whole computer goes through the app and that, if NetworkManager does not allow
+the connection, the computer's password is asked next (a static sentence: the dialog cannot know which path will win). The test checks the dialog's title only.
 
 **Sailfish OS** (connman, no polkit prompt): not implemented. It would need a connman VPN plugin or a root helper started by a systemd unit (the `ip`
 commands of the helper above, for example through a socket-activated service that checks the caller's uid) because connman has no D-Bus call that makes
@@ -77,9 +79,20 @@ unit (real device owned by the user, address, route, ping and UDP from the host 
 connection gone), crash (the app killed), default route (guarded: ssh peer `/32`, 60 s watchdog; the active network is the VPN, an unprotected datagram goes into
 the TUN and a `protect()`ed one does not, `ip route` identical afterwards). The helper is tested directly (see CHANGELOG).
 
+## Limits
+
+- One VPN per instance; two instances with VPNs at once would both add `0.0.0.0/1` and `128.0.0.0/1` at metric 50 and fight over them.
+- `Builder.setMtu` is ignored on the NetworkManager path (the TUN stays at 1500); the helper path sets it.
+- The notification's Disconnect action (a desktop notification button) and the per-app sandbox (`APKLAYER_SANDBOX`: the guard's socket and the TUN go through
+  the hub, nothing in the app's view is needed, but it was not run) are untested. The manager phase of the test is skipped unless `manager/b` is built
+  (`meson setup manager/b manager -Dslint=...`; `tests/run` does not).
+
 ## Untested / needs a person
 
+- The hub's pkexec path (`HubVpnNet.viaHelper`: only the helper binary was run, as root through `sudo`, never from the hub through pkexec).
+- Establishing through the real OpenVPN for Android and WireGuard (local corpus APKs): both install and start (WireGuard's libwg-go loads), the UI was not
+  driven to a connection (WireGuard needs a tunnel created in its UI; OpenVPN a profile and a reachable server).
 - The pkexec dialog on a real desktop (the helper's logic is tested as root through `sudo -n` with `PKEXEC_UID`).
-- A real VPN provider with WireGuard or OpenVPN for Android end to end; Sailfish; KDE/Lomiri polkit agents; the default-route case with DNS (the exclusive
-  DNS priority was not exercised against a working resolver).
+- A real VPN provider end to end; Sailfish; KDE/Lomiri polkit agents; the default-route case against a working VPN resolver (the test checks that
+  resolved lists the app's DNS as the default route, not that names resolve through it).
 - NetworkManager versions before 1.40 (the `tun` connection type with `owner` is older; `save no` and `dns-priority` were checked on 1.54 only).

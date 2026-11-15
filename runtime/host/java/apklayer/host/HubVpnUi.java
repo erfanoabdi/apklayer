@@ -45,8 +45,9 @@ final class HubVpnUi {
     boolean ask(String pkg) {
         String label = HubInstaller.labelOf(pkg, pkg);
         return HubInstallDialog.ask("Allow " + label + " to set up a VPN connection?",
-                label + " (" + pkg + ") wants to set up a VPN connection that allows it to monitor network traffic. Only accept if you trust the source. "
-                        + "A key appears in the notifications when the VPN is active.", "OK", "Cancel");
+                label + " (" + pkg + ") wants to set up a VPN connection. While it runs, the network traffic of this whole computer (not only of Android apps) goes through "
+                        + label + ", which can monitor and change it. Only accept if you trust it. If NetworkManager does not allow the connection to be made, the "
+                        + "computer's password is asked next. A notification shows while the VPN is active, with a button to disconnect.", "OK", "Cancel");
     }
 
     void show(String owner, String session) {

@@ -59,6 +59,7 @@ final class HubVpn extends IVpnManager.Stub {
 
     /** What a hub that died left (its connection, the state file): `apklayer vpn sweep`. */
     private void sweep() {
+        if (!Files.exists(dir.resolve("active"))) return;  // none was left
         try {
             Process process = new ProcessBuilder(System.getProperty("apklayer.cli"), "vpn", "sweep").redirectErrorStream(true).start();
             process.getOutputStream().close();

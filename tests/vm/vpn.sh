@@ -5,6 +5,7 @@
 #           answered by the app through the TUN, `apklayer vpn status`, the resolver has the app's DNS; `apklayer vpn disconnect` revokes the app (onRevoke)
 #           and the device, connection and route are gone.
 #  crash:   the app is killed: its descriptor closes, the guard sees the carrier go, the hub removes the VPN (device and connection gone, status "no VPN").
+#  stop:    `apklayer stop` with the VPN up removes it.
 #  manager: the Instances page shows the VPN and its Disconnect button revokes it (when manager/b is built).
 #  hubcrash: the hub is killed (SIGKILL): the guard's pipe closes and it removes the VPN.
 #  default: the default route through the TUN (0.0.0.0/1 + 128.0.0.0/1) with the ssh peer's /32 and a watchdog (systemd timer, 60 s) that deletes the connection
@@ -101,6 +102,17 @@ python3 tests/vm/vpn-link.py absent tunapk 20 || fail "the TUN $if is still ther
 [ "$(ip route)" = "$routes" ] || fail "the routes are not the same after the hub was killed: $(ip route)"
 bin/apklayer stop >/dev/null 2>&1; wait $owner
 echo "hub crash ok"
+
+# ---- stack stop ----
+start_owner crash
+if=$(vpniface)
+bin/apklayer stop >/dev/null 2>&1  # the VPN is up: the sweep of stop (and the guard's own teardown) must remove it
+wait $owner
+python3 tests/vm/vpn-link.py absent tunapk 20 || fail "the TUN $if is still there after the stack stopped"
+[ "$(nmconn)" = 0 ] || fail "the connection is still there after the stack stopped"
+[ "$(ip route)" = "$routes" ] || fail "the routes are not the same after the stack stopped: $(ip route)"
+[ "$(bin/apklayer vpn status)" = "no VPN" ] || fail "vpn status after the stack stopped"
+echo "stop ok"
 
 # ---- the manager ----
 if [ -x manager/b/apklayer-manager ]; then  # built by `meson setup manager/b manager -Dslint=...` (not part of tests/run)
