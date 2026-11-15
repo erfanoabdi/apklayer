@@ -44,7 +44,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
-- Shared libraries: HIDL libraries need HwBinder/HwParcel JNI in app processes, an instance hwservicemanager for unlisted HALs and `android.hidl.*-java` libraries in the Android root; a native library's path in the app's linker namespace (`<uses-native-library>` itself works).
+- Shared libraries: a native library's path in the app's linker namespace (`<uses-native-library>` itself works).
+- HIDL (`docs/HIDL.md`, group `hidl`): left are a local hwservicemanager beside the host forwarding on Halium instances (libhidl patch 0004), the x86_64 build of `libapklayer_hwservicemanager`, apps registering their own HIDL services (VINTF entry), and a `LOG(INFO) <<` crash in `libandroid_runtime` inside an app JVM (avoided by minimum severity WARNING; root cause open).
 - Storage: scoped storage hides other packages' `Android/data` and `Android/obb` only for the `/storage/emulated/0`, `/sdcard` and `/data/media/0` spellings; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
 - Call audio: the 6 s new-requester grace and reports from native AAudio/OpenSL streams (the policy's active tracks).
 - Direct buffer `array()` writes are lost (HotSpot cannot pin an app's `allocateDirect` buffer; `ApklayerBuffers` returns a copy).
