@@ -54,12 +54,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Packaging and releases
 - Owner to decide: `dh_installsystemduser` enables `apklayerd` for every user at login (`/etc/systemd/user/default.target.wants/apklayerd.service` after `dpkg -i`) although `debian/rules` and `docs/INSTALL.md` say it starts on demand: keep it, or `override_dh_installsystemduser: dh_installsystemduser --no-enable`.
-- Sailfish RPM 0.4.19 on the Quintus does not turn `media = device` on by default (fixed in main since, needs a new RPM and runtime); the same new RPM brings the Lipstick rotation and Maliit fixes.
-- Sailfish RPM from current main is installed and runs apps on the Quintus; open: no log line shows the `jni_guest_surface.c` change is active; the RPM and deb jobs need one real package build to confirm `tools/check-runtime-links.sh` runs clean in them.
+- Sailfish RPM: the `jni_guest_surface.c` change now logs `[runtime] jni_guest_surface active: ...` once per app JVM; needs an RPM of this tree installed on the Quintus and one app run to see it there.
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
-- Release: the first real tag run (`release.yml` fetch steps and tag-to-version handling), the Sailfish RPM job and the GitHub runners are unrun; the release guard (`tools/release/check-runtime.py`) was checked locally only; PackageKit/pkexec install untested. The debs built here lack the PulseAudio backend (`libpulse-dev` missing on both hosts); the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
+- Release: the first real tag run, the GitHub runners (the fetch steps, `actions/checkout` of the `prebuilts-v<version>` tag, upload/download of `~` file names) are unrun here; the guard, SHA256SUMS rename and `releases-json.py` ran locally with a fake tag (2026-11-16); PackageKit/pkexec install untested; the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 
 ## Manager

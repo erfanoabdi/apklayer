@@ -246,6 +246,9 @@ int apklayer_jni_guest_surface(JNIEnv *env, JavaVM *vm, jvmtiEnv *jvmti, jniNati
         table->GetStaticMethodID = next.GetStaticMethodID;
         table->FromReflectedMethod = next.FromReflectedMethod;
     }
+    fprintf(stderr, "[runtime] jni_guest_surface active: guest jmethodIDs %s\n", apklayer_art_jni_table && art_of ? "synthetic (libart.so thunks)" : "the JVM's own");
+#else
+    fprintf(stderr, "[runtime] jni_guest_surface active: guest jmethodIDs the translator's\n");
 #endif
     return 0;
 }

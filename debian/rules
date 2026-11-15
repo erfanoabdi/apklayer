@@ -34,6 +34,8 @@ override_dh_auto_install:
 	mv debian/apklayer/usr/include debian/apklayer-dev/usr/
 	mv debian/apklayer/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig debian/apklayer-dev/usr/lib/$(DEB_HOST_MULTIARCH)/
 	rmdir debian/apklayer/usr/lib/$(DEB_HOST_MULTIARCH)
+	# the audio backends are `required: false` in meson: a build env without libpulse-dev/libpipewire-0.3-dev (Build-Depends) must fail here, not ship a deb without one
+	for b in pulse pipewire; do test -n "$$(find debian/apklayer -name libapklayer-audio-$$b.so)" || { echo "debian/rules: libapklayer-audio-$$b.so missing: install Build-Depends"; exit 1; }; done
 	# no link of the package may dangle or point into this build root (the RPM's libjavacore.so did)
 	APKLAYER_BUILD_ROOT=$(CURDIR) sh tools/check-runtime-links.sh debian/apklayer
 
