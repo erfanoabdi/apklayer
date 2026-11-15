@@ -46,9 +46,9 @@ int openCommand(const Layout& l, const Instance& inst, const std::vector<std::st
     std::string path = realPath(args[1]);
     if (path.empty() || !exists(path) || isDir(path)) die("no such file: " + args[1]);
     std::string token = sha256Text(path + std::to_string(getpid()) + std::to_string(time(nullptr))).substr(0, 16), root = join(appDataDir(l, inst, package), "app/cache/opened");  // the app's getCacheDir() (its data link "app", AppEnvironment.persistDataDirs)
-    // shortcut: under the sandbox the app's data is its own uid's and out of the user's reach, so the copy lies in the instance's tmp (the app's java.io.tmpdir,
-    // HostOpenedFiles reads both), world readable behind its unguessable token with the folder not listable; chown through the namespace would keep it private
-    if (sandboxOn()) root = join(inst.tmpDir(), "opened");
+    // under the sandbox the app's data is its own uid's and out of the user's reach, so the copy lies in the app's private tmp (its java.io.tmpdir: the
+    // instance's tmp/sandbox-<uid>, which the app's view shows as the instance's tmp; HostOpenedFiles reads both): the folders 0711, the files 0644 for its uid
+    if (sandboxOn()) root = join(inst.tmpDir(), "sandbox-" + property(join(appDir(l, package), "info.properties"), "uid") + "/opened");
     makeDirs(root);
     if (sandboxOn()) chmod(root.c_str(), 0711);
     // a day of them stays (an app may keep the Uri for a while); the cache is the app's own and clear-data removes it

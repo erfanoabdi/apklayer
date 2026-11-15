@@ -44,8 +44,8 @@ ones is pruned) and the app starts (or is told, if it runs: `onNewIntent`, the r
 launches (`APKLAYER_INTENT_FILE`). `HostOpenedFiles` (registered in every app JVM) serves exactly that Uri: read only, `OpenableColumns`
 (`_display_name`, `_size`), `getType`. The app never sees the host path or the folder.
 
-Under the per-app sandbox the app's data is its uid's and out of the user's reach, so the copy lies in the instance's tmp (`opened/<token>/`, the folder 0711,
-the files 0644: the app's `java.io.tmpdir`; `HostOpenedFiles` looks in both places). Another app of the instance could read it only by guessing the 64-bit token.
+Under the per-app sandbox the app's data is its uid's and out of the user's reach, so the copy lies in the app's own tmp (`<instance>/tmp/sandbox-<uid>/opened/<token>/`, its `java.io.tmpdir`; the folder 0711,
+the files 0644; `HostOpenedFiles` looks in both places). Other apps do not see that folder.
 
 Limits: one file per launch (a file manager that selects several
 runs the handler once per file, `%f`, and each reaches the running app in `onNewIntent`); the copy is whole (a very large file takes its time).

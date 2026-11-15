@@ -40,16 +40,18 @@ public final class ApkPreview {
             List<String> perms = new ArrayList<>();
             ByteBuffer b = ByteBuffer.wrap(xml).order(ByteOrder.LITTLE_ENDIAN);
             List<String> strings = new ArrayList<>();
+            int[] ids = new int[0];
             for (int at = b.getShort(2) & 0xffff; at + 8 <= xml.length; ) {
                 int type = b.getShort(at) & 0xffff, header = b.getShort(at + 2) & 0xffff, size = b.getInt(at + 4);
                 if (size <= 0) break;
                 if (type == 0x0001) strings = ApkSet.strings(b, at);
+                else if (type == 0x0180) { ids = new int[(size - header) / 4]; for (int i = 0; i < ids.length; i++) ids[i] = b.getInt(at + header + 4 * i); }
                 else if (type == 0x0102) {
                     String element = str(strings, b.getInt(at + 20));
                     int attrs = at + header + (b.getShort(at + 24) & 0xffff), count = b.getShort(at + 28) & 0xffff;
                     for (int i = 0; i < count; i++) {
                         int a = attrs + 20 * i, key = b.getInt(a + 4), raw = b.getInt(a + 8), dataType = b.get(a + 15) & 0xff, data = b.getInt(a + 16);
-                        String k = str(strings, key), v = raw >= 0 ? str(strings, raw) : "";
+                        String k = key >= 0 && key < ids.length ? androidName(ids[key], str(strings, key)) : str(strings, key), v = raw >= 0 ? str(strings, raw) : "";
                         if (v.isEmpty() && dataType == 0x03) v = str(strings, data);
                         if (element.equals("manifest") && k.equals("package")) pkg = v;
                         else if (element.equals("manifest") && k.equals("versionName")) version = v;
@@ -61,11 +63,14 @@ public final class ApkPreview {
                 }
                 at += size;
             }
-            if (arsc != null && label != 0) { String r = resolve(arsc, label, false); if (r != null) name = r; }
+            // a resource it cannot read (an unusual table) leaves the package name and no icon, not an empty preview
+            try { if (arsc != null && label != 0) { String r = resolve(arsc, label, false); if (r != null) name = r; } } catch (RuntimeException unreadable) { }
             System.out.println("package\t" + pkg + "\nversion\t" + version + "\nlabel\t" + (name.isEmpty() ? pkg : name));
             for (String p : perms) System.out.println("perm\t" + p);
-            String r = arsc != null && icon != 0 ? resolve(arsc, icon, true) : null;
-            if (r != null && zip.getEntry(r) != null) Files.write(Path.of(args[1]), bytes(zip, r));
+            try {
+                String r = arsc != null && icon != 0 ? resolve(arsc, icon, true) : null;
+                if (r != null && zip.getEntry(r) != null) Files.write(Path.of(args[1]), bytes(zip, r));
+            } catch (RuntimeException unreadable) { }
         } finally {
             if (tmp != null) Files.deleteIfExists(tmp);
         }
@@ -89,7 +94,8 @@ public final class ApkPreview {
                     for (int t = at + (b.getShort(at + 2) & 0xffff); t < at + size; ) {
                         int ct = b.getShort(t) & 0xffff, ch = b.getShort(t + 2) & 0xffff, cs = b.getInt(t + 4);
                         if (cs <= 0) break;
-                        if (ct == 0x0201 && (b.get(t + 8) & 0xff) == ((id >>> 16) & 0xff)) {
+                        // shortcut: dense 32-bit offsets only; a sparse (flag 1) or 16-bit (flag 2) type chunk is skipped and its resource stays unresolved
+                        if (ct == 0x0201 && (b.get(t + 9) & 3) == 0 && (b.get(t + 8) & 0xff) == ((id >>> 16) & 0xff)) {
                             int entry = id & 0xffff, count = b.getInt(t + 12);
                             if (entry < count && b.getInt(t + ch + 4 * entry) != -1) {
                                 int e = t + b.getInt(t + 16) + b.getInt(t + ch + 4 * entry), dataType = b.get(e + 11) & 0xff, data = b.getInt(e + 12);
@@ -111,6 +117,11 @@ public final class ApkPreview {
             id = ref;
         }
         return null;
+    }
+
+    /** The attribute's name from its android: resource id (an obfuscated manifest drops the names), else the name the manifest gives. */
+    private static String androidName(int id, String name) {
+        return switch (id) { case 0x01010001 -> "label"; case 0x01010002 -> "icon"; case 0x01010003 -> "name"; case 0x0101021c -> "versionName"; default -> name; };
     }
 
     private static byte[] bytes(ZipFile zip, String name) throws IOException {

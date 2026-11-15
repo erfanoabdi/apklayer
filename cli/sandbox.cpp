@@ -308,6 +308,7 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     std::string data = realPath(appDataDir(l, inst, package)), tmp = join(inst.tmpDir(), "sandbox-" + std::to_string(uid));
     makeDirs(tmp);
     if (chown(tmp.c_str(), uid, uid) != 0) die("cannot give " + tmp + " to the app");
+    chmod(tmp.c_str(), 01777);  // the user (`apklayer open`) puts a file there for a running app; only this app's view shows the directory to others than the user
     steps.push_back({Step::Tmpfs, join(realPath(inst.root), "app-data")});  // the other apps' data is not in the view at all
     // an isolated process (android:isolatedProcess) has no access to the app's data or the shared storage: an empty directory of its own where the data
     // path is (the runtime expects it), nothing where the storage is

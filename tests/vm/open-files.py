@@ -112,6 +112,7 @@ try:
         check(out.returncode == 0, 'apklayer open under the sandbox: ' + (out.stderr or out.stdout)[-200:])
         check(line is not None and 'uri=content://apklayer.opened/' in line and 'remote sandbox.example.org 1195' in line and 'size=%d' % sbx.stat().st_size in line,
               'the sandboxed app reads the opened file through its content Uri')
+        check(any(Path(LOGDIR, 'tmp').glob('sandbox-*/opened/*/data')), 'the copy lies in the app\'s private tmp (sandbox-<uid>/opened), not in its uid-owned data')
         instance.stop()
         del env['APKLAYER_SANDBOX']
         sbx.unlink(missing_ok=True)
@@ -127,6 +128,8 @@ try:
         print(re.findall(r'^(?:Exec|MimeType)=.*$', vpn_text, re.M))
         check('installed de.blinkt.openvpn' in out.stdout, 'install OpenVPN for Android ' + (out.stderr or out.stdout)[-150:])
         check('application/x-openvpn-profile;' in vpn_text, 'OpenVPN\'s entry carries its profile type (MimeType=)')
+        info = run('bin/apklayer', 'inspect', str(vpn), str(OUT / 'vpn-icon.png')).stdout  # label and icon from resources.arsc
+        check('label\tOpenVPN for Android' in info and 'perm\tandroid.permission.INTERNET' in info and (OUT / 'vpn-icon.png').stat().st_size > 0, 'apklayer inspect: OpenVPN\'s label, permissions and icon')
         check(re.search(r'^Exec=.* open de\.blinkt\.openvpn %f$', vpn_text, re.M) is not None, 'OpenVPN\'s entry opens the file')
         run('bin/apklayer', 'uninstall', 'de.blinkt.openvpn')
     # .apk, .apks, .xapk, .apkm: the manager's entry (data/apklayer-manager.desktop) takes the files, %F, into its install dialog

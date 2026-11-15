@@ -258,19 +258,12 @@ private:
         b.set_app_config(manager::configModel(d.config));
     }
 
-    static std::string permTitle(const std::string& name) {
-        std::string title = name.substr(name.rfind('.') + 1);
-        for (size_t i = 0; i < title.size(); i++)
-            title[i] = title[i] == '_' ? ' ' : static_cast<char>(i == 0 ? toupper(static_cast<unsigned char>(title[i])) : tolower(static_cast<unsigned char>(title[i])));
-        return title;
-    }
-
     // `apklayer permissions` rows (permission, level, granted): the runtime ones first, each with a title ("ACCESS_FINE_LOCATION" -> "Access fine location")
     static std::shared_ptr<slint::VectorModel<PermEntry>> permissions(const Rows& rows) {
         std::vector<PermEntry> runtime, other;
         for (const auto& r : rows) {
             PermEntry e;
-            std::string name = field(r, 0), level = field(r, 1), granted = field(r, 2), title = permTitle(name);
+            std::string name = field(r, 0), level = field(r, 1), granted = field(r, 2), title = manager::permTitle(name);
             e.name = slint::SharedString(name);
             e.title = slint::SharedString(title);
             e.runtime = level == "dangerous";
@@ -323,24 +316,16 @@ public:
     void preview(const std::string& path) {
         ui_->global<Backend>().set_preview_for("");
         if (path.empty() || access(path.c_str(), R_OK) != 0) return;
-        std::string icon = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") + "/apklayer-preview-" + std::to_string(getpid()) + ".png";
+        static int serial = 0;  // one icon file per request: two quick ones do not share it
+        std::string icon = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") + "/apklayer-preview-" + std::to_string(getpid()) + "-" + std::to_string(++serial) + ".png";
         later([cli = cli_, path, icon] { unlink(icon.c_str()); return cli.run({"inspect", path, icon}); }, [this, path, icon](const Result& r) {
             auto& b = ui_->global<Backend>();
             if (r.status == 0) {
-                std::string name, version, label, list;
-                std::vector<std::string> perms;
-                for (const auto& row : manager::parseRows(r.out)) {
-                    if (field(row, 0) == "package") name = field(row, 1);
-                    else if (field(row, 0) == "version") version = field(row, 1);
-                    else if (field(row, 0) == "label") label = field(row, 1);
-                    else if (field(row, 0) == "perm") perms.push_back(permTitle(field(row, 1)));
-                }
-                for (size_t i = 0; i < perms.size() && i < 12; i++) list += (i ? ", " : "") + perms[i];
-                if (perms.size() > 12) list += ", and " + std::to_string(perms.size() - 12) + " more";
+                manager::Preview p = manager::parsePreview(r.out);
                 b.set_preview_icon(access(icon.c_str(), R_OK) == 0 ? slint::Image::load_from_path(slint::SharedString(icon)) : slint::Image());
-                b.set_preview_label(slint::SharedString(label));
-                b.set_preview_detail(slint::SharedString(name + (version.empty() ? "" : " · " + version)));
-                b.set_preview_permissions(slint::SharedString(perms.empty() ? "Asks for no permissions" : "Asks for: " + list));
+                b.set_preview_label(slint::SharedString(p.label));
+                b.set_preview_detail(slint::SharedString(p.detail));
+                b.set_preview_permissions(slint::SharedString(p.permissions));
                 b.set_preview_for(slint::SharedString(path));
             }
             unlink(icon.c_str());
@@ -636,9 +621,9 @@ int main(int argc, char** argv) {
             printf("apklayer-manager: %s %s\n", eq == std::string::npos ? "pressed" : "typed into", label.c_str());
         }
         if (waitPreview) { if (m.previewDone) settled(); else m.previewed = settled; }  // the file's preview, which may be shown before this timer
-        if (waitRefreshes == 0) { if (!waitPreview) settled(); return; }
+        if (waitRefreshes == 0 && !waitPreview) { settled(); return; }
         // the picture after the actions' own events (an app's start, a finished uninstall) reached the window, not after a guessed delay
-        m.applied = [&] { if (++refreshes == waitRefreshes) settled(); };
+        if (waitRefreshes > 0) m.applied = [&] { if (++refreshes == waitRefreshes) settled(); };
         slint::Timer::single_shot(std::chrono::minutes(3), [] { fputs("apklayer-manager: the refresh never came\n", stderr); slint::quit_event_loop(); });
     });
     slint::run_event_loop();

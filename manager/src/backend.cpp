@@ -82,6 +82,30 @@ int Cli::runLines(const std::vector<std::string>& args, const std::function<void
     return done.get_future().get();
 }
 
+std::string permTitle(const std::string& name) {
+    std::string title = name.substr(name.rfind('.') + 1);
+    for (size_t i = 0; i < title.size(); i++)
+        title[i] = title[i] == '_' ? ' ' : static_cast<char>(i == 0 ? toupper(static_cast<unsigned char>(title[i])) : tolower(static_cast<unsigned char>(title[i])));
+    return title;
+}
+
+Preview parsePreview(const std::string& out) {
+    std::string name, version, list;
+    Preview p;
+    size_t perms = 0;
+    for (const auto& row : parseRows(out)) {
+        if (row.size() < 2) continue;
+        if (row[0] == "package") name = row[1];
+        else if (row[0] == "version") version = row[1];
+        else if (row[0] == "label") p.label = row[1];
+        else if (row[0] == "perm" && perms++ < 12) list += (perms > 1 ? ", " : "") + permTitle(row[1]);
+    }
+    if (perms > 12) list += ", and " + std::to_string(perms - 12) + " more";
+    p.detail = name + (version.empty() ? "" : " \u00b7 " + version);
+    p.permissions = perms == 0 ? "Asks for no permissions" : "Asks for: " + list;
+    return p;
+}
+
 std::string chosenFile(const Result& chooser) {
     for (const auto& row : parseRows(chooser.out))
         if (!row.empty() && row[0].rfind("uri ", 0) == 0) return fileUriPath(row[0].substr(4));
