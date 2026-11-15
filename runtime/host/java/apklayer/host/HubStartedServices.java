@@ -32,6 +32,7 @@ final class HubStartedServices {
         packages.enforceServicePermission(caller.name(), info);
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
         String key = processKey(info);
+        directory.noteIsolated(key, info);
         HubDirectory.Peer target = directory.peer(key);
         if (target != null) return deliver(target, explicit, explicit);
         // the process is not running: launched, and the start delivered once it is up, while the caller goes on (ActivityManagerService queues

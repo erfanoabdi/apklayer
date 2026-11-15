@@ -31,6 +31,22 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         return false;
     }
 
+    /** An isolated process's uid (android:isolatedProcess) belongs to the package it runs for, as PackageManagerService's mIsolatedOwners says. */
+    private static String isolatedOwner(int uid) {
+        if (!android.os.Process.isIsolated(uid) || !HubClient.connected()) return null;
+        return HubClient.current().isolatedOwner(uid);
+    }
+    @Implementation
+    protected String[] getPackagesForUid(int uid) {
+        String owner = isolatedOwner(uid);
+        return owner != null ? new String[] {owner} : super.getPackagesForUid(uid);
+    }
+    @Implementation
+    protected String getNameForUid(int uid) {
+        String owner = isolatedOwner(uid);
+        return owner != null ? owner : super.getNameForUid(uid);
+    }
+
     @Implementation
     protected boolean hasSigningCertificate(int uid, byte[] certificate, int type) {
         String[] packages = real.getPackagesForUid(uid);
