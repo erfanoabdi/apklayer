@@ -21,7 +21,7 @@ import java.util.List;
  */
 final class HostOpenedFiles extends ContentProvider {
     static final String AUTHORITY = "apklayer.opened";
-    private File root;
+    private File[] roots;  // the app's cache, and the instance's tmp where the sandbox keeps the copy (the app's own folder is out of the CLI's reach)
 
     static void register(Application app) {
         HostOpenedFiles provider = new HostOpenedFiles();
@@ -29,7 +29,7 @@ final class HostOpenedFiles extends ContentProvider {
         info.name = HostOpenedFiles.class.getName(); info.packageName = app.getPackageName(); info.authority = AUTHORITY; info.exported = true;
         info.applicationInfo = app.getApplicationInfo();
         provider.attachInfo(app, info);
-        provider.root = new File(app.getCacheDir(), "opened");
+        provider.roots = new File[] {new File(app.getCacheDir(), "opened"), new File(System.getProperty("java.io.tmpdir", "/tmp"), "opened")};
         org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(AUTHORITY, provider);
     }
 
@@ -37,8 +37,11 @@ final class HostOpenedFiles extends ContentProvider {
     private File dir(Uri uri) {
         List<String> segments = uri.getPathSegments();
         if (segments.size() != 2 || !segments.get(0).matches("[0-9a-f]{8,32}")) return null;
-        File dir = new File(root, segments.get(0));
-        return new File(dir, "data").isFile() ? dir : null;
+        for (File root : roots) {
+            File dir = new File(root, segments.get(0));
+            if (new File(dir, "data").isFile()) return dir;
+        }
+        return null;
     }
 
     @Override public boolean onCreate() { return true; }

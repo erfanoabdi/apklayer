@@ -114,6 +114,14 @@ std::string hostClasspath(const Layout& l) {  // no app classes: they get a load
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
+int previewApk(const Layout& l, const std::string& file, const std::string& iconOut) {
+    if (!exists(file)) die("no such file: " + file);
+    Spawn s;
+    s.argv = {findJava(l), "-cp", l.hostClasses(), "apklayer.tools.ApkPreview", file, iconOut};
+    s.env = currentEnv();
+    return runAndWait(s);
+}
+
 std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade, bool system) {
     for (const std::string& apk : apks) if (!exists(apk)) die("no such file: " + apk);
     l.requireRuntime();
