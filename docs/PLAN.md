@@ -64,13 +64,13 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
+- Owner to decide: `dh_installsystemduser` enables `apklayerd` for every user at login (`/etc/systemd/user/default.target.wants/apklayerd.service` after `dpkg -i`) although `debian/rules` and `docs/INSTALL.md` say it starts on demand: keep it, or `override_dh_installsystemduser: dh_installsystemduser --no-enable`.
 - Sailfish RPM 0.4.19 on the Quintus does not turn `media = device` on by default (fixed in main since, needs a new RPM and runtime); the same new RPM brings the Lipstick rotation and Maliit fixes.
 - Sailfish RPM from current main is installed and runs apps on the Quintus; open: no log line shows the `jni_guest_surface.c` change is active; the RPM and deb jobs need one real package build to confirm `tools/check-runtime-links.sh` runs clean in them.
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
-- Flatpak: the `org.freedesktop.Sdk.Extension.openjdk25` extension and 26.08 runtime are unverified (manifest now names JDK 25).
-- amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
+- Release: the first real tag run (`release.yml` fetch steps and tag-to-version handling), the Sailfish RPM job and the GitHub runners are unrun; the release guard (`tools/release/check-runtime.py`) was checked locally only; PackageKit/pkexec install untested. The debs built here lack the PulseAudio backend (`libpulse-dev` missing on both hosts); the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
 - First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 
