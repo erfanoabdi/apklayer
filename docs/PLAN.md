@@ -52,11 +52,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Startup and memory
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
-- ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
-- Hub ready with 146 packages is 2.1 s, ~0.5 s above the 5-package floor (`onServiceStart` 0.36 s). A CLI run outside the hub that changes a package's declared permissions in place is not seen until the apps directory changes.
+- ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
+- Hub ready is ~2.0 s with 148 packages; left: JVM main to Robolectric ready 0.8 s and the settings provider's `installProviders` 0.34 s.
 - `tests/lib/instance.wait_file` races with app-log rotation (exists, then read_text).
-- Cold start: `Hyphenator.nInit` (~45 ms) and the eager `JNI_OnLoad` libraries (4 ms; the 144 ms is `libandroid_runtime`) need no work. Remaining: `Application.onCreate` with ~20 packages (~2 s). A key generated with user authentication before the keystore enrollment finishes could miss the secure user id (not covered by a test).
-- SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
+- Cold start: an app with ~20 packages whose `Application.onCreate` takes ~2 s (not reproduced; needs such an app).
+- Composer GL context ~80 MB: measure on a phone while an app draws.
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
