@@ -33,7 +33,7 @@ spare_ready() { for ((w = 0; w < 120; w++)); do grep -q preloaded "$state/app-sp
 export APKLAYER_JOPTS='-Dapklayer.runms=300000'
 # the window made certain: the spare's JVM stopped (SIGSTOP) takes the launch but cannot rename itself, so it stays unnamed until it is killed
 spare_ready
-jvm=$(pgrep -P "$(procs ' app-spare ' | head -1 | cut -d' ' -f1)" | head -1)
+jvm=$(sed -n 's/.*app spare pid=\([0-9]*\)$/\1/p' "$state/app-spare.log" | tail -1)  # the idle spare's holder says it
 [ -n "$jvm" ] || fail "no spare JVM to hold"
 kill -STOP "$jvm"
 $A run "$pkg" >/dev/null 2>&1 & pid=$!
