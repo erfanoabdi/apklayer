@@ -14,7 +14,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 ## Bugs
 - The app log cap (256 MB, `APKLAYER_APP_LOG_CAP`) is not strict: a few lines from a writer other than the launcher's pipe arrive after the cap note.
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
-- Fennec on x86 with a profile lacking the test prefs: the Gecko parent aborts ~45 s in (Breakpad hides the first fault; a spare JVM ends in `pthread_join` SEGV at 0x8; guest `libmegazord` double free is quarantined). `debug.apklayer.log` is not the cause.
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize.
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
@@ -73,6 +72,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
+- Fennec on x86: a guest `libmegazord` double free is quarantined (not a crash).
 - No translation cache across starts.
 - Telegram has no x86_64 FOSS APK to test.
 - The guest JVM finds the host's `libjsig`: watch for a later SIGSEGV handler.
