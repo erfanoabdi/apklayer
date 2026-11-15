@@ -60,6 +60,11 @@ public final class GuestRepoint {
                 return new Target(HostDefaults.REDIRECT_BUFFER, name, desc);
             if (isVirtual && desc.startsWith("()") && ("hasArray".equals(name) || "array".equals(name) || "arrayOffset".equals(name)))
                 return new Target(HostDefaults.REDIRECT_BUFFER, name, "(Ljava/nio/ByteBuffer;" + desc.substring(1));
+            // position(int) after writes into array(): the copy's range written back (Cronet's InputStreamChannel reads into array())
+            if (isVirtual && "position".equals(name) && "(I)Ljava/nio/Buffer;".equals(desc))
+                return new Target(HostDefaults.REDIRECT_BUFFER, "position", "(Ljava/nio/ByteBuffer;I)Ljava/nio/Buffer;");
+            if (isVirtual && "position".equals(name) && "(I)Ljava/nio/ByteBuffer;".equals(desc))
+                return new Target(HostDefaults.REDIRECT_BUFFER, "positionByteBuffer", "(Ljava/nio/ByteBuffer;I)Ljava/nio/ByteBuffer;");
         }
         if (isVirtual) {
             if (UnsafeRepoint.OWNER.equals(owner)) {

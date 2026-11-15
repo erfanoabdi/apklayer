@@ -4,7 +4,7 @@
 //
 //   SYNTHETIC_PREFIX  prefix of the members the converter invents (outlined and split method parts, spill fields).
 //   REDIRECT_UNSAFE   an app's sun.misc.Unsafe calls go to apklayer.loader.ApklayerUnsafe (see runtime/host).
-//   REDIRECT_BUFFER   an app's ByteBuffer.allocateDirect/hasArray/array/arrayOffset go to apklayer.loader.ApklayerBuffers (Android's
+//   REDIRECT_BUFFER   an app's ByteBuffer.allocateDirect/hasArray/array/arrayOffset/position(int) go to apklayer.loader.ApklayerBuffers (Android's
 //                     direct buffers have an array).
 //   REDIRECT_EXIT     an app's System.exit/Runtime.exit/halt go to apklayer.loader.ApklayerExit (an exit that follows an activity start is a restart).
 //   LIBRARY           "classloader": the class hierarchy comes from the framework classes on the converter's own class path (the
