@@ -641,6 +641,10 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
             }
+            case HubProtocol.USB_OPEN -> {
+                Peer caller = caller(); String device = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeTypedObject(usb.open(caller.name(), device), android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
+            }
             case HubProtocol.PERMISSIONS_REQUEST -> {
                 Peer caller = caller(); String[] names = request.createStringArray(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeIntArray(permissionPrompt.request(caller.name(), caller.pid(), names)); return true;

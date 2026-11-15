@@ -149,7 +149,7 @@ the desktop. In microG's settings (the microG Settings app in the instance) "Goo
 ### USB devices
 
 Apps reach a USB device the way they do on Android (UsbManager: the device list, the attach intent, a permission question, `openDevice`); apklayer
-then opens the device's node `/dev/bus/usb/BBB/DDD` read-write as your user. By default those nodes are root's: give your user the device with a udev
+then opens the device's node `/dev/bus/usb/BBB/DDD` read-write as your user (the hub does it for an app that holds the permission and hands the descriptor over, as Android's UsbService does: also for the sandbox's app uids). Several apps that handle one device share one chooser when it is plugged in. By default those nodes are root's: give your user the device with a udev
 rule (`uaccess`: the logged-in desktop user gets it while their session is active), e.g. for a USB serial adapter:
 
 ```sh

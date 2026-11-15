@@ -18,16 +18,24 @@ def client(bus, path):
 
 
 def new_connection(device, profile, end):
+    """Asynchronous: the dispatcher of a server socket asks this mock (the device's address) while it handles a connection, and the mock waiting for its reply
+    would stall until D-Bus's timeout when a second ConnectProfile arrives meanwhile (BlueZ does not wait either)."""
     dbus.Interface(device.connection.get_object(client(device.connection, profile), profile), 'org.bluez.Profile1').NewConnection(
-        dbus.ObjectPath(device.__dbus_object_path__), dbus.types.UnixFd(end), dbus.Dictionary({}, signature='sv'))
+        dbus.ObjectPath(device.__dbus_object_path__), dbus.types.UnixFd(end), dbus.Dictionary({}, signature='sv'),
+        reply_handler=lambda: None, error_handler=lambda error: print('NewConnection to', profile, 'failed:', error, flush=True))
     end.close()
 
 
 def connect_profile(device, uuid):
-    profiles = getattr(objects['/org/bluez'], 'profiles', {})
-    profile, server = profiles.get((uuid.lower(), 'client')), profiles.get((uuid.lower(), 'server'))
-    if profile is None:
+    """Each registration of a client profile (one per helper: several apps, or one app's clients at once, register one UUID) gets one connection, the newest unserved first."""
+    bluez = objects['/org/bluez']
+    profiles, served = getattr(bluez, 'profiles', {}), getattr(bluez, 'served', set())
+    waiting = [p for p in profiles.get((uuid.lower(), 'client'), []) if p not in served]
+    servers = profiles.get((uuid.lower(), 'server'), [])
+    if not waiting:
         raise dbus.exceptions.DBusException('no profile for ' + uuid, name='org.bluez.Error.NotAvailable')
+    profile, server = waiting[-1], servers[-1] if servers else None  # the newest: an older one may be left by a helper that failed
+    bluez.served = served | {profile}
     ours, theirs = socket.socketpair()
     if server is not None:
         new_connection(device, server, ours)

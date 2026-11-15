@@ -60,10 +60,9 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish phone: needs a person for the Maliit-hide check, a finger on the keypad and the lock code; Maliit's sideways keyboard in a landscape app; the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client); sensorfw rotation by physically turning the phone; Bluetooth, scoped storage not run.
 - Sailfish location: needs `/var/lib/location/location.conf` enabled and connman's gps `Powered=true` (off by default); a real fix outdoors unchecked; sensorfw stops sensors with the screen off (the app reads zeros): documented, not changed.
 - VPN for apps (host-wide, `docs/VPN.md`, group `vpn`): built through NetworkManager (user-owned TUN, `apklayer vpn-guard`, `/1` default route, pkexec helper fallback); open: drive WireGuard and OpenVPN for Android to an established TUN (WireGuard needs a tunnel made in its UI, OpenVPN a profile and a server); a person's check of the pkexec dialog on a real desktop and the notification's Disconnect button; the pkexec path end to end through the hub; the per-app sandbox; Sailfish via connman; several instances with VPNs (they share the `/1` routes); no kill switch, `setMtu` ignored on the NM path.
-- Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
-- USB: one chooser for several apps; sandbox node access.
-- Bluetooth: pairing paths, Sailfish agent, truly simultaneous connects to one server socket (the mock keeps one client profile per UUID).
-- Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
+- USB: the sandbox path (`tests/vm/usb.py` with `USB_SANDBOX=1`, group `usb-sandbox`, optional) is unrun: the UTM VM lacks `tools/host-setup/sandbox.sh` (machine-wide AppArmor change); the hub opens the node and hands the descriptor over (the same path as without the sandbox, which `usb` runs).
+- Bluetooth: pairing paths on real devices; Sailfish: `ensure_agent` (bridge/portal/bluez.py) leaves `agent` set when RegisterAgent fails, so only the first bond reports `pairing without our agent` (no functional harm); our agent is not the default agent, so a pairing a remote device starts reaches the system's agent only; real BlueZ's choice between two client profiles of one UUID is unchecked (the mock hands each registration one connection).
+- Push: no `hello-work` test app: androidx.work is not on this machine (no downloads); WorkManager itself runs (Nextcloud 3.27 debug: 15 jobs through the hub, periodic ones at 15 min); a test app needs a work-runtime AAR from the owner; constraints stopping a running job, periodic runs and resume after suspend untested; microG 0.3.x.
 
 ## Tests and tooling
 
