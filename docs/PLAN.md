@@ -22,22 +22,22 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Graphics
 - Vulkan presentation untested on AMD.
-- OTR2 on the NVIDIA PC at 2448x1374: not measured (no APK on the tester PC; glbench there: 180 fps vsynced, 2.8k-4.9k fps unsynced while PGR renders). The ~30 fps was on the Intel PC.
-- Windows on KDE (tester PC, kwin 6.8, scale 2) pass, groups `kde-window` and `kde-output` included; needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
+- OTR2 on the NVIDIA PC at 2448x1374: not measured (no APK on the tester PC).
+- KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
 - `fit_size` reserves 46 px (`DECOR_H`) also under server-side decorations: the first window is 542 px high where 588 would fit.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
 - Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- `tests/run camera` fails on main in `camera-portrait.py` (`SurfaceTexture.setDefaultBufferSize` NPE, then the shutter-timestamps check); `camera-ndk` passes.
+- `tests/run camera` fails on main in `camera-portrait.py` (`SurfaceTexture.setDefaultBufferSize` NPE, then the shutter-timestamps check).
 - Portrait desktop monitor: the right camera mount degrees per monitor direction are unknown (no way to detect it).
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
 - Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); stylus slider and tool wheel are not delivered; AXIS_TILT/ORIENTATION follow a remembered InputReader formula, not a checked source.
-- Non-Latin input (group `input-lang` passes): map the xkb layout to the app's `LocaleList` and IME subtypes; RTL cursor, selection and bidi in an EditText; layout-switch hotkeys (Alt+Shift, Super+Space); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
+- Non-Latin input: map the xkb layout to the app's `LocaleList` and IME subtypes; RTL cursor, selection and bidi in an EditText; layout-switch hotkeys (Alt+Shift, Super+Space); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
 - text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 - Lomiri greeter: only the first uinput tap registers.
@@ -60,7 +60,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Unity: `hpatchz`.
 
 ## Sandbox (before it can be the default)
-- NVIDIA sandbox checklist passes on the tester PC; open: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (the tester PC's nodes are 0666, no `nvidia-modprobe`).
+- NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (nodes are 0666 on the tester PC, no `nvidia-modprobe`).
 - UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
 - A release-candidate deb with the sandbox on for a day.
 
@@ -90,7 +90,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
-- AMD: Vulkan presentation, host ES1. NVIDIA is confirmed (RTX 5060 Ti 615.71, sandboxed and not).
+- AMD: Vulkan presentation and host ES1 untested.
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
 - Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
 - Ubuntu Touch: manager on screen, navigation bar under the panel, drawer tap, shell window, maximize, turning by hand.
