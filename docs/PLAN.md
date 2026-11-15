@@ -12,7 +12,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- The app log cap (256 MB, `APKLAYER_APP_LOG_CAP`) is not strict: a few lines from a writer other than the launcher's pipe arrive after the cap note.
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize.
@@ -54,10 +53,9 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Direct buffer `array()` writes are lost (HotSpot cannot pin an app's `allocateDirect` buffer; `ApklayerBuffers` returns a copy).
 
 ## Startup and memory
-- JDK 25: flatpak still names JDK 21; findJava prefers an installed 21 over 25.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
-- Hub ready with 146 packages is 2.1 s, ~0.5 s above the 5-package floor (`onServiceStart` 0.36 s; `definition()` scans all packages per permission; no caching on the apps directory mtime because in-place updates in `cli/apps.cpp` don't change it).
+- Hub ready with 146 packages is 2.1 s, ~0.5 s above the 5-package floor (`onServiceStart` 0.36 s). A CLI run outside the hub that changes a package's declared permissions in place is not seen until the apps directory changes.
 - `tests/lib/instance.wait_file` races with app-log rotation (exists, then read_text).
 - Cold start: `Hyphenator.nInit` (~45 ms) and the eager `JNI_OnLoad` libraries (4 ms; the 144 ms is `libandroid_runtime`) need no work. Remaining: `Application.onCreate` with ~20 packages (~2 s). A key generated with user authentication before the keystore enrollment finishes could miss the secure user id (not covered by a test).
 - SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
@@ -93,6 +91,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 ## Packaging and releases
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
+- Flatpak: the `org.freedesktop.Sdk.Extension.openjdk25` extension and 26.08 runtime are unverified (manifest now names JDK 25).
 - amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
 - First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
