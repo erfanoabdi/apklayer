@@ -30,6 +30,8 @@ try:
     small = log.read_text(errors='replace')
     assert 'reached its size limit (3000 bytes)' in small and re.search(r'\[apklayer\] \d+ lines \(\d+ bytes\) of the launch.s output were left out', small), small[-1500:]
     assert len(small.encode()) < 4500 and small.split('\n[apklayer] this log reached')[0].endswith('\n'), 'the cut is not at a line end or the file is over the cap: %d' % len(small)
+    after = small.split('size limit (3000 bytes): the rest of the launch\'s output is left out\n')[1]
+    assert re.fullmatch(r'\[apklayer\] \d+ lines \(\d+ bytes\) of the launch.s output were left out at the size limit\n', after), 'lines after the cap note: ' + after[:500]
     out = instance.OUT / 'report.tar.gz'
     subprocess.run(['bin/apklayer', 'report', PKG, str(out)], env=ENV, capture_output=True, text=True, check=True, timeout=120)
     with tarfile.open(out) as t:

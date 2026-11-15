@@ -48,8 +48,19 @@ final class AppEnvironment {
         String appLog = System.getProperty("apklayer.applog");
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out;
         else if (appLog != null) {
-            try { org.robolectric.shadows.ShadowLog.stream = new java.io.PrintStream(new java.io.FileOutputStream(appLog, true), true); }
-            catch (java.io.IOException e) { System.out.println("[apklayer] app log " + appLog + ": " + e); }
+            try {
+                // the launcher's tee (cli/logs.cpp) caps the file: this second writer takes a line only while it fits, so nothing follows the cap note
+                String capEnv = System.getenv("APKLAYER_APP_LOG_CAP");
+                long cap = capEnv != null ? Long.parseLong(capEnv) : 256L << 20;
+                java.io.FileOutputStream file = new java.io.FileOutputStream(appLog, true);
+                org.robolectric.shadows.ShadowLog.stream = new java.io.PrintStream(new java.io.OutputStream() {
+                    @Override public void write(int b) throws java.io.IOException { write(new byte[] {(byte) b}, 0, 1); }
+                    @Override public void write(byte[] b, int off, int len) throws java.io.IOException {
+                        if (file.getChannel().size() + len <= cap) file.write(b, off, len);
+                    }
+                }, true);
+            }
+            catch (java.io.IOException | NumberFormatException e) { System.out.println("[apklayer] app log " + appLog + ": " + e); }
         }
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
                 : new AndroidManifest(null, null, null, null, "", apk) {
