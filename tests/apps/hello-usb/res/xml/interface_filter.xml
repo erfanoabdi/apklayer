@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Filter.java: the elements in this order match / match / no match / no match / match a fake mass-storage interface (class 8, subclass 6, protocol 0x50) of a device of class 0 -->
+<resources>
+  <usb-device class="8" subclass="6" protocol="80"/>
+  <usb-device class="8"/>
+  <usb-device class="8" subclass="6" protocol="98"/>
+  <usb-device class="3"/>
+  <usb-device vendor-id="4660" class="8" subclass="6"/>
+</resources>

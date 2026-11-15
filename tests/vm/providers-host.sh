@@ -79,6 +79,9 @@ events=$(grep -a -o '^\[hw\] accelerometer [0-9]* events' $out | grep -o '[0-9][
 grep -a "vibrate" $APKLY_STATE/hfd.calls
 [ "$(grep -a -o 'vibrate [0-9]*' $APKLY_STATE/hfd.calls | pattern - "vibrate 1")" = "vibrate 100 vibrate 200 vibrate 100 " ] ||
     fail "the app's waveform and click did not reach hfd-service"
+# no amplitude in hfd and none in feedbackd's events: the HAL reports no compose capability and refuses compose
+bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
+grep -aq "PASS vibrator without compose" $APKLY_STATE/tool.log || fail "hfd: the HAL reports or plays compositions"
 bin/apklayer providers set vibrator feedbackd >/dev/null
 bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
 grep -a "PASS\|Check failed" $APKLY_STATE/tool.log; grep -a "TriggerFeedback\|EndFeedback" $APKLY_STATE/feedbackd-events.calls

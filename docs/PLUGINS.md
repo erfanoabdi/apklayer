@@ -45,7 +45,7 @@ The domain's own calls:
 
 | Domain | Calls | Threads |
 |---|---|---|
-| `vibrator` | `on(duration_ms)`, `off()`, `amplitude(0..1)` | Binder threads (up to 5), possibly at the same time. Return at once. AOSP's example HAL keeps the timing and the completion callbacks. |
+| `vibrator` | `on(duration_ms)`, `off()`, `amplitude(0..1)` | Binder threads (up to 5), possibly at the same time. Return at once. AOSP's example HAL keeps the timing and the completion callbacks. Optional `compose()` (nonzero): the backend honours an amplitude change before each `on`, so the HAL also reports and plays compositions (primitives, PWLE) as 20 ms-and-up steps. |
 | `sensors` | `list(out, max)` once; `read(index, values[3])` → 3 (x, y, z) or 1 value, in Android's units (m/s², rad/s, µT, lux, hPa, cm) | `list` on the main thread. `read` runs on one sampling thread per active sensor, so calls for different sensors run in parallel. Never block: return the latest value. |
 | `gnss` | `next_fix(&fix)` → 0, or `-EAGAIN` while there is no fix yet | One reporting thread, about once a second. Never block for long. |
 | `camera` | `list`, `open(id, callbacks)`, `start(w, h, fps, fourccs)`, `format`, `stop`, `close`; frames arrive through `callbacks->frame` with I420, NV12, YUYV or XRGB planes and a monotonic timestamp | Control calls come from binder threads, one at a time per camera. Callbacks run on your capture thread. No callback may run after `stop` or `close` returns. |

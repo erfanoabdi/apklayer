@@ -34,7 +34,7 @@ for want in "adapter state=12 enabled=true name=apklayer-mock address=02:00:00:0
         "read 00002a19-0000-1000-8000-00805f9b34fb value=42 status=0" "ccc written status=0" "notify 00002a19-0000-1000-8000-00805f9b34fb value=43" \
         "bond C0:FF:EE:00:00:01 10->11" "bond C0:FF:EE:00:00:01 11->12" "state 12->10 enabled=false" "state 10->12 enabled=true" \
         "rfcomm connected=true" "rfcomm read echo:ping" "rfcomm channel 3 failed read failed, socket might closed or timeout (ERR " \
-        "server accept timeout Try again" "server accepted 11:22:33:44:55:66 connected=true" "server client read got:hello" "server close woke accept socket closed" \
+        "server accept timeout Try again" "server accepted 11:22:33:44:55:66 connected=true" "server client read got:hello" "server several clients served=2" "pi-scan started=0" "pi-scan C0:FF:EE:00:00:01 type=1" "server close woke accept socket closed" \
         "rfcomm pipes left=0" "pairing-request AA:BB:CC:00:00:02 variant=0 key=-1" "setpin answered=true" "bond AA:BB:CC:00:00:02 11->12" \
         "bond AA:BB:CC:00:00:01 10->11" "bond AA:BB:CC:00:00:01 11->12" "pairing-request AA:BB:CC:00:00:03 variant=2 key=123456" "bond AA:BB:CC:00:00:03 11->12" "PASS"; do
     grep -aqF "[bt] $want" $out || { echo "FAIL: no '[bt] $want'"; exit 1; }

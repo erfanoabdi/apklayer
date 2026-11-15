@@ -65,6 +65,7 @@ public class Main extends Activity {
             }
         }, filter(), Context.RECEIVER_EXPORTED);
         for (UsbDevice d : usb.getDeviceList().values()) if (Serial.acm(d) && !asked) { asked = true; ask(d); }
+        Filter.run(this);
         System.out.println("[usb] ready");
     }
 

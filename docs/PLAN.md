@@ -108,10 +108,10 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Binder devices of a removed instance stay until reboot.
 
 ## Hardware
-- Vibrator effects. x86_64 `libapklayer_gnss`.
+- Vibrator: `View.performHapticFeedback(int)` is swallowed by Robolectric's `ShadowView` (haptic constants only reach the HAL for the hidden `Vibrator.performHapticFeedback`); ramp/PWLE segments of app effects are skipped in the hub's vibrator_manager.
 - iio-sensor-proxy gives only derived values: no accelerometer or compass type. On Parallels a source-tree CLI needs `--no-daemon` plus `APKLAYER_NATIVE`/`APKLAYER_BT`/`APKLAYER_BINDER=userspace` (the old 0.3.4 daemon takes over).
-- USB: attach with no hub, interface filters, one chooser for several apps, sandbox node access.
-- Bluetooth: pairing paths, Sailfish agent, several clients per server socket, PendingIntent scans.
+- USB: one chooser for several apps; sandbox node access.
+- Bluetooth: pairing paths, Sailfish agent, truly simultaneous connects to one server socket (the mock keeps one client profile per UUID).
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
