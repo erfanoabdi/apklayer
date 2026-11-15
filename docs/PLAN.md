@@ -47,6 +47,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 ## Sandbox (before it can be the default)
 - NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes run only on a real Debian-style NVIDIA box (code read and the node-to-arguments table tested with a Debian node list; nodes are 0666 on the tester PC, no `nvidia-modprobe`).
 - A release-candidate deb with the sandbox on for a day.
+- SettingsProvider throws "Ssaid settings not accessible" for an isolated process (android:isolatedProcess, uid 99000) of an app whose SSAID already exists: the lookup is keyed by the caller's uid, the insert by the app's, so it regenerates the same value and `insertSettingLocked` returns false (frameworks/base/packages/SettingsProvider, `getSsaidSettingLocked`/`generateSsaidLocked`: key the lookup by `callingPkg.applicationInfo.uid`; an apklayer patch of the settings APK). Group `sandbox` alone failed every second run in a slot before `tests/vm/sandbox.sh` deleted the table first.
 
 ## Packaging and releases
 - Sailfish RPM: the `jni_guest_surface.c` change now logs `[runtime] jni_guest_surface active: ...` once per app JVM; needs an RPM of this tree installed on the Quintus and one app run to see it there.

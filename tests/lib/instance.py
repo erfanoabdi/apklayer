@@ -83,6 +83,17 @@ def assert_clean():
     assert not left, 'left running:\n' + '\n'.join(left)
 
 
+def reclaim(*paths):
+    """Gives files back to the user that a sandboxed app's uid (APKLAYER_SANDBOX=1, cli/sandbox.cpp) left in the instance's data and state or in `paths`:
+    they would break the next unsandboxed run (AccessDeniedException) and cannot be removed by the user. Only with the processes gone; sudo -n, as the tests use it."""
+    data = Path(ENV.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer' / ('0' if INSTANCE == 'default' else INSTANCE)
+    me = '%d:%d' % (os.getuid(), os.getgid())
+    for p in (data, STATE, *paths):
+        if p and Path(p).exists():
+            subprocess.run(['sudo', '-n', 'find', str(p), '-xdev', '(', '!', '-uid', str(os.getuid()), '-o', '!', '-gid', str(os.getgid()), ')', '-exec', 'chown', '-h', me, '{}', '+'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def stop():
     """The instance's stack, hub, apps and shell, then anything of this instance the stop missed. Returns the services that did not end
     cleanly at this stop (the stack daemon's "stopped: NAME (status N)" lines: SIGSEGV is 139)."""
@@ -93,6 +104,7 @@ def stop():
     for line in mine('java', exact=True):  # the app and service JVMs the stop missed (by name: their command lines are process names)
         try: os.kill(int(line.split()[0]), signal.SIGTERM)
         except (OSError, ValueError): pass
+    reclaim()
     if not log.exists(): return []
     with open(log, 'rb') as f:
         f.seek(seen)

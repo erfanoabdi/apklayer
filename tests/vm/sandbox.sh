@@ -14,6 +14,9 @@ mkdir -p "$other" "$home/private" && chmod 755 "$home" && chmod 700 "$home/priva
 export APKLAYER_PICKER="echo $home/picked.txt"  # apklayerd's picker (it runs as the user); the app's own environment does not reach it
 # an on-demand apklayerd keeps its first client's environment: one an earlier group in this instance started has no picker of the test's
 bin/apklayer stop >/dev/null 2>&1; sh tests/vm/kill-instance.sh "$inst" "[a]pklayer daemon --on-demand"
+# the SSAID table of an earlier run: SettingsProvider keys an isolated caller's lookup by its uid (99000) but stores the id under the app's uid, so a second request of the
+# same app finds no entry, generates the same id again and throws "Ssaid settings not accessible" (insert without a change); the isolated check below fails (PLAN: patch it)
+rm -f "$root/data/system/users/0/settings_ssaid.xml"
 bin/apklayer install .tests/apks/hello-sandbox.apk 2>&1 | grep -aq installed || { echo "install hello-sandbox failed"; exit 1; }
 bin/apklayer stop >/dev/null 2>&1; bin/apklayer home-access hello.sandbox off >/dev/null
 # a GPU node closed to "other" that the user opens (the seat's ACL, the video group): what NVIDIA's /dev/nvidia* can be (Debian: 0660 video)
