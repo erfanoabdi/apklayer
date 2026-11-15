@@ -329,7 +329,7 @@ public final class HubClient {
      */
     static synchronized boolean attachEarly() {
         if (current == null && !attaching && !HubHost.booting && System.getProperty("apklayer.apps") != null && System.getProperty("apklayer.package") != null && !AppEnvironment.installing) {
-            android.app.Application app = org.robolectric.android.internal.ApklayerBinding.hostApplication();
+            android.app.Application app = android.app.ActivityThread.currentApplication();
             if (app != null) {
                 attaching = true;
                 try { attach(app); }

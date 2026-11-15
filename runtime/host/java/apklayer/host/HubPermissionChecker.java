@@ -18,7 +18,7 @@ final class HubPermissionChecker extends IPermissionChecker.Stub {
 
     static void install() {
         ShadowServiceManager.addBinderService(Context.PERMISSION_CHECKER_SERVICE, IPermissionChecker.class, new HubPermissionChecker((source, permission) ->
-                org.robolectric.android.internal.ApklayerBinding.hostApplication().checkPermission(permission, source.pid, source.uid) == PackageManager.PERMISSION_GRANTED));
+                android.app.ActivityThread.currentApplication().checkPermission(permission, source.pid, source.uid) == PackageManager.PERMISSION_GRANTED));
     }
 
     static boolean publish(HubPackages packages) {
