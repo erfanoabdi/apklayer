@@ -19,7 +19,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR (Tencent ACE) died at 105-144 s on half the runs: cause found, ACE's `/proc/self/root` virtual-app probe (fixed in `bridge/native/paths.c`; 31.7 min idle soak on the tester PC). Open: ship the rebuilt `libapklayer-preload.so` in the deb/bundle; run meson `path-layer` and `tests/run files`; play PGR into a gameplay scene on the tester PC (needs a test-input shell or an unlocked desktop).
-- Translator differences still open vs real arm64 (`tests/apps/hello-acediff`, `known-diffs.txt`): default NaN sign and FPCR.DN, fmax/fmin/fmls NaN operands, fused FRECPS/FRSQRTS, a guest signal with no guest handler ends in HotSpot's crash handler (SIGABRT). None explains ACE.
+- Translator, translated code only (acediff known-diffs `inv `, `dn `, `nn `, `default-NaN`, `vsqrtq_f`): the negative default NaN of an invalid FADD/FSUB/FMUL/FDIV/FSQRT/FMLA/FMADD, FPCR.DN ignored, two NaN operands of different kinds, NaN sign of FMSUB/FNMADD/FNMSUB. A fix-up after each operation, or a bail while DN is set, would close them at a speed cost. None explains ACE. A guest fault without a guest handler still goes to HotSpot's handler.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
 
 ## Graphics
@@ -62,7 +62,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
 - Fennec on x86: a guest `libmegazord` double free is quarantined (not a crash). A crash seen once at libxul+0x3e88716 in another PC tree did not reproduce on main (6 of 6 pass).
-- Translator: ops on a stale joined `pthread_t` should answer ESRCH; a guest fault without a guest handler still goes to HotSpot's handler.
 - No translation cache across starts.
 - Telegram has no x86_64 FOSS APK to test.
 - The guest JVM finds the host's `libjsig`: watch for a later SIGSEGV handler.
