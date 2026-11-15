@@ -232,7 +232,6 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         step("runtime", "running", "Setting up version " + have + " (a few minutes after an update)");
         fresh.requireRuntime();
         if (!fresh.setUpBundle(false)) { step("runtime", "failed", "Setting up the runtime in " + fresh.native + " failed: apklayer setup in a terminal shows why"); return 1; }
-        applyGappsConfig(fresh);  // Google's allowlists, when its apps are installed: a new runtime's android-root has none
     }
     step("runtime", "done", "Version " + have);
 
@@ -279,7 +278,8 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     if (o.microg) extra("microg", envOr("APKLAYER_MICROG_INDEX", "https://microg.org/fdroid/repo/index-v1.json"), {"com.google.android.gms", "com.android.vending"});
     if (o.gapps) {
         std::string e = installGapps(fresh, instance, [](const std::string& detail) { step("gapps", "running", detail); }, progress);
-        step("gapps", e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
+        // the hub reads the allowlists once per JVM (apklayer.host.HubPackages): a running instance keeps its old view until it is restarted
+        step("gapps", e.empty() ? "done" : "failed", e.empty() ? "Installed; restart the instance to use them (apklayer stop)" : e);
     }
     if (o.fdroid) extra("fdroid", envOr("APKLAYER_FDROID_INDEX", "https://f-droid.org/repo/index-v1.json"), {"org.fdroid.fdroid"});
     return anyFailed ? 1 : 0;

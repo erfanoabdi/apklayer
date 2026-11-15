@@ -10,7 +10,10 @@ namespace apklayer {
 
 // Installs (or updates) the LiteGapps build of this CPU; report names what it does. "" when it worked, else what failed.
 std::string installGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report, const manager::Progress& progress);
-// Google's permission allowlists and sysconfig, kept in <data>/apklayer/google-apps/etc, into the runtime's android-root (again after a runtime update)
-void applyGappsConfig(const Layout& layout);
+// <data>/apklayer/google-apps/etc: Google's permission allowlists, sysconfig and default grants, where `setup --gapps` leaves them. The readers are
+// pointed at them there (APKLAYER_EXTRA_ETC in cli/env.cpp, apklayer.host.HostSystemConfig, cli/manage.cpp) rather than a copy being made into the
+// runtime's android-root, which a package build serves read-only. "" unless Google's own apps are installed: the Services Framework is theirs alone
+// (microG ships none), so a removal stops the allowlists applying at once.
+std::string gappsEtcDir(const Layout& layout);
 
 }  // namespace apklayer

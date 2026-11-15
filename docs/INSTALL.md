@@ -236,8 +236,9 @@ installed and offers Install, Update (nothing is downloaded beyond the repositor
 In place of microG, `apklayer setup --gapps` (the "Google Play" tile) installs Google's own apps from the LiteGapps "lite" zip for the runtime's SDK
 (~250 MB from SourceForge, sha256-pinned in cli/gapps.cpp; `APKLAYER_GAPPS_URL`/`APKLAYER_GAPPS_SHA256` for another copy, `file://` works): the Services
 Framework, Play services, Play Store and the contacts/calendar sync adapters as system apps, with Google's privileged-permission and sysconfig XMLs
-(kept in `~/.local/share/apklayer/google-apps/etc`, copied into the runtime's android-root again after a runtime update). microG is removed first;
-the two cannot be installed together.
+(kept in `~/.local/share/apklayer/google-apps/etc` and read from there, never copied into the runtime's android-root, so a package build that serves
+that read-only -- the Nix one -- works too). Restart the instance afterwards: the hub reads the allowlists once. microG is removed first; the two
+cannot be installed together.
 Space: the runtime takes ~1.6 GB unpacked per version and an update unpacks the new one beside the current one (the one before stays; older
 ones go), with the bundle (~0.5 GB) downloaded beside them. Setup checks the free space of `~/.local/share/apklayer` before it downloads or unpacks
 and fails early with what is needed, what is free and where; when only removing the runtimes other than the current one makes room it removes

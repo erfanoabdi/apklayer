@@ -5,6 +5,7 @@
 #include "daemon.h"
 #include "linux_compat.h"
 #include "flatpak.h"
+#include "gapps.h"
 #include "logs.h"
 #include "halium.h"
 #include <algorithm>
@@ -305,6 +306,9 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     bindShared(true);
     steps.insert(steps.end(), lateLinks.begin(), lateLinks.end());
     for (const std::string& own : {l.appsDir, inst.stateDir, inst.root}) bind(realPath(own), own, false);
+    // Google's permission allowlists (cli/gapps.cpp) sit beside the apps, so the tmpfs above hides them: bind them back, or
+    // apklayer.host.HostSystemConfig reads an empty directory and Google's apps quietly lose their privileged permissions here
+    if (std::string gapps = gappsEtcDir(l); !gapps.empty()) bind(realPath(gapps), gapps, false);
     std::string data = realPath(appDataDir(l, inst, package)), tmp = join(inst.tmpDir(), "sandbox-" + std::to_string(uid));
     makeDirs(tmp);
     if (chown(tmp.c_str(), uid, uid) != 0) die("cannot give " + tmp + " to the app");

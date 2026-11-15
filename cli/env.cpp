@@ -1,6 +1,7 @@
 #include "env.h"
 
 #include "apps.h"
+#include "gapps.h"
 #include "gpus.h"
 #include "binder.h"
 #include "halium.h"
@@ -381,6 +382,11 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
     if (exists(join(n, "native-runtime.jar"))) a.push_back("-Dapklayer.nativejar=" + join(n, "native-runtime.jar"));
     if (isDir(join(nr, "apex"))) {
         ne.env["ANDROID_ROOT"] = join(nr, "system");
+        // Google's permission allowlists (cli/gapps.cpp) stay in the data home: the runtime's android-root is read-only in a package build.
+        // HostSystemConfig reads this beside ANDROID_ROOT; cli/sandbox.cpp binds it back in. The erase is not optional: nativeEnv starts from
+        // currentEnv() and the hub spawns launches with its own environment, so a removal has to clear it, not merely stop setting it.
+        if (std::string gapps = gappsEtcDir(l); !gapps.empty()) ne.env["APKLAYER_EXTRA_ETC"] = gapps;
+        else ne.env.erase("APKLAYER_EXTRA_ETC");
         ne.env["ANDROID_DATA"] = "/data";  // the instance's own (APKLAYER_DATA through the path layer): SettingsProvider's files, not the shared native root's
         ne.env["ANDROID_I18N_ROOT"] = join(nr, "apex/com.android.i18n");
         ne.env["ANDROID_TZDATA_ROOT"] = join(nr, "apex/com.android.tzdata");

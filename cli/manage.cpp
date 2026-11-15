@@ -4,6 +4,7 @@
 #include "binder.h"
 #include "desktop.h"
 #include "fetch.h"
+#include "gapps.h"
 
 #include <algorithm>
 #include <cctype>
@@ -253,9 +254,17 @@ int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<
     std::vector<std::string> requested = split(property(info, "permissions"), ';');
     if (args.size() == 1) {
         // signature permissions: a privileged system app (in the build's allowlist) holds them, as HostSystemConfig grants them
+        // Google's own apps keep their allowlist in the data home (cli/gapps.cpp), which HostSystemConfig reads beside this one: both, or the
+        // CLI disagrees with the JVM about what is privileged
         bool privileged = false;
-        for (const std::string& f : listDir(join(etc, "permissions")))
-            privileged = privileged || readFile(join(etc, "permissions/" + f)).value_or("").find("<privapp-permissions package=\"" + pkg + "\"") != std::string::npos;
+        std::vector<std::string> allowlists = {join(etc, "permissions")};
+        if (std::string gapps = gappsEtcDir(l); !gapps.empty()) allowlists.push_back(join(gapps, "permissions"));
+        for (const std::string& dir : allowlists)
+            for (const std::string& f : listDir(dir)) {
+                const std::string xml = readFile(join(dir, f)).value_or("");  // either quote: a vendor's allowlist is not always written as AOSP's are
+                privileged = privileged || xml.find("<privapp-permissions package=\"" + pkg + "\"") != std::string::npos
+                                        || xml.find("<privapp-permissions package='" + pkg + "'") != std::string::npos;
+            }
         for (const std::string& p : requested) {
             if (p.empty()) continue;
             const std::string level = levels.count(p) ? levels[p] : "";
