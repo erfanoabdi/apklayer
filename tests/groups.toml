@@ -406,6 +406,11 @@ run = ["python3 -u tests/vm/window-formats.py"]
 apps = ["hello-glformats"]
 run = ["python3 -u tests/vm/gl-formats.py"]
 
+[exit-clean]
+# a host JVM that loaded libapklayer_egl ends without a fault at stop: no hs_err file, no stopped-by-signal service (PGR on AWS: SIGSEGV in an exit-time callback)
+apps = ["hello-glbench"]
+run = ["python3 -u tests/vm/exit-clean.py"]
+
 [texture-view]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/texture-view.py"]
