@@ -341,7 +341,7 @@ static void test_float_targets(void)
         quad(1, 0, 0.5f, 0.25f, 0.75f, 1.0f);
         px8(0, 0, p);
         snprintf(name, sizeof name, "%s-write", U[i].name);
-        int tol = U[i].fmt == GL_RGB565 || U[i].fmt == GL_RGBA4 ? 9 : 1;
+        int tol = U[i].fmt == GL_RGBA4 ? 17 : U[i].fmt == GL_RGB565 ? 9 : 1;  /* RGBA4: one 4-bit step; radeonsi truncates (0.25 -> 51), others round */
         result(name, abs(p[0] - 128) <= tol && (U[i].ch < 2 || abs(p[1] - 64) <= tol) && (U[i].ch < 3 || abs(p[2] - 191) <= tol), "0.5,0.25,0.75 -> %d,%d,%d,%d", p[0], p[1], p[2], p[3]);
         rt_free(&r);
     }

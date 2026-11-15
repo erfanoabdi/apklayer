@@ -51,6 +51,7 @@ Read where they are needed; set them for one command (`APKLAYER_RUNTIME_DEBUG=1 
 | `APKLAYER_PRESENT_FENCE` | `gpu`: no sync object for presents (HAL tests) |
 | `APKLAYER_CDS` | `off`: no class data sharing archive (a corrupt archive) |
 | `APKLAYER_GST_AMC` | keep the Android-MediaCodec GStreamer elements on Halium |
+| `APKLAYER_COMPOSITOR_GPU` | the compositor's GPU (id or render node), where its dmabuf feedback names none (a nested or virtual KWin) |
 | `APKLAYER_GPU` | the instance's GPU for one command (the persistent choice is `apklayer gpu set`) |
 | `APKLAYER_BOOT_BROADCASTS`, `APKLAYER_MEDIA_WATCHES` | `0`/a package: BOOT_COMPLETED receivers; the hub's inotify budget |
 | `APKLAYER_DISPLAY_WIDTH`, `_HEIGHT`, `_DPI` | the virtual display (720x1280, 320 dpi) |

@@ -393,6 +393,14 @@ run = ["b/bridge/hals/graphics/vulkan-select-test real"]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)
 run = ["python3 -u tests/vm/gpu-select.py"]
 
+[gpu-multi]
+# iGPU + dGPU: the instance on each hardware GPU (APKLAYER_GPU), the compositor's own and the others (mixed: LINEAR window buffers imported across GPUs):
+# gpu-smoke, gles1 and vulkan-present on each; skipped on a host with one GPU
+apps = ["hello-vulkan", "hello-gles1"]
+needs = ["com.android.test.uibench"]
+alone = true
+run = ["python3 -u tests/vm/gpu-multi.py"]
+
 [gpu-window]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/gpu-window-run.py"]

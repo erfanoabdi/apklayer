@@ -75,6 +75,17 @@ fi
 "$cli" settings | grep -qx "navbar	on" || { echo "FAIL the navigation bar row did not set navbar on"; exit 1; }
 "$cli" settings set navbar auto >/dev/null
 echo "ok   the navigation bar setting through the Properties page"
+# the Instances page's GPU rows (only where the host has several GPUs): choose the one the desktop does not use, then "Automatic" again
+if [ "$("$cli" gpus | tail -n +2 | grep -c .)" -gt 1 ]; then
+    IFS=$'\t' read -r gid gname < <("$cli" gpus | awk -F'\t' 'NR > 1 && $5 == "no" { print $1 "\t" $7; exit }')
+    auto="Automatic (the desktop's GPU)"  # the first row (no explicit choice)
+    chosen() { "$cli" gpus | awk -F'\t' -v id="$1" '$1 == id && $8 == "yes" { f = 1 } END { exit !f }'; }
+    "$m" --screenshot "$shots/ui-11-gpu.png" --size 1100x900 --page 1 --expect "GPU of $APKLAYER_INSTANCE" --click "$gname" --wait-refresh 1
+    chosen "$gid" || { echo "FAIL the GPU rows did not choose $gid"; exit 1; }
+    "$m" --screenshot "$shots/ui-12-gpu.png" --size 1100x900 --page 1 --click "$auto" --wait-refresh 1
+    ! chosen "$gid" || { echo "FAIL the GPU rows' Automatic did not unset the choice"; exit 1; }
+    echo "ok   the Instances page's GPU rows chose $gname and Automatic again"
+fi
 "$cli" stop >/dev/null
 echo "PASS manager UI"
 "$(dirname "${BASH_SOURCE[0]}")/ui-updater.sh" "$@"
