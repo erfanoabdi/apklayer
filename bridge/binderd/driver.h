@@ -150,6 +150,7 @@ struct Proc {
     uint64_t cookie;
     pid_t pid;
     uid_t euid;
+    uid_t app_uid = 0;  // APKLAYER_BINDER_SET_SENDER_UID: the sender_euid of its oneway transactions (0: euid)
     // the receive area: a memfd mapped here and (read-only for libbinder) in the process
     int memfd = -1;
     uint8_t* area = nullptr;

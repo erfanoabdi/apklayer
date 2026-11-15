@@ -44,6 +44,11 @@ public final class HubClient {
         synchronized (HubClient.class) { unappliedSettings = settings; }
         AppHost.beforeFirstLaunch(() -> { android.os.Bundle late = takeSettings(); if (late != null) AppHost.configurationChanged(HostConfiguration.update(late)); });
         HostInputMethods.install(context,HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
+        int uid = android.os.Process.myUid();  // known by now in a spare too
+        if (uid >= android.os.Process.FIRST_APPLICATION_UID) {
+            int set = RealBinder.setSenderUid(uid);
+            if (set != 0 && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] oneway sender uid not set: " + set);
+        }
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
     /**

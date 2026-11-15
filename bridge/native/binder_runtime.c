@@ -147,6 +147,14 @@ static void start_pool(JNIEnv *env, jclass cls)
 }
 
 /* The helper class apklayer.host.RealBinder (an uninstrumented host class; natives registered under their plain names). */
+/* libapklayer-preload's binder route (LD_PRELOAD, global scope): absent when the process runs without it */
+extern int apklayer_binder_route_set_sender_uid(uint32_t uid) __attribute__((weak));
+static jint set_sender_uid(JNIEnv *env, jclass cls, jint uid)
+{
+    (void)env; (void)cls;
+    return apklayer_binder_route_set_sender_uid ? apklayer_binder_route_set_sender_uid((uint32_t)uid) : -ENOSYS;
+}
+
 int apklayer_register_binderhelper(JNIEnv *env, jclass helper)
 {
     void *ndk = bionic_dlopen("libbinder_ndk.so", 2);
@@ -168,6 +176,7 @@ int apklayer_register_binderhelper(JNIEnv *env, jclass helper)
         {"lookup0", "(Ljava/lang/String;)Landroid/os/IBinder;", (void *)lookup},
         {"startPool", "()V", (void *)start_pool},
         {"wait0", "(Ljava/lang/String;J)Landroid/os/IBinder;", (void *)wait_service},
+        {"setSenderUid0", "(I)I", (void *)set_sender_uid},
     };
     if ((*env)->RegisterNatives(env, helper, methods, sizeof methods / sizeof *methods) < 0) return -1;
     return 0;

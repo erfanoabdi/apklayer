@@ -41,6 +41,17 @@ public final class RealBinder {
     }
     private static native IBinder wait0(String name, long timeoutMs);
 
+    /**
+     * This process's app uid as the sender of its oneway transactions (userspace binder: APKLAYER_BINDER_SET_SENDER_UID, bridge/binderd/protocol.h):
+     * a oneway call has no sender pid and every unsandboxed process runs as the desktop user, so a receiver that asks getCallingUid without an
+     * interface-token header (grpc-binder) learns the app from it. 0 or -errno; the kernel's binder and older shims leave it unset.
+     */
+    static int setSenderUid(int uid) {
+        try { return setSenderUid0(uid); }
+        catch (UnsatisfiedLinkError older) { return -38; }  // ENOSYS: a runtime without it
+    }
+    private static native int setSenderUid0(int uid);
+
     // The shim registers these uninstrumented native names; the public methods above initialize the pool.
     private static native boolean publish0(String name, IBinder binder, boolean allowIsolated);
     private static native IBinder lookup0(String name);

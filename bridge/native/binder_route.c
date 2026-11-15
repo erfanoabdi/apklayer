@@ -422,6 +422,21 @@ static int route_close(int fd, int *result)
 /* the path layer's glibc-level open wrappers (paths_preload.c: bionic code's fortified __open_2 reaches them on glibc) ask here too; and access()
  * of a routed node succeeds, as for a device */
 int apklayer_binder_route_open(const char *path, int flags) { return route_open(path, flags); }
+/* The process's Android app uid as the sender of its oneway transactions, on every binder it opened (APKLAYER_BINDER_SET_SENDER_UID; the shim
+ * calls it once the app is known: a spare learns it late). 0: done, else -errno of the first refusal; nothing routed: 0. */
+int apklayer_binder_route_set_sender_uid(uint32_t uid)
+{
+    if (!on()) return 0;
+    int fds[MAX_CONNS], n = 0, first = 0;
+    pthread_mutex_lock(&conns_lock);
+    for (int i = 0; i < MAX_CONNS; i++) if (conns[i].fd >= 0) fds[n++] = conns[i].fd;
+    pthread_mutex_unlock(&conns_lock);
+    for (int i = 0; i < n; i++) {
+        int result;
+        if (route_ioctl(fds[i], APKLAYER_BINDER_SET_SENDER_UID, &uid, &result) && result < 0 && !first) first = -errno;
+    }
+    return first;
+}
 int apklayer_binder_route_exists(const char *path)
 {
     char sock[sizeof conns[0].path], ctx[16];

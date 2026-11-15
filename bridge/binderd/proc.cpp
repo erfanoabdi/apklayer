@@ -195,6 +195,12 @@ bool Driver::ioctl(Thread* t, uint32_t cmd, const std::vector<uint8_t>& arg, uin
             if (!argIn(arg, &on)) out.ret = -EINVAL;
             else p->oneway_spam_detection = on;
         } break;
+        case APKLAYER_BINDER_SET_SENDER_UID: {
+            uint32_t uid;
+            if (!argIn(arg, &uid)) out.ret = -EINVAL;
+            else if (p->euid != getuid()) out.ret = -EPERM;  // a process of another user (a sandboxed app): its own uid stays the answer
+            else p->app_uid = uid;
+        } break;
         case BINDER_GET_EXTENDED_ERROR:
             argOut(out, t->ee);
             t->ee = {0, BR_OK, 0};
