@@ -43,7 +43,6 @@ void progress(double p) {
     fflush(stdout);
 }
 std::string readText(const std::string& path) { return readFile(path).value_or(""); }
-std::string envOr(const char* name, const char* fallback) { return getenvOr(name, fallback); }
 
 // the providers step's line: every domain is automatic unless chosen (cli/providers.cpp); on a Halium device, which are the device's own
 std::string providersDetail(const Layout& layout, const Instance& instance) {
@@ -272,8 +271,12 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     }
 
     // 5. the optional ones
-    auto extra = [&](const char* id, const std::string& index, const std::vector<std::string>& packages) {
-        std::string e = installFromIndex(fresh, instance, id, index, packages);
+    manager::Downloads sources;
+    const std::string sourcesError = (o.microg || o.fdroid) ? loadDownloads(fresh, sources) : "";
+    auto extra = [&](const char* id, const char* env) {
+        const std::string index = getenvOr(env, sources.str({id, "index"}));
+        std::string e = !sourcesError.empty() ? sourcesError : index.empty() ? std::string("No ") + id + " index in downloads.json"
+                      : installFromIndex(fresh, instance, id, index, sources.strings({id, "packages"}));
         step(id, e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
     };
     // microG and Google's own share package names under other signers: Google's go first (with their data), as --gapps removes microG's
@@ -281,12 +284,12 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         std::string e = removeGapps(fresh, instance, [](const std::string& detail) { step("microg", "running", detail); });
         if (!e.empty()) { step("microg", "failed", e); o.microg = false; }
     }
-    if (o.microg) extra("microg", envOr("APKLAYER_MICROG_INDEX", "https://microg.org/fdroid/repo/index-v1.json"), {"com.google.android.gms", "com.android.vending"});
+    if (o.microg) extra("microg", "APKLAYER_MICROG_INDEX");
     if (o.gapps) {
         std::string e = installGapps(fresh, instance, [](const std::string& detail) { step("gapps", "running", detail); }, progress);
         step("gapps", e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
     }
-    if (o.fdroid) extra("fdroid", envOr("APKLAYER_FDROID_INDEX", "https://f-droid.org/repo/index-v1.json"), {"org.fdroid.fdroid"});
+    if (o.fdroid) extra("fdroid", "APKLAYER_FDROID_INDEX");
     return anyFailed ? 1 : 0;
 }
 

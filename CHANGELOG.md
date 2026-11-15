@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: download sources moved from C++ into downloads.json
+- The LiteGapps URLs and sha256 per CPU (cli/gapps.cpp) and the microG and F-Droid index URLs and package lists (cli/setup.cpp) are now `data/downloads.json`, installed to `<share>/apklayer/downloads.json`; `~/.config/apklayer/downloads.json` is merged over it per entry; the APKLAYER_GAPPS_URL/SHA256, APKLAYER_MICROG_INDEX and APKLAYER_FDROID_INDEX variables still win. Code: common/downloads.{h,cpp}; test `downloads` (manager/tests/downloads_test.cpp: merge, override, missing key, broken or missing file); docs/DOWNLOADS.md.
+- Left as they are: the microG signature hashes in ShadowHostPackageManager.java (certificate identity, not a download) and manager/fetch-slint.sh (build time).
+- PLAN: none open.
 ## 2026-11-16: input-lang flake: the field's text was only kept for the window with input focus
 - Cause (not c7326d35; the same flake appears with its textinput.c changes, none of them touches focus): the UTM VM runs the real mutter, so any other window mapped there (parallel tests) takes the keyboard and text-input focus (ti_leave, `ime_window` NULL) for a while. `text_input_surrounding` dropped the host's report of an unfocused window, so `sur_text` stayed the previous step's text and the byte-counted `delete:2` was converted by the wrong text (seen: nothing deleted, or two letters deleted: 'прив'). The test input's own injection sets `ime_window = w` for the call, so it hit exactly this.
 - Fix: the field text and cursor are kept per window (`struct window.sur_text`), forwarded to the compositor only for the focused one (bridge/shell/textinput.c, shell.h). Second flake, test only: the keyboard re-enter after such a focus loss reports the layout again, so input-lang.py collapses repeated layout reports before checking the hotkey order.

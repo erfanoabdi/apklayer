@@ -1,7 +1,7 @@
 // Google's own apps (LiteGapps "lite", the framework's SDK 37) as the instance's system apps, in place of microG: the zip is downloaded and checked,
 // tools/gapps.sh takes its APKs and XMLs out, the XMLs go into the runtime's android-root (the privileged allowlist that makes GmsCore a privileged
 // system app holding its signature permissions, sysconfig, default grants) and each APK is installed `--system` as the bundle's system apps are.
-// No Google code is in apklayer: LiteGapps' official SourceForge files, pinned by sha256 (APKLAYER_GAPPS_URL and APKLAYER_GAPPS_SHA256 override).
+// No Google code is in apklayer: LiteGapps' official SourceForge files, pinned by sha256 in downloads.json (APKLAYER_GAPPS_URL and APKLAYER_GAPPS_SHA256 override).
 #include "gapps.h"
 
 #include <cstdio>
@@ -16,12 +16,6 @@ namespace apklayer {
 
 namespace {
 struct Zip { std::string url, sha256; };
-Zip zipFor(const std::string& cpu) {
-    const std::string base = "https://sourceforge.net/projects/litegapps/files/litegapps/";
-    if (cpu == "arm64") return {base + "arm64/37/lite/2026-10-12/LiteGapps-arm64-17.0-20261012-official.zip/download", "f7e3a2097fad2e2f739c6708333d15fa9bc2cf7971a9041a6a621b4f3c8a1e37"};
-    if (cpu == "amd64") return {base + "x86_64/37/lite/2026-10-01/LiteGapps-x86_64-17.0-20261001-official.zip/download", "61e891cbb826b7fbdc8839ac925de323147dba66c39b8ae34f1e9c3a12fc21fa"};
-    return {};
-}
 // the install order: the Services Framework before Play services (its gservices provider), then the Play Store, then the sync adapters
 const char* const kApks[] = {"GoogleServicesFramework.apk", "GmsCore.apk", "Phonesky.apk", "GoogleContactsSyncAdapter.apk", "GoogleCalendarSyncAdapter.apk"};
 std::string gappsDir(const Layout& layout) { return join(layout.dataHome, "apklayer/google-apps"); }  // a reserved instance name (cli/manage.cpp)
@@ -54,6 +48,12 @@ const char* const kPackages[] = {"com.google.android.syncadapters.calendar", "co
                                  "com.google.android.gms", "com.google.android.gsf"};
 }  // namespace
 
+std::string loadDownloads(const Layout& layout, manager::Downloads& d) {
+    std::string base = join(layout.root, "downloads.json");
+    if (!exists(base)) base = join(layout.root, "data/downloads.json");
+    return d.load(base, manager::userDownloadsFile());
+}
+
 bool gappsInstalled(const Layout& layout) { return exists(appDir(layout, "com.google.android.gsf")); }
 
 std::string removeGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report) {
@@ -74,7 +74,10 @@ void applyGappsConfig(const Layout& layout) {
 }
 
 std::string installGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report, const manager::Progress& progress) {
-    Zip zip = zipFor(manager::cpuNames()[0]);
+    manager::Downloads sources;
+    if (std::string e = loadDownloads(layout, sources); !e.empty()) return e;
+    const std::string cpu = manager::cpuNames()[0];
+    Zip zip{sources.str({"gapps", cpu, "url"}), sources.str({"gapps", cpu, "sha256"})};
     zip.url = getenvOr("APKLAYER_GAPPS_URL", zip.url);
     zip.sha256 = getenvOr("APKLAYER_GAPPS_SHA256", zip.sha256);
     if (zip.url.empty()) return "No Google apps build for this CPU";
