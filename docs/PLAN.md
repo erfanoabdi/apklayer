@@ -86,11 +86,10 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- The runner counts a script's SKIP exit (`decoration` on GNOME has no xdg-decoration) as FAIL; and with two groups at a time on 4 CPUs `sandbox`, `window-geometry` and `input-wheel-pen` can flake (each passes alone). The x86_64 `libhidlbase`/`libapklayer_hidltool` in the prebuilts predate libhidl 0005 and the `manifest` command (the arm64 ones have both); rebuild them to make the two locks equal.
+- The x86_64 `libhidlbase`/`libapklayer_hidltool` in the prebuilts predate libhidl 0005 and the `manifest` command (the arm64 ones have both); rebuild them to make the two locks equal. The UTM VM's `~/prebuilts` is behind the lock (libapklayer_egl, hidltool, vdisplay, libhidlbase): refresh it.
 - Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
 - Password-ssh hosts (UTM VM, tester PC) intermittently refuse auth ("Permission denied" about every other connection): `tests/run` needs a retry in `vm.ssh`/`vm.copy`.
 - `fullscreen.py` and `kde-window.py` compare integer sizes against KWin's fractional geometry (fail at 150% scale on the tester PC, also on main).
-- `check-prebuilts.sh` does not catch stale `libvulkan.so`, `libapklayer_vulkan.so`, `vulkan.apklayer.so` (not in the lock; the tester PC's `~/apklayer-build/prebuilts` copy is ~25 libraries behind): add them to the lock.
 - `tests/run` pushes the whole tree each time (4-8 min over the tester PC's link): push changed files only.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
