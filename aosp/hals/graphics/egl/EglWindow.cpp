@@ -320,9 +320,14 @@ EGLSurface apklayer::egl::hostSurface(EGLSurface s) {  // the host's surface beh
 
 extern "C" {
 
-EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindowType native, const EGLint*) {
+EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindowType native, const EGLint* attribs) {
     auto* nw = reinterpret_cast<ANativeWindow*>(native);
     if (nw == nullptr || nw->common.magic != ANDROID_NATIVE_WINDOW_MAGIC) { tError = EGL_BAD_NATIVE_WINDOW; return EGL_NO_SURFACE; }
+    // apklayer patch: the host's window surfaces cannot encode sRGB (Mesa's gbm platform answers EGL_BAD_MATCH for EGL_GL_COLORSPACE_SRGB on every
+    // config) and the attribute list used to be ignored: a linear surface came back as the sRGB one that was asked for, and an engine in linear colour
+    // space (Unity URP) wrote linear values to it unencoded (PGR's dark 3D scenes). The error the host gives, as the app's fallback expects it.
+    for (; attribs && *attribs != EGL_NONE; attribs += 2)
+        if (attribs[0] == 0x309D /* EGL_GL_COLORSPACE_KHR */ && attribs[1] != 0x308A /* EGL_GL_COLORSPACE_LINEAR_KHR */) { tError = EGL_BAD_MATCH; return EGL_NO_SURFACE; }
     auto* win = new Window{dpy, cfg, nw, nullptr, EGL_NO_SURFACE, 0, 0, 0};
     host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
     // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples. Connected before the

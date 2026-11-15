@@ -93,6 +93,20 @@ const char* kAndroidExtensions =
         " EGL_ANDROID_recordable EGL_KHR_swap_buffers_with_damage"  // implemented here (HWUI refuses to start without it)
         " EGL_ANDROID_get_frame_timestamps";  // EglWindow.cpp: SurfaceFlinger's frame events through the Android window, as Android's libEGL
 
+// The host's extension string without the colour-space ones (EGL_KHR_gl_colorspace, EGL_EXT_gl_colorspace_*): its window surfaces are linear whatever
+// is asked (eglCreateWindowSurface refuses the sRGB request), so an engine must not choose its sRGB-backbuffer path from the name.
+std::string withoutColorspace(const char* list) {
+    std::string out;
+    for (const char* p = list ? list : ""; *p;) {
+        size_t n = strcspn(p, " ");
+        bool drop = n >= 21 && (!strncmp(p, "EGL_KHR_gl_colorspace", 21) || !strncmp(p, "EGL_EXT_gl_colorspace", 21));
+        if (n && !drop) { out.append(p, n); out += ' '; }
+        p += n;
+        while (*p == ' ') p++;
+    }
+    return out;
+}
+
 static unsigned displayRefs;  // initialize/terminate count, below
 
 }  // namespace
@@ -225,11 +239,11 @@ const char* eglQueryString(EGLDisplay dpy, EGLint name) {
     static std::string extensions, clientExtensions;
     const char* hostString = host<const char* (*)(EGLDisplay, EGLint)>("eglQueryString")(dpy, name);
     if (name == EGL_EXTENSIONS && dpy != EGL_NO_DISPLAY) {
-        if (extensions.empty()) extensions = std::string(hostString ? hostString : "") + kAndroidExtensions;
+        if (extensions.empty()) extensions = withoutColorspace(hostString) + kAndroidExtensions;
         return extensions.c_str();
     }
     if (name == EGL_EXTENSIONS) {
-        if (clientExtensions.empty()) clientExtensions = std::string(hostString ? hostString : "") + " EGL_KHR_platform_android";
+        if (clientExtensions.empty()) clientExtensions = withoutColorspace(hostString) + " EGL_KHR_platform_android";
         return clientExtensions.c_str();
     }
     return hostString;

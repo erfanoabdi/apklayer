@@ -394,6 +394,11 @@ run = ["python3 -u tests/vm/fences.py"]
 apps = ["hello-glbench"]
 run = ["python3 -u tests/vm/window-formats.py"]
 
+[gl-formats]
+# sRGB, float/packed render targets, depth/stencil, MSAA, ETC2/EAC/ASTC/S3TC blocks and an sRGB window surface: the wrapper must agree with the host driver alone (tests/bench/glformats)
+apps = ["hello-glformats"]
+run = ["python3 -u tests/vm/gl-formats.py"]
+
 [texture-view]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/texture-view.py"]
