@@ -3,7 +3,7 @@
 # Ubuntu Touch X23 (UBPORTS in tests/vm/local.conf, key auth), sfos the Sailfish Quintus (SAILFISH). Copies tools/halium's helpers, spare-race.py and the hello
 # apps (the apks of $APKLAYER_APKS, default the repo's build/; tests/apps/build.sh builds them) into a scratch directory, runs phone-checks.sh there in an
 # instance of its own (ptest), prints PASS/FAIL per group, removes what it made (scratch, instance) and, on ut, locks the phone again when it woke it.
-# Groups: hello newpipe providers hidl camera sensors race (both), rotate (sfos). both: the screen is woken and the lock code typed (unlock.sh; apps are stopped while
+# Groups: hello newpipe providers hidl hidl-host camera sensors race (both), rotate (sfos). both: the screen is woken and the lock code typed (unlock.sh; apps are stopped while
 # the phone is locked; sfos needs SAILFISH_LOCK in local.conf).
 set -u
 os=${1:-}; shift || true
@@ -22,7 +22,7 @@ ssh() { command ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" "$@"; }
 h=$repo/tools/halium
 ssh "mkdir -p $R/apks" || exit 2
 scp -q $h/phone-checks.sh $h/ut-shot.sh $h/hidl-list.sh $repo/tests/vm/spare-race.py "$host:$R/"
-for app in hello-input hello-camera hello-hardware; do [ -e "$apks/$app.apk" ] && scp -q "$apks/$app.apk" "$host:$R/apks/"; done
+for app in hello-input hello-camera hello-hardware hello-hidl; do [ -e "$apks/$app.apk" ] && scp -q "$apks/$app.apk" "$host:$R/apks/"; done
 woke=0
 out=$($h/unlock.sh $os); echo "unlock: $out"
 [ "$out" = unlocked ] && woke=1

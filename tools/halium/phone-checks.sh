@@ -2,7 +2,7 @@
 # phone-checks.sh <ut|sfos> <group>...: runs ON a phone (tools/halium/phone-test.sh copies it with its helpers and calls it). One instance of its own
 # (ptest) takes the checks; prints "PASS group: ..." or "FAIL group: ..." per group, exits 1 when one failed. Env: A (the CLI), R (this directory with
 # the helper scripts and apks/), OS. Groups: hello (hello.input started, SurfaceFlinger's picture of it), providers (the device's hardware is the
-# default), hidl (hidl-list.sh), camera (hello.camera lists cameras), sensors (hello.hardware: sensors, location), race (spare-race.py), rotate (sfos:
+# default), hidl (hidl-list.sh), hidl-host (hello.hidl: the instance's own manager, marker, own service), camera (hello.camera lists cameras), sensors (hello.hardware: sensors, location), race (spare-race.py), rotate (sfos:
 # Lipstick turned by its orientation lock: the shell turns the display; the lock is put back).
 os=$1; shift
 A=${A:-apklayer} R=${R:-$(dirname "$0")}
@@ -30,6 +30,15 @@ for g in "$@"; do
         report $ok providers "graphics, camera, media, vibrator = device" ;;
     hidl)
         bash "$R/hidl-list.sh" "$APKLAYER_INSTANCE" > "$R/hidl.out" 2>&1; r=$?; cat "$R/hidl.out" | sed 's/^/  /'; report $r hidl "device camera provider and Codec2 listed" ;;
+    hidl-host)  # docs/HIDL.md "Needs a phone" (tests/vm/hidl.sh on a host-HAL instance): own manager + marker, an own service, the forwarded names (hidl)
+        ok=0; m=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$APKLAYER_INSTANCE/data/apklayer/hwservicemanager.local
+        run_app hello.hidl hidl-hello 30000
+        grep -aq "\[hidl\] hello.hidl PASS" "$R/hidl-hello.out" || { ok=1; echo "  hello.hidl: no PASS"; }
+        grep -aq "own service listed=true own PASS" "$R/hidl-hello.out" || { ok=1; echo "  hello.hidl: own service"; }
+        [ -e "$m" ] || { ok=1; echo "  no marker $m"; }
+        $A exec libapklayer_hidltool.so manager 2>&1 | grep -aq "manager: transport hwbinder, listed 1" || { ok=1; echo "  hidltool manager"; }
+        $A exec libapklayer_hidltool.so local 2>&1 | grep -aq "local: register 1, found 1, listed 1" || { ok=1; echo "  hidltool local"; }
+        report $ok hidl-host "manager marker, hello.hidl, own service" ;;
     camera)
         $A permissions grant hello.camera android.permission.CAMERA >/dev/null 2>&1
         run_app hello.camera camera 45000 -Dhello.real=1
