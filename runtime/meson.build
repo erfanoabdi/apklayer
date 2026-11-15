@@ -1,6 +1,7 @@
 # The runtime's Java side against the prebuilts' Robolectric and framework (common/ of the prebuilts branch), into the native dir:
 # host classes, the Robolectric overlay with the JNI shim (native-runtime.jar), the java.base patch; with android_runtime also the Android half
 # (android-all/: the framework jar with the shim, android-all-instrumented/: the same instrumented once, android-root/, the Robolectric jars).
+run_command(python, files('../tools/check-hub-protocol.py'), check: true)  # parallel branches gave two HubProtocol codes the same number twice
 pc = prebuilts / 'common'
 robolectric = pc / 'Robolectric_all.jar'
 sim_classes = pc / 'sim-classes'
