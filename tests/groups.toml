@@ -320,10 +320,22 @@ needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py --mobile", "python3 -u tests/vm/fullscreen-key.py"]
 
 [decoration]
-# server-side title bars under sway (headless, its own socket): needs sway on the VM
+# server-side title bars under sway (headless, its own socket) when sway is on the VM, else under the desktop's own compositor if it has xdg-decoration (KDE)
 needs = ["com.android.test.uibench"]
 optional = true
 run = ["python3 -u tests/vm/decoration.py"]
+
+[kde-window]
+# KDE Plasma's KWin (the desktop session) drives the window: maximize, fullscreen, quick tile, script-set size, minimize, close; the shell's configures must match KWin's geometry
+needs = ["com.android.test.uibench"]
+optional = true
+run = ["python3 -u tests/vm/kde-window.py"]
+
+[kde-output]
+# two outputs of different scale under a KWin of its own (kwin_wayland --virtual): the window moves between them, one is disabled; the scale follows
+needs = ["com.android.test.uibench"]
+optional = true
+run = ["python3 -u tests/vm/kde-output.py"]
 
 [mobile]  # also the hub's questions as full-screen pages in the mobile style (permission-mobile.py)
 needs = ["com.android.test.uibench"]
