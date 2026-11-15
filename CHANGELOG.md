@@ -4,6 +4,10 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: GApps: Play Store's install session with dex metadata (.dm) installs
+- With the oneway sender uid in place Play Store downloaded the app and committed the session; the hub answered `INSTALL_PARSE_FAILED: Failed to parse .../com.hottagames.nte.dm`: HubInstallSessions.apks took every session file for an APK. Now it leaves out what PackageInstallerSession's sAddedApkFilter does: dex metadata (`.dm`), fs-verity signatures (`.fsv_sig`), checksum files (`.digests`, `.signature`) and remove markers (`.removed`). The `.dm` is not used (no ART profile here).
+- Checked: compiles; deployed into the `gwd` home. Not run: the install itself (owner's Play Store) and the group `system-apps`/installer tests (no VM config on this PC).
+
 ## 2026-11-15: GApps: Play Store downloads refused by its own internal-only check (oneway sender uid in the userspace binder)
 - Signed in, Play Store queued an install and then failed: `PERMISSION_DENIED: Rejected by (internal-only) security policy`. Its processes talk over grpc-binder (BackgroundProcessEndpointService), whose transactions are oneway and have no interface-token header; `internalOnly()` accepts a caller only when `Binder.getCallingUid() == Process.myUid()`. apklayer names a oneway sender only from that header (all unsandboxed processes are one Linux user, a oneway call has no pid), so it read as nobody.
 - binderd: `APKLAYER_BINDER_SET_SENDER_UID` (bridge/binderd/protocol.h), from a process of its own user only: the uid is the `sender_euid` of that process's oneway transactions. binder_route `apklayer_binder_route_set_sender_uid`, the shim's `RealBinder.setSenderUid0`, set at hub registration (a spare knows its app by then); ShadowHostRealBinder takes an app-range euid other than its own Linux uid for a headerless oneway call. docs/BINDER.md.
