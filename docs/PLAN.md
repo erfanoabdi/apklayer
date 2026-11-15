@@ -26,7 +26,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Vulkan presentation untested on AMD.
 - KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
 - `fit_size` reserves 46 px (`DECOR_H`) also under server-side decorations: the first window is 542 px high where 588 would fit.
-- Lipstick: the pointer on the navigation-bar strip goes to the app.
+- Lipstick: a mouse over the navigation-bar strip (pointer.c `in_remote_strip`) is the bar's since 2026-11-15; needs a human check (no pointer device on the phone to try it).
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
@@ -109,7 +109,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
 - Several phone instances as a product; a JRE for the Ubuntu Touch deb.
 
-- Quintus: libGLES_meow crashes SurfaceFlinger on any new instance; needs `apklayer prop set ro.hardware.egl mali` (HALIUM.md).
 - Sailfish has no bash (busybox): phone tests must be POSIX sh or Python.
 - Share / Open with on the X23 is not driven through the UI by `phone-test.sh`.
 - Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).

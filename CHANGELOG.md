@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: Quintus needs no `ro.hardware.egl mali` prop; Lipstick's pointer on the bar strip
+- `cli/stack.cpp` (deviceGraphicsProperties): a device's `ro.hardware.egl` `meow` (MediaTek's wrapper, crashes SurfaceFlinger's dlopen on the Quintus) becomes `mali` when libGLES_mali.so is in /vendor/lib64/egl. phone-checks.sh no longer sets the prop. Quintus, RPM 0.4.102 built here: `phone-test.sh sfos hello newpipe` on fresh instances: newpipe PASS, hello PASS (its first run, in the same command as newpipe's, FAILed once with no picture; rerun alone PASS).
+- `bridge/shell/pointer.c`: where the display composes the navigation bar (Lipstick, `nav.remote`), the pointer over the strip went to the app; hover is dropped there and a left press/release acts as a bar button (as touch.c does). Built, not exercised: the phone has no pointer.
 
 ## 2026-11-15: a dev tree's CLI no longer relinks an installed runtime
 - A meson-installed dev tree's CLI without `APKLAYER_NATIVE` ran `setup-runtime.sh` on the shared `~/.local/share/apklayer/runtime/<ver>` and relinked it into the dev tree; deleting the tree left the tester PC's runtime dangling. `tools/release/setup-runtime.sh` now refuses (exit 1, says so and names `APKLAYER_NATIVE`) when the runtime's `native-runtime.jar` link resolves into a different package half; a dangling owner is repaired as before, an update of the same package (same half path) is unchanged. Group `setup-runtime-foreign` (tests/vm/setup-runtime-foreign.sh). docs/RELEASES.md.
