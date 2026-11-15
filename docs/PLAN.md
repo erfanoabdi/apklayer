@@ -84,12 +84,12 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- Tester PC: its `~/apklayer-build/prebuilts` is stale (~25 libraries behind); its address is in no config here, so it needs the owner's host (rsync from the Mac). The rebuilt x86_64 hidlbase/hidltool (`manifest`) are untested on a device.
 - Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
-- `kde-window.py` fractional-scale tolerance (1 px) is unverified at 150% on a real KWin: run it once on the tester PC.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
+- Needs the tester PC login (it takes a password; my key is refused; host `wesley-a520mhdv`): refresh its stale `~/apklayer-build/prebuilts` by rsync from the Mac; run `kde-window.py` once at 150% on its KWin.
+- Needs the Quintus lock code (not in `local.conf`): re-run `phone-test.sh sfos` groups with the current RPM.
 - AMD: Vulkan presentation and host ES1 untested.
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
 - Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
