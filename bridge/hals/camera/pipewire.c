@@ -21,6 +21,7 @@ struct apklayer_camera {
     struct spa_hook listener;
     uint32_t fourcc, width, height, fps, sequence;
     int ready;  /* 0 negotiating, 1 format known, <0 -errno; under the loop's lock */
+    int warmup;  /* frames still checked for the sensor's dark start frames (a webcam's first one or two, before its exposure settles) */
 };
 
 uint32_t pw_camera_fourcc(uint32_t f)
@@ -83,6 +84,20 @@ static void on_param_changed(void *data, uint32_t id, const struct spa_pod *para
     pw_thread_loop_signal(c->loop, false);
 }
 
+/* A webcam starts with one or two near-black frames (the MacBook's: Y 23, then 134): an app that takes its first frame (a still, a preview's
+ * first picture) gets black. The first frames of a raw stream are dropped while their sampled mean luma is that dark, 8 at most (a dark scene
+ * passes after that). shortcut: MJPEG and RGB frames are not looked into (no cheap luma). */
+static int dark_start(const struct apklayer_camera_frame *f)
+{
+    if (f->fourcc == APKLAYER_CAM_MJPEG || f->fourcc == APKLAYER_CAM_XRGB || !f->data[0]) return 0;
+    const uint8_t *p = f->data[0];
+    uint64_t sum = 0, n = 0;
+    uint32_t step = f->fourcc == APKLAYER_CAM_YUYV ? 2 : 1;
+    for (uint32_t y = 0; y < f->height; y += 8)
+        for (uint32_t x = 0; x < f->width; x += 8) sum += p[(uint64_t)y * f->stride[0] + (uint64_t)x * step], n++;
+    return n && sum / n <= 30;
+}
+
 static void on_process(void *data)
 {
     struct apklayer_camera *c = data;
@@ -110,6 +125,8 @@ static void on_process(void *data)
         }
     }
     if (mjpeg) f.stride[0] = 0;  /* a JPEG: its bytes, no rows */
+    if (ok && c->warmup > 0 && (!f.stride[0] || !dark_start(&f))) c->warmup = 0;  /* the first lit frame ends the check */
+    else if (ok && c->warmup > 0) c->warmup--, ok = 0;
     if (ok && (f.stride[0] || mjpeg) && c->cb.frame) c->cb.frame(c->cb.user, &f);
     pw_stream_queue_buffer(c->stream, b);
 }
@@ -179,7 +196,7 @@ int apklayer_camera_start(struct apklayer_camera *c, uint32_t width, uint32_t he
             SPA_FORMAT_VIDEO_size, SPA_POD_CHOICE_RANGE_Rectangle(&SPA_RECTANGLE(width, height), &SPA_RECTANGLE(16, 16), &SPA_RECTANGLE(8192, 8192)),
             SPA_FORMAT_VIDEO_framerate, SPA_POD_CHOICE_RANGE_Fraction(&SPA_FRACTION(fps, 1), &SPA_FRACTION(0, 1), &SPA_FRACTION(240, 1)));
     }
-    c->ready = 0;
+    c->ready = 0, c->warmup = 8;
     int result = n ? pw_stream_connect(c->stream, PW_DIRECTION_INPUT, PW_ID_ANY, PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS, params, n) : -EINVAL;
     struct timespec end;
     pw_thread_loop_get_time(c->loop, &end, 3000000000LL);
