@@ -49,12 +49,13 @@ final class HubStartedServices {
         return explicit.getComponent();
     }
 
-    /** A service declared in a process of its own (android:process, isolatedProcess: microG's McsService in ":persistent") runs in that process's
-     *  host, keyed as a bind keys it (HubServices.ownProcess); the package's process would refuse it. */
-    private static String processKey(ServiceInfo info) {
+    /** A service declared in a process of its own (android:process: microG's McsService in ":persistent") runs in that process's host, keyed by
+     *  the process's name as a bind keys it (HubServices.ownProcess: services sharing an android:process share it), an isolatedProcess one by the
+     *  service; the package's process would refuse it. */
+    static String processKey(ServiceInfo info) {
         String process = info.processName != null ? info.processName : info.packageName;
-        boolean own = (info.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(info.packageName);
-        return HubDirectory.key(info.packageName, own ? info.name : null);
+        if ((info.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0) return HubDirectory.key(info.packageName, info.name);
+        return HubDirectory.key(info.packageName, process.equals(info.packageName) ? null : process);
     }
 
     private ComponentName deliver(HubDirectory.Peer target, Intent explicit, Intent delivered) {

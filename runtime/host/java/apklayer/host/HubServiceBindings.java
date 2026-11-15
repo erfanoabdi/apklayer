@@ -47,7 +47,9 @@ final class HubServiceBindings {
         if (!system && !caller.name().equals(info.packageName) && !info.exported) throw new SecurityException("Service is not exported");
         if (!system) packages.enforceServicePermission(caller.name(), info);
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
-        String key = HubDirectory.key(info.packageName, instance);
+        // another app's bind names no process (only the package's own processes know them): the service's android:process, as for a start
+        // (Play Store binding Play services' ".persistent" brokers); a process's own binds name it (HubServices.ownProcess)
+        String key = instance == null && !caller.name().equals(info.packageName) ? HubStartedServices.processKey(info) : HubDirectory.key(info.packageName, instance);
         directory.noteIsolated(key, info);
         System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " bind " + key + " " + info.name + " flags=0x" + Integer.toHexString(flags) + " from " + caller.name());
         Binding binding = new Binding(caller, explicit, connection, flags, key);
