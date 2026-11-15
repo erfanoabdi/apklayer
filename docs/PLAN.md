@@ -89,7 +89,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
 - Shared spare, cold component hosts.
-- Isolated processes run as the app uid. Design: own uid (AID_ISOLATED 99000+) in the userns map, a view kind in `sandbox-exec`, caller uid to package in the hub.
+- Isolated processes (uid 99000+) hold no permissions and see only the hub; not covered: isolated processes of system-uid apps, `externalService`, `useAppZygote`.
 
 ## Packaging and releases
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
