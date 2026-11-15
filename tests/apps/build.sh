@@ -13,11 +13,12 @@ trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/cls" "$W/aidl" "$(dirname "$OUT")"
 LIBS=""
 if ls *.c >/dev/null 2>&1; then
+  API=26; [ ! -f lib.api ] || read -r API < lib.api  # lib.api: the NDK API level of the library (default 26)
   ABIS=x86_64; [ ! -f lib.abi ] || read -r ABIS < lib.abi; ABIS=${APP_ABI:-$ABIS}  # APP_ABI overrides (hello-identity: x86_64 for Waydroid); lib.abi: the ABI(s) of the library, space separated (arm64-v8a: an app only a native bridge runs on x86_64; armeabi-v7a: only the 32-bit app process)
   for ABI in $ABIS; do
     case "$ABI" in arm64-v8a) TRIPLE=aarch64-linux-android;; armeabi-v7a) TRIPLE=armv7a-linux-androideabi;; *) TRIPLE=x86_64-linux-android;; esac
     mkdir -p "$W/lib/$ABI"
-    "$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/${TRIPLE}26-clang)" -shared -fPIC -O2 -o "$W/lib/$ABI/libhello.so" *.c -Wl,--as-needed -lEGL -lGLESv2 -landroid -llog -lm -lcamera2ndk -lmediandk
+    "$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/${TRIPLE}${API}-clang)" -shared -fPIC -O2 -o "$W/lib/$ABI/libhello.so" *.c -Wl,--as-needed -lEGL -lGLESv2 -landroid -llog -lm -lcamera2ndk -lmediandk -laaudio -lOpenSLES
     LIBS="$LIBS lib/$ABI/libhello.so"
   done
 fi
