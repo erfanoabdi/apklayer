@@ -1,0 +1,25 @@
+From: apklayer
+Subject: [PATCH] libhidl: the stand-in stays where the host has a hwservicemanager file (a Halium device) and the instance runs its own manager
+
+apklayer patch (docs/PATCHES.md, docs/HIDL.md, docs/HALIUM.md). defaultServiceManager1_2 takes libhwbinder's isHidlSupported(), which is true when
+/system/bin/hwservicemanager exists. The path layer serves a file the instance's Android root lacks from the host, and a Halium device
+(Ubuntu Touch, Sailfish: /system is the Android image) has that file: with the instance's own manager running, every process got the
+real client of that manager and never the stand-in, so listManifestByInterface, listByInterface and registerForNotifications for the listed
+device HALs (camera provider, Codec2) were answered by the instance's manager with nothing (`Codec2Client: No Codec2 services declared`,
+cameraserver without a HIDL provider). 0004's marker (the stack writes it when the instance has host HALs and runs the manager) now also
+keeps the stand-in there. Rebuild: `m libhidlbase`.
+Against system/libhidl 061055fc4dad (REVISION), after 0001-0004. Apply: patches/apply aosp <LineageOS tree>.
+---
+--- a/transport/ServiceManagement.cpp
++++ b/transport/ServiceManagement.cpp
+@@ -425,7 +425,9 @@
+             return nullptr;
+         }
+ 
+-        if (!isHidlSupported()) {
++        // apklayer patch (libhidl 0005): with the instance's own manager beside it the stand-in stays, as 0004 says, also where
++        // /system/bin/hwservicemanager exists (the path layer falls through to a Halium host's own): its list calls go to the host
++        if (!isHidlSupported() || details::localServiceManager() != nullptr) {
+             // hwservicemanager is not available on this device.
+             LOG(WARNING) << "hwservicemanager is not supported on the device.";
+             gDefaultServiceManager = sp<NoHwServiceManager>::make();
