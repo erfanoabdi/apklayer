@@ -3,7 +3,8 @@
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
   <uses-permission android:name="android.permission.CAMERA"/>
   <application android:label="camera-check">
-    <activity android:name=".Main" android:exported="true" android:screenOrientation="landscape">
+    <activity android:name=".Main" android:exported="true" android:screenOrientation="landscape"
+        android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboard|keyboardHidden|uiMode|layoutDirection|locale">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
     <activity android:name=".Portrait" android:screenOrientation="portrait" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"/>

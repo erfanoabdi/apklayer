@@ -172,7 +172,7 @@ permissions close to others.
 
 - The deb sets the host up at install: the AppArmor profile that lets apklayer make user namespaces (Ubuntu 23.10+ restricts them), GPU render
   nodes usable by app uids (`/usr/lib/udev/rules.d/70-apklayer-render.rules`), `uidmap`. A source tree: `sudo sh tools/host-setup/sandbox.sh` once.
-- Your user needs 65536 subordinate ids: `grep $USER /etc/subuid /etc/subgid`; without a line,
+- Your user needs 65536 subordinate ids (the deb's postinst adds a range for regular users that have none; `sandbox.sh` does it for its user): `grep $USER /etc/subuid /etc/subgid`; without a line,
   `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER`.
 - Opt-in: `APKLAYER_SANDBOX=1` for your session in `~/.config/environment.d/60-apklayer.conf` (0.4.5 turned it on by default where the host was
   set up; 0.4.6 made it opt-in again: on NVIDIA's driver and on deb installs it broke apps; both are addressed since 2026-11-08, NVIDIA not yet
