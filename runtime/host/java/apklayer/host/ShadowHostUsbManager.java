@@ -49,7 +49,12 @@ public class ShadowHostUsbManager extends ShadowUsbManager {
             System.out.println("[apklayer] usb: no permission for " + device.getDeviceName() + " (UsbManager.requestPermission first)");
             return null;
         }
-        try (ParcelFileDescriptor pfd = ParcelFileDescriptor.open(new File(device.getDeviceName()), ParcelFileDescriptor.MODE_READ_WRITE)) {
+        // through the hub as UsbService does (an app uid of the sandbox cannot open the node itself); the app's own open when there is no hub
+        try (ParcelFileDescriptor pfd = HubClient.connected() ? HubClient.current().usbOpen(device.getDeviceName()) : ParcelFileDescriptor.open(new File(device.getDeviceName()), ParcelFileDescriptor.MODE_READ_WRITE)) {
+            if (pfd == null) {
+                System.out.println("[apklayer] usb: cannot open " + device.getDeviceName() + " (the user needs read-write access: docs/INSTALL.md, USB devices)");
+                return null;
+            }
             UsbDeviceConnection connection = new UsbDeviceConnection(device);
             boolean opened = ReflectionHelpers.callInstanceMethod(connection, "open", ClassParameter.from(String.class, device.getDeviceName()),
                     ClassParameter.from(ParcelFileDescriptor.class, pfd), ClassParameter.from(android.content.Context.class, RuntimeEnvironment.getApplication()));

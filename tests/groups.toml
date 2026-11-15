@@ -149,10 +149,16 @@ run = ["tests/vm/plugins.sh"]
 apps = ["hello-gps", "hello-gps2"]
 run = ["tests/vm/gnss.sh"]
 
-[usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach, permission dialog, transfers
-apps = ["hello-usb"]
+[usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach (one chooser for hello.usb and hello.usb2), permission dialog, transfers
+apps = ["hello-usb", "hello-usb2"]
 run = ["tests/vm/usb.py"]
 alone = true  # one usbip virtual device controller: usb and usb-serial take turns
+
+[usb-sandbox]  # the same with the per-app sandbox: the apps' uids cannot open the node, the hub opens it and hands the descriptor over (HubUsb.open)
+optional = true  # needs tools/host-setup/sandbox.sh once
+apps = ["hello-usb", "hello-usb2"]
+run = ["USB_SANDBOX=1 tests/vm/usb.py"]
+alone = true
 
 [usb-serial]  # the serial gadget (CDC ACM) held by the host's cdc_acm: claimed with force, line coding, a line each way (tests/vm/usb-serial.py)
 apps = ["hello-usb"]

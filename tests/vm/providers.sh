@@ -48,7 +48,7 @@ grep -aq "PASS gnss AIDL" $tool && grep -aq "^location 48.8584000 2.2945000 3.0"
 out=$APKLY_STATE/providers-app.out
 grep -aq -m1 '^\[hw\] \(PASS\|FAIL\)' < <(APKLAYER_JOPTS="-Dapklayer.runms=40000 -Dhw.compose=true" bin/apklayer run hello.hardware 2>&1 | tee $out)
 grep -a '\[hw\]\|\[runtime\] registering\|no registration function' $out
-grep -a "location \[" $APKLY_STATE/hub.log
+grep -a "location \[\|vibrator: PWLE\|composePwle" $APKLY_STATE/hub.log
 grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
 # the waveform's two steps, the click (the example HAL's 100 ms effect), the composition's two primitives (CLICK at 0.5, THUD at 1.0: Vibrator.compose through the HAL) and the CONFIRM haptic feedback through SystemVibrator and through View.performHapticFeedback (a click each: the example HAL has CLICK and TICK only), in this order
@@ -56,6 +56,7 @@ grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
   "vibrator: on 200 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 1.00 vibrator: on 100 ms amplitude 1.00 vibrator: on 100 ms amplitude 1.00 " ] || fail "the app's waveform and click did not reach the vibrator backend"
 [ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -3 | tr '\n' ' ')" = \
   "vibrator: on 20 ms amplitude 0.17 vibrator: on 20 ms amplitude 0.50 vibrator: on 20 ms amplitude 0.83 " ] || fail "the app's ramp (PWLE) segment did not reach the vibrator backend as steps"
+grep -aq 'vibrator: PWLE segment on the HAL' $APKLY_STATE/hub.log || fail "the app's ramp did not go through the HAL's composePwle"
 grep -aq '^\[hw\] view haptic feedback true' $out || fail "View.performHapticFeedback did not reach the vibrator"
 grep -aq '^\[hw\] gps fix 48.85840 2.29450 accuracy 3.0' $out || fail "the app's gps fix is not the configured one"
 # SensorManager over SensorService: 50 Hz for 2 s (about 100 events), the configured value
