@@ -72,6 +72,8 @@ export global Backend {
     in property <string> permissions-note;  // why the list is empty (an install that predates the list)
     in property <string> instance: "default";
     in property <bool> instance-running;
+    in property <string> vpn-text;  // the selected instance's VPN (`apklayer vpn status`), "" when none
+    callback disconnect-vpn();     // `apklayer vpn disconnect`: the app is told (onRevoke), the TUN and its routes go
     in property <bool> busy;               // a long action (install, uninstall, instance setup) runs
     in property <string> busy-text;
     in property <string> message;          // the latest result, shown in the snackbar

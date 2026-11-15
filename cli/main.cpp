@@ -26,6 +26,7 @@
 #include "spare.h"
 #include "unit.h"
 #include "version.h"
+#include "vpn.h"
 
 using namespace apklayer;
 
@@ -108,7 +109,7 @@ int main(int argc, char** argv) {
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
     bool autostart = (args.size() >= 3 && args[0] == "instance" && args[1] == "autostart")  // systemctl --user is the user's, not apklayerd's
                      || (args[0] == "hub" && currentUnit().rfind("apklayer-instance@", 0) == 0);  // the always-on unit's hub is its main process, not apklayerd's child
-    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup", "config"};
+    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup", "config", "vpn-guard"};
     bool opens = args[0] == "open" && (args.size() == 2 || args.size() == 3);  // run with a host file as the intent's data (cli/open.cpp)
     if ((opens || (args[0] == "run" && args.size() == 2)) && !inDaemon) startLomiriAppShell(layout, id);  // in the drawer launch's unit, before it is left
     bool local = kLocal.count(args[0]) && !(inFlatpak() && args[0] == "setup");  // the Flatpak's setup starts a stack: the daemon's, as every command's
@@ -151,6 +152,8 @@ int main(int argc, char** argv) {
     if (cmd == "app-spare" && sandboxOn()) return 0;
     if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by a launch (cli/spare.cpp)
     if (cmd == "app-spare" && n == 1) { wakeAppSpare(layout, inst); return 0; }  // the hub's, at its start
+    if (cmd == "vpn-guard") return vpnGuard(std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "vpn" && n == 2) return vpnCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "sandbox-exec") return sandboxExec(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "home-access" && n == 3) return homeAccessCommand(layout, inst, args[1], args[2]);
     if (cmd == "portal") return portalCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));

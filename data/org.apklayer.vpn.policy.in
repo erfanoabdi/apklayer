@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- The host-wide VPN's root helper (docs/VPN.md), for hosts where NetworkManager cannot make the TUN. It does only: make a TUN owned by the caller, its addresses,
+     routes and DNS, and remove them again. The password is asked once for each VPN an app sets up. -->
+<policyconfig>
+  <vendor>apklayer</vendor>
+  <action id="org.apklayer.vpn">
+    <description>Set up a VPN for an Android app</description>
+    <message>An Android app wants to route this computer's network traffic through its VPN. Authentication is required to create the network interface.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@HELPER@</annotate>
+  </action>
+</policyconfig>

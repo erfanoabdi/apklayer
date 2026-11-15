@@ -53,6 +53,7 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
     private static IBinder hub(String name) {
         IBinder own = HostPackageService.binder(name);
         if (own != null) return own;
+        if (android.content.Context.VPN_MANAGEMENT_SERVICE.equals(name)) return RealBinder.lookup(HubVpn.SERVICE);
         if (!android.content.Context.ACCOUNT_SERVICE.equals(name)) return null;
         HubClient.attachEarly();  // the accounts service knows its callers by their registration (an app may ask from attachBaseContext)
         return RealBinder.lookup(HubAccounts.SERVICE);

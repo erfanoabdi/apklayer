@@ -93,6 +93,13 @@ run = ["tests/vm/pamcheck.sh"]
 apps = ["hello-keystore", "hello-keystore-other"]
 run = ["tests/vm/keystore.sh", "python3 -u tests/vm/keystore-auth.py"]
 
+[vpn]
+# the host-wide VPN (docs/VPN.md): consent dialog, a real TUN on the host through NetworkManager, ping and UDP answered by the app, protect(), onRevoke, app crash,
+# `apklayer vpn status|disconnect`, and the default route through the TUN (with the ssh peer's /32 and a watchdog)
+alone = true  # the host's network changes for the others: a TUN with its routes, and in the last phase the default route
+apps = ["hello-vpn"]
+run = ["tests/vm/vpn.sh"]
+
 [settings]
 alone = true  # flips the desktop's colour scheme for a few seconds: every instance's apps follow it (their screenshots too)
 apps = ["hello-settings"]
