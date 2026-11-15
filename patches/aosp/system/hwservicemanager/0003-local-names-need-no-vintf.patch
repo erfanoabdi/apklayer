@@ -1,0 +1,26 @@
+From: apklayer
+Subject: [PATCH] hwservicemanager: HALs outside the platform packages need no VINTF entry
+
+apklayer patch (docs/PATCHES.md, docs/HIDL.md). libhidl's registerAsService and getService both ask getTransport() and refuse anything the
+VINTF manifests do not declare as hwbinder; an app's own HAL has no entry on a desktop. getTransport() now answers HWBINDER for an interface
+whose package does not start with "android." and for any interface with an instance name starting with "local" (how the tests register a
+platform interface). Platform HALs keep needing their entry. Side effect: a native `IFoo::getService()` (retry) of such a name nobody registered waits
+for it instead of failing at once (a Java getService does not retry). Rebuild: `m libapklayer_hwservicemanager`.
+Against system/hwservicemanager 60271965cf6b (REVISION), after 0001-0002. Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/Vintf.cpp b/Vintf.cpp
+--- a/Vintf.cpp
++++ b/Vintf.cpp
+@@ -67,6 +67,12 @@
+         return tr;
+     }
+
++    // apklayer patch: HALs of an app (docs/HIDL.md) have no VINTF entry on a desktop: the interfaces outside the platform packages
++    // and the instance names starting with "local" (a test of a platform interface) count as hwbinder, so add() and getService() work.
++    if (!fqName.package().empty() && (fqName.package().rfind("android.", 0) != 0 || instanceName.rfind("local", 0) == 0)) {
++        return vintf::Transport::HWBINDER;
++    }
++
+     LOG(INFO) << __FUNCTION__ << ": Cannot find entry " << fqName.string() << "/" << instanceName
+               << " in either framework or device VINTF manifest.";
+     return vintf::Transport::EMPTY;

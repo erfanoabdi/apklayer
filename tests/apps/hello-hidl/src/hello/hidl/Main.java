@@ -1,13 +1,15 @@
 package hello.hidl;
 
 import android.app.Activity;
+import android.hidl.base.V1_0.IBase;
 import android.os.Bundle;
 import java.lang.reflect.Method;
 import java.util.List;
 
 /**
  * Calls the instance's hwservicemanager through the framework's HwBinder (android.hidl.manager@1.0 IServiceManager, the framework's own Java classes,
- * by reflection: they are hidden API): getService, getTransport of its own entry (hwbinder = 1) and list(), which names that entry.
+ * by reflection: they are hidden API): getService, getTransport of its own entry (hwbinder = 1) and list(), which names that entry;
+ * then registers a service of its own (IBase.Stub, a compile-only stand-in in compile-only/) and finds it again.
  */
 public final class Main extends Activity {
     @Override protected void onCreate(Bundle state) {
@@ -28,6 +30,12 @@ public final class Main extends Activity {
             boolean listed = names.contains(self + "/default");
             System.out.println(tag + " transport=" + transport + " listed=" + listed + " names=" + names);
             System.out.println(tag + (transport == 1 && listed ? " PASS" : " FAIL"));
+            // the app's own HIDL service: it has no VINTF entry, the instance's manager takes it (docs/HIDL.md); IBase.Stub is the generated root stub.
+            // Not fetched back here (the app's own process: the proxy's check calls into itself); the manager's list shows it.
+            new IBase.Stub() {}.registerAsService("local-java");
+            @SuppressWarnings("unchecked") List<String> after = (List<String>) manager.getMethod("list").invoke(sm);
+            boolean own = after.contains("android.hidl.base@1.0::IBase/local-java");
+            System.out.println(tag + " own service listed=" + own + (own ? " own PASS" : " own FAIL"));
         } catch (Throwable failure) {
             System.out.println(tag + " FAIL " + failure);
             failure.printStackTrace(System.out);

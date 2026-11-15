@@ -6,6 +6,7 @@ and not for one that is not listed. HIDL: hidltool is the device's hwservicemana
 getService reaches it through /dev/host_hwbinder ($APKLAYER_HOST_HWBINDER) and passes strings and vectors both ways."""
 import os
 import selectors
+import shutil
 import subprocess
 import sys
 import time
@@ -75,9 +76,27 @@ try:
     hidl = tool(app_env, 'atrace', lib='libapklayer_hidltool.so')
     assert hidl.returncode == 0 and 'atrace: categories apklayer (served by the device instance) ; enableCategories SUCCESS' in hidl.stdout, hidl.stdout
     line_of(device, 'device: enableCategories apklayer')
+    # libhidl 0004: the instance's own hwservicemanager beside the host forwarding (the stack starts it where host HALs are chosen, which needs a
+    # Halium device; here the test stages what the stack stages: its VINTF entry in the instance's root, the marker, and runs the manager)
+    root = Path(os.environ.get('XDG_RUNTIME_DIR', instance.SESSION)) / 'apklayer' / instance.INSTANCE / 'android-root/system/etc/vintf/manifest'
+    root.mkdir(parents=True, exist_ok=True)
+    for f in (instance.NATIVE / 'android-root/system/etc/vintf/manifest').iterdir():
+        if not f.name.startswith('apklayer-'): (root / f.name).write_bytes(f.read_bytes())
+    (root / 'apklayer-hwservicemanager.xml').write_bytes(Path('aosp/hals/hwservicemanager/manifest.xml').read_bytes())
+    marker = conf.parent / 'hwservicemanager.local'
+    marker.write_text('')
+    start(base, 'libapklayer_hwservicemanager.so')
+    for attempt in range(3):  # the manager takes the context a moment after it starts (no property service here to wait on)
+        own = tool(app_env, 'local', lib='libapklayer_hidltool.so')
+        if own.returncode == 0: break
+    assert 'local: register 1, found 1, listed 1' in own.stdout, own.stdout
+    hidl = tool(app_env, 'atrace', lib='libapklayer_hidltool.so')  # the host's names still go to the host with the manager running
+    assert hidl.returncode == 0 and 'enableCategories SUCCESS' in hidl.stdout, hidl.stdout
     print('host-binder: OK')
 finally:
     conf.unlink()
+    (conf.parent / 'hwservicemanager.local').unlink(missing_ok=True)
+    shutil.rmtree(Path(os.environ.get('XDG_RUNTIME_DIR', instance.SESSION)) / 'apklayer' / instance.INSTANCE / 'android-root', ignore_errors=True)
     for p in procs:
         try: os.killpg(p.pid, 15)
         except ProcessLookupError: pass
