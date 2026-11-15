@@ -22,5 +22,6 @@ std::string hostCli(const std::string& cli) {
 }
 
 std::string launcherPrefix() { return inFlatpak() ? getenvOr("FLATPAK_ID", "io.github.erfanoabdi.Apklayer") + "." : "apklayer-"; }
+std::string menuPrefix() { return inFlatpak() ? launcherPrefix() : "apklayer."; }  // the menu merge file and directory entry (data/apklayer.menu, apklayer.directory)
 
 }  // namespace apklayer

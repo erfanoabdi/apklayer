@@ -22,7 +22,7 @@ int removeAllCommand(const Layout& l, const std::vector<std::string>& args) {
     std::string data = hostXdg("XDG_DATA_HOME", ".local/share"), config = hostXdg("XDG_CONFIG_HOME", ".config");
     std::string cache = getenvOr("XDG_CACHE_HOME", join(homeDir(), ".cache")), units = join(config, "systemd/user");
     std::vector<std::string> trees = {join(l.dataHome, "apklayer"), join(l.stateHome, "apklayer"), join(cache, "apklayer"), join(config, "apklayer")};
-    std::vector<std::string> files = {join(config, "menus/applications-merged/" + launcherPrefix() + "menu"), join(data, "desktop-directories/" + launcherPrefix() + "directory"),
+    std::vector<std::string> files = {join(config, "menus/applications-merged/" + menuPrefix() + "menu"), join(data, "desktop-directories/" + menuPrefix() + "directory"),
                                       join(units, "apklayer-instance@.service"), join(units, "apklayerd.service")};
     for (const std::string& name : listDir(join(data, "applications")))
         if (name.rfind(launcherPrefix(), 0) == 0 && name.size() > 8 && name.compare(name.size() - 8, 8, ".desktop") == 0) files.push_back(join(data, "applications/" + name));
