@@ -204,8 +204,11 @@ def wait_file(path, needle, seconds):
     with selectors.DefaultSelector() as events:
         events.register(fd, selectors.EVENT_READ)
         while _time.monotonic() < end:
-            text = path.read_text(errors='replace') if path.exists() else ''
+            try: text = path.read_text(errors='replace')
+            except FileNotFoundError: text = ''  # absent, or rotated between two calls
             if needle in text: os.close(fd); return text
             if events.select(min(2, max(0.1, end - _time.monotonic()))): os.read(fd, 65536)
     os.close(fd)
-    raise AssertionError('timed out waiting for ' + needle + ' in ' + str(path) + '\n' + (path.read_text(errors='replace')[-2000:] if path.exists() else '(no file)'))
+    try: tail = path.read_text(errors='replace')[-2000:]
+    except FileNotFoundError: tail = '(no file)'
+    raise AssertionError('timed out waiting for ' + needle + ' in ' + str(path) + '\n' + tail)
