@@ -10,6 +10,29 @@ extern std::atomic<bool> gMicMute;  // IModule.setMicMute (Service.cpp): capture
 // No sound server answers (the open fails): the stream runs on AOSP's DriverStubImpl (the emulator's stub), discarding output and
 // delivering silent input at real time, so apps still see a working device (owner's decision 2026-11-08; logged once per process).
 bool silentFallback(int status, bool input);
+// One backend's functions (bridge/hals/audio): the library the stack was started with is linked; when no sound server answers it, a stream tries the
+// other backend (PipeWire <-> PulseAudio, dlopen from the sibling file of APKLAYER_HOST_LIBS' entry), so a server started later is used by the
+// next stream, not the next stack start. A stream keeps the table it opened with.
+struct AudioApi {
+    int (*probe)();  // < 0: no sound server answers it here (a cheap check; an open against a missing PulseAudio server can block for 30 s)
+    int (*open)(const apklayer_audio_config*, apklayer_audio**);
+    ssize_t (*write)(apklayer_audio*, const void*, size_t);
+    int (*position)(apklayer_audio*, struct apklayer_audio_position*);
+    int (*pause)(apklayer_audio*);
+    int (*start)(apklayer_audio*);
+    int (*flush)(apklayer_audio*);
+    int (*drain)(apklayer_audio*);
+    void (*close)(apklayer_audio*);
+    int (*captureOpen)(const apklayer_audio_config*, apklayer_capture**);
+    ssize_t (*captureRead)(apklayer_capture*, void*, size_t, uint64_t);
+    int (*capturePosition)(apklayer_capture*, struct apklayer_audio_position*);
+    int (*capturePause)(apklayer_capture*);
+    int (*captureStart)(apklayer_capture*);
+    int (*captureFlush)(apklayer_capture*);
+    void (*captureClose)(apklayer_capture*);
+};
+const AudioApi& linkedAudioApi();
+const AudioApi* siblingAudioApi();  // the other backend's table, nullptr when it is not staged or does not load
 // The transfer thread runs unprivileged; PipeWire owns graph scheduling.
 class HostOutputWorker final : public StreamOutWorker {
   public:
@@ -38,6 +61,9 @@ class PipeWireStream : public StreamCommonImpl {
     void shutdown() override;
   private:
     const StreamContext& context_;
+    const AudioApi* api_ = &linkedAudioApi();
+    int openBackend();  // the linked backend, else the other one; api_ is the one that answered
+    apklayer_audio_config config_{};
     apklayer_audio* audio_ = nullptr;
     int64_t epoch_ = 0;
     std::optional<DriverStubImpl> stub_;
@@ -78,6 +104,9 @@ class PipeWireInStream : public StreamCommonImpl {
     void shutdown() override;
   private:
     const StreamContext& context_;
+    const AudioApi* api_ = &linkedAudioApi();
+    int openBackend();
+    apklayer_audio_config config_{};
     apklayer_capture* capture_ = nullptr;
     int64_t epoch_ = 0;
     std::optional<DriverStubImpl> stub_;

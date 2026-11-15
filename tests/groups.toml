@@ -509,6 +509,17 @@ apps = ["hello-native-audio"]
 alone = true
 run = ["python3 -u tests/vm/native-audio.py late"]
 
+[audio-uid]
+# per-uid call audio: a native (AAudio, OpenSL ES) voice communication player of one app keeps the call mode against a later, silent requester (patches/aosp/frameworks/av/0004)
+apps = ["hello-native-aaudio", "hello-native-aaudio2"]
+alone = true
+run = ["python3 -u tests/vm/audio-uid.py"]
+
+[audio-backend-swap]
+# the HAL's backend table: a stack started with no sound server (PipeWire backend) uses a PulseAudio-only server started later, per stream
+alone = true
+run = ["python3 -u tests/vm/audio-swap.py"]
+
 [audio-aidl]
 alone = true
 run = ["tests/vm/audio-host.sh aidl"]
