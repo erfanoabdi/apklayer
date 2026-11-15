@@ -118,6 +118,19 @@ def pixel_case(name, shot_name, want_bar=True):
     case(name, ok, 'bottom %s, Back region extreme %s, above the bar %s' % (bar, icon, above))
 
 
+def title_case(name):
+    """KWin's own title bar (Breeze) in the picture it composes: bar rows above the client area, filled with a colour that is neither the backdrop nor the app's content."""
+    info = kw()
+    img = shot(name)
+    if img is None: return case(name + ' (screenshot)', False, 'no capture of the virtual output')
+    f = img.width / info['outputGeometry'][2]
+    fx, fy, fw, fh = info['frame']
+    bar = info['client'][1] - fy
+    px = lambda lx, ly: img.getpixel((min(img.width - 1, int(lx * f)), min(img.height - 1, int(ly * f))))
+    title, content, outside = px(fx + fw // 4, fy + bar // 2), px(fx + fw // 4, info['client'][1] + bar), px(fx - 20, fy + bar // 2)
+    case(name, 15 <= bar <= 60 and title not in (outside, content) and sum(title) > 600, 'title bar %d logical, its colour %s, the content below %s, the backdrop %s' % (bar, title, content, outside))
+
+
 def check_start():
     info, c = kw(), cfg()
     log = shell_log()
@@ -127,6 +140,7 @@ def check_start():
     case('the app is told the bar as its inset: %d logical = %d px @%d%%' % (NAV, NAV * c['scale'] // 100, c['scale']), c['nav'] == NAV and c['nav_px'] == (NAV * c['scale'] + 50) // 100, str(c))
     steps['float'] = c
     pixel_case('the bar is drawn: its colour at the bottom, the Back triangle in its region', 'start')
+    title_case('the title bar is KWin\'s: a light bar above the content, not our own')
     steps['back_before'] = click_back_region(c)  # Back
 
 
