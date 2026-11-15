@@ -585,6 +585,10 @@ run = ["python3 -u tests/vm/otr2-input.py aspect"]
 apps = ["hello-arm64"]
 run = ["python3 -u tests/vm/art-maps.py"]
 
+[spare-race]  # rapid run / stop <pkg> cycles: no run blocked in the spare socket, no spare holder piled up
+apps = ["hello-input"]
+run = ["tests/vm/spare-race.sh"]
+
 [spawn]  # a program started from the app JVM (ProcessBuilder) takes no second: exec_preload, jspawnhelper and the path layer
 apps = ["hello-spawn"]
 run = ["tests/vm/spawn.sh"]

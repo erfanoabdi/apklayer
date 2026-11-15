@@ -91,7 +91,8 @@ std::string windowLaunch(const Layout& l, const Instance& inst, const std::strin
     auto running = launches(l, inst);  // kept: a range-for over a member of a temporary would outlive it
     for (const std::string& record : running[package]) {
         std::vector<std::string> pids = split(readFile(join(inst.stateDir, record)).value_or(""), '\n');
-        if (pids.size() >= 2 && atoi(pids[1].c_str()) > 0 && processOf(pids[0], package) == target) found = record.substr(strlen("run."));
+        if (pids.size() >= 2 && atoi(pids[1].c_str()) > 0 && (pids.size() >= 3 && !pids[2].empty() ? pids[2] : processOf(pids[0], package)) == target)
+            found = record.substr(strlen("run."));
     }
     return found;
 }
@@ -284,7 +285,9 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     }
     if (started[1] >= 0) close(started[1]);
     // `apklayer stop` ends what this launch started: the JVM and its window sink
-    writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
+    // third line: the Android process the JVM runs. A spare's JVM shows the package only once it renamed itself (AppEnvironment.nameProcessEarly,
+    // seconds on a loaded phone): until then `stop <package>`, `info` and relaunch would not know the launch (launches())
+    writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n" + (process.empty() ? package : process) + "\n");
     int status = 0;
     // SIGKILL to this waiter closes its socket: the spare's holder ends the JVM (runAppSpare)
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
