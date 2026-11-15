@@ -5,6 +5,7 @@
 #           answered by the app through the TUN, `apklayer vpn status`, the resolver has the app's DNS; `apklayer vpn disconnect` revokes the app (onRevoke)
 #           and the device, connection and route are gone.
 #  crash:   the app is killed: its descriptor closes, the guard sees the carrier go, the hub removes the VPN (device and connection gone, status "no VPN").
+#  manager: the Instances page shows the VPN and its Disconnect button revokes it (when manager/b is built).
 #  hubcrash: the hub is killed (SIGKILL): the guard's pipe closes and it removes the VPN.
 #  default: the default route through the TUN (0.0.0.0/1 + 128.0.0.0/1) with the ssh peer's /32 and a watchdog (systemd timer, 60 s) that deletes the connection
 #           if this script does not finish; the active network is the VPN, an unprotected socket's datagram goes into the TUN, a protect()ed one does not;
@@ -23,7 +24,7 @@ cleanup() {
     bin/apklayer stop >/dev/null 2>&1
     bin/apklayer vpn sweep >/dev/null 2>&1
     for c in a b; do user nmcli connection delete id "$con$c" >/dev/null 2>&1; done
-    sd systemctl --user stop "$watchdog.timer" "$watchdog.service" >/dev/null 2>&1
+    sd systemctl --user stop "$watchdog.timer" "$watchdog.service" >/dev/null 2>&1; sd systemctl --user reset-failed "$watchdog.service" >/dev/null 2>&1
     [ -z "$peerroute" ] || sudo -n ip route del $peerroute >/dev/null 2>&1
 }
 trap cleanup EXIT
@@ -101,6 +102,21 @@ python3 tests/vm/vpn-link.py absent tunapk 20 || fail "the TUN $if is still ther
 bin/apklayer stop >/dev/null 2>&1; wait $owner
 echo "hub crash ok"
 
+# ---- the manager ----
+if [ -x manager/b/apklayer-manager ]; then  # built by `meson setup manager/b manager -Dslint=...` (not part of tests/run)
+    start_owner crash
+    manager/b/apklayer-manager --instance "$inst" --screenshot "$out.png" --size 1100x760 --page 1 --expect "VPN is active in $inst" || fail "the manager's Instances page does not show the VPN"
+    manager/b/apklayer-manager --instance "$inst" --screenshot "$out.png" --size 1100x760 --page 1 --click "Disconnect the VPN" --wait-refresh 1 || fail "the manager's Disconnect button failed"
+    [ "$(bin/apklayer vpn status)" = "no VPN" ] || fail "the VPN is still there after the manager's Disconnect"
+    grep -aq "^\[vpn\] onRevoke" "$out" || fail "the manager's Disconnect did not revoke the app"
+    python3 tests/vm/vpn-link.py absent tunapk 15 || fail "the TUN is still there after the manager's Disconnect"
+    bin/apklayer stop >/dev/null 2>&1; wait $owner
+    rm -f "$out.png"
+    echo "manager ok"
+else
+    echo "SKIP manager (no manager/b/apklayer-manager)"
+fi
+
 # ---- default route ----
 peer=${SSH_CLIENT%% *}
 gateway=$(ip route show default | awk '{print $3; exit}')
@@ -110,6 +126,7 @@ if [ -n "$peer" ] && [ -n "$gateway" ]; then
     sudo -n ip route add $peerroute || fail "cannot add the route to the ssh peer $peer"
 fi
 routes=$(ip route)
+sd systemctl --user reset-failed "$watchdog.service" >/dev/null 2>&1  # a watchdog that fired in an earlier run left its service failed
 sd systemd-run --user --quiet --unit="$watchdog" --on-active=60 sh -c "nmcli connection delete id ${con}a; nmcli connection delete id ${con}b" || fail "cannot arm the watchdog"
 start_owner default
 if=$(vpniface)
@@ -123,7 +140,7 @@ bin/apklayer vpn disconnect || fail "vpn disconnect"
 finish_owner
 grep -aq "^\[vpn\] PASS" "$out" || fail "the default phase of the owner failed"
 python3 tests/vm/vpn-link.py absent tunapk 15 || fail "the TUN is still there after disconnect"
-sd systemctl --user stop "$watchdog.timer" "$watchdog.service" >/dev/null 2>&1
+sd systemctl --user stop "$watchdog.timer" "$watchdog.service" >/dev/null 2>&1; sd systemctl --user reset-failed "$watchdog.service" >/dev/null 2>&1
 [ "$(ip route)" = "$routes" ] || fail "the routes are not the same after the default phase: $(ip route)"
 echo "default ok"
 echo "PASS vpn"

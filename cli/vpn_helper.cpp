@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <poll.h>
+#include <ctime>
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -127,13 +128,17 @@ int main(int argc, char** argv) {
     printf("ready\n");
     fflush(stdout);
     // the VPN lives as long as the hub's pipe: a "confirm" line disarms the watchdog; EOF, a signal or the watchdog remove it
-    int remaining = watchdog * 1000;
+    timespec start{};
+    clock_gettime(CLOCK_MONOTONIC, &start);
     bool armed = watchdog > 0;
     while (!stop) {
+        timespec now{};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long left = watchdog * 1000L - ((now.tv_sec - start.tv_sec) * 1000L + (now.tv_nsec - start.tv_nsec) / 1000000L);  // a fixed deadline: input does not extend it
+        if (armed && left <= 0) break;  // the watchdog ran out
         pollfd p{STDIN_FILENO, POLLIN, 0};
-        int r = poll(&p, 1, armed ? remaining : -1);
-        if (r == 0) break;  // the watchdog ran out
-        if (r < 0) continue;
+        int r = poll(&p, 1, armed ? static_cast<int>(left) : -1);
+        if (r <= 0) continue;
         ssize_t got = read(STDIN_FILENO, buf, sizeof buf);
         if (got <= 0) break;
         if (std::string(buf, got).find("confirm") != std::string::npos) armed = false;
