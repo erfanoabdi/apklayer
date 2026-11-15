@@ -404,6 +404,10 @@ run = ["python3 -u tests/vm/logs.py", "g++ -std=c++17 -I cli tests/native/log-ca
 apps = ["hello-input", "hello-system"]  # hello.system's Ime: the Android input method bound to hello.input's field (ime-bind)
 run = ["cc -o b/utf16-offsets tests/vm/utf16-offsets.c && b/utf16-offsets", "python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/symbol-keys.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py"]
 
+[input-lang]  # other scripts: xkb layouts (ru, ara, ir, dead keys), Ctrl+A on any layout, IME commits, byte-counted deletion, glyphs not tofu
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/input-lang.py"]
+
 [magnifier]
 apps = ["hello-input"]
 run = ["tests/vm/magnifier.sh"]
