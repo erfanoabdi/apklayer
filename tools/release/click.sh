@@ -21,7 +21,7 @@ java="${APKLAYER_CLICK_JAVA:-/usr/lib/jvm/java-21-openjdk-arm64/bin/java}"
 sh tools/release/jdk-image.sh "$java" "$root/usr/lib/apklayer/native"
 [ -f "$root/usr/lib/apklayer/native/jdk/apklayer-stamp" ] || { echo "click.sh: no JDK image (needs a JDK 21 with jmods: $java)" >&2; exit 1; }
 # the manager's entry, paths relative to the click (lomiri-app-launch runs it from there)
-sed -e 's#^Exec=.*#Exec=usr/bin/apklayer-manager#' -e 's#^Icon=.*#Icon=usr/share/icons/hicolor/scalable/apps/apklayer.svg#' \
+sed -e 's#^Exec=.*#Exec=usr/bin/apklayer-manager#' -e 's#^Icon=.*#Icon=usr/share/icons/hicolor/scalable/apps/apklayer.svg#' -e '/^MimeType=/d' \
     data/apklayer-manager.desktop > "$root/apklayer.desktop"
 cp click/apklayer.apparmor "$root/"
 sed "s/@VERSION@/$version/" click/manifest.json > "$root/manifest.json"

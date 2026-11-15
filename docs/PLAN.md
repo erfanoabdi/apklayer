@@ -7,7 +7,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - GitHub releases only (debs, Sailfish RPM, Ubuntu Touch click, Flatpak bundles).
 - No per-app hacks; the corpus (`tests/corpus/`) measures compatibility. CTS last.
 - Hardware only through Android's own interfaces (AIDL/HIDL HALs, framework classes).
-- Halium: device HALs only for vibrator, camera, media; never sensors or GNSS.
+- Halium: sensors come through sensorfw, location through GeoClue (Sailfish) or Lomiri's location service; vibrator, camera and media use the device HALs.
 - No cached app processes; always-on only for push/background.
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
@@ -18,12 +18,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
-- PGR colours are off and dark (also llvmpipe on the arm server and the NVIDIA tester PC): agent working on it.
+- PGR colours are off and dark in the 3D lobby (also llvmpipe on the arm server and the NVIDIA tester PC; 2D UI is right). Ruled out: window alpha/opaque region, an sRGB window surface (Mesa gbm answers BAD_MATCH). Untested: ASTC/ETC2 decode, sRGB/FP16/R11G11B10 render targets through the wrapper, a reference lobby frame outside the tutorial dim. Agent working on it.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with `apklayer prop set berberis.mode.com.kurogame.gplay.punishing.grayraven.en lite-translate-or-interpret` (and unset for the reference); the ASTC fallback in `cli/env.cpp` is a separate lever.
 
 ## Graphics
 - Vulkan presentation untested on AMD.
-- OTR2 on the NVIDIA PC at 2448x1374: not measured (no APK on the tester PC).
 - KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
 - `fit_size` reserves 46 px (`DECOR_H`) also under server-side decorations: the first window is 542 px high where 588 would fit.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
@@ -31,9 +30,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- `tests/run camera` fails on main in `camera-portrait.py` (`SurfaceTexture.setDefaultBufferSize` NPE, then the shutter-timestamps check).
-- Portrait desktop monitor: the right camera mount degrees per monitor direction are unknown (no way to detect it).
-- Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
+- Fossify Camera on Parallels is unchecked (no APK locally); Open Camera works on the MacBook camera. The `camera` group prints a harmless stray FAIL line from a test-app race (hello.camera recreates its activity).
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
@@ -53,31 +50,29 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
 - Composer GL context ~80 MB: measure on a phone while an app draws.
 - A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap.
-- Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
-- Telegram has no x86_64 FOSS APK to test.
-- Unity: `hpatchz`.
 
 ## Sandbox (before it can be the default)
 - NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (nodes are 0666 on the tester PC, no `nvidia-modprobe`).
-- UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
+- Each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
+- File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
 - Flatpak: the `org.freedesktop.Sdk.Extension.openjdk25` extension and 26.08 runtime are unverified (manifest now names JDK 25).
 - amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
 - First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
-- Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
 
 ## Manager
 - `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
+- VPN for apps, host-wide (owner decided 2026-11-15; the instance-only variant is dropped): `VpnService` with a real TUN device on the host and the default route through the app's VPN (WireGuard, OpenVPN for Android), the VPN in `ConnectivityManager`, the manager shows it and can disconnect it. Agent working.
 - Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
 - iio-sensor-proxy gives only derived values: no accelerometer or compass type. On Parallels a source-tree CLI needs `--no-daemon` plus `APKLAYER_NATIVE`/`APKLAYER_BT`/`APKLAYER_BINDER=userspace` (the old 0.3.4 daemon takes over).
 - USB: one chooser for several apps; sandbox node access.

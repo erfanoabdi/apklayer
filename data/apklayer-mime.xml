@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The Android package formats the manager installs when they are opened (docs/FILE-ASSOCIATIONS.md): shared-mime-info knows .apk
+     (application/vnd.android.package-archive), not the split formats. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.android.package-archive">
+    <comment>Android package</comment>
+    <glob pattern="*.apk"/>
+  </mime-type>
+  <mime-type type="application/x-android-apks">
+    <comment>Android split package set (apks)</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.apks"/>
+  </mime-type>
+  <mime-type type="application/x-android-xapk">
+    <comment>Android package with its data (xapk)</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.xapk"/>
+  </mime-type>
+  <mime-type type="application/x-android-apkm">
+    <comment>Android split package bundle (apkm)</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.apkm"/>
+  </mime-type>
+</mime-info>

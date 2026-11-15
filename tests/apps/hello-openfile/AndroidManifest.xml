@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.openfile">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <!-- the file types the desktop associates with it (docs/FILE-ASSOCIATIONS.md): OpenVPN for Android's .ovpn filters, an image family, a bare */* and a web link -->
+  <application android:label="openfile">
+    <activity android:name=".Main" android:exported="true" android:launchMode="singleTask">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:scheme="content" android:mimeType="application/x-openvpn-profile"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="file"/>
+        <data android:scheme="content"/>
+        <data android:mimeType="*/*"/>
+        <data android:host="*"/>
+        <data android:pathPattern=".*\\.ovpn"/>
+        <data android:pathPattern=".*\\..*\\.conf"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:mimeType="image/*"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:mimeType="*/*"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:scheme="https" android:host="example.org" android:mimeType="application/x-web-only"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

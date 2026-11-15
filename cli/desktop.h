@@ -11,7 +11,7 @@ void setProperty(const std::string& file, const std::string& key, const std::str
 bool isSystemApp(const std::string& info);
 // Whether the app has a launcher in the drawer: drawer=show|hide, else user apps yes, system apps no
 bool inDrawer(const std::string& info);
-// (Re)writes the package's entry from its info.properties (a system app without a launcher activity has none) and the .apk handler; in the
+// (Re)writes the package's entry from its info.properties (a system app without a launcher activity has none) the file types it opens (MimeType=, a mime package: cli/filetypes.h) and the .apk handler; in the
 // Flatpak the dynamic launcher portal installs it (the person confirms once) or removes it, and the main entry handles .apk files
 void writeDesktop(const Layout& layout, const std::string& package);
 // Removes the package's entry (the Flatpak's: through the dynamic launcher portal)

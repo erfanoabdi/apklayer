@@ -11,3 +11,6 @@ tests/corpus/results-subset.md
 /inst/
 /flatpak/prebuilts
 /subprojects/bionic_translation
+/result
+/result-*
+.direnv/

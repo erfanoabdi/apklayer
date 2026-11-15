@@ -139,6 +139,8 @@ if not arm32_only
   install_symlink('apklayer', pointing_to: '../lib/apklayer/cli/apklayer', install_dir: get_option('bindir'))
 endif
 install_data('data/apklayer-manager.desktop', install_dir: get_option('datadir') / 'applications')
+# the .apks/.xapk/.apkm types the manager's entry opens (shared-mime-info; the packaging updates its database: docs/FILE-ASSOCIATIONS.md)
+install_data('data/apklayer-mime.xml', rename: 'apklayer.xml', install_dir: get_option('datadir') / 'mime/packages')
 # the Apklayer submenu of the desktop's app menu (as Waydroid's): apps carry Categories=X-Apklayer-App; the CLI writes a per-user copy too
 install_data('data/apklayer.menu', install_dir: get_option('sysconfdir') / 'xdg/menus/applications-merged')
 install_data('data/apklayer.directory', install_dir: get_option('datadir') / 'desktop-directories')

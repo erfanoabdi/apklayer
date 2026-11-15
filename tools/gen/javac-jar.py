@@ -47,6 +47,9 @@ def main():
         tree = classes.parent / ('%s.src%d' % (classes.name, i))
         shutil.rmtree(tree, ignore_errors=True)
         shutil.copytree(src, tree)
+        # copytree keeps the source's modes: a read-only prebuilts tree (a distribution's package
+        # build serves one from its store) would leave nothing for patches/apply to write to
+        for p in [tree, *tree.rglob('*')]: p.chmod(p.stat().st_mode | 0o200)
         subprocess.run([str(REPO / 'patches/apply'), project, str(tree)], check=True, stdout=subprocess.DEVNULL)
         files += sources(tree)
     argfile = classes.parent / (classes.name + '.sources')

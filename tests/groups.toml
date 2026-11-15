@@ -596,3 +596,8 @@ run = ["python3 -u tests/vm/resize-frame.py"]
 [input-wheel-pen]  # the wheel's notches and fractions (AXIS_VSCROLL/HSCROLL) and a stylus's axes through the shell's test input
 apps = ["hello-input"]
 run = ["python3 -u tests/vm/input-wheel-pen.py"]
+
+[open-files]
+# the files an app's manifest opens, from the desktop: .desktop MimeType= and mime package, `apklayer open` (a content Uri, onNewIntent), docs/FILE-ASSOCIATIONS.md
+apps = ["hello-openfile"]
+run = ["python3 -u tests/vm/open-files.py"]

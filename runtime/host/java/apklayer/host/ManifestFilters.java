@@ -73,6 +73,45 @@ final class ManifestFilters {
         return out;
     }
 
+    /**
+     * What the app opens as a file (the host's file associations, cli/filetypes.cpp): per VIEW or EDIT filter with CATEGORY_DEFAULT and a file-like
+     * data (no scheme, or file/content), "mimeType,...;ext,...": the extensions come from pathPattern/pathSuffix ending in a literal ".ext".
+     */
+    static List<String> fileTypes(Application app) {
+        List<String> out = new ArrayList<>();
+        try (XmlResourceParser xml = app.getAssets().openXmlResourceParser("AndroidManifest.xml")) {
+            boolean open = false, dflt = false, other = false;
+            java.util.Set<String> mimes = new java.util.LinkedHashSet<>(), exts = new java.util.LinkedHashSet<>();
+            java.util.regex.Pattern ext = java.util.regex.Pattern.compile("\\.([A-Za-z0-9]{1,12})$");
+            for (int ev = xml.getEventType(); ev != XmlResourceParser.END_DOCUMENT; ev = xml.next()) {
+                String tag = xml.getName();
+                if (ev == XmlResourceParser.START_TAG) {
+                    switch (tag) {
+                        case "intent-filter" -> { open = false; dflt = false; other = false; mimes.clear(); exts.clear(); }
+                        case "action" -> { String a = xml.getAttributeValue(NS, "name"); open |= "android.intent.action.VIEW".equals(a) || "android.intent.action.EDIT".equals(a); }
+                        case "category" -> dflt |= "android.intent.category.DEFAULT".equals(xml.getAttributeValue(NS, "name"));
+                        case "data" -> {
+                            String scheme = xml.getAttributeValue(NS, "scheme"), mime = xml.getAttributeValue(NS, "mimeType");
+                            if (scheme != null && !scheme.equals("file") && !scheme.equals("content")) other = true;
+                            if (mime != null) mimes.add(mime);
+                            for (String attr : new String[] {"pathPattern", "pathAdvancedPattern", "pathSuffix"}) {
+                                String path = xml.getAttributeValue(NS, attr);
+                                java.util.regex.Matcher m = path == null ? null : ext.matcher(path.replace("\\", ""));
+                                if (m != null && m.find()) exts.add(m.group(1).toLowerCase(java.util.Locale.ROOT));
+                            }
+                        }
+                        default -> { }
+                    }
+                } else if (ev == XmlResourceParser.END_TAG && "intent-filter".equals(tag) && open && dflt && !other && (!mimes.isEmpty() || !exts.isEmpty())) {
+                    out.add(String.join(",", mimes) + ";" + String.join(",", exts));
+                }
+            }
+        } catch (IOException | XmlPullParserException | RuntimeException e) {
+            System.out.println("[apklayer] cannot read the manifest's file types: " + e);
+        }
+        return out;
+    }
+
     private static String qualified(Application app, String name) {
         return name == null ? null : name.startsWith(".") ? app.getPackageName() + name : name;
     }

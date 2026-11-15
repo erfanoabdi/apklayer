@@ -98,6 +98,8 @@ rm -rf %{buildroot}%{_datadir}/lomiri-content-hub
 
 %post
 systemctl daemon-reload >/dev/null 2>&1 || :
+update-mime-database %{_datadir}/mime >/dev/null 2>&1 || :
+update-desktop-database %{_datadir}/applications >/dev/null 2>&1 || :
 # a phone whose home is on its small system partition keeps apklayer's data on /userdata (cli/datamove.cpp): each user's own directory there,
 # made by `apklayer setup`; sticky like /tmp. One that exists (made by hand) stays as it is.
 if [ -d /userdata ] && [ ! -e /userdata/apklayer ]; then mkdir /userdata/apklayer && chmod 1777 /userdata/apklayer; fi || :
@@ -106,11 +108,13 @@ if [ "$1" -gt 1 ] && pgrep -x apklayer-shell >/dev/null 2>&1; then echo "apklaye
 
 %postun
 systemctl daemon-reload >/dev/null 2>&1 || :
+update-mime-database %{_datadir}/mime >/dev/null 2>&1 || :
 
 %files
 %{_bindir}/apklayer
 %{_bindir}/apklayer-manager
 %{_datadir}/applications/apklayer-manager.desktop
+%{_datadir}/mime/packages/apklayer.xml
 %{_prefix}/lib/apklayer
 %{_datadir}/apklayer
 %{_datadir}/icons/hicolor/*/apps/apklayer.*
