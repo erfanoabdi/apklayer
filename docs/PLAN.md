@@ -23,7 +23,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Home scene on NVIDIA: block noise on 3D models. Recheck with `apklayer prop set berberis.mode.com.kurogame.gplay.punishing.grayraven.en lite-translate-or-interpret` (and unset for the reference); the ASTC fallback in `cli/env.cpp` is a separate lever.
 
 ## Graphics
-- Vulkan presentation untested on AMD.
+- Multi-GPU: tested on the MacBookPro16,1 (Intel UHD 630 + AMD Pro 5500M, the desktop's KWin on the AMD one) and with a nested KWin on the Intel one (`APKLAYER_COMPOSITOR_GPU`, a virtual KWin names no device); needs a person or hardware: a real KWin session on the iGPU (`KWIN_DRM_DEVICES`), NVIDIA + Intel (Optimus), two dGPUs. A different GPU per app is not built (one stack, one GPU per instance: use two instances).
 - KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
 - Lipstick: a mouse over the navigation-bar strip (pointer.c `in_remote_strip`) is the bar's since 2026-11-15; needs a human check (no pointer device on the phone to try it).
 
@@ -71,7 +71,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 ## Needs hardware or a person
 - Tester PC: run `kde-window.py` once at 150% on its KWin (the prebuilts there are current; the new deb is built, not installed).
 - Needs the Quintus lock code (not in `local.conf`): re-run `phone-test.sh sfos` groups with the current RPM.
-- AMD: Vulkan presentation and host ES1 untested.
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
 - Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
 - Ubuntu Touch: manager on screen, navigation bar under the panel, drawer tap, shell window, maximize, turning by hand.

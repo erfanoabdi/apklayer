@@ -1,5 +1,5 @@
 // Instances: each an Android of its own (binder devices, /data, /storage, property store). Selecting one points every other page at it.
-import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, IconButton, OutlinedCard, DropDownMenu, Switch } from "@material";
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, IconButton, OutlinedCard, Switch } from "@material";
 import { Backend, AppIcons } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 
@@ -52,13 +52,19 @@ export component InstancesPage {
                     if inst.id != "default" : IconButton { icon: AppIcons.delete; tooltip: "Remove"; enabled: !Backend.busy; clicked => { root.confirm("remove-instance", inst.id); } }
                 }
                 // the selected instance's GPU (several GPUs: iGPU + dGPU); a change restarts its Android services
-                if Backend.gpus.length > 1 : DropDownMenu {
-                    label: "GPU of " + Backend.instance + (Backend.gpu-index >= 0 ? ": " + Backend.gpus[Backend.gpu-index].text : "");  // DropDownMenu shows no text before a selection
-                    leading_icon: AppIcons.memory;
-                    enabled: !Backend.busy;
-                    items: Backend.gpus;
-                    current_index: Backend.gpu-index;
-                    selected(i) => { Backend.set-gpu(i); }
+                // rows, not a menu: every choice is on screen (and reachable by the scripted input of manager/tests/ui.sh)
+                if Backend.gpus.length > 1 : VerticalLayout {
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    Heading { text: "GPU of " + Backend.instance; }
+                    for gpu[i] in Backend.gpus : Row {
+                        text: gpu.text;
+                        supporting-text: gpu.trailing_text;
+                        icon: AppIcons.memory;
+                        selected: i == Backend.gpu-index;
+                        clickable: !Backend.busy;
+                        clicked => { Backend.set-gpu(i); }
+                        if i == Backend.gpu-index : Tag { text: "Used"; strong: true; }
+                    }
                 }
             }
         }
