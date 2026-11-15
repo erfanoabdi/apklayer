@@ -14,8 +14,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 ## Bugs
 - GApps sign-in: after local account creation on GMS 26.44 / Android 17, setup reports “There was a problem communicating with Google servers”; screenshot-time logs include a failed DroidGuard response fetch. Cronet Dynamite also failed to load `ImplVersion`; path-based DEX loader support is patched and covered by a regression check, but end-to-end sign-in is still unverified. Owner reports Waydroid Android 13 works without Integrity (GMS version unknown).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
-- Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
-- Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
+- Phone with the deb: `HubStartup.connect` hang in `pingBinder` after 4-5 NewPipe launches not reproduced on the X23 click (8 launch/stop cycles); rapid `apklayer run`/`stop` cycles leave `run` processes blocked in the `takeAppSpare` socket read (`cli/spare.cpp`, `cli/run.cpp`) and `app-spare` holders alive after `stop <pkg>`: a real race.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR dies 114-161 s after launch on the repaired tester PC (11 of 11 runs, any preload, translator, runtime or translation mode), after ACE connects to its servers and the invalid-free storm starts; also a HotSpot SIGSEGV on AWS (hs_err_pid335150, core in /var/tmp/pgr-core). Not the `/proc/self/root` probe (none seen in 5 logged runs). Next: reinstall PGR's APK set on the tester PC (an agent's `apklayer install` erased its lib/ and arm64 split there), run with fresh app data (ACE state in files/ano_tmp), look at what ACE gets for /proc/self/fd, /proc/self/map_files, /proc/<pid>, /dev/virtpipe-sec; restore `berberis.mode.<pgr>=lite-translate-or-interpret` (takes effect after a whole-instance `apklayer stop`).
@@ -27,7 +26,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
 - `fit_size` reserves 46 px (`DECOR_H`) also under server-side decorations: the first window is 542 px high where 588 would fit.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
-- Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
+- Lomiri: no keyboard inset while the app is turned (a deliberate shortcut `ime = turn ? 0` in `bridge/shell/geometry.c`; the keyboard would be a side inset, and the inset path takes a bottom value only). After the screen is off or locked Lomiri SIGSTOPs apps and they need a launch to resume; once the picture was half re-laid at a smaller scale after a resume (a person).
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
@@ -40,7 +39,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Non-Latin input: map the xkb layout to the app's `LocaleList` and IME subtypes; RTL cursor, selection and bidi in an EditText; layout-switch hotkeys (Alt+Shift, Super+Space); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
 - text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
 - OTR2 in a mobile maximized window and FlorisBoard typing.
-- Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
 - HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
@@ -48,6 +46,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
 
 ## Startup and memory
+- Measured on the X23: JVM max heap 1.39 GB (25% of RAM; the API says 256 MB), 700 MB live heap fine, instance PSS 605 MB with NewPipe idle, composer 24 MB, SurfaceFlinger 37 MB; first `apklayer setup` 63 s. After a runtime change `setup` says Installed but 9 apps stay marked stale (converter ABI) until launched or converted from the manager banner.
 - Quintus idle PSS: app JVM ~394 MB, hub ~249 MB, three spares ~235 MB each; composer 22 MB, SurfaceFlinger 38 MB (no ~80 MB GL context seen).
 - A meson-installed dev tree's CLI that runs without `APKLAYER_NATIVE` relinks the shared `~/.local/share/apklayer/runtime/<ver>` to itself (`setUpBundle` / `setup-runtime.sh` use `ln -sfn`); deleting that tree breaks the owner's runtime (this broke the tester PC on 2026-11-15). Make it refuse, copy, or give dev trees their own runtime dir.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
@@ -77,6 +76,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
+- Halium host HALs: `listManifestByInterface`/`listByInterface` return no names for `camera.provider@2.4` and `media.c2@1.0/1.2` through the stand-in's host branch on the X23 (and `cameras []` on the Quintus), although `getService` of the same HALs works (`hidltool cameras internal/0` finds 3 cameras, `codecs default` lists the MediaTek components; `hidltool manifest <fqName>` added). So `camera`/`media = device` find no provider: `Codec2Client: No Codec2 services declared`, `hello.camera` `cameras []`. Suspects: the host hwservicemanager answering `list*` with nothing for this caller (ACL), the stand-in's probe fallback, or the vendor manifest listing only @2.6 on Sailfish. Instance `ut` runs `media = apklayer` meanwhile (`apklayer --instance ut providers unset media` to revert). After the fix: NewPipe playback and the camera items (preview rotation, `getCallingUid`, rear still, present fences).
 - Sailfish phone: Lipstick rotation now works (follows the sensor transform or a locked app; checked through the orientation lock key, not by physically turning the phone); open: the sensorfw route by physically turning the phone, the keyboard inset in landscape, Maliit's sideways keyboard in a landscape app, the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client), a finger on the host dialog works. The phone runs the old shell and vdisplay again: it needs a new RPM and runtime to get the rotation and Maliit fixes. `camera = device` lists no cameras (`cameras []`) although the device's camera provider@2.4/2.5/2.6 is on its hwbinder and `providers set camera fake` works; cameraserver logs no HIDL provider attempt (the vendor manifest lists only @2.6): diagnose with `hidltool`; preview rotation, `getCallingUid`, still, fences and `media = device` wait on it. Not run: HIDL local manager, binder busy-poll, pamcheck, scoped storage, Bluetooth.
 - Sailfish location: needs `/var/lib/location/location.conf` enabled and connman's gps `Powered=true` (off by default); a real fix outdoors unchecked; sensorfw stops sensors with the screen off (the app reads zeros): documented, not changed.
 - VPN for apps (host-wide, `docs/VPN.md`, group `vpn`): built through NetworkManager (user-owned TUN, `apklayer vpn-guard`, `/1` default route, pkexec helper fallback); open: drive WireGuard and OpenVPN for Android to an established TUN (WireGuard needs a tunnel made in its UI, OpenVPN a profile and a server); a person's check of the pkexec dialog on a real desktop and the notification's Disconnect button; the pkexec path end to end through the hub; the per-app sandbox; Sailfish via connman; several instances with VPNs (they share the `/1` routes); no kill switch, `setMtu` ignored on the NM path.
@@ -87,6 +87,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
+- `tests/run` has no phone route: add the click build and install steps (`tools/release/click.sh`, `runtime-bundle.sh`, the `gdbus ... com.lomiri.click.Install` install, `apklayer setup --bundle`) as a script under `tools/halium`.
+- Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
 - Password-ssh hosts (UTM VM, tester PC) intermittently refuse auth ("Permission denied" about every other connection): `tests/run` needs a retry in `vm.ssh`/`vm.copy`.
 - `fullscreen.py` and `kde-window.py` compare integer sizes against KWin's fractional geometry (fail at 150% scale on the tester PC, also on main).
 - `check-prebuilts.sh` does not catch stale `libvulkan.so`, `libapklayer_vulkan.so`, `vulkan.apklayer.so` (not in the lock; the tester PC's `~/apklayer-build/prebuilts` copy is ~25 libraries behind): add them to the lock.

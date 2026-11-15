@@ -710,7 +710,9 @@ static const char *proc_root_rest(const char *p)
     if (!n || (p[n] && p[n] != '/')) return NULL;
     p += n;
     while (p[0] == '/' && p[1] == '/') p++;
-    return p[0] == '/' && strncmp(p, "/proc", 5) ? p : NULL;  /* /proc/self/root/proc/... is the hidden-process rules' */
+    /* /proc/self/root/proc/... is the hidden-process rules'. Only the data and storage spellings: apklayer's own CLI under the preload (the stack, `run`) reads the host's
+     * /vendor and /odm as /proc/self/root/vendor (cli/device_hals.cpp), which must stay the host's (the device's HALs, 27 manifest fragments, not the Android root's 9) */
+    return p[0] == '/' && (!strncmp(p, "/data", 5) || !strncmp(p, "/storage", 8) || !strncmp(p, "/sdcard", 7) || !strncmp(p, "/mnt", 4)) ? p : NULL;
 }
 
 /* apklayer patch: what readlink says of the three links Android has and the instance's data and storage have as host links (their targets are host-relative):

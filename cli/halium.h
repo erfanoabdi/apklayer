@@ -16,6 +16,7 @@ std::string defaultInstanceId();
 void haliumEnvDefaults(Env& env, const Layout& layout);
 // A launch from Lomiri's drawer (lomiri-app-launch: APP_ID, its unit): a window shell of its own, started in that unit before the launch leaves it, so
 // Lomiri gives its Wayland client (the app's window) to the app (card, name, icon) and drops it when the launch ends. Sets APKLAYER_APP_SHELL (its socket).
-void startLomiriAppShell(const Layout& layout, const std::string& instanceId);
+// Not for a package already running in the instance: its launch is handed to the running app.
+void startLomiriAppShell(const Layout& layout, const std::string& instanceId, const std::string& package);
 
 }  // namespace apklayer

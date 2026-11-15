@@ -53,18 +53,6 @@ std::string processOf(const std::string& pid, const std::string& package) {
     return package;
 }
 
-// The launcher pid (its run.<pid> record, the layer stack) of a running window JVM of the package, or of one of its android:process names
-// ("<package>:jvm"); empty: none (component hosts have no window sink).
-std::string windowLaunch(const Layout& l, const Instance& inst, const std::string& target) {
-    std::string found, package = target.substr(0, target.find(':'));
-    auto running = launches(l, inst);  // kept: a range-for over a member of a temporary would outlive it
-    for (const std::string& record : running[package]) {
-        std::vector<std::string> pids = split(readFile(join(inst.stateDir, record)).value_or(""), '\n');
-        if (pids.size() >= 2 && atoi(pids[1].c_str()) > 0 && processOf(pids[0], package) == target) found = record.substr(strlen("run."));
-    }
-    return found;
-}
-
 // `apklayer run` of an app whose window JVM runs in this instance (Android: a launcher or `am start` reaches the running process, never a second
 // one): the hub hands the intent (APKLAYER_INTENT_FILE) or a launcher start to it, and the shell raises its window. False: start a process.
 bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const std::string& package) {
@@ -86,7 +74,8 @@ bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const 
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof addr.sun_path, "%s", l.shellSocket().c_str());
+    std::string own = join(l.runtimeHome, "apklayer/shell-" + launcher + ".sock");  // a Lomiri drawer launch's own shell (cli/halium.cpp) holds that app's window
+    snprintf(addr.sun_path, sizeof addr.sun_path, "%s", exists(own) ? own.c_str() : l.shellSocket().c_str());
     bool raised = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0 && write(fd, header, sizeof header) == sizeof header
                   && write(fd, payload.data(), payload.size()) == (ssize_t)payload.size();
     close(fd);
@@ -94,6 +83,18 @@ bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const 
     return true;
 }
 }  // namespace
+
+// The launcher pid (its run.<pid> record, the layer stack) of a running window JVM of the package, or of one of its android:process names
+// ("<package>:jvm"); empty: none (component hosts have no window sink).
+std::string windowLaunch(const Layout& l, const Instance& inst, const std::string& target) {
+    std::string found, package = target.substr(0, target.find(':'));
+    auto running = launches(l, inst);  // kept: a range-for over a member of a temporary would outlive it
+    for (const std::string& record : running[package]) {
+        std::vector<std::string> pids = split(readFile(join(inst.stateDir, record)).value_or(""), '\n');
+        if (pids.size() >= 2 && atoi(pids[1].c_str()) > 0 && processOf(pids[0], package) == target) found = record.substr(strlen("run."));
+    }
+    return found;
+}
 
 // The JVM options that make a host JVM this package's process (its data, uid, library dir), then its APK and classes jar: an app launch and a component
 // host start with them; the instance's spare takes them with its launch (cli/spare.cpp).
