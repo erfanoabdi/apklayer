@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sun, 15 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: libselinux is listed in the app namespace's module view
+
+apklayer patch (docs/PATCHES.md). bridge/ndk/libselinux.c is mapped over libselinux.so (libapklayer_selinux.so) and, as plain C against glibc, is
+loaded by glibc's dlopen: a host-only module, so dl_iterate_phdr hid it from app code and Android's libselinux.so (eagerly loaded by the runtime)
+was missing from the list. It is named /system/lib64/libselinux.so now.
+
+--- a/linker/app_view.c
++++ b/linker/app_view.c
+@@ -170,6 +170,10 @@ bool apkenv_android_module(const char *host_path, char *buf, size_t size, bool glibc_loaded)
+ 		snprintf(buf, size, "/system/lib64/%s", base);
+ 		return true;
+ 	}
++	if (!strcmp(base, "libapklayer_selinux.so")) {  /* apklayer's libselinux (glibc-loaded stand-in), Android's name */
++		snprintf(buf, size, "/system/lib64/libselinux.so");
++		return true;
++	}
+ 	if (strstr(host_path, "robolectric-nativeruntime") || strstr(host_path, "/native-runtime")) {
+ 		snprintf(buf, size, "/system/lib64/libandroid_runtime.so");
+ 		return true;
