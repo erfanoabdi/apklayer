@@ -6,6 +6,7 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 
 ## 2026-11-15: GApps: Play Store's install session with dex metadata (.dm) installs
 - With the oneway sender uid in place Play Store downloaded the app and committed the session; the hub answered `INSTALL_PARSE_FAILED: Failed to parse .../com.hottagames.nte.dm`: HubInstallSessions.apks took every session file for an APK. Now it leaves out what PackageInstallerSession's sAddedApkFilter does: dex metadata (`.dm`), fs-verity signatures (`.fsv_sig`), checksum files (`.digests`, `.signature`) and remove markers (`.removed`). The `.dm` is not used (no ART profile here).
+- The next commit then failed with `Installer com.android.vending does not declare android.permission.REQUEST_INSTALL_PACKAGES`: not a code gap. The hand-made `gwd` home had no `<data>/apklayer/google-apps/etc`, so its re-made runtime copy lacked Google's privapp XMLs (applyGappsConfig had nothing to copy) and Play Store held no INSTALL_PACKAGES. Restored there from its LiteGapps files.
 - Checked: compiles; deployed into the `gwd` home. Not run: the install itself (owner's Play Store) and the group `system-apps`/installer tests (no VM config on this PC).
 
 ## 2026-11-15: GApps: Play Store downloads refused by its own internal-only check (oneway sender uid in the userspace binder)
