@@ -48,7 +48,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
 - Storage: scoped storage hides other packages' `Android/data` and `Android/obb` only for the `/storage/emulated/0`, `/sdcard` and `/data/media/0` spellings; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
 - Call audio: the 6 s new-requester grace and reports from native AAudio/OpenSL streams (the policy's active tracks).
-- Direct buffer `array()` writes are lost (HotSpot cannot pin an app's `allocateDirect` buffer; `ApklayerBuffers` returns a copy).
+- Direct buffer `array()` writes are lost: documented limit (a copy-back would overwrite newer buffer contents; only array pinning would fix it, see `docs/PATCHES.md`).
 
 ## Startup and memory
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
@@ -73,7 +73,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Modules: `dl_iterate_phdr` lists 285 of 320 (Waydroid's full module list is not in the repo; waydroid.txt is cut at 16 KB). Not loaded: libEGL/libGLESv*/libvulkan (libEGL stalled the app), ~30 libs not staged (libheif, libion, libbufferhub, libRS, HAL/aidl libs, libcgrouprc); ART libs and boot*.oat cannot exist. libc exports `bionic_*` names.
 - x86: (`HWCAP2` 0 is deliberate: matrix row 152), exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the x86 guest matches a real phone; arm64 native can read it: owner to decide whether to deny it for app uids).
 - Process attributes: main thread id; the property count is 421 (Waydroid's full list is not in the repo; some values are plausible, not verified).
-- Java: `String.class.getClassLoader()`, `Object.class.getResource`, ArrayStoreException text, StackOverflow depth, main thread id 2.
+- Java: ArrayStoreException text, StackOverflow depth and main thread id 2 are JVM limits (`docs/ART-DEFERRED.md`).
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with the INSTALL.md checklist (the broker now runs `nvidia-modprobe` for missing nodes; only the argument mapping is tested).
