@@ -65,6 +65,9 @@ public final class NativeLoader {
     /** Every class the JVM has loaded, of every loader (JVMTI, app_native.c): CdsDump links them before the dump; null when JVMTI refuses. */
     static native Class<?>[] loadedClasses();
 
+    /** mprotect of a direct buffer's pages (SharedMemory.map): 0 or the errno. */
+    static native int mprotect(java.nio.ByteBuffer buffer, int prot);
+
     /** The process's command line and name as Android's Process.setArgV0 sets them (native code reads /proc/self/cmdline). */
     static void nameProcess(String name) {
         try { setProcessName(name); } catch (LinkageError noShim) { /* no native runtime in this process */ }

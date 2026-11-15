@@ -26,6 +26,7 @@ public final class Main extends Activity {
                     System.out.println("[files] owndata java=" + viaJava + " os=" + os + " nio=" + java.nio.file.Files.isDirectory(java.nio.file.Path.of("/data/user/0/" + pkg + "/files")) + " other=" + other + " filesDir=" + getFilesDir());
                     System.out.println("[files] DONE"); finish(); return;
                 }
+                if (System.getProperty("hello.libcore") != null) { LibCore.print(); finish(); return; }
                 if (System.getProperty("hello.scoped") != null) {  // scoped storage: another package's Android/data and Android/obb are not reachable (the runner made hello.scoped.other's files), the app's own are
                     getExternalFilesDir(null).mkdirs();
                     java.io.File mine = new java.io.File(getExternalFilesDir(null), "mine");
