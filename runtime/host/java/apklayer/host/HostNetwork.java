@@ -31,7 +31,10 @@ final class HostNetwork {
     private HostNetwork() {}
 
     /** What the host offers right now: the default-route interface, its transport and link, and the other networks; null when offline. */
-    record State(String iface, boolean wifi, LinkProperties link, List<Other> others) {}
+    record State(String iface, boolean wifi, LinkProperties link, List<Other> others) {
+        /** The host's default route is a VPN's TUN (docs/VPN.md): the default network is the VPN, TRANSPORT_VPN without NOT_VPN. */
+        boolean vpn() { return VPNS.matcher(iface).matches(); }
+    }
 
     /** A network that is not the default one: {@code transport} is a NetworkCapabilities.TRANSPORT_*. */
     record Other(String iface, int transport, LinkProperties link) {}
@@ -64,17 +67,19 @@ final class HostNetwork {
     static State read() {
         try {
             List<String> lines = Files.readAllLines(Path.of("/proc/net/route"));
-            for (String line : lines.subList(Math.min(1, lines.size()), lines.size())) {
-                String[] f = line.trim().split("\\s+");
-                if (f.length > 7 && f[1].equals("00000000") && (Integer.parseInt(f[3], 16) & 1) != 0) {  // destination 0.0.0.0, flag UP
-                    return new State(f[0], new File("/sys/class/net/" + f[0] + "/wireless").isDirectory(), HostLinkProperties.read(f[0]), others(f[0]));
+            // the default route: 0.0.0.0/0, or 0.0.0.0/1 (mask 00000080), the more specific half a VPN takes it with (docs/VPN.md): that one wins in the kernel too
+            for (String mask : new String[] {"00000080", "00000000"})
+                for (String line : lines.subList(Math.min(1, lines.size()), lines.size())) {
+                    String[] f = line.trim().split("\\s+");
+                    if (f.length > 7 && f[1].equals("00000000") && f[7].equals(mask) && (Integer.parseInt(f[3], 16) & 1) != 0) {  // destination 0.0.0.0, flag UP
+                        return new State(f[0], new File("/sys/class/net/" + f[0] + "/wireless").isDirectory(), HostLinkProperties.read(f[0]), others(f[0]));
+                    }
                 }
-            }
         } catch (IOException | NumberFormatException unreadable) { /* offline */ }
         return null;
     }
 
-    static NetworkCapabilities capabilities(State state) { return capabilities(state.wifi() ? NetworkCapabilities.TRANSPORT_WIFI : NetworkCapabilities.TRANSPORT_ETHERNET); }
+    static NetworkCapabilities capabilities(State state) { return capabilities(state.vpn() ? NetworkCapabilities.TRANSPORT_VPN : state.wifi() ? NetworkCapabilities.TRANSPORT_WIFI : NetworkCapabilities.TRANSPORT_ETHERNET); }
 
     static NetworkCapabilities capabilities(int transport) {
         NetworkCapabilities caps = new NetworkCapabilities();
@@ -84,6 +89,7 @@ final class HostNetwork {
                 NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING, NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED, NetworkCapabilities.NET_CAPABILITY_FOREGROUND,
                 NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED,
                 NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED /* NetworkRequest.Builder asks for it by default (API 31): without it no request is satisfied (WorkManager's network constraint) */}) caps.addCapability(c);
+        if (transport == NetworkCapabilities.TRANSPORT_VPN) caps.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN);  // a new NetworkCapabilities has it by default
         return caps;
     }
 
@@ -134,7 +140,7 @@ final class HostNetwork {
         } else {
             // the network's netId is its type (Robolectric keys the active network by type): 1 or 9, a non-zero network handle
             shadow.setActiveNetworkInfo(ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED,
-                    next.wifi() ? ConnectivityManager.TYPE_WIFI : ConnectivityManager.TYPE_ETHERNET, 0, true, NetworkInfo.State.CONNECTED));
+                    next.vpn() ? ConnectivityManager.TYPE_VPN : next.wifi() ? ConnectivityManager.TYPE_WIFI : ConnectivityManager.TYPE_ETHERNET, 0, true, NetworkInfo.State.CONNECTED));
             Network network = manager.getActiveNetwork();
             if (network != null) {
                 shadow.setNetworkCapabilities(network, capabilities(next));

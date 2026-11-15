@@ -44,6 +44,7 @@ public final class HubHost {
         HostNetwork.installHub(directory::sendSystem);
         HostNetwork.install(RuntimeEnvironment.getApplication());  // the hub follows the host's connection too, to announce its changes
         HostNetwork.watch(directory::hostChanged);  // job constraints follow the host's network
+        if (!RealBinder.publish(HubVpn.SERVICE, directory.vpn())) System.out.println("[apklayer-hub] cannot publish " + HubVpn.SERVICE);
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
         HubBatteryStats.publishIfSensors();  // SensorService's battery notes: without it every sensor enable and disable waits 5 s
         directory.usb.watch();

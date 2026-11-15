@@ -57,6 +57,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.PendingIntent", ShadowHostRealPendingIntent.class.getName()),
                 Map.entry("android.app.Service", ShadowHostService.class.getName()),
                 Map.entry("android.app.IntentService", ShadowHostIntentService.class.getName()),  // its shadow must be a ShadowHostService (stopSelf)
+                Map.entry("android.net.VpnService", ShadowHostVpnService.class.getName()),  // the real prepare/establish/protect (docs/VPN.md), not Robolectric's stubs
                 Map.entry("android.app.job.JobService", ShadowHostJobService.class.getName()),  // the same, and the real jobFinished reaches HostJobs
                 Map.entry("android.os.ParcelFileDescriptor", ShadowHostRealParcelFileDescriptor.class.getName()),
                 Map.entry("android.os.SharedMemory", ShadowHostSharedMemory.class.getName()),  // a real memfd, mappable in the process it is sent to
@@ -90,6 +91,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.view.TextureView", ShadowHostRealTextureView.class.getName()),
                 Map.entry("android.view.SurfaceSession", HostPlainShadows.SurfaceSession.class.getName()),
                 Map.entry("android.net.LocalSocketImpl", HostPlainShadows.LocalSocketImpl.class.getName()),
+                Map.entry("com.android.internal.net.NetworkUtilsInternal", ShadowHostNetworkUtilsInternal.class.getName()),
                 Map.entry("android.view.PixelCopy", HostPlainShadows.PixelCopy.class.getName()),
                 Map.entry("android.graphics.SurfaceTexture", HostGLShadows.SurfaceTexture.class.getName()),
                 Map.entry("android.graphics.TextureLayer", HostGLShadows.TextureLayer.class.getName()),

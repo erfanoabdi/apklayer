@@ -282,6 +282,12 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CONFIRM_CREDENTIAL, request -> { request.writeString(title); request.writeString(description); request.writeLong(challenge); },
                 reply -> reply.readBoolean());
     }
+    /** VpnService.prepare()'s dialog (HubVpn.consent): whether the person lets this app set up a VPN. */
+    /** VpnService.protect(): the hub has the VPN's guard bind the socket to the host's own interface. */
+    boolean vpnProtect(java.io.FileDescriptor socket) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.VPN, request -> { request.writeString("protect"); request.writeFileDescriptor(socket); }, reply -> reply.readBoolean());
+    }
+    boolean vpnConsent() { return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.VPN, request -> request.writeString("consent"), reply -> reply.readBoolean()); }
     /** The app cancelled its BiometricPrompt: the hub closes the password dialog of this app's open confirmCredential. */
     void cancelCredential() { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CANCEL_CREDENTIAL, request -> { }, reply -> null); }
     /** StorageManager.unmount: whether the drive (volume id) is unmounted now (HubVolumes.eject). */

@@ -43,7 +43,7 @@ struct Detail {
 };
 
 struct Snapshot {
-    Rows apps, instances, props, settings, status, gpus, providers, binder, config;
+    Rows apps, instances, props, settings, status, gpus, providers, binder, config, vpn;
     std::optional<Detail> detail;
     std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
 };
@@ -73,6 +73,7 @@ Snapshot load(const Cli& cli, const std::string& current) {
     s.gpus = rows(cli, {"gpus"}, s.error);
     s.providers = rows(cli, {"providers"}, s.error);
     s.binder = rows(cli, {"binder"}, s.error);
+    s.vpn = rows(cli, {"vpn", "status"}, s.error);  // one VPN row, or "no VPN"
     s.config = rows(cli, {"config", "list"}, s.error);
     if (!current.empty()) s.detail = loadDetail(cli, current);
     return s;
@@ -139,6 +140,9 @@ public:
         }
         b.set_instances(instances);
         b.set_instance_running(running);
+        std::string vpn;  // the instance's VPN (an app's VpnService, docs/VPN.md): "<session> (<app>), <all traffic|some routes>"
+        for (const auto& r : s.vpn) if (field(r, 0) == "VPN") vpn = field(r, 2) + " (" + field(r, 1) + "), " + field(r, 5);
+        b.set_vpn_text(slint::SharedString(vpn));
         if (setup_) setup_->binder(binder);
         auto props = std::make_shared<slint::VectorModel<PropEntry>>();
         for (const auto& r : s.props) {
@@ -446,6 +450,7 @@ private:
                   });
         });
         b.on_set_autostart([this](slint::SharedString id, bool on) { action(on ? "Turning always-on mode on" : "Turning always-on mode off", {"instance", "autostart", std::string(id), on ? "on" : "off"}, std::string(id)); });
+        b.on_disconnect_vpn([this] { action("Disconnecting the VPN", {"vpn", "disconnect"}); });
         b.on_stop_instance([this](slint::SharedString id) { action("Stopping the instance", {"stop"}, std::string(id)); });
         b.on_set_gpu([this](int i) {
             if (i < 0 || i >= static_cast<int>(gpuIds_.size())) return;
