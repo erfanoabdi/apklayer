@@ -45,7 +45,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Permissions and Android rules
 - Shared libraries: a native library's path in the app's linker namespace (`<uses-native-library>` itself works).
-- HIDL (`docs/HIDL.md`, group `hidl`): left are a local hwservicemanager beside the host forwarding on Halium instances (libhidl patch 0004), apps registering their own HIDL services (VINTF entry), and rerunning `tests/run hidl` on UTM/arm64 with the new libpdfium.
+- HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
 - Storage: scoped storage hides other packages' `Android/data` and `Android/obb` only for the `/storage/emulated/0`, `/sdcard` and `/data/media/0` spellings; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
 - Call audio: the 6 s new-requester grace and reports from native AAudio/OpenSL streams (the policy's active tracks).
 - Direct buffer `array()` writes are lost (HotSpot cannot pin an app's `allocateDirect` buffer; `ApklayerBuffers` returns a copy).

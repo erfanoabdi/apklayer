@@ -26,7 +26,8 @@ if [ -f aidl.list ]; then
   done < aidl.list
 fi
 OPT=$(ls "$SDK"/platforms/android-36.1/optional/*.jar | paste -sd: -)  # the optional shared libraries (<uses-library>): compile only, as the SDK's stubs
-javac -nowarn -d "$W/cls" -cp "$AJ:$OPT" $(find -H src "$W/aidl" -name '*.java')
+CO=""; if [ -d compile-only ]; then mkdir -p "$W/co"; javac -nowarn -d "$W/co" -cp "$AJ" $(find compile-only -name '*.java'); CO=":$W/co"; fi  # compile-only/: framework classes the SDK hides, on the classpath only
+javac -nowarn -d "$W/cls" -cp "$AJ:$OPT$CO" $(find -H src "$W/aidl" -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
 key() { local ks="$PWD/../../../build/keys/$1.jks"; mkdir -p "$(dirname "$ks")"
   [ -f "$ks" ] || keytool -genkeypair -keystore "$ks" -alias key -storepass apklayer -keypass apklayer -dname "CN=$1" -keyalg RSA -validity 10000 -noprompt >/dev/null 2>&1
