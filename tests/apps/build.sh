@@ -53,7 +53,8 @@ ABIS=()
 if [ -f split.list ]; then while IFS=: read -r split config; do
   if [ "$config" = abi ]; then ABIS+=("$split"); elif [ -n "$split" ]; then SPLITS+=(--split "$W/split_$split.apk:$config"); fi
 done < split.list; fi
-"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} ${SPLITS[@]+"${SPLITS[@]}"} --manifest "$MANIFEST"
+SHARED=(); [ ! -f shared-lib ] || SHARED=(--shared-lib)  # a library with resources: its package id is assigned when an app loads it (sharedLibraryFiles)
+"$BT"/aapt2 link ${SHARED[@]+"${SHARED[@]}"} ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} ${SPLITS[@]+"${SPLITS[@]}"} --manifest "$MANIFEST"
 (cd "$W" && zip -q base.apk classes.dex $LIBS)
 for abi in ${ABIS[@]+"${ABIS[@]}"}; do  # what bundletool makes of lib/<abi>/: a split of the same package and versionCode named config.<abi>
   printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="%s" android:versionCode="%s" split="config.%s"><application android:hasCode="false"/></manifest>' \

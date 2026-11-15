@@ -72,6 +72,7 @@ final class HostVolumes {
 
         static List<VolumeInfo> list(File storage, int user) {
             List<VolumeInfo> volumes = new ArrayList<>();
+            if ("off".equals(System.getenv("APKLAYER_DRIVE_SCAN"))) return volumes;  // `apklayer config set drive-scan off`: no drive is this instance's volume, none is scanned
             String host = System.getProperty("apklayer.storage"), name = user();
             List<String> lines;
             try { lines = Files.readAllLines(Path.of("/proc/self/mounts")); } catch (IOException | RuntimeException unreadable) { return volumes; }

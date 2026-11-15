@@ -5,6 +5,7 @@ import android.content.pm.VersionedPackage;
 import android.content.res.ApkAssets;
 import android.content.res.XmlResourceParser;
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -176,14 +177,22 @@ final class HostSharedLibraries {
         });
         if (resolved.infos().isEmpty()) return;
         info.sharedLibraryInfos = new ArrayList<>(resolved.infos());
-        info.sharedLibraryFiles = resolved.jars().stream().map(Path::toString).toArray(String[]::new);
+        info.sharedLibraryFiles = withApks(resolved.jars());
+    }
+
+    /** The libraries' files as PackageManagerService lists them: the jars, then the installed providers' APKs (ResourcesManager adds an .apk of sharedLibraryFiles to the app's AssetManager: the library's resources). */
+    private static String[] withApks(List<Path> jars) {
+        List<String> all = new ArrayList<>();
+        for (Path jar : jars) all.add(jar.toString());
+        for (Path jar : jars) { Path apk = jar.resolveSibling("base.apk"); if (jar.getFileName().toString().equals("classes.jar") && Files.isRegularFile(apk)) all.add(apk.toString()); }
+        return all.toArray(new String[0]);
     }
 
     private static final Map<String, Resolved> OTHERS = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * Before any class of the app loads: the libraries' jars join the app's class loader and its ApplicationInfo.sharedLibraryFiles (LoadedApk and
-     * apps read them; ResourcesManager skips .jar files). A required library the runtime lacks is reported: the app may still run without it.
+     * apps read them; ResourcesManager skips .jar files and takes the .apk ones (withApks)). A required library the runtime lacks is reported: the app may still run without it.
      */
     static void install(Path apk) {
         if (apk == null) return;
@@ -203,7 +212,7 @@ final class HostSharedLibraries {
         try {
             if (app != null) app.getClass().getMethod("addLibraries", Path[].class).invoke(app, (Object) resolved.jars().toArray(new Path[0]));
         } catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
-        files = resolved.jars().stream().map(Path::toString).toArray(String[]::new);
+        files = withApks(resolved.jars());
         try {
             Object bound = org.robolectric.util.ReflectionHelpers.getField(org.robolectric.RuntimeEnvironment.getActivityThread(), "mBoundApplication");
             record(org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo"));

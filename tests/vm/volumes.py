@@ -189,6 +189,13 @@ try:
     detach()
     picture.unlink()
     lines += app(jopts + '-Dhello.catchup.drive=0', lambda line, lines: None, budget)
+    # drive-scan off (`apklayer config set drive-scan off` exports APKLAYER_DRIVE_SCAN=off): the drive is mounted, yet no volume of this instance and no MediaStore volume
+    attach()
+    mount()
+    off = app('-Dhello.hotplug=catchup -Dhello.catchup.file=none-%d.png -Dhello.catchup.drive=0' % os.getpid(), lambda line, lines: None, {'APKLAYER_DRIVE_SCAN': 'off'})
+    for step in ('catchup gone volume', 'catchup gone mediastore volume'):
+        print('%s drive-scan off: %s' % ('PASS' if '[hotplug] PASS ' + step in off else 'FAIL', step))
+        if '[hotplug] PASS ' + step not in off: lines.append('[hotplug] FAIL drive-scan off')
 finally:
     stop()
     polkit(False)
@@ -199,4 +206,4 @@ finally:
 passed = {l.split('[hotplug] PASS ')[1].strip() for l in lines if '[hotplug] PASS ' in l}
 STEPS = [t for t in STEPS if not (SANDBOX and t == 'eject ended the holder')]
 for step in STEPS: print('%s %s' % ('PASS' if step in passed else 'FAIL', step))
-sys.exit(0 if all(s in passed for s in STEPS) else 1)
+sys.exit(0 if all(s in passed for s in STEPS) and not any('FAIL drive-scan off' in l for l in lines) else 1)
