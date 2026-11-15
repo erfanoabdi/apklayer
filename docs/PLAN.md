@@ -106,8 +106,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- F-Droid update and uninstall flows are not scripted in the corpus (Aurora and Telegram scripts exist).
-- Flaky, not reproduced: webview-input, native-media AVC on Parallels, audio-silent on the x86 PC (watch for a recurrence with its log).
+- Flaky, not reproduced: native-media AVC on Parallels (4/4 on UTM), audio-silent on the x86 PC (6/6): watch for a recurrence with its log.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person

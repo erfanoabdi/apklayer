@@ -54,6 +54,22 @@ class App:
         os.close(fd)
         return self.screen()
 
+    def until(self, test, what, seconds=60):
+        """Waits until test(texts of the newest complete dump) holds (a condition `text` cannot name: a text that went away); returns those texts."""
+        fd = instance._libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        instance._libc.inotify_add_watch(fd, os.fsencode(str(self.log.parent)), 0x102)  # IN_MODIFY | IN_CREATE
+        until = time.monotonic() + seconds
+        with selectors.DefaultSelector() as events:
+            events.register(fd, selectors.EVENT_READ)
+            while True:
+                texts = [t for _, t in self.screen()]
+                if texts and test(texts): break
+                left = until - time.monotonic()
+                assert left > 0, 'no %s of %s within %d s; the screen shows: %s' % (what, self.pkg, seconds, texts[-12:])
+                if events.select(min(left, 2)): os.read(fd, 65536)
+        os.close(fd)
+        return texts
+
     def screen(self):
         blocks = self.log.read_text(errors='replace').split('[apklayer] script: views')
         block = blocks[-2] if len(blocks) > 2 else blocks[-1]  # the last block may still be written

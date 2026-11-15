@@ -500,6 +500,14 @@ optional = true
 needs = ["com.aurora.store"]
 run = ["python3 -u tests/corpus/aurora-search.py"]
 
+[corpus-fdroid]
+# real F-Droid client 2.0, offline: a one-app repository served by the test (index-v2, entry.jar signed with a throw-away key) -> its app page offers Update ->
+# the update installs through the hub's PackageInstaller (hello-installer 1 -> 2) -> Uninstall in the page's menu removes it
+optional = true
+apps = ["hello-installer"]
+needs = ["org.fdroid.fdroid"]
+run = ["python3 -u tests/corpus/fdroid-flow.py"]
+
 [corpus-telegram]
 # real Telegram FOSS: the intro screen's Start Messaging button leads to the Your Phone page (no login)
 optional = true
