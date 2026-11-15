@@ -72,7 +72,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
-- VPN for apps, phase 1 (agent working): `VpnService` (prepare/establish/protect/onRevoke) with a TUN device in an instance-only network namespace, the VPN as the instance's network in `ConnectivityManager`, the manager shows it and can disconnect it.
+- VPN for apps, host-wide (owner decided 2026-11-15; the instance-only variant is dropped): `VpnService` with a real TUN device on the host and the default route through the app's VPN (WireGuard, OpenVPN for Android), the VPN in `ConnectivityManager`, the manager shows it and can disconnect it. Agent working.
 - Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
 - iio-sensor-proxy gives only derived values: no accelerometer or compass type. On Parallels a source-tree CLI needs `--no-daemon` plus `APKLAYER_NATIVE`/`APKLAYER_BT`/`APKLAYER_BINDER=userspace` (the old 0.3.4 daemon takes over).
 - USB: one chooser for several apps; sandbox node access.
