@@ -12,6 +12,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
+- x86 PC: `system-apps` case `downloads` and `input` `ime-insets` fail (also unsandboxed).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize.
@@ -79,10 +80,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Java: `String.class.getClassLoader()`, `Object.class.getResource`, ArrayStoreException text, StackOverflow depth, main thread id 2.
 
 ## Sandbox (before it can be the default)
-- The NVIDIA tester's box with the INSTALL.md checklist.
-- `sandbox` group: 4 isolated-process checks fail on the VM (also on the unmodified tree), cause not investigated.
+- The NVIDIA tester's box with the INSTALL.md checklist (the broker now runs `nvidia-modprobe` for missing nodes; only the argument mapping is tested).
 - The VM's `~/prebuilts` has no arm64 dir, so `tools/check-prebuilts.sh` fails there on default runs.
-- Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
 - Shared spare, cold component hosts.
 - Isolated processes (uid 99000+) hold no permissions and see only the hub; not covered: isolated processes of system-uid apps, `externalService`, `useAppZygote`.

@@ -108,6 +108,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.opengl.GLES32", HostGLShadows.GLES32.class.getName()),
                 Map.entry("android.media.MediaMetadataRetriever", HostMediaShadows.MediaMetadataRetriever.class.getName()),
                 Map.entry("android.media.MediaMuxer", HostMediaShadows.MediaMuxer.class.getName()),
+                Map.entry("android.app.AppOpsManager", ShadowHostAppOpsManager.class.getName()),  // checkPackage of an isolated process names its owner's package
                 Map.entry("android.app.usage.StorageStatsManager", ShadowHostStorageStatsManager.class.getName()),
                 Map.entry("android.content.om.OverlayManager", ShadowHostOverlayManager.class.getName()),  // no overlays: empty lists, not null
                 Map.entry("android.os.Vibrator", HostPlainShadows.Vibrator.class.getName()),
