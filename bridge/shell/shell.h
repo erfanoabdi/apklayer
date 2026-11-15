@@ -109,6 +109,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_FULLSCREEN 18    /* app -> shell: {own window id, on}: the app went fullscreen or left it (mobile.c) */
 #define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
+#define MSG_LAYOUT 118        /* shell -> app: {i32 id} + utf8 language tag of the keyboard layout in use (keyboard.c): the input method subtype */
 #define MSG_TABLET 117        /* shell -> app: a pen's event (tablet.c) */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 enum { NB_AUTO = 0, NB_ON = 1, NB_OFF = 2 };  /* the navbar setting: a desktop window gets the navigation bar when the compositor draws its title bar (auto), always, never */

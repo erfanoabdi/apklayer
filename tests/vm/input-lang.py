@@ -39,7 +39,9 @@ STEPS = [
     ('delete 1', 'привет', ['delete:2'], None, 2),  # two bytes: one Cyrillic letter
     ('delete 2', 'приве', [ALL, 'text:a😀'], None, 0),
     ('delete 3', 'a😀', ['delete:4'], None, 2),  # four bytes: the pair of units
-    ('end', 'a', [], None, 0),
+    ('alt+shift', 'a', ['layout:us,ru:,:grp:alt_shift_toggle', 'combo:alt+42', 'key:34'], None, 0),  # the group switches: g is п
+    ('super+space', 'aп', ['layout:us,ara:,:grp:win_space_toggle', 'combo:super+57', 'key:16'], None, 0),  # q is ض
+    ('end', 'aпض', [], None, 0),
 ]
 # Ctrl+A is queued on the app's main thread: the typing after it waits two ticks (as input-inject.py)
 STEPS = [part for name, want, steps, shot, delay in STEPS for part in (
@@ -100,6 +102,9 @@ try:
                 step += 1
                 if steps: instance.inject(PKG, *steps)
     compare('ru1', 'ru2', 'Cyrillic'); compare('ara1', 'ara2', 'Arabic'); compare('deva1', 'deva2', 'Devanagari')
+    langs = [line.split('input layout: ')[1] for line in seen if 'input layout: ' in line]  # the input method subtype the host got from the xkb group
+    for want in ('ru', 'ar', 'fa'): assert want in langs, 'no input method subtype %s (got %s)' % (want, langs)
+    assert langs[-3:] == ['ru', 'en', 'ar'], 'the layout hotkeys did not switch the xkb group: %s' % langs
     print('PASS Cyrillic, Arabic, Persian, dead keys, harakat, Devanagari, CJK and astral text, byte-counted deletion and glyphs through the shell test input', flush=True)
 finally:
     instance.stop()
