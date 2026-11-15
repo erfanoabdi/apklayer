@@ -41,12 +41,35 @@ final class HostKeyStore {
         var gatekeeper = android.service.gatekeeper.IGateKeeperService.Stub.asInterface(binder);
         org.robolectric.shadows.ShadowServiceManager.addBinderService(HubLockScreen.SERVICE, android.service.gatekeeper.IGateKeeperService.class, gatekeeper);
         boolean secure;
-        try {
-            secure = gatekeeper.getSecureUserId(0) != 0;
-            // a new instance: the hub enrolls the credential before it is ready (HubLockScreen.unlockIfProvided), and this app may have started
-            // with the hub (its first app start); once enrolled the id is there at once and nothing waits. The hub itself does not wait for itself.
-            if (!secure && !AppEnvironment.installing && System.getenv("APKLAYER_HUB_READY_FD") == null && awaitHub()) secure = gatekeeper.getSecureUserId(0) != 0;
-        } catch (android.os.RemoteException gone) { return; }
+        try { secure = gatekeeper.getSecureUserId(0) != 0; }
+        catch (android.os.RemoteException gone) { return; }
+        // a new instance: the hub enrolls the credential before it is ready (HubLockScreen.unlockIfProvided), and this app may have started with the hub
+        // (its first app start; 1.3-4.4 s). The start does not wait for it: KeyguardManager's answers do (ShadowHostKeyguardManager), when an app asks.
+        // The hub itself does not wait for itself.
+        if (!secure && !AppEnvironment.installing && System.getenv("APKLAYER_HUB_READY_FD") == null) {
+            pending = new java.util.concurrent.CountDownLatch(1);
+            Thread enrolled = new Thread(() -> {
+                try { publish(awaitHub() && gatekeeper.getSecureUserId(0) != 0); }
+                catch (android.os.RemoteException gone) { publish(false); }
+                finally { pending.countDown(); }
+            }, "lock-screen");
+            enrolled.setDaemon(true);
+            enrolled.start();
+            return;
+        }
+        publish(secure);
+    }
+
+    private static volatile java.util.concurrent.CountDownLatch pending;
+
+    /** Blocks while a new instance's credential is not enrolled yet (lockScreen's thread); at once otherwise. */
+    static void awaitLockScreen() {
+        java.util.concurrent.CountDownLatch latch = pending;
+        if (latch == null) return;
+        try { latch.await(); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+    }
+
+    private static void publish(boolean secure) {
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceSecure", secure);
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isKeyguardSecure", secure);
         HostConfiguration.relock();  // isDeviceLocked needs the credential
