@@ -133,10 +133,22 @@ float finite                 f6fdb92a777a1de7
   vcvt_f32_f16(vreinterpret_f16_u16(vget_low_u16(vreinterpretq_u16_f32(a)))) 2c8d656c1852e000
 float any bits               cfab8955785b32f6
   fpcr read-back 0001388cd0000000
-  rmode nearest ops d5e26b33d3e08e56
-  rmode +inf ops a3b6edfdbd9fee37
-  rmode -inf ops 801765679b682521
-  rmode zero ops 00690207c3492312
+  rmode nearest add d931f3b58cd61999
+  rmode nearest mul 0f03a4b2e5a01822
+  rmode nearest div afad917852c13bc3
+  rmode nearest lrintf 466bc41c2f5daf9a
+  rmode +inf add 8fa6e6a78e3deb43
+  rmode +inf mul 4e77e4614c9a5d97
+  rmode +inf div 944f0b42a3c25fff
+  rmode +inf lrintf 98678fc620239b5e
+  rmode -inf add 03be33ec609e0572
+  rmode -inf mul ec01420817a559f4
+  rmode -inf div 5c78a7aa3d54559a
+  rmode -inf lrintf 934f307d5210f009
+  rmode zero add defd0b69b2a822bc
+  rmode zero mul 8be7d01f407074d7
+  rmode zero div d4402d334221a90c
+  rmode zero lrintf 16b5c021bb8a0019
   flush-to-zero mul 0000000000000000
   flush-to-zero add 0000000000000000
   default-NaN add c00000d913400000
@@ -297,6 +309,9 @@ signal wild-jump round 2: in_handler=2 signo=11 code=1 addr=0x1000 pc=0 sp=0x100
 signal sigaction roundtrip flags=0x58000004 handler=1 mask-usr2=1 mask-term=1 mask-int=0
 signal altstack roundtrip size=65536 flags=0 same=1
 signal bad-sp no-altstack child: killed by signal 11
-signal misaligned-handler child: killed by signal 7
-signal br-misaligned: in_handler=2 signo=7 code=1
+signal misaligned-handler child: exited 101
+signal br-misaligned: in_handler=2 signo=7 code=1 addr==target 1
+signal blr-misaligned: in_handler=2 signo=7 code=1 addr==target 1
+signal ret-misaligned: in_handler=2 signo=7 code=1 addr==target 1
+signal br-noexec-page: in_handler=2 signo=11 code=2 addr==target 1
 signals                      114c2c0009ca3a6a

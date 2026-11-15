@@ -159,11 +159,12 @@ static uint64_t t_float_fin(void) { return t_float(1); }
 static uint64_t t_float_any(void) { return t_float(0); }
 static uint64_t t_fpcr(void)
 {
-    uint64_t h = 0, fpcr0, r; static const char *L[4] = {"rmode nearest ops", "rmode +inf ops", "rmode -inf ops", "rmode zero ops"};
+    uint64_t h = 0, fpcr0, r; static const char *L[4][4] = {{"rmode nearest add", "rmode nearest mul", "rmode nearest div", "rmode nearest lrintf"}, {"rmode +inf add", "rmode +inf mul", "rmode +inf div", "rmode +inf lrintf"},
+        {"rmode -inf add", "rmode -inf mul", "rmode -inf div", "rmode -inf lrintf"}, {"rmode zero add", "rmode zero mul", "rmode zero div", "rmode zero lrintf"}};
     __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr0));
     for (unsigned mode = 0; mode < 4; mode++) {
         uint64_t v = (fpcr0 & ~(3ull << 22)) | (uint64_t)mode << 22; __asm__ volatile("msr fpcr, %0" :: "r"(v)); __asm__ volatile("mrs %0, fpcr" : "=r"(r)); FL("fpcr read-back", r);
-        LOOP(60) { volatile float a = (float)(int)(next() % 1000) / 7.0f + 1e-3f, b = (float)(int)(next() % 1000) / 13.0f + 3e-4f; volatile double d = a * 1e-7; FL(L[mode], BC32(a + b)); FL(L[mode], BC32(a * b)); FL(L[mode], BC64(d / b)); FL(L[mode], (uint64_t)(int)lrintf(a)); }
+        LOOP(60) { volatile float a = (float)(int)(next() % 1000) / 7.0f + 1e-3f, b = (float)(int)(next() % 1000) / 13.0f + 3e-4f; volatile double d = a * 1e-7; FL(L[mode][0], BC32(a + b)); FL(L[mode][1], BC32(a * b)); FL(L[mode][2], BC64(d / b)); FL(L[mode][3], (uint64_t)(int)lrintf(a)); }
     }
     uint64_t fz = fpcr0 | (1ull << 24); __asm__ volatile("msr fpcr, %0" :: "r"(fz));  /* flush-to-zero: a denormal result becomes 0 */
     { volatile float a = 1e-39f, b = 1.0f; FL("flush-to-zero mul", BC32(a * b)); FL("flush-to-zero add", BC32(a + a)); }
@@ -313,6 +314,7 @@ static void on_wild(int s, siginfo_t *si, void *ucv)
     siglongjmp(jb, 1);
 }
 static void child_dead(int s) { _exit(40 + s); }
+static void child_bus(int s, siginfo_t *si, void *u) { (void)s; (void)u; _exit(100 + si->si_code); }  /* SIGBUS handler: the exit status names the si_code */
 static uint64_t t_signals(void)
 {
     uint64_t h = 0; stack_t ss = {.ss_sp = altstack, .ss_size = sizeof altstack}, old_ss;
@@ -339,12 +341,26 @@ static uint64_t t_signals(void)
     if (pid == 0) { struct sigaction s2 = {.sa_handler = child_dead}; sigemptyset(&s2.sa_mask); sigaction(SIGSEGV, &s2, NULL); sigaltstack(&(stack_t){.ss_flags = SS_DISABLE}, NULL);
         __asm__ volatile("mov x9, #0x1342\n mov sp, x9\n br x9\n" ::: "x9", "memory"); _exit(7); }
     if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal bad-sp no-altstack child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
-    /* a handler address that is not 4-aligned (ACE's handler 0x...63ba): raise it in a child */
+    /* a handler address that is not 4-aligned (ACE's handler 0x...63ba): the PC alignment fault is a SIGBUS (BUS_ADRALN) the child's SIGBUS handler sees (its default action is the JVM's crash report under Berberis, not compared) */
     pid = fork();
-    if (pid == 0) { signal(SIGBUS, SIG_DFL); signal(SIGSEGV, SIG_DFL); struct sigaction s3 = {.sa_flags = 0}; s3.sa_handler = (void (*)(int))((uintptr_t)on_wild | 2); sigemptyset(&s3.sa_mask); sigaction(SIGUSR1, &s3, NULL); raise(SIGUSR1); _exit(7); }
+    if (pid == 0) { struct sigaction sb = {.sa_sigaction = child_bus, .sa_flags = SA_SIGINFO}; sigemptyset(&sb.sa_mask); sigaction(SIGBUS, &sb, NULL); struct sigaction s3 = {.sa_flags = 0}; s3.sa_handler = (void (*)(int))((uintptr_t)on_wild | 2); sigemptyset(&s3.sa_mask); sigaction(SIGUSR1, &s3, NULL); raise(SIGUSR1); _exit(7); }
     if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal misaligned-handler child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
-    /* a pc fault at a misaligned address from branch (br x9 with x9 odd) */
-    in_handler = 0; if (sigsetjmp(jb, 1) == 0) { __asm__ volatile("mov x9, %0\n br x9\n" :: "r"((uintptr_t)t_signals | 2) : "x9"); } say("signal br-misaligned: in_handler=%d signo=%d code=%d", in_handler, seen_si.si_signo, seen_si.si_code);
+    /* a pc fault at a misaligned address: br, blr and ret to it (hardware: SIGBUS BUS_ADRALN, si_addr = the target); a mapped non-executable page is SEGV_ACCERR */
+    { uintptr_t t = (uintptr_t)t_signals | 2; static const char *K[3] = {"br", "blr", "ret"};
+      for (int k = 0; k < 3; k++) {
+          in_handler = 0; memset(&seen_si, 0, sizeof seen_si);
+          if (sigsetjmp(jb, 1) == 0) {
+              if (k == 0) __asm__ volatile("mov x9, %0\n br x9\n" :: "r"(t) : "x9");
+              else if (k == 1) __asm__ volatile("mov x9, %0\n blr x9\n" :: "r"(t) : "x9", "x30");
+              else __asm__ volatile("mov x30, %0\n ret\n" :: "r"(t) : "x30");
+          }
+          say("signal %s-misaligned: in_handler=%d signo=%d code=%d addr==target %d", K[k], in_handler, seen_si.si_signo, seen_si.si_code, (uintptr_t)seen_si.si_addr == t);
+      }
+      void *np = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      in_handler = 0; memset(&seen_si, 0, sizeof seen_si);
+      if (sigsetjmp(jb, 1) == 0) { __asm__ volatile("mov x9, %0\n br x9\n" :: "r"(np) : "x9"); }
+      say("signal br-noexec-page: in_handler=%d signo=%d code=%d addr==target %d", in_handler, seen_si.si_signo, seen_si.si_code, seen_si.si_addr == np);
+      munmap(np, 4096); }
     sigaltstack(&old_ss, NULL);
     return h;
 }

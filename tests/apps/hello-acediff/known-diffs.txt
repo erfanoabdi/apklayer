@@ -1,0 +1,20 @@
+^sha512
+^sm4
+vsha512
+ vsqrtq_f
+ vfmsq_f32
+ vmaxq_f32
+ vminq_f32
+ vmaxnmq_f32
+ vminnmq_f32
+ vrecpsq_f32
+ vrsqrtsq_f32
+ default-NaN
+ raw handler ran
+ blocked: no delivery
+ unblock delivers
+ PR_GET_
+ mrs id_pfr0_el1
+ mrs pm
+ mrs s3_3_c4_c2_
+ mrs s3_3_c2_c4_
