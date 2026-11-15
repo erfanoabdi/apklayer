@@ -47,8 +47,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Shared libraries: HIDL libraries need HwBinder/HwParcel JNI in app processes, an instance hwservicemanager for unlisted HALs and `android.hidl.*-java` libraries in the Android root; a native library's path in the app's linker namespace (`<uses-native-library>` itself works).
 - Storage: scoped storage hides other packages' `Android/data` and `Android/obb` only for the `/storage/emulated/0`, `/sdcard` and `/data/media/0` spellings; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
 - Call audio: the 6 s new-requester grace and reports from native AAudio/OpenSL streams (the policy's active tracks).
-- libcore: `sun.misc.Cleaner`; SharedMemory `PROT_EXEC`/`PROT_NONE` (needs a JNI mprotect call and a native rebuild).
-- Termux under `APKLAYER_SANDBOX=1` is not tested.
 - Direct buffer `array()` writes are lost (HotSpot cannot pin an app's `allocateDirect` buffer; `ApklayerBuffers` returns a copy).
 
 ## Startup and memory
@@ -82,6 +80,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with the INSTALL.md checklist.
+- `sandbox` group: 4 isolated-process checks fail on the VM (also on the unmodified tree), cause not investigated.
+- The VM's `~/prebuilts` has no arm64 dir, so `tools/check-prebuilts.sh` fails there on default runs.
 - Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
 - Shared spare, cold component hosts.
