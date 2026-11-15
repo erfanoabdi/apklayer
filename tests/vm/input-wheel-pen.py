@@ -84,7 +84,9 @@ try:
     wheel('wheel:0,-5,finger', 0.3333, 0)     # a touchpad's continuous scroll, 15 units a notch
     wheel('wheel:0,1,shift', -1, 0, shift=True)  # Shift+wheel: the meta state, the view (HorizontalScrollView) decides
     # a pen: hover, touch with tilt and rotation, a button held, lifted, the eraser end
-    pen('pen:100,200,0,0,0,0,0.5', 'HOVER_MOVE', distance=0.5, pressure=0, x=100, y=200)
+    f = pen('pen:100,200,0,0,0,0,0.5', 'HOVER_MOVE', distance=0.5, pressure=0)
+    scale = float(f['x']) / 100  # the shell converts surface coordinates by the output's scale (200% on a HiDPI desktop)
+    assert scale >= 1 and abs(float(f['y']) - 200 * scale) < 1e-3, 'pen position %s,%s at 100,200 (scale %s)' % (f['x'], f['y'], scale)
     pen('pen:100,200,0.6,30,0,90,0', 'DOWN', pressure=0.6, tilt=math.radians(30), orientation=math.atan2(-math.sin(math.radians(30)), 0),
         rotation=math.pi / 2, buttons=0)
     pen('pen:110,210,0.8,0,45,0,0,1', 'MOVE', pressure=0.8, tilt=math.radians(45), orientation=0, buttons=32)  # BUTTON_STYLUS_PRIMARY

@@ -145,7 +145,7 @@ if=$(vpniface)
 status=$(bin/apklayer vpn status); echo "$status"
 printf '%s' "$status" | grep -aq "all traffic$" || fail "vpn status: $status"
 ip route show | grep -q "^0.0.0.0/1 dev $if" && ip route show | grep -q "^128.0.0.0/1 dev $if" || fail "no 0.0.0.0/1 and 128.0.0.0/1 routes on $if: $(ip route)"
-if command -v resolvectl >/dev/null; then resolvectl status "$if" | grep -q "DNS Servers: 10.88.0.53" && resolvectl status "$if" | grep -q "Default Route: yes" || fail "the resolver does not use the VPN's DNS for everything on $if: $(resolvectl status "$if" 2>&1)"; fi
+if command -v resolvectl >/dev/null; then resolvectl status "$if" | grep -q "DNS Servers: 10.88.0.53" && resolvectl status "$if" | grep -q "Default Route: yes\|+DefaultRoute" || fail "the resolver does not use the VPN's DNS for everything on $if: $(resolvectl status "$if" 2>&1)"; fi
 ip route get 8.8.8.8 | grep -q "dev $if" || fail "8.8.8.8 is not routed into the TUN: $(ip route get 8.8.8.8)"
 [ -z "$peer" ] || ip route get "$peer" | grep -q "dev $device" || fail "the ssh peer $peer is not reached by $device: $(ip route get "$peer")"
 bin/apklayer vpn disconnect || fail "vpn disconnect"

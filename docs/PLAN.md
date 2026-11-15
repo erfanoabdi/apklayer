@@ -19,7 +19,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR dies 114-161 s after launch on the repaired tester PC (x86_64 translated; 11 of 11 runs, any preload, translator, runtime or translation mode), after ACE connects to its servers and the invalid-free storm starts; not the `/proc/self/root` probe (none in 5 logged runs). PGR on the AWS arm64 server (native) is stable: 2.5 h or more in the lobby with libapklayer_egl 652ac421; its three hs_err files and the ~13 GB cores in /var/tmp/pgr-core are exit-time faults at `systemctl stop`, not gameplay crashes. Next for the tester PC: reinstall PGR's APK set there (an agent's `apklayer install` erased its lib/ and arm64 split; the full set is on AWS), run with fresh app data (ACE state in files/ano_tmp), look at what ACE gets for /proc/self/fd, /proc/self/map_files, /proc/<pid>, /dev/virtpipe-sec; restore `berberis.mode.<pgr>=lite-translate-or-interpret` (takes effect after a whole-instance `apklayer stop`).
-- New libraries not run on the tester PC/NVIDIA or the phones: x86_64 `libapklayer_egl` (sRGB fix, 14b1af63), the linked-GL query fix; run `gl-formats` there.
+- New libraries not run on the tester PC/NVIDIA or the phones: x86_64 `libapklayer_egl` (sRGB fix) and the linked-GL query fix (`gl-formats` passes on the Intel PC).
 - Home scene on NVIDIA: block noise on 3D models. Recheck with `apklayer prop set berberis.mode.com.kurogame.gplay.punishing.grayraven.en lite-translate-or-interpret` (and unset for the reference); the ASTC fallback in `cli/env.cpp` is a separate lever.
 
 ## Graphics
@@ -88,6 +88,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
+- The runner counts a script's SKIP exit (`decoration` on GNOME has no xdg-decoration) as FAIL; and with two groups at a time on 4 CPUs `sandbox`, `window-geometry` and `input-wheel-pen` can flake (each passes alone). The x86_64 `libhidlbase`/`libapklayer_hidltool` in the prebuilts predate libhidl 0005 and the `manifest` command (the arm64 ones have both); rebuild them to make the two locks equal.
 - `tests/run` has no phone route: add the click build and install steps (`tools/release/click.sh`, `runtime-bundle.sh`, the `gdbus ... com.lomiri.click.Install` install, `apklayer setup --bundle`) as a script under `tools/halium`.
 - Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
 - Password-ssh hosts (UTM VM, tester PC) intermittently refuse auth ("Permission denied" about every other connection): `tests/run` needs a retry in `vm.ssh`/`vm.copy`.

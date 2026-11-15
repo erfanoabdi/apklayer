@@ -53,7 +53,9 @@ def texts(seen):
 
 def field(name):
     shot = instance.capture(name, PKG)
-    crop = pixels.rgb(shot).crop((0, 55, 480, 110))
+    image = pixels.rgb(shot)
+    k = max(1, round(image.width / 480))  # the window is 480 px wide at scale 1 (960 at 200%, the x86 PC)
+    crop = image.crop((0, 55 * k, 480 * k, 110 * k))
     ink = sum(1 for p in crop.getdata() if p[0] < 110 and p[1] < 110 and p[2] < 110)
     assert ink > 30, '%s: no text drawn in the field (%d dark pixels)' % (name, ink)
     shots[name] = crop

@@ -42,7 +42,8 @@ def reference():
 def offscreen():
     lib = OUT / 'lib'
     lib.mkdir(exist_ok=True)
-    with zipfile.ZipFile(APK) as z: (lib / 'libhello.so').write_bytes(z.read('lib/arm64-v8a/libhello.so'))
+    abi = 'x86_64' if os.uname().machine == 'x86_64' else 'arm64-v8a'  # btload runs the host's own ABI
+    with zipfile.ZipFile(APK) as z: (lib / 'libhello.so').write_bytes(z.read('lib/%s/libhello.so' % abi))
     env = dict(line.split('=', 1) for line in subprocess.run(['bin/apklayer', 'env'], env=ENV, capture_output=True, text=True, check=True).stdout.splitlines() if '=' in line)
     native = env['APKLAYER_NATIVE']
     run = subprocess.run([native + '/bin/btload', '%s/android-libs:%s' % (native, lib), 'libhello.so', '--main'], env=env, capture_output=True, text=True, timeout=180)

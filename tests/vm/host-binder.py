@@ -80,7 +80,7 @@ try:
     # Halium device; here the test stages what the stack stages: its VINTF entry in the instance's root, the marker, and runs the manager)
     root = Path(os.environ.get('XDG_RUNTIME_DIR', instance.SESSION)) / 'apklayer' / instance.INSTANCE / 'android-root/system/etc/vintf/manifest'
     root.mkdir(parents=True, exist_ok=True)
-    for f in (instance.NATIVE / 'android-root/system/etc/vintf/manifest').iterdir():
+    for f in (instance.NATIVE / 'android-root/system/etc/vintf/manifest').glob('*'):  # absent in a freshly staged tree
         if not f.name.startswith('apklayer-'): (root / f.name).write_bytes(f.read_bytes())
     (root / 'apklayer-hwservicemanager.xml').write_bytes(Path('aosp/hals/hwservicemanager/manifest.xml').read_bytes())
     marker = conf.parent / 'hwservicemanager.local'
