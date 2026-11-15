@@ -82,7 +82,7 @@ void window_send_configure(struct window *w)
     /* the output's pixels: the app's screen (Display.getRealSize, WindowManager.getMaximumWindowMetrics), not its window */
     send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, w->dpi, nav, w->mobile, opw, oph, ime }, 10);
     if (w->proxy)
-        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw : ah, s, w->dpi, nav, w->mobile, opw, oph, ime, w->turn }, 11);
+        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw + (w->nav.remote ? turned_nav(w) : 0) : ah, s, w->dpi, nav, w->mobile, opw, oph, ime, w->turn }, 11);
     fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px%s\n",
             w->client->pkg, aw, ah, s, aw * s / 100, ah * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
             w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav, ime,
