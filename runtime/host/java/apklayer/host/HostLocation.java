@@ -78,7 +78,10 @@ final class HostLocation {
     /** Runs a location helper and follows it. */
     private static void follow(ShadowLocationManager shadow, String provider, java.util.List<String> command) {
         try {
-            Process helper = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+            ProcessBuilder builder = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT);
+            // the app JVM's preload and bionic library path (cli/env.cpp) are not for the host's python3: it segfaulted (exit 139) with them, so no network provider
+            builder.environment().keySet().removeAll(java.util.List.of("LD_PRELOAD", "LD_LIBRARY_PATH"));
+            Process helper = builder.start();
             Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
             follow(shadow, provider, helper.getInputStream(), helper::destroy);
         } catch (IOException noHelper) { System.out.println("[apklayer] location: " + provider + ": " + noHelper.getMessage() + ", provider removed"); shadow.removeProvider(provider); }
