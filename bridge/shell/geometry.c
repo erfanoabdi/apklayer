@@ -153,7 +153,11 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     w->fullscreen = fullscreen;  /* before the sizes below: a fullscreen window has no title bar */
     /* mobile style: the phone's shell sizes the window whatever its state (Lomiri drops maximized once the app is active, then sends the
      * turned screen's size when the phone rotates) */
-    if (cw > 0 && ch > W_BAR(w) && (constrained || resizing || restored || !w->configured || w->mobile)) { nw = cw; nh = ch - W_BAR(w); }
+    /* A floating size the compositor changes by itself (a script, a window rule, a hotplug that refits the window) is a resize too:
+     * it differs from the last one it sent; a repeat of it (an activation, a state change) may predate our own reshape */
+    int moved = !injecting && cw > 0 && ch > 0 && (cw != w->comp_w || ch != w->comp_h) && w->comp_w > 0;
+    if (!injecting && cw > 0 && ch > 0) { w->comp_w = cw; w->comp_h = ch; }
+    if (cw > 0 && ch > W_BAR(w) && (constrained || resizing || restored || !w->configured || w->mobile || moved)) { nw = cw; nh = ch - W_BAR(w); }
     else if (restored && w->float_w > 0) { nw = w->float_w; nh = w->float_h; }
     if (!constrained && w->lock && nw > 0 && nh > 0 && (nw > nh) != (w->lock == 1)) {
         /* an activity fixed to one orientation keeps its shape in a floating window (as Android's desktop keeps a fixed app's aspect ratio on

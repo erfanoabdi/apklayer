@@ -32,4 +32,5 @@ SLOTS = _values['APKLY_SLOTS'].split()
 def auth(tool, password=None):
     """The command prefix of ssh or scp to the VM: through sshpass with a password, else key authentication that fails instead of prompting."""
     password = PASS if password is None else password
-    return (['sshpass', '-p', password, tool] if password else [tool, '-o', 'BatchMode=yes']) + ['-o', 'StrictHostKeyChecking=no']
+    # a password host: no key offers first (an agent with many keys is refused before the password is tried)
+    return (['sshpass', '-p', password, tool, '-o', 'PubkeyAuthentication=no'] if password else [tool, '-o', 'BatchMode=yes']) + ['-o', 'StrictHostKeyChecking=no']

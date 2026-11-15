@@ -49,6 +49,15 @@ rm -rf $apps/$broken
 grep -q "no stale apps" <<<"$($cli reconvert --all-stale)" || fail "a second reconvert --all-stale found stale apps"
 ok "nothing stale afterwards"
 
+# an install from before the permission list was recorded (2026-11-04): same converter ABI, no permissions line; stale too, no reinstall needed
+sed -i '/^permissions=/d' $props
+[ "$(stale)" = 1 ] || fail "an app without a recorded permission list is not listed stale"
+grep -q "apklayer reconvert $pkg" <<<"$($cli permissions $pkg 2>&1 || true)" || fail "permissions does not point at reconvert"
+$cli reconvert --all-stale >/dev/null 2>&1 || fail "reconvert --all-stale failed for the app without a permission list"
+grep -q '^permissions=' $props && [ "$(stale)" = 0 ] && [ "$(cat "$data/files/reconvert-marker")" = kept ] || fail "reconvert did not record the permission list (or lost the data)"
+$cli permissions $pkg >/dev/null || fail "permissions still fails after reconvert"
+ok "an app installed before the permission list: stale, reconvert records it (data kept), permissions works"
+
 mkdir -p $w/new/apklayer && echo 99 > $w/new/apklayer/data-format
 if msg=$(XDG_DATA_HOME=$w/new $cli list 2>&1); then fail "a data home of format 99 was used"; fi
 grep -q "newer apklayer" <<<"$msg" || fail "no reason for refusing format 99: $msg"

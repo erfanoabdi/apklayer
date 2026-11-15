@@ -13,6 +13,7 @@ component AppDetail {
     callback confirm(kind: string, target: string);
 
     ScrollView {
+        init => { self.content_y = -Backend.scroll-y; }
         VerticalLayout {
             padding: MaterialStyleMetrics.padding_24;
             spacing: MaterialStyleMetrics.spacing_16;

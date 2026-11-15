@@ -148,6 +148,7 @@ struct window {
     int float_w, float_h;       /* content size before a maximize/fullscreen/tile: restored when the compositor leaves the size to us */
     int lock;                   /* the top activity's fixed orientation (MSG_WINDOW_SIZE): 1 landscape, 2 portrait, 0 none */
     int turn;                   /* mobile style: the app turned against the window, degrees (90, 270; 0 none): the display owner composes it so (geometry.c) */
+    int comp_w, comp_h;         /* the window geometry of the compositor's last toplevel configure (0 x 0: none yet): a floating one that repeats it may predate our reshape */
     int bounds_w, bounds_h;     /* xdg_toplevel.configure_bounds: the largest window geometry that fits the work area, 0 = unknown */
     int maximized, activated;   /* xdg toplevel states (maximized: also fullscreen) */
     int fullscreen;             /* the compositor's fullscreen state: no title bar */

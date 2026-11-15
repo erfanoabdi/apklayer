@@ -1,5 +1,5 @@
 // apklayer-manager: the Slint UI (ui/app.slint) over the apklayer CLI (src/backend.h). The CLI runs on worker threads; results come back to the
-// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
+// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--scroll PX] [--app PKG]
 // [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...] (the screenshot mode: presses the labelled
 // elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
 #include <map>
@@ -478,7 +478,7 @@ int main(int argc, char** argv) {
     else cli.instance = defaultInstance(cli);
     std::string shot, app, dialog;
     std::vector<std::string> input, expect;
-    int width = 0, height = 0, page = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
+    int width = 0, height = 0, page = 0, scroll = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
     bool firstRun = false, share = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -487,6 +487,7 @@ int main(int argc, char** argv) {
         else if (a == "--screenshot" && more) shot = argv[++i];
         else if (a == "--size" && more && sscanf(argv[++i], "%dx%d", &width, &height) == 2) {}
         else if (a == "--page" && more) page = atoi(argv[++i]);
+        else if (a == "--scroll" && more) scroll = atoi(argv[++i]);
         else if (a == "--app" && more) app = argv[++i];
         else if (a == "--dialog" && more) dialog = argv[++i];
         else if (a == "--dark" || a == "--light") dark = a == "--dark";
@@ -524,6 +525,8 @@ int main(int argc, char** argv) {
     }
     if (!app.empty()) { m.select(app); ui->set_app_detail_open(true); } else m.refreshNow();
     if (getenv("APKLAYER_RELEASES_URL")) m.setup().check(true);  // the screenshot mode reads releases.json only when a test names one
+    // only what is on screen has a label to find: --scroll PX scrolls the app's detail and the hardware cards by PX pixels first
+    ui->global<Backend>().set_scroll_y(static_cast<float>(scroll));
     ui->show();
     if (!dialog.empty()) ui->invoke_show_dialog(slint::SharedString(dialog));
     int status = 1;
