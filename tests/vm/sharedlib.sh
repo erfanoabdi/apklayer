@@ -36,7 +36,7 @@ out=$APKLY_STATE/sharedlib-hello.applib.user.out
 [ $late = 0 ] && APKLAYER_JOPTS="-Dapklayer.runms=30000" bin/apklayer run hello.applib.user > "$out" 2>&1
 grep -a "\[sharedlib\]\|shared library" "$out" | cut -c1-300
 # sharedLibraryInfos: the static library (TYPE_STATIC 2) and the system app's (TYPE_DYNAMIC 1), not the optional native one no build has
-if [ $early = 6 ] && [ $late = 0 ] && grep -aq "\[sharedlib\] hello.applib.user PASS static=static-library v3 system=system library infos=hello.applib:2 hello.applib.shared:1$" "$out"; then echo "PASS libraries of installed apps"
+if [ $early = 6 ] && [ $late = 0 ] && grep -aq "\[sharedlib\] hello.applib.user PASS static=static-library v3 system=system library infos=hello.applib:2 hello.applib.shared:1 res=library resource$" "$out"; then echo "PASS libraries of installed apps"
 else echo "FAIL libraries of installed apps (before the providers: exit $early, after: $late)"; tail -n 2 "$work"/*.out; fail=1; fi
 # the static library's provider stays while its user is installed (DELETE_FAILED_USED_SHARED_LIBRARY, exit 8), and goes after it
 bin/apklayer uninstall hello.applib > "$work/provider.out" 2>&1; used=$?

@@ -37,6 +37,8 @@ const Setting kSettings[] = {
      "Empty: the Chromium WebView once installed; none: no WebView provider; or the package of one", true},
     {"camera-mount", "APKLAYER_CAMERA_MOUNT", "text", "", "", "", "Cameras mounted on the display",
      "Degrees [NAME:]0|90|180|270 that a desktop camera (PipeWire) is turned from the screen's upright, e.g. 90 for a portrait monitor (the provider option mount=)", false},
+    {"drive-scan", "APKLAYER_DRIVE_SCAN", "choice", "on", "on,off", "", "Desktop drives",
+     "on: the desktop's mounted drives (/media/<user>) are volumes of this instance and MediaProvider scans them; off: this instance ignores them", false},
     {"audio-output", "APKLAYER_AUDIO_TARGET", "text", "", "", "", "Audio output", "The PipeWire or PulseAudio sink apps play to (empty: the default one)", false},
     {"audio-input", "APKLAYER_AUDIO_TARGET_IN", "text", "", "", "", "Audio input", "The source apps record from (empty: the default one)", false},
 };
