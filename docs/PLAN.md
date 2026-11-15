@@ -57,6 +57,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 
 ## Hardware
+- NFC (`docs/NFC.md`, group `nfc`, mock tags): the PC/SC source against a real reader (UID, Type 4 NDEF read, direct transmit) is unrun; a neard backend (D-Bus, PN533/ST21NFC without PC/SC); the NFC permission check, `ACTION_ADAPTER_STATE_CHANGED`, `ignore()`/tag removal callbacks, a chooser for several matching apps; HCE and a phone's own NFC HAL are not planned.
 - Sailfish phone: needs a person for the Maliit-hide check, a finger on the keypad and the lock code; Maliit's sideways keyboard in a landscape app; the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client); sensorfw rotation by physically turning the phone; Bluetooth, scoped storage not run.
 - Sailfish location: needs `/var/lib/location/location.conf` enabled and connman's gps `Powered=true` (off by default); a real fix outdoors unchecked; sensorfw stops sensors with the screen off (the app reads zeros): documented, not changed.
 - VPN for apps (host-wide, `docs/VPN.md`, group `vpn`): built through NetworkManager (user-owned TUN, `apklayer vpn-guard`, `/1` default route, pkexec helper fallback); open: drive WireGuard and OpenVPN for Android to an established TUN (WireGuard needs a tunnel made in its UI, OpenVPN a profile and a server); a person's check of the pkexec dialog on a real desktop and the notification's Disconnect button; the pkexec path end to end through the hub; the per-app sandbox; Sailfish via connman; several instances with VPNs (they share the `/1` routes); no kill switch, `setMtu` ignored on the NM path.
@@ -80,7 +81,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Apps: a Godot 4 game, JW Library thumbnails, a NewPipe download.
 
 ## Parked (owner's decision)
-- NFC, biometrics, game controllers, ModemManager telephony, screen capture portal.
+- Biometrics, game controllers, ModemManager telephony, screen capture portal.
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
 - Several phone instances as a product; a JRE for the Ubuntu Touch deb.
 - Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
