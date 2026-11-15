@@ -138,10 +138,10 @@ SEQUENCE = [  # (what KWin does at this tick, the check at the next one)
     ('w.fullScreen = true;', check_fullscreen),
     ('w.fullScreen = false;', check_unfullscreen),
     ('workspace.slotWindowQuickTileLeft();', check_tiled),
-    ('w.tile = null;', check_untiled),
+    ('untile(w);', check_untiled),
     ('w.frameGeometry = {x: w.frameGeometry.x, y: w.frameGeometry.y, width: 700, height: 560};', check_resized),  # not an interactive resize
     ('workspace.slotWindowQuickTileRight();', check_tiled_right),
-    ('w.tile = null;', check_untiled_after_resize),
+    ('untile(w);', check_untiled_after_resize),
     ('w.noBorder = true;', check_no_border),  # the decoration goes: KWin may tell the client to draw its own bar
     ('w.noBorder = false;', check_border),
     ('w.minimized = true;', check_minimized),
