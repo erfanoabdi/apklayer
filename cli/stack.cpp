@@ -473,6 +473,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
             start("gatekeeperd", "libapklayer_gatekeeperd.so", {"/data/misc/gatekeeper"});
         }
     }
+    unlink(join(inst.dataDir, "apklayer/sensor_features").c_str());  // the sensors HAL front writes it (HostSystemConfig's sensor features)
     for (const ProviderService& p : providers) {
         start(p.name, p.front, p.options, p.backend);
         // system_server's SensorService, over the sensors HAL: what SensorManager in apps talks to (HostSensorShadows)
@@ -501,6 +502,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // "server died"). One waiter per service blocks in waitForService; the daemon sets the ready property after all of them returned.
     std::vector<std::string> waitFor = {"SurfaceFlingerAIDL"};
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
+    if (sensors && staged(l, "libapklayer_sensorservice.so")) waitFor.push_back("sensorservice");  // the HAL listed its sensors (sensor_features) by then
     for (const Service& s : running)  // an app's first camera list (the provider joins cameraserver whenever it registers); started on first use: no wait
         if (s.name == "cameraserver" && s.pid > 0) waitFor.push_back("media.camera");
     std::vector<int> waiters;

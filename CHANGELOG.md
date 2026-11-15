@@ -2254,6 +2254,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - All owned test instances were checked clean on ARM and x86. The owner paused/cleared the goal and requested a handoff after current tasks finished. No additional build/test was launched afterward. Real Termux confirmation, Fennec painted content, remaining native launch APIs and broader runtime identity gaps remain open.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-15 - gsi_arm64 libapklayer_sensors (writes apklayer/sensor_features: the sensor types its backend lists)
+- Why: PLAN Graphics "Play feature list lacks sensors": HostSystemConfig declares android.hardware.sensor.* from the file. Command: `flock -n ~/los24-build.lock bash -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_sensors'` after `tools/sync-aosp.sh "..." hals/sensors`. Result: (below)
 ### 2026-11-15 - gsi_x86_64 libapklayer_egl (CPU copy when a dmabuf import fails; buffer count 6 at swap interval 0)
 - Why: PLAN Graphics "GPU per instance: copy fallback" and "Swap interval 0": EglWindow/EglAttach changes need the library on the PC. Command: `flock -n ~/los24-build.lock bash -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_egl'`. Result: built (14:55, soong analysis) and once more by tools/lib/orb-build-module.py after the CPU copy accepted tiled window buffers; sha256 9c6c0154 (118232 bytes), deps/android-tree-files-x86_64.lock updated.
 ### 2026-11-15 - gsi_x86_64 libapklayer_camera (shutter/sensor timestamp = the backend frame's timestamp_ns)
