@@ -47,6 +47,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
 
 ## Startup and memory
+- `ActivityManager.getMemoryClass()` reports 16 (expected ~256) and `Runtime.maxMemory` 256 MB while an app can hold ~1.7 GB (the host JVM's limit, no ART-style heap cap); find where `memoryClass` comes from.
+- Quintus idle PSS: app JVM ~394 MB, hub ~249 MB, three spares ~235 MB each; composer 22 MB, SurfaceFlinger 38 MB (no ~80 MB GL context seen).
 - A meson-installed dev tree's CLI that runs without `APKLAYER_NATIVE` relinks the shared `~/.local/share/apklayer/runtime/<ver>` to itself (`setUpBundle` / `setup-runtime.sh` use `ln -sfn`); deleting that tree breaks the owner's runtime (this broke the tester PC on 2026-11-15). Make it refuse, copy, or give dev trees their own runtime dir.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
@@ -62,7 +64,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
-- Sailfish RPM deployed to the Quintus (upgrade 0.4.14 to 0.4.19 works; first command after the upgrade 35 s, `setup --update --bundle` 48 s). The package half of the bundle still has build-path links (`libjavacore.so` to `/cache/prebuilts/...`, `libm` to a build-container path); the `libart.so` link fix in `setup-runtime.sh` and the `jni_guest_surface.c` change (drop the synthetic-id hooks when libart.so does not load) were checked only by hand-made links, the C part is not built or run; system-app per-APK reinstall on an upgrade not verified.
+- Sailfish RPM from current main is installed and runs apps on the Quintus; open: the per-APK system-app reinstall list on an upgrade is not diffed; the deb build probably has the same dangling `libjavacore.so` link (fixed in `setup-runtime.sh` for the runtime; check the deb); no log line shows the `jni_guest_surface.c` change is active.
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
@@ -75,6 +77,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
+- Sailfish phone, not yet run: rotation and letterbox, manager text input under Maliit, a finger on the host install/permission dialog, a stale Lipstick 'not responding' window after hello.hardware, Maliit staying up after switching apps; Halium camera, media = device, HIDL, binder busy-poll, pamcheck, scoped storage, Bluetooth pairing.
 - Sailfish location: needs `/var/lib/location/location.conf` enabled and connman's gps `Powered=true` (off by default); a real fix outdoors unchecked; sensorfw stops sensors with the screen off (the app reads zeros): documented, not changed.
 - VPN for apps (host-wide, `docs/VPN.md`, group `vpn`): built through NetworkManager (user-owned TUN, `apklayer vpn-guard`, `/1` default route, pkexec helper fallback); open: drive WireGuard and OpenVPN for Android to an established TUN (WireGuard needs a tunnel made in its UI, OpenVPN a profile and a server); a person's check of the pkexec dialog on a real desktop and the notification's Disconnect button; the pkexec path end to end through the hub; the per-app sandbox; Sailfish via connman; several instances with VPNs (they share the `/1` routes); no kill switch, `setMtu` ignored on the NM path.
 - Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
