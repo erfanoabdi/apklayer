@@ -1,192 +1,286 @@
-#!/bin/sh
-# tools/stage: files from the LineageOS tree's build (~/los24 in the OrbStack machine ubuntu22-x86) to where apklayer runs. Read-only on the tree.
-#   tools/stage libs <dest> <lib.so>...  libraries and everything they need (DT_NEEDED, recursively), skipping what dest has; prints the copied names.
-#                                        ANDROID_LIBS_SRC: source dirs separated by ":" (first match wins; default the arm64 system/lib64). Runs where the tree is.
-#   tools/stage root                     the files Android processes read at fixed paths into the VM's native dir's android-root (its ~/.config/apklayer/env, else ~/arm64-native; on the Mac).
-#                                        ANDROID_PRODUCT (default generic_arm64) picks the product; STAGE_DEST=<dir> writes a local directory instead.
-#   tools/stage media [--dry-run]        software codecs and extractors from the media APEX outputs into the VM's Android library dir (tools/lib/stage-media.py)
-#   tools/stage sysapps                  the tree's providers and system apps installed as apklayer apps on the VM
-#   tools/stage vulkan [stage dir]       the Orb Vulkan loader build onto the VM (the loader keeps its SONAME; the mapping selects the renamed copy)
-#   tools/stage x86_64                   everything an x86_64 machine needs, one tar file: build/x86_64/apklayer-x86_64-stage.tar (docs/X86_64.md)
-#   tools/stage gfxstream <prebuilts>    gfxstream's sources libapklayer-gles1.so is built from (OpenGL ES 1, bridge/hals/graphics/gles1) into <prebuilts>/common/gfxstream
-#   tools/stage arm32                    the arm32 Android libraries of the 32-bit app process into build/arm32/android-libs (gsi_arm64's system/lib,
-#                                        apklayer's modules' 32-bit outputs; then tools/armhf/build.sh)
-# The VM is the one in tests/vm/local.conf.
-set -eu
-here="$(cd "$(dirname "$0")" && pwd)"
-repo="$(dirname "$here")"
-tree=/home/erfanabdi/los24
-ORB="${APKLAYER_ORB-orb -m ubuntu22-x86}"  # "env" when this runs inside the OrbStack machine
-vm_config() { . "$repo/tests/vm/config.sh"; }
-vm() { vm_auth ssh -o StrictHostKeyChecking=no "$VM" "$VM_PATHS $*"; }
+#!/usr/bin/env python3
+"""tools/stage: files from the LineageOS tree's build (~/los24 in the OrbStack machine ubuntu22-x86) to where apklayer runs. Read-only on the tree.
+  tools/stage libs <dest> <lib.so>...  libraries and everything they need (DT_NEEDED, recursively), skipping what dest has; prints the copied names.
+                                       ANDROID_LIBS_SRC: source dirs separated by ":" (first match wins; default the arm64 system/lib64). Runs where the tree is.
+  tools/stage root                     the files Android processes read at fixed paths into the VM's native dir's android-root (its ~/.config/apklayer/env, else ~/arm64-native; on the Mac).
+                                       ANDROID_PRODUCT (default generic_arm64) picks the product; STAGE_DEST=<dir> writes a local directory instead.
+  tools/stage media [--dry-run]        software codecs and extractors from the media APEX outputs into the VM's Android library dir (tools/lib/stage-media.py)
+  tools/stage sysapps                  the tree's providers and system apps installed as apklayer apps on the VM
+  tools/stage vulkan [stage dir]       the Orb Vulkan loader build onto the VM (the loader keeps its SONAME; the mapping selects the renamed copy)
+  tools/stage x86_64                   everything an x86_64 machine needs, one tar file: build/x86_64/apklayer-x86_64-stage.tar (docs/X86_64.md)
+  tools/stage gfxstream <prebuilts>    gfxstream's sources libapklayer-gles1.so is built from (OpenGL ES 1, bridge/hals/graphics/gles1) into <prebuilts>/common/gfxstream
+  tools/stage arm32                    the arm32 Android libraries of the 32-bit app process into build/arm32/android-libs (gsi_arm64's system/lib,
+                                       apklayer's modules' 32-bit outputs; then tools/armhf/build.sh)
+The VM is the one in tests/vm/local.conf."""
+import hashlib
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+TREE = '/home/erfanabdi/los24'
+ORB = shlex.split(os.environ.get('APKLAYER_ORB', 'orb -m ubuntu22-x86'))  # "env" when this runs inside the OrbStack machine
 # the VM's own runtime paths, as its CLI reads them (~/.config/apklayer/env, else the default layout): $N native dir, $L Android libraries
-VM_PATHS='[ -f ~/.config/apklayer/env ] && . ~/.config/apklayer/env; N=${APKLAYER_NATIVE:-$HOME/arm64-native}; L=${APKLAYER_ANDROID_LIBS:-$HOME/android-arm64/lib64};'
+VM_PATHS = '[ -f ~/.config/apklayer/env ] && . ~/.config/apklayer/env; N=${APKLAYER_NATIVE:-$HOME/arm64-native}; L=${APKLAYER_ANDROID_LIBS:-$HOME/android-arm64/lib64}; '
+NOT_FROM_BIONIC = ('libc.so', 'libm.so', 'libdl.so', 'libdl_android.so')  # bionic_translation provides these
+ALIAS_VULKAN = ('libvulkan.so', 'libapklayer_vulkan.so')  # the patched loader also under its own name: the mapping selects it for Vulkan apps
 
-stage_libs() {
-    src="${ANDROID_LIBS_SRC:-$tree/out/target/product/generic_arm64/system/lib64}"
-    dest="$1"; shift
-    mkdir -p "$dest"
-    queue="$*"
-    while [ -n "$queue" ]; do
-        set -- $queue; lib="$1"; shift; queue="$*"
-        case "$lib" in libc.so|libm.so|libdl.so|libdl_android.so) continue;; esac  # bionic_translation provides these
-        [ -e "$dest/$lib" ] && continue
-        found=""
-        oldifs="$IFS"; IFS=:
-        for d in $src; do [ -e "$d/$lib" ] && { found="$d/$lib"; break; }; done
-        IFS="$oldifs"
-        [ -n "$found" ] || { echo "missing in $src: $lib" >&2; continue; }
-        cp "$found" "$dest/$lib"; echo "$lib"
-        queue="$queue $(readelf -d "$found" | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p' | tr '\n' ' ')"
-    done
-}
 
-stage_root() {
-    OUT="$tree/out/target/product/${ANDROID_PRODUCT:-generic_arm64}"
-    if [ -n "${STAGE_DEST:-}" ]; then
-        sink() { mkdir -p "$STAGE_DEST/$1" && tar xf - -C "$STAGE_DEST/$1"; }
-    else
-        vm_config
-        sink() { vm "mkdir -p \$N/android-root/$1 && tar xf - -C \$N/android-root/$1"; }
-    fi
+def vm_config():
+    sys.path.insert(0, str(REPO / 'tests/vm'))
+    import config
+    return config
+
+
+def vm_cmd(command):
+    c = vm_config()
+    return c.auth('ssh') + [c.VM, VM_PATHS + command]
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, check=True, **kw)
+
+
+def pipe(producer, consumer):
+    """producer | consumer: like the shell, the consumer's status counts (a tar of paths that are missing still stages the rest)."""
+    p = subprocess.Popen(producer, stdout=subprocess.PIPE)
+    c = subprocess.Popen(consumer, stdin=p.stdout)
+    p.stdout.close()
+    rc = c.wait()
+    p.wait()
+    if rc: sys.exit(rc)
+
+
+def orb_tar(sink, *args):
+    pipe(ORB + ['tar', 'cf', '-', *args], sink)
+
+
+def local_sink(dest):
+    os.makedirs(dest, exist_ok=True)
+    return ['tar', 'xf', '-', '-C', str(dest)]
+
+
+def vm_sink(sub):
+    return vm_cmd('mkdir -p $N/android-root/%s && tar xf - -C $N/android-root/%s' % (sub, sub))
+
+
+def stage_libs(src, dest, libs):
+    """The libraries and their DT_NEEDED closure from the first source dir that has them into dest. Returns (copied, missing messages)."""
+    os.makedirs(dest, exist_ok=True)
+    queue, copied, missing = list(libs), [], []
+    while queue:
+        lib = queue.pop(0)
+        if lib in NOT_FROM_BIONIC or os.path.lexists(os.path.join(dest, lib)): continue
+        found = next((os.path.join(d, lib) for d in src if os.path.exists(os.path.join(d, lib))), None)
+        if found is None:
+            missing.append('missing in %s: %s' % (':'.join(src), lib))
+            continue
+        shutil.copy(found, os.path.join(dest, lib))
+        copied.append(lib)
+        queue += re.findall(r'NEEDED.*\[(.*)\]', run(['readelf', '-d', found], capture_output=True, text=True).stdout)
+    return copied, missing
+
+
+def stage_root(product=None, dest=None, tree=TREE):
+    out = '%s/out/target/product/%s' % (tree, product or os.environ.get('ANDROID_PRODUCT', 'generic_arm64'))
+    dest = dest or os.environ.get('STAGE_DEST')
+    sink = (lambda sub: local_sink(os.path.join(dest, sub))) if dest else vm_sink
     # system/etc/security/cacerts: the CA store native TLS reads (Dart's dart:io "Failed to find root cert cache" without it)
-    $ORB tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions system/etc/vintf/manifest.xml \
-        system/fonts system/etc/fonts.xml system/etc/font_fallback.xml system/etc/security/cacerts system/framework/org.lineageos.platform-res.apk apex/com.android.i18n/etc apex/com.android.tzdata/etc system/bin/sh system/bin/toybox system/bin/toolbox system/bin/getprop | sink .  # toolbox: Android's getprop (a link to it), read by Termux's getprop script
+    # toolbox: Android's getprop (a link to it), read by Termux's getprop script
+    orb_tar(sink('.'), '-C', out, 'system/etc/cgroups.json', 'system/etc/task_profiles.json', 'system/etc/task_profiles', 'system/usr/hyphen-data',
+            'system/etc/permissions', 'system/etc/compatconfig', 'system/etc/sysconfig', 'system/etc/default-permissions', 'system/etc/vintf/manifest.xml',
+            'system/fonts', 'system/etc/fonts.xml', 'system/etc/font_fallback.xml', 'system/etc/security/cacerts', 'system/framework/org.lineageos.platform-res.apk',
+            'apex/com.android.i18n/etc', 'apex/com.android.tzdata/etc', 'system/bin/sh', 'system/bin/toybox', 'system/bin/toolbox', 'system/bin/getprop')
     # the optional shared libraries apps declare (<uses-library>, HostSharedLibraries) as JVM classes at the path their etc/permissions/<name>.xml names:
     # the javac output of each library module (architecture independent; the device's jar there is DEX)
-    jars="$tree/out/soong/.intermediates/external/apache-http/org.apache.http.legacy.impl/android_common/repackaged-jarjar/javac/org.apache.http.legacy.jar"
-    for m in base mock runner; do jars="$jars $tree/out/soong/.intermediates/frameworks/base/test-$m/android.test.$m.impl/android_common/repackaged-jarjar/javac/android.test.$m.jar"; done
+    jar = lambda base, name: '%s/out/soong/.intermediates/%s/android_common/repackaged-jarjar/javac/%s.jar' % (tree, base, name)
+    jars = [jar('external/apache-http/org.apache.http.legacy.impl', 'org.apache.http.legacy')]
+    jars += [jar('frameworks/base/test-%s/android.test.%s.impl' % (m, m), 'android.test.' + m) for m in ('base', 'mock', 'runner')]
     # the platform's other optional libraries (etc/permissions names them): the same javac output (javax.obex holds only ObexPacket in this tree, as on the device)
-    for m in location/lib/com.android.location.provider obex/javax.obex libs/usb/com.android.future.usb.accessory media/lib/remotedisplay/com.android.media.remotedisplay \
-            media/lib/signer/com.android.mediadrm.signer nfc-extras/com.android.nfc_extras; do
-        jars="$jars $tree/out/soong/.intermediates/frameworks/base/$m.impl/android_common/repackaged-jarjar/javac/${m##*/}.jar"
-    done
-    $ORB tar cf - --transform='s,^.*/,system/framework/,' -P $jars | sink .
+    for m in ('location/lib/com.android.location.provider', 'obex/javax.obex', 'libs/usb/com.android.future.usb.accessory', 'media/lib/remotedisplay/com.android.media.remotedisplay',
+              'media/lib/signer/com.android.mediadrm.signer', 'nfc-extras/com.android.nfc_extras'):
+        jars.append(jar('frameworks/base/' + m + '.impl', m.rsplit('/', 1)[-1]))
+    orb_tar(sink('.'), '--transform=s,^.*/,system/framework/,', '-P', *jars)
     # the build properties the stack's property store loads (stack.cpp: android-root/props/system_build.prop)
-    $ORB tar cf - -C "$OUT/system" --transform='s,^build.prop$,system_build.prop,' build.prop | sink props
+    orb_tar(sink('props'), '-C', out + '/system', r'--transform=s,^build.prop$,system_build.prop,', 'build.prop')
     # Original audio policy tables are source XML assets, not generated libraries.
-    $ORB tar cf - -C "$tree/frameworks/av/services/audiopolicy/config" --transform='s,^,vendor/etc/,' audio_policy_volumes.xml default_volume_tables.xml | sink .
+    orb_tar(sink('.'), '-C', tree + '/frameworks/av/services/audiopolicy/config', '--transform=s,^,vendor/etc/,', 'audio_policy_volumes.xml', 'default_volume_tables.xml')
     # apklayer's own half of the device configuration (features the host layers provide, the codec list, the vendor manifest).
-    COPYFILE_DISABLE=1 tar cf - --exclude .DS_Store -C "$repo/bridge/native/android-root" vendor/etc | sink .
+    pipe(['tar', 'cf', '-', '--exclude', '.DS_Store', '-C', str(REPO / 'bridge/native/android-root'), 'vendor/etc'], sink('.'))
     # Protection levels of the framework's permissions (normal ones are granted at install, signature ones to platform-signed system apps).
-    tsv="$(mktemp -d)"
-    $ORB cat "$tree/frameworks/base/core/res/AndroidManifest.xml" | python3 "$here/gen/permission-levels.py" > "$tsv/apklayer-permission-levels.tsv"
-    tar cf - -C "$tsv" apklayer-permission-levels.tsv | sink system/etc
-    rm -rf "$tsv"
-}
+    manifest = run(ORB + ['cat', tree + '/frameworks/base/core/res/AndroidManifest.xml'], capture_output=True).stdout
+    tsv = run([sys.executable, str(HERE / 'gen/permission-levels.py')], input=manifest, capture_output=True).stdout
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / 'apklayer-permission-levels.tsv').write_bytes(tsv)
+        pipe(['tar', 'cf', '-', '-C', d, 'apklayer-permission-levels.tsv'], sink('system/etc'))
 
-stage_sysapps() {
-    vm_config
-    OUT="$tree/out/target/product/generic_arm64"
+
+def stage_sysapps():
+    out = TREE + '/out/target/product/generic_arm64'
     # tools/sysapps.list: package and APK (a glob: MediaProvider's Mainline module is a flattened APEX directory); system apps, so --system
-    grep -v '^#' "$here/sysapps.list" | while IFS="$(printf '\t')" read -r pkg apk; do
-        [ "$apk" != - ] || continue
-        name="$(basename "$apk" .apk)"
-        orb -m ubuntu22-x86 sh -c "cat \$(ls $OUT/$apk | head -1)" < /dev/null | vm "cat > ~/sys-$name.apk"
-        vm "cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000; b/cli/apklayer install --system ~/sys-$name.apk 2>&1 | grep -a 'installed\|rror\|xception' | head -3" < /dev/null
-    done
-}
+    for line in (HERE / 'sysapps.list').read_text().splitlines():
+        if not line or line.startswith('#'): continue
+        pkg, _, apk = line.partition('\t')
+        if apk == '-': continue
+        name = Path(apk).stem
+        pipe(ORB + ['sh', '-c', 'cat $(ls %s/%s | head -1)' % (out, apk)], vm_cmd('cat > ~/sys-%s.apk' % name))
+        r = subprocess.run(vm_cmd("cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000; b/cli/apklayer install --system ~/sys-%s.apk 2>&1 | grep -a 'installed\\|rror\\|xception' | head -3" % name),
+                           stdin=subprocess.DEVNULL)
 
-stage_vulkan() {
-    vm_config
-    stage="${1:-$HOME/OrbStack/ubuntu22-x86/home/erfanabdi/apklayer-vulkan-stage}"
-    for name in libvulkan.so vulkan.apklayer.so libapklayer_vktest.so; do
-        target="$name"; [ "$name" != libvulkan.so ] || target=libapklayer_vulkan.so
-        vm "cat > \$L/$target" < "$stage/$name"
-        actual=$(vm "sha256sum \$L/$target" | cut -d' ' -f1)
-        [ "$actual" = "$(shasum -a 256 "$stage/$name" | cut -d' ' -f1)" ] || { echo "hash mismatch: $target" >&2; exit 1; }
-        echo "Verified $target $actual"
-    done
-    COPYFILE_DISABLE=1 tar cf - -C "$repo" bridge/native/apklayer.prop bridge/native/bionic_translation.cfg | vm 'tar xf - -C ~/apklayer'
-    vm 'cd ~/apklayer && ninja -C b reconfigure >/dev/null && meson install -C b --skip-subprojects --only-changed --quiet'  # the mapping sees the loader
-}
 
-stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF is checked to be x86-64
-    if [ "${1:-}" != --inside ]; then exec orb -m ubuntu22-x86 sh "/mnt/mac$here/stage" x86_64 --inside; fi
-    stage="$HOME/apklayer-x86_64" out="$tree/out/target/product/generic_x86_64"
-    mkdir -p "$stage"
-    echo "== libraries"
-    # first the module outputs of apklayer's modules and the patched tree libraries (the lock's "apklayer"/"patched" names): `m <output file>` builds
-    # them there without installing into system/lib64, whose copies may be older
-    names="$(awk '($5 == "apklayer" || $5 == "patched") && $3 ~ /[.]so$/ { n = $3; sub(".*/", "", n); sub("[.]so$", "", n); printf "-name %s -o ", n }' "$repo/deps/android-tree-files.lock")"
-    srcs=""
-    for d in $(find "$tree/out/soong/.intermediates" -type d \( $names -false \) -prune 2>/dev/null); do
-        for v in android_x86_64_shared android_vendor_x86_64_shared; do [ -d "$d/$v" ] && srcs="$srcs$d/$v:"; done
-    done
-    srcs="$srcs$out/system/lib64"
-    for d in "$out"/apex/*/lib64 "$out"/apex/*/lib64/extractors "$out/system_ext/lib64" "$out/system/system_ext/lib64" "$out/vendor/lib64"; do [ -d "$d" ] && srcs="$srcs:$d"; done
-    rm -rf "$stage/android-x86_64"; mkdir -p "$stage/android-x86_64/lib64"
+def stage_vulkan(stage=None):
+    stage = Path(stage or Path.home() / 'OrbStack/ubuntu22-x86/home/erfanabdi/apklayer-vulkan-stage')
+    for name in ('libvulkan.so', 'vulkan.apklayer.so', 'libapklayer_vktest.so'):
+        target = 'libapklayer_vulkan.so' if name == 'libvulkan.so' else name
+        with open(stage / name, 'rb') as f: run(vm_cmd('cat > $L/' + target), stdin=f)
+        actual = run(vm_cmd('sha256sum $L/' + target), capture_output=True, text=True).stdout.split()[0]
+        if actual != hashlib.sha256((stage / name).read_bytes()).hexdigest(): sys.exit('hash mismatch: ' + target)
+        print('Verified %s %s' % (target, actual))
+    pipe(['tar', 'cf', '-', '-C', str(REPO), 'bridge/native/apklayer.prop', 'bridge/native/bionic_translation.cfg'], vm_cmd('tar xf - -C ~/apklayer'))
+    run(vm_cmd('cd ~/apklayer && ninja -C b reconfigure >/dev/null && meson install -C b --skip-subprojects --only-changed --quiet'))  # the mapping sees the loader
+
+
+def rerun_inside(step):
+    """x86_64 and arm32 run in the OrbStack machine, where the tree is: this script again, with --inside."""
+    if '--inside' not in sys.argv: os.execvp(ORB[0], ORB + ['python3', '/mnt/mac' + str(HERE / 'stage'), step, '--inside'])
+
+
+def lock_names():
+    """Module names of the lock's "apklayer"/"patched" rows (deps/android-tree-files.lock: columns 3 = path, 5 = origin)."""
+    rows = [l.split() for l in (REPO / 'deps/android-tree-files.lock').read_text().splitlines()]
+    return rows, {re.sub(r'\.so$', '', r[2].rsplit('/', 1)[-1]) for r in rows if len(r) >= 5 and r[4] in ('apklayer', 'patched') and r[2].endswith('.so')}
+
+
+def module_srcs(names, variants, system_lib, apex_lib, extra):
+    """Source dirs for stage_libs: the soong module outputs of the lock's apklayer/patched names (`m <output file>` builds them without installing into
+    system/lib64, whose copies may be older), then the product's system lib dir and its apex/system_ext/vendor ones."""
+    out = TREE + '/out/target/product/' + extra
+    srcs = []
+    for root, dirs, _ in os.walk(TREE + '/out/soong/.intermediates'):
+        dirs.sort()
+        for d in [d for d in dirs if d in names]:
+            dirs.remove(d)
+            srcs += [os.path.join(root, d, v) for v in variants if os.path.isdir(os.path.join(root, d, v))]
+    srcs.append(out + '/' + system_lib)
+    for pattern in ('apex/*/' + apex_lib, 'apex/*/%s/extractors' % apex_lib, 'system_ext/' + apex_lib, 'system/system_ext/' + apex_lib, 'vendor/' + apex_lib):
+        srcs += sorted(str(p) for p in Path(out).glob(pattern) if p.is_dir())
+    return srcs
+
+
+def foreign_elf(files, machine):
+    bad = 0
+    for f in sorted(files):
+        if not f.is_file(): continue
+        m = re.search(r'Machine: *(.*)', subprocess.run(['readelf', '-h', str(f)], capture_output=True, text=True).stdout)
+        if not m or machine not in m.group(1):
+            print('not %s: %s' % ('x86-64' if machine == 'X86-64' else 'arm32', f))
+            bad += 1
+    print('%d foreign ELF files' % bad)
+
+
+def write_libs(srcs, dest, roots, stage_dir):
+    copied, missing = stage_libs(srcs, dest, roots)
+    (stage_dir / 'libs-copied.txt').write_text(''.join(c + '\n' for c in copied))
+    (stage_dir / 'libs-missing.txt').write_text(''.join(m + '\n' for m in missing))
+    left = {re.sub('.*: ', '', m) for m in missing}
+    print('%d libraries copied; missing (%s): %d' % (len(copied), stage_dir / 'libs-missing.txt', len(left)))
+    return copied
+
+
+def stage_x86_64():
+    rerun_inside('x86_64')
+    stage = Path(os.environ.get('APKLAYER_STAGE_DIR') or Path.home() / 'apklayer-x86_64')  # the env var: a scratch dir for checks
+    out = TREE + '/out/target/product/generic_x86_64'
+    stage.mkdir(exist_ok=True)
+    print('== libraries')
+    rows, names = lock_names()
+    srcs = module_srcs(names, ('android_x86_64_shared', 'android_vendor_x86_64_shared'), 'system/lib64', 'lib64', 'generic_x86_64')
+    shutil.rmtree(stage / 'android-x86_64', ignore_errors=True)
+    lib64 = stage / 'android-x86_64/lib64'
+    lib64.mkdir(parents=True)
     # roots: the list and every library of the arm64 lock (the providers' HAL libraries are loaded by name, not needed), so both sets stay level
-    roots="$(cat "$repo/deps/android-libs.list"; awk '$3 ~ /lib64\/[^\/]*[.]so$/ { n = $3; sub(".*/", "", n); print n }' "$repo/deps/android-tree-files.lock" | grep -v ubsan_standalone)"
-    ANDROID_LIBS_SRC="$srcs" stage_libs "$stage/android-x86_64/lib64" $(echo "$roots" | grep -v libapklayer_vulkan | sed 's/aarch64/x86_64/' | sort -u) > "$stage/libs-copied.txt" 2> "$stage/libs-missing.txt"
-    # the patched Android Vulkan loader also under its own name (the mapping selects it for Vulkan apps, as on arm64: tools/stage vulkan)
-    cp "$stage/android-x86_64/lib64/libvulkan.so" "$stage/android-x86_64/lib64/libapklayer_vulkan.so" && echo libapklayer_vulkan.so >> "$stage/libs-copied.txt"
-    echo "$(wc -l < "$stage/libs-copied.txt") libraries copied; missing (see $stage/libs-missing.txt): $(sed 's/.*: //' "$stage/libs-missing.txt" | sort -u | wc -l)"
-    echo "== Android root"
-    rm -rf "$stage/android-root"
-    ORB=env ANDROID_PRODUCT=generic_x86_64 STAGE_DEST="$stage/android-root" stage_root
-    if ls "$out"/system/lib64/libberberis_arm64.so >/dev/null 2>&1; then  # the native bridge for arm64-only apps, when built (docs/X86_64.md "arm64-only apps")
-        echo "== native bridge (Digitalis)"
-        cp "$out"/system/lib64/libberberis_*.so "$stage/android-x86_64/lib64/"
-        mkdir -p "$stage/android-root/system/lib64" "$stage/android-root/system/bin" "$stage/android-root/system/etc"
-        cp -r "$out/system/lib64/arm64" "$stage/android-root/system/lib64/" && cp -r "$out/system/bin/arm64" "$stage/android-root/system/bin/"
-        cp "$out/system/etc/ld.config.arm64.txt" "$stage/android-root/system/etc/"
-        cp "$repo/aosp/nativebridge/cpuinfo.arm64.txt" "$stage/android-root/system/etc/cpuinfo.arm64.txt"  # the guest's /proc/cpuinfo fallback (the translator synthesizes it per online CPU: 0010)
-    fi
-    echo "== libart.so for the guest (aarch64: the host build is x86-64)"
-    sh "$repo/tools/lib/build-libart-arm64.sh" "$tree" "$repo/bridge/native" "$stage/android-root/apex/com.android.art/lib64/libart.so"
-    echo "== Robolectric"
-    mkdir -p "$stage/aosp" && cp "$tree/out/host/linux-x86/framework/Robolectric_all.jar" "$stage/aosp/"
-    echo "== framework javac shards (runtime/meson.build lists the @CriticalNative methods from them)"
-    rm -rf "$stage/javac-shards"; mkdir -p "$stage/javac-shards"
-    cp "$tree"/out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac/framework.jar[0-9]* "$stage/javac-shards/" 2>/dev/null || true
-    rm -f "$stage"/javac-shards/*.rsp "$stage"/javac-shards/*.pc_state
-    echo "== check: every ELF is x86-64"
-    bad=0
-    for f in "$stage"/android-x86_64/lib64/*.so*; do
-        [ -f "$f" ] || continue
-        case "$(readelf -h "$f" 2>/dev/null | sed -n 's/.*Machine: *//p')" in *X86-64*) ;; *) echo "not x86-64: $f"; bad=$((bad + 1));; esac
-    done
-    echo "$bad foreign ELF files"
-    echo "== tar"
-    mkdir -p "$repo/build/x86_64"
-    tar cf "$repo/build/x86_64/apklayer-x86_64-stage.tar" -C "$stage" android-x86_64 android-root aosp javac-shards libs-copied.txt libs-missing.txt
-    ls -la "$repo/build/x86_64/apklayer-x86_64-stage.tar"
-}
+    roots = (REPO / 'deps/android-libs.list').read_text().split()
+    roots += [r[2].rsplit('/', 1)[-1] for r in rows if len(r) >= 3 and re.search(r'lib64/[^/]*\.so$', r[2])]
+    roots = sorted({re.sub('aarch64', 'x86_64', r, count=1) for r in roots if 'ubsan_standalone' not in r and 'libapklayer_vulkan' not in r})
+    copied = write_libs(srcs, str(lib64), roots, stage)
+    shutil.copy(lib64 / ALIAS_VULKAN[0], lib64 / ALIAS_VULKAN[1])  # the mapping selects it for Vulkan apps, as on arm64: tools/stage vulkan
+    with open(stage / 'libs-copied.txt', 'a') as f: f.write(ALIAS_VULKAN[1] + '\n')
+    print('== Android root')
+    shutil.rmtree(stage / 'android-root', ignore_errors=True)
+    stage_root('generic_x86_64', str(stage / 'android-root'))
+    if (Path(out) / 'system/lib64/libberberis_arm64.so').exists():  # the native bridge for arm64-only apps, when built (docs/X86_64.md "arm64-only apps")
+        print('== native bridge (Digitalis)')
+        for f in Path(out, 'system/lib64').glob('libberberis_*.so'): shutil.copy(f, lib64)
+        for sub in ('system/lib64', 'system/bin', 'system/etc'): (stage / 'android-root' / sub).mkdir(parents=True, exist_ok=True)
+        shutil.copytree(out + '/system/lib64/arm64', stage / 'android-root/system/lib64/arm64', symlinks=True, dirs_exist_ok=True)
+        shutil.copytree(out + '/system/bin/arm64', stage / 'android-root/system/bin/arm64', symlinks=True, dirs_exist_ok=True)
+        shutil.copy(out + '/system/etc/ld.config.arm64.txt', stage / 'android-root/system/etc')
+        shutil.copy(REPO / 'aosp/nativebridge/cpuinfo.arm64.txt', stage / 'android-root/system/etc/cpuinfo.arm64.txt')  # the guest's /proc/cpuinfo fallback (0010)
+    print('== libart.so for the guest (aarch64: the host build is x86-64)')
+    run(['sh', str(REPO / 'tools/lib/build-libart-arm64.sh'), TREE, str(REPO / 'bridge/native'), str(stage / 'android-root/apex/com.android.art/lib64/libart.so')])
+    print('== Robolectric')
+    (stage / 'aosp').mkdir(exist_ok=True)
+    shutil.copy(TREE + '/out/host/linux-x86/framework/Robolectric_all.jar', stage / 'aosp')
+    print('== framework javac shards (runtime/meson.build lists the @CriticalNative methods from them)')
+    shutil.rmtree(stage / 'javac-shards', ignore_errors=True)
+    (stage / 'javac-shards').mkdir()
+    for f in Path(TREE, 'out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac').glob('framework.jar[0-9]*'):
+        if not f.name.endswith(('.rsp', '.pc_state')): shutil.copy(f, stage / 'javac-shards')
+    print('== check: every ELF is x86-64')
+    foreign_elf(lib64.glob('*.so*'), 'X86-64')
+    print('== tar')
+    (REPO / 'build/x86_64').mkdir(parents=True, exist_ok=True)
+    tarfile = REPO / 'build/x86_64/apklayer-x86_64-stage.tar'
+    run(['tar', 'cf', str(tarfile), '-C', str(stage), 'android-x86_64', 'android-root', 'aosp', 'javac-shards', 'libs-copied.txt', 'libs-missing.txt'])
+    run(['ls', '-la', str(tarfile)])
 
-stage_arm32() { # re-runs itself inside the OrbStack machine; every staged ELF is checked to be 32-bit ARM
-    if [ "${1:-}" != --inside ]; then exec orb -m ubuntu22-x86 sh "/mnt/mac$here/stage" arm32 --inside; fi
-    out="$tree/out/target/product/generic_arm64" dest="$repo/build/arm32/android-libs"
+
+def stage_arm32():
+    rerun_inside('arm32')
+    out = TREE + '/out/target/product/generic_arm64'
+    dest = REPO / 'build/arm32/android-libs'
     # apklayer's modules and the patched tree libraries from their 32-bit module outputs (`m <output file>`), then the product's system/lib
-    names="$(awk '($5 == "apklayer" || $5 == "patched") && $3 ~ /[.]so$/ { n = $3; sub(".*/", "", n); sub("[.]so$", "", n); printf "-name %s -o ", n }' "$repo/deps/android-tree-files.lock")"
-    srcs=""
-    for d in $(find "$tree/out/soong/.intermediates" -type d \( $names -false \) -prune 2>/dev/null); do
-        for v in android_arm_armv8-a_shared android_vendor_arm_armv8-a_shared; do [ -d "$d/$v" ] && srcs="$srcs$d/$v:"; done
-    done
-    srcs="$srcs$out/system/lib"
-    for d in "$out"/apex/*/lib "$out"/apex/*/lib/extractors "$out/system_ext/lib" "$out/system/system_ext/lib" "$out/vendor/lib"; do [ -d "$d" ] && srcs="$srcs:$d"; done
-    rm -rf "$dest"; mkdir -p "$dest"
+    _, names = lock_names()
+    srcs = module_srcs(names, ('android_arm_armv8-a_shared', 'android_vendor_arm_armv8-a_shared'), 'system/lib', 'lib', 'generic_arm64')
+    shutil.rmtree(dest, ignore_errors=True)
+    dest.mkdir(parents=True)
     # roots: what an app process loads (the list); the stack's own services stay 64-bit
-    ANDROID_LIBS_SRC="$srcs" stage_libs "$dest" $(grep -v ubsan_standalone "$repo/deps/android-libs.list" | sed 's/aarch64/arm/') > "$dest/../libs-copied.txt" 2> "$dest/../libs-missing.txt"
-    cp "$dest/libvulkan.so" "$dest/libapklayer_vulkan.so"  # the patched loader under its own name, as on arm64 (tools/stage vulkan)
-    echo "$(wc -l < "$dest/../libs-copied.txt") libraries copied; missing ($dest/../libs-missing.txt): $(sed 's/.*: //' "$dest/../libs-missing.txt" | sort -u | wc -l)"
-    bad=0
-    for f in "$dest"/*.so*; do
-        case "$(readelf -h "$f" 2>/dev/null | sed -n 's/.*Machine: *//p')" in ARM) ;; *) echo "not arm32: $f"; bad=$((bad + 1));; esac
-    done
-    echo "$bad foreign ELF files"
-}
+    roots = [re.sub('aarch64', 'arm', r, count=1) for r in (REPO / 'deps/android-libs.list').read_text().split() if 'ubsan_standalone' not in r]
+    write_libs(srcs, str(dest), roots, dest.parent)
+    shutil.copy(dest / ALIAS_VULKAN[0], dest / ALIAS_VULKAN[1])  # the patched loader under its own name, as on arm64 (tools/stage vulkan)
+    foreign_elf(dest.glob('*.so*'), 'ARM')
 
-[ $# -ge 1 ] || { sed -n '2,15p' "$0" >&2; exit 2; }
-step="$1"; shift
-case "$step" in
-    libs) stage_libs "$@";;
-    root) stage_root;;
-    media) exec python3 "$here/lib/stage-media.py" "$@";;
-    sysapps) stage_sysapps;;
-    vulkan) stage_vulkan "$@";;
-    x86_64) stage_x86_64 "$@";;
-    arm32) stage_arm32 "$@";;
-    gfxstream) mkdir -p "$1/common/gfxstream" && $ORB tar cf - -C "$tree/hardware/google/gfxstream" meson.build meson_options.txt host common third_party | tar xf - -C "$1/common/gfxstream";;
-    *) echo "tools/stage: unknown target $step" >&2; exit 2;;
-esac
+
+def stage_gfxstream(prebuilts):
+    d = Path(prebuilts) / 'common/gfxstream'
+    d.mkdir(parents=True, exist_ok=True)
+    pipe(ORB + ['tar', 'cf', '-', '-C', TREE + '/hardware/google/gfxstream', 'meson.build', 'meson_options.txt', 'host', 'common', 'third_party'], ['tar', 'xf', '-', '-C', str(d)])
+
+
+def main(argv):
+    if not argv:
+        sys.exit(__doc__.split('The VM is')[0].rstrip())
+    step, args = argv[0], [a for a in argv[1:] if a != '--inside']
+    if step == 'libs':
+        src = os.environ.get('ANDROID_LIBS_SRC') or TREE + '/out/target/product/generic_arm64/system/lib64'
+        copied, missing = stage_libs(src.split(':'), args[0], args[1:])
+        print(''.join(c + '\n' for c in copied), end='')
+        print(''.join(m + '\n' for m in missing), end='', file=sys.stderr)
+    elif step == 'root': stage_root()
+    elif step == 'media': os.execvp(sys.executable, [sys.executable, str(HERE / 'lib/stage-media.py'), *args])
+    elif step == 'sysapps': stage_sysapps()
+    elif step == 'vulkan': stage_vulkan(*args)
+    elif step == 'x86_64': stage_x86_64()
+    elif step == 'arm32': stage_arm32()
+    elif step == 'gfxstream': stage_gfxstream(args[0])
+    else: sys.exit('tools/stage: unknown target ' + step)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
