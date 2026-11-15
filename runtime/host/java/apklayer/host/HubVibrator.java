@@ -1,6 +1,7 @@
 package apklayer.host;
 
 import android.os.CombinedVibration;
+import android.view.HapticFeedbackConstants;
 import android.os.IBinder;
 import android.os.ICancellationSignal;
 import android.os.IVibratorManagerService;
@@ -14,6 +15,7 @@ import android.os.VibratorInfo;
 import android.os.vibrator.IHapticGeneratorSessionCallback;
 import android.os.vibrator.IVibrationSessionCallback;
 import android.os.vibrator.PrebakedSegment;
+import android.os.vibrator.PrimitiveSegment;
 import android.os.vibrator.StepSegment;
 import android.os.vibrator.VibrationEffectSegment;
 import java.util.function.BiPredicate;
@@ -30,8 +32,9 @@ final class HubVibrator extends IVibratorManagerService.Stub {
     private static final String HAL_DESCRIPTOR = "android.hardware.vibrator.IVibrator";
     // IVibrator's transactions (hardware/interfaces/vibrator/aidl/aidl_api/.../4/IVibrator.aidl, in declaration order) and capabilities
     private static final int GET_CAPABILITIES = IBinder.FIRST_CALL_TRANSACTION, OFF = GET_CAPABILITIES + 1, ON = GET_CAPABILITIES + 2,
-            PERFORM = GET_CAPABILITIES + 3, SET_AMPLITUDE = GET_CAPABILITIES + 5;
-    private static final int CAP_AMPLITUDE_CONTROL = 4;
+            PERFORM = GET_CAPABILITIES + 3, SET_AMPLITUDE = GET_CAPABILITIES + 5, GET_COMPOSITION_DELAY_MAX = GET_CAPABILITIES + 7,
+            GET_COMPOSITION_SIZE_MAX = GET_CAPABILITIES + 8, GET_PRIMITIVE_DURATION = GET_CAPABILITIES + 10, COMPOSE = GET_CAPABILITIES + 11;
+    private static final int CAP_AMPLITUDE_CONTROL = 4, CAP_COMPOSE_EFFECTS = 32, PRIMITIVES = 9;  // CompositePrimitive NOOP..LOW_TICK
 
     private final BiPredicate<Integer, String> holds;  // uid, permission
     private Thread playing;
@@ -81,7 +84,16 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         if (vibratorId != 0) return null;
         long caps;
         try { caps = hal(GET_CAPABILITIES, null); } catch (RemoteException gone) { caps = 0; }
-        return new VibratorInfo.Builder(0).setCapabilities(caps).build();
+        VibratorInfo.Builder info = new VibratorInfo.Builder(0).setCapabilities(caps);
+        if ((caps & CAP_COMPOSE_EFFECTS) != 0) {  // the primitives the HAL plays: their durations make VibratorInfo.isPrimitiveSupported true
+            try {
+                info.setCompositionSizeMax(hal(GET_COMPOSITION_SIZE_MAX, null)).setPrimitiveDelayMax(hal(GET_COMPOSITION_DELAY_MAX, null));
+                for (int primitive = 1; primitive < PRIMITIVES; primitive++) {
+                    try { info.setSupportedPrimitive(primitive, hal(GET_PRIMITIVE_DURATION, ints(primitive))); } catch (UnsupportedOperationException unsupported) { /* not this one */ }
+                }
+            } catch (RemoteException gone) { /* the capabilities stay */ }
+        }
+        return info.build();
     }
 
     @Override public synchronized boolean isVibrating(int vibratorId) { return playing != null && playing.isAlive(); }
@@ -104,8 +116,8 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         player.start();
     }
 
-    // shortcut: step segments (createOneShot, createWaveform) and prebaked effects (createPredefined) only; primitive and ramp segments are skipped,
-    // and a repeating waveform plays once
+    // shortcut: step, primitive and prebaked segments only (createOneShot, createWaveform, startComposition, createPredefined); ramp (PWLE) segments are
+    // skipped (the HAL plays composePwle, nothing here asks it to), and a repeating waveform plays once
     private void play(VibrationEffect.Composed effect) {
         try {
             for (VibrationEffectSegment segment : effect.getSegments()) {
@@ -116,6 +128,19 @@ final class HubVibrator extends IVibratorManagerService.Stub {
                     int ms;
                     try { ms = hal(PERFORM, args); } catch (UnsupportedOperationException unsupported) { continue; }  // an effect the HAL has not
                     Thread.sleep(ms);
+                    continue;
+                }
+                if (segment instanceof PrimitiveSegment primitive) {  // IVibrator.compose with this one primitive (CompositeEffect: delay, primitive, scale)
+                    Parcel args = Parcel.obtain();
+                    args.writeInt(1);
+                    args.writeInt(1);  // the element is not null
+                    args.writeInt(16);  // the parcelable's size with its own header
+                    args.writeInt(primitive.getDelay());
+                    args.writeInt(primitive.getPrimitiveId());
+                    args.writeFloat(primitive.getScale());
+                    args.writeStrongBinder(null);
+                    try { hal(COMPOSE, args); } catch (UnsupportedOperationException unsupported) { continue; }
+                    Thread.sleep(primitive.getDelay() + hal(GET_PRIMITIVE_DURATION, ints(primitive.getPrimitiveId())));
                     continue;
                 }
                 if (!(segment instanceof StepSegment step) || step.getDuration() <= 0) continue;
@@ -143,7 +168,23 @@ final class HubVibrator extends IVibratorManagerService.Stub {
     }
 
     @Override public void performHapticFeedback(int uid, int deviceId, String opPkg, int constant, int usage, String reason, int flags, int privFlags) {
-        // shortcut: haptic feedback constants map to prebaked effects (system_server's HapticFeedbackVibrationProvider): not played
+        if (!holds.test(uid, android.Manifest.permission.VIBRATE) || constant == HapticFeedbackConstants.NO_HAPTICS) return;
+        // the effects of system_server's HapticFeedbackVibrationProvider.getVibration (the HAL's own effects; no per-device or setting overrides)
+        int effect = switch (constant) {
+            case HapticFeedbackConstants.CONTEXT_CLICK, HapticFeedbackConstants.GESTURE_END, HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE,
+                    HapticFeedbackConstants.SCROLL_TICK, HapticFeedbackConstants.SEGMENT_TICK, HapticFeedbackConstants.VIRTUAL_KEY_RELEASE,
+                    HapticFeedbackConstants.DRAG_CROSSING, HapticFeedbackConstants.KEYBOARD_RELEASE -> VibrationEffect.EFFECT_TICK;
+            case HapticFeedbackConstants.TEXT_HANDLE_MOVE, HapticFeedbackConstants.CLOCK_TICK, HapticFeedbackConstants.SEGMENT_FREQUENT_TICK,
+                    HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE -> VibrationEffect.EFFECT_TEXTURE_TICK;
+            case HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.VIRTUAL_KEY, HapticFeedbackConstants.EDGE_RELEASE, HapticFeedbackConstants.CALENDAR_DATE,
+                    HapticFeedbackConstants.CONFIRM, HapticFeedbackConstants.BIOMETRIC_CONFIRM, HapticFeedbackConstants.GESTURE_START,
+                    HapticFeedbackConstants.SCROLL_ITEM_FOCUS, HapticFeedbackConstants.SCROLL_LIMIT, HapticFeedbackConstants.TOGGLE_ON,
+                    HapticFeedbackConstants.TOGGLE_OFF -> VibrationEffect.EFFECT_CLICK;
+            case HapticFeedbackConstants.REJECT, HapticFeedbackConstants.BIOMETRIC_REJECT -> VibrationEffect.EFFECT_DOUBLE_CLICK;
+            default -> VibrationEffect.EFFECT_HEAVY_CLICK;  // LONG_PRESS, DRAG_START, EDGE_SQUEEZE, and the provider's own default
+        };
+        System.out.println("[apklayer-hub] vibrator: haptic feedback " + constant + " -> effect " + effect);
+        vibrate(uid, deviceId, opPkg, CombinedVibration.createParallel(VibrationEffect.get(effect)), null, reason, null);
     }
 
     @Override public void performHapticFeedbackForInputDevice(int uid, int deviceId, String opPkg, int constant, int inputDeviceId, int inputSource,

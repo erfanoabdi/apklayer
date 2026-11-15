@@ -42,8 +42,24 @@ public final class Main extends Activity {
         Thread.sleep(500);  // the pattern is 350 ms
         vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK));
         Thread.sleep(300);
+        if (Boolean.getBoolean("hw.compose")) compose(vibrator);  // -Dhw.compose=true: tests/vm/providers.sh (the host backends' tests read only the waveform and click)
         System.out.println("[hw] vibrator pattern and click played");
         return true;
+    }
+
+    private void compose(Vibrator vibrator) throws InterruptedException {
+        // a composition of two primitives (the HAL composes: the fake backend gets CLICK at 0.5, then THUD at 1.0), then haptic feedback (CONFIRM: a click, as the example HAL has only CLICK and TICK)
+        boolean primitives = vibrator.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_CLICK, VibrationEffect.Composition.PRIMITIVE_THUD);
+        System.out.println("[hw] vibrator primitives supported=" + primitives);
+        if (primitives) vibrator.vibrate(VibrationEffect.startComposition().addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.5f)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD, 1f, 50).compose());
+        Thread.sleep(600);
+        // SystemVibrator.performHapticFeedback (hidden: ViewRootImpl's path; Robolectric's ShadowView answers View.performHapticFeedback(int) itself, so an app's View never gets here)
+        try {
+            Vibrator.class.getMethod("performHapticFeedback", int.class, int.class, String.class, int.class, int.class).invoke(vibrator, android.view.HapticFeedbackConstants.CONFIRM, 0, "hello", 0, 0);
+        } catch (ReflectiveOperationException failure) { failure.printStackTrace(System.out); }
+        Thread.sleep(400);
+        System.out.println("[hw] vibrator haptic feedback sent");
     }
 
     private boolean location() throws InterruptedException {
