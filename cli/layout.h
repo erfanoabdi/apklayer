@@ -34,7 +34,7 @@ struct Layout {
     std::string dex2jvmJar() const { return join(build, "runtime/dex2jvm/dex2jvm.jar"); }
     std::string shellBinary() const { return join(build, "bridge/shell/apklayer-shell"); }
     std::string shellSocket() const { return join(runtimeHome, "apklayer/shell.sock"); }
-    std::string cliBinary() const;  // this tool, for the Java side (-Dapklayer.cli)
+    std::string cliBinary() const;  // this tool, for the Java side (-Dapklayer.cli); APKLAYER_CLI overrides it (a wrapped package: cli/layout.cpp)
 };
 
 struct Instance {

@@ -10,6 +10,17 @@
   ...
 }: let
   cfg = config.programs.apklayer;
+
+  # the per-app sandbox's subordinate ids: a block of these to each user in sandbox.users, in order
+  subIdStart = 100000;
+  subIdCount = 65536;
+
+  declared = user: let
+    u = config.users.users.${user} or {};
+  in
+    (u.isNormalUser or false) || (u.isSystemUser or false);
+
+  undeclaredSandboxUsers = lib.filter (user: !(declared user)) cfg.sandbox.users;
 in {
   options.programs.apklayer = {
     enable = lib.mkEnableOption "apklayer, which runs Android apps in Wayland windows";
@@ -90,7 +101,14 @@ in {
         type = lib.types.listOf lib.types.str;
         default = [];
         example = ["alice"];
-        description = "Users that get the subordinate id range the per-app sandbox needs.";
+        description = ''
+          Users that get the subordinate ids the per-app sandbox needs: 65536 each, from 100000 up,
+          a disjoint range per user in the order they are listed.
+
+          Each one has to be a user this configuration declares (users.users.<name>.isNormalUser):
+          the ranges are written as part of that declaration, so a user made only with useradd
+          cannot be given them here.
+        '';
       };
     };
   };
@@ -100,6 +118,16 @@ in {
       {
         assertion = cfg.sandbox.enable -> cfg.sandbox.users != [];
         message = "programs.apklayer.sandbox.enable needs sandbox.users: the per-app sandbox takes each user's own subordinate ids.";
+      }
+      # Subordinate ids go on a user this configuration declares. Listing one that only exists in
+      # /etc/passwd (useradd, with users.mutableUsers on) otherwise fails far from here, as
+      # "Exactly one of users.users.<name>.isSystemUser and users.users.<name>.isNormalUser must be set".
+      {
+        assertion = cfg.sandbox.enable -> undeclaredSandboxUsers == [];
+        message =
+          "programs.apklayer.sandbox.users names ${lib.concatStringsSep ", " undeclaredSandboxUsers}, which this configuration does not declare. "
+          + "The per-app sandbox's subordinate ids are written for users NixOS manages, so declare each one "
+          + "(users.users.<name> = { isNormalUser = true; ... };) or drop it from sandbox.users.";
       }
     ];
 
@@ -145,21 +173,30 @@ in {
 
     environment.sessionVariables = lib.mkIf cfg.sandbox.enable {APKLAYER_SANDBOX = "1";};
 
+    # A range each, not one shared: subUidRanges go into /etc/subuid verbatim, so giving two users
+    # the same 65536 ids would run their sandboxed apps as the same host uids, and each could read
+    # and own the other's app data -- the one thing the per-app sandbox is there to prevent.
     users.users = lib.mkIf cfg.sandbox.enable (
-      lib.genAttrs cfg.sandbox.users (_user: {
-        subUidRanges = [
-          {
-            startUid = 100000;
-            count = 65536;
-          }
-        ];
-        subGidRanges = [
-          {
-            startGid = 100000;
-            count = 65536;
-          }
-        ];
-      })
+      lib.listToAttrs (
+        lib.imap0 (
+          i: user:
+            lib.nameValuePair user {
+              subUidRanges = [
+                {
+                  startUid = subIdStart + i * subIdCount;
+                  count = subIdCount;
+                }
+              ];
+              subGidRanges = [
+                {
+                  startGid = subIdStart + i * subIdCount;
+                  count = subIdCount;
+                }
+              ];
+            }
+        )
+        cfg.sandbox.users
+      )
     );
 
     # the instances whose binderfs nodes apklayer-binder makes at boot (debian/instances)
