@@ -15,6 +15,10 @@ public final class Main extends Activity {
         String tag = "[hidl] " + getPackageName();
         try {
             Class<?> manager = Class.forName("android.hidl.manager.V1_0.IServiceManager");
+            try {  // the exception IServiceManager.getService() swallows (NoSuchElementException: not found)
+                Object raw = Class.forName("android.os.HwBinder").getMethod("getService", String.class, String.class).invoke(null, "android.hidl.manager@1.0::IServiceManager", "default");
+                System.out.println(tag + " raw=" + raw);
+            } catch (java.lang.reflect.InvocationTargetException e) { System.out.println(tag + " raw failed: " + e.getCause()); }
             Object sm = manager.getMethod("getService").invoke(null);
             if (sm == null) throw new IllegalStateException("IServiceManager.getService() is null");
             String self = "android.hidl.manager@1.0::IServiceManager";

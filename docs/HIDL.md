@@ -20,6 +20,15 @@ only when `host_hals.conf` lists nothing, and stages its VINTF entry (`aosp/hals
 the manager refuses to run without its own `android.hidl.manager` entry). An instance that has host HALs keeps the stand-in and still has no
 local manager.
 
+## Findings while making it work
+
+- Robolectric's instrumented `android.os.Hw*` classes return defaults for their natives unless a shadow says `callNativeMethodsByDefault`
+  (`HostPlainShadows.HwBinder` and the others, listed in `HostShadowProvider`): registering the JNI alone left `getService` returning null.
+- The tree's hwservicemanager aborted at its first transaction (`CHECK_EQ` on the serving stack pointer: no security context here); patches/aosp/system/hwservicemanager 0002.
+- `libandroid_runtime`'s `LOG(INFO) << ...` in `JHwBinder_native_getService` crashes in an app JVM (its inline `std::__put_character_sequence` jumps into
+  libc++'s rodata; the same libbase LogMessage works in the stack's processes). Cause not found; `apklayer_register_binder` sets android-base's
+  minimum severity to WARNING in the JVM so the INFO streams are never built. A `LOG(WARNING|ERROR) <<` in libandroid_runtime would still crash.
+
 ## What remains
 
 - Instances with host HALs (Halium `graphics`/`camera`/`media = device`): a local manager next to the host forwarding needs `NoHwServiceManager`'s
