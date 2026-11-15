@@ -53,13 +53,22 @@ def run(mode):
     try:
         _, _, full, _ = state(lambda v, b, c, f: not v and b == 0 and c > 0)
         if mode == 'pan':
-            n = len(seen)
-            instance.inject(PKG, 'focus', 'tap:%d,%d' % NUMBER)
-            _, _, _, low = state(lambda v, b, c, f: f > 400, n)  # the number field has focus, under where the keyboard comes
+            # the host's scale (200% on a HiDPI desktop): hello.input's action bar is 56 dp, the content 544 dp of the 600 dp window
+            scale = full / 544
+            # a round trip of the keyboard first: a tap before the app's first frame reached the shell is converted at the unscaled size
             n = len(seen)
             instance.inject(PKG, 'ime:%d' % KEYBOARD)
-            # the pan animates (ViewRootImpl's scroller): until the field (48 px) sits above the keyboard in the 600 px window
-            _, _, content, focus = state(lambda v, b, c, f: v and b == KEYBOARD and f + 48 <= 601 - KEYBOARD, n)  # (1 px: ViewRootImpl rounds the rect)
+            state(lambda v, b, c, f: v and b == KEYBOARD, n)
+            n = len(seen)
+            instance.inject(PKG, 'ime:0')
+            state(lambda v, b, c, f: not v and b == 0 and c == full, n)
+            n = len(seen)
+            instance.inject(PKG, 'focus', 'tap:%d,%d' % NUMBER)
+            _, _, _, low = state(lambda v, b, c, f: f > 400 * scale, n)  # the number field has focus, under where the keyboard comes
+            n = len(seen)
+            instance.inject(PKG, 'ime:%d' % KEYBOARD)
+            # the pan animates (ViewRootImpl's scroller): until the field (48 dp) sits above the keyboard in the 600 dp window
+            _, _, content, focus = state(lambda v, b, c, f: v and b == KEYBOARD and f + 48 * scale <= 600 * scale + 2 * scale - KEYBOARD, n)  # (2 dp: ViewRootImpl rounds the rect, 3 px off at 200%)
             assert content == full, 'adjustPan resized the content: %d -> %d' % (full, content)
             result = 'adjustPan: ime insets %d px, the content keeps %d px, the focused field panned from %d to %d' % (KEYBOARD, full, low, focus)
         else:
