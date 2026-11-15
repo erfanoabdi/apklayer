@@ -4,6 +4,10 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: a dev tree's CLI no longer relinks an installed runtime
+- A meson-installed dev tree's CLI without `APKLAYER_NATIVE` ran `setup-runtime.sh` on the shared `~/.local/share/apklayer/runtime/<ver>` and relinked it into the dev tree; deleting the tree left the tester PC's runtime dangling. `tools/release/setup-runtime.sh` now refuses (exit 1, says so and names `APKLAYER_NATIVE`) when the runtime's `native-runtime.jar` link resolves into a different package half; a dangling owner is repaired as before, an update of the same package (same half path) is unchanged. Group `setup-runtime-foreign` (tests/vm/setup-runtime-foreign.sh). docs/RELEASES.md.
+- Checked: the group's script on the UTM VM (PASS). Not run: a full CLI run from a dev tree on a real installed runtime.
+
 ## 2026-11-15: GApps "Getting account info" hang: the hub's startService no longer waits for the delivery
 - Owner's default instance on the 0.4.19+gitadbb7e31 deb (Play services 26.26.34 from LiteGapps), account setup stuck on "Getting account info". Thread dumps (SIGQUIT): the UI process waited for a service connection; Play services' `:persistent` main thread, inside a service creation (Robolectric's ServiceController.create idles the looper), ran a receiver that waited for class `ackt`'s lock; the worker holding that lock had sent a PendingIntent for a service of its own process, and the hub's start waited for that main thread (HubEndpoint ENDPOINT_START -> Services.startFromHub).
 - HubStartedServices.start now delivers on a single-thread queue per target process and returns at once, as ActivityManagerService schedules a start (it already did for a process not running). A cross-process stopService runs on the same queue, behind earlier starts, and still waits for its answer. Restarts after a death are unchanged.

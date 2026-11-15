@@ -642,3 +642,7 @@ run = ["python3 -u tests/vm/heap.py"]
 # `apklayer setup` after a runtime update installs only the changed system APKs and keeps data (cli/setup.cpp system-apps step); the APKs are the runner's installed test apps
 apps = ["hello-payload", "hello-payload2", "hello-heap"]
 run = ["tests/vm/sysapps-update.sh"]
+
+[setup-runtime-foreign]
+# a dev tree CLI must not relink a runtime another build owns (setup-runtime.sh refuses)
+run = ["tests/vm/setup-runtime-foreign.sh"]
