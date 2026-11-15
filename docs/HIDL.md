@@ -25,14 +25,19 @@ local manager.
 - Robolectric's instrumented `android.os.Hw*` classes return defaults for their natives unless a shadow says `callNativeMethodsByDefault`
   (`HostPlainShadows.HwBinder` and the others, listed in `HostShadowProvider`): registering the JNI alone left `getService` returning null.
 - The tree's hwservicemanager aborted at its first transaction (`CHECK_EQ` on the serving stack pointer: no security context here); patches/aosp/system/hwservicemanager 0002.
-- `libandroid_runtime`'s `LOG(INFO) << ...` in `JHwBinder_native_getService` crashes in an app JVM (its inline `std::__put_character_sequence` jumps into
-  libc++'s rodata; the same libbase LogMessage works in the stack's processes). Cause not found; `apklayer_register_binder` sets android-base's
-  minimum severity to WARNING in the JVM so the INFO streams are never built. A `LOG(WARNING|ERROR) <<` in libandroid_runtime would still crash.
+- `libandroid_runtime`'s `LOG(INFO) << ...` in `JHwBinder_native_getService` crashed in an app JVM (SEGV_ACCERR, pc in libc++'s rodata, from its inline
+  `std::__put_character_sequence`). Root cause (2026-11-15, from the hs_err registers): not libc++ against libstdc++ but two libc++ copies. `libpdfium.so`
+  links libc++ statically and exported 699 `std::__1` symbols (`locale::use_facet`, `ctype<char>::id`, `basic_ostream::sentry`...); libandroid_runtime
+  lists libpdfium.so (NEEDED 77) before libc++.so (101), so the bionic linker's lookup bound its `ctype<char>::id` and `use_facet` to pdfium's copy while
+  the ostringstream's locale (made in libbase) holds libc++.so's facets numbered by libc++.so's own ids: `use_facet` returned a `collate<char>` for
+  `ctype<char>`, and `widen()` (vtable slot 7) jumped into rodata. libbase and the stack's processes never crashed because libbase lists libc++ first (NEEDED 2) and the stack loads no pdfium; libhwui lists pdfium (23)
+  before libc++ (46) and was bound to pdfium's copy too (73 undefined std::__1 symbols), it only never reached the unset-fill path, so the fix matters beyond HIDL. Fix at the source: patches/aosp/external/pdfium 0001 (`-Wl,--exclude-libs` for libc++_static.a, libc++abi.a, libunwind.a in
+  libpdfium's ldflags); `m libpdfium` (x86_64 and arm64). The earlier workaround (android-base minimum severity WARNING in `apklayer_register_binder`)
+  is gone.
 
 ## What remains
 
 - Instances with host HALs (Halium `graphics`/`camera`/`media = device`): a local manager next to the host forwarding needs `NoHwServiceManager`'s
   non-host branches (get, add, list, registerForNotifications) to go to the local manager instead of "nothing" (libhidl patch 0004). Not started.
 - HALs of the app's own: an app cannot register a HIDL service yet (`ServiceManager::add` needs a VINTF entry for the name; the stack declares none).
-- x86_64: `libapklayer_hwservicemanager` is built for arm64 only (`m` of `gsi_x86_64`, then `deps/android-tree-files-x86_64.lock`).
 - Android ships `android.hidl.*-java` as boot jars; an app that is not a system app gets the same classes here (the framework carries them).

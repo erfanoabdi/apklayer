@@ -401,7 +401,7 @@ d5fa1885e4677b2bff9639617ec96b5a5f292ddf2dc14104b37c2f273c1da6ad 120136 android-
 0717ce2e1ea91031cd15d60b61eea62287d45ff022680aa59f9d72ba5847862e 528040 android-arm64/lib64/libopus.so out/target/product/generic_arm64/apex/com.android.media.swcodec/lib64/libopus.so same
 d55beceb9dd4045f956b5ab2cbb45a3f194df99da9effc9e4d7b7ddffdca654b 51648 android-arm64/lib64/libpackagelistparser.so out/target/product/generic_arm64/system/lib64/libpackagelistparser.so same
 094ccddeebf3100f086d50c4aa4ebe64e9634b0e25e377340b2b323102df724b 412712 android-arm64/lib64/libpcre2.so out/target/product/generic_arm64/system/lib64/libpcre2.so same
-98fc6298afdead171f29a3f0ab68f0c6f3642b773ed6e5a14ef889f2dcb6f930 5000304 android-arm64/lib64/libpdfium.so out/target/product/generic_arm64/system/lib64/libpdfium.so same
+2f9a3f344e55e754804e5d200c5c9938e526b9ee17fe836f50e5d6eff0c05358 4559224 android-arm64/lib64/libpdfium.so out/target/product/generic_arm64/system/lib64/libpdfium.so apklayer
 094bb02f4e848fdbda86f3cd3957744c72e83c1d882e2d26b353455bc8388cff 999568 android-arm64/lib64/libperfetto_c.so out/target/product/generic_arm64/system/lib64/libperfetto_c.so same
 4e011cfb7454272e0573d1c0aa1e7883ba3dd8b088f40fc46c3ffdd831e37dbc 53560 android-arm64/lib64/libperfetto_framework_jni.so out/target/product/generic_arm64/system/lib64/libperfetto_framework_jni.so same
 e742c4bf7b84440edeeb64ac97aa309c5389ad7f1f9742daacdcbfff78f4f2d8 85432 android-arm64/lib64/libpermission.so out/target/product/generic_arm64/system/lib64/libpermission.so patched
