@@ -110,7 +110,9 @@ static ssize_t proc_link(const char *path, char *buf, ssize_t r, size_t size)
     if (r > 0 && path && !strncmp(path, "/proc/", 6)) { r = apklayer_android_spelling(buf, r, (long)size); r = apklayer_proc_link_view(path, buf, r, size); }
     return r;
 }
-ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r, n); }
+const char *apklayer_own_data_env(void);
+ssize_t apklayer_virtual_readlink(const char *mapped, char *buf, size_t n);  /* paths.c: /data/data, /sdcard and /storage/self/primary read as Android's links; -2 for any other path */
+ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = apklayer_virtual_readlink(m, buf, n); if (r == -2) r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r, n); }
 
 /* readdir on /proc leaves out the processes the app does not see (paths.c apklayer_proc_pid_hidden); the directory is told by its device and inode */
 static int is_proc_dir(DIR *d)
@@ -263,11 +265,12 @@ char *realpath(const char *path, char *resolved)
 {
     MAP(m, path);
     char *r = ((char *(*)(const char *, char *))REAL(realpath))(m, resolved);
-    const char *storage = getenv("APKLAYER_STORAGE");
-    size_t n = storage ? strlen(storage) : 0;
-    if (r && n >= 8 && !strncmp(r, storage, n) && (r[n] == 0 || r[n] == '/')) { memcpy(r, "/storage", 8); memmove(r + 8, r + n, strlen(r + n) + 1); }
-    else if (r && n >= 8 && path) r = drive_spelling(path, storage, n, r, resolved);
+    const char *storage = getenv("APKLAYER_STORAGE"), *data = getenv("APKLAYER_DATA");
+    size_t n = storage ? strlen(storage) : 0, d = data ? strlen(data) : 0;
     r = own_spelled(r, resolved ? PATH_MAX : 0, resolved == NULL);  /* the app's own directories as /data/user/0/<pkg>, /data/app/~~... */
+    if (r && d >= 5 && apklayer_own_data_env() && !strncmp(r, data, d) && (r[d] == 0 || r[d] == '/')) { memcpy(r, "/data", 5); memmove(r + 5, r + d, strlen(r + d) + 1); }  /* an app's: the instance's /data */
+    else if (r && n >= 8 && !strncmp(r, storage, n) && (r[n] == 0 || r[n] == '/')) { memcpy(r, "/storage", 8); memmove(r + 8, r + n, strlen(r + n) + 1); }
+    else if (r && n >= 8 && path) r = drive_spelling(path, storage, n, r, resolved);
     DONE(m);
     return r;
 }
@@ -292,7 +295,7 @@ int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev) { PROC_GONE(dir
     int r = f ? ((int (*)(int, const char *, mode_t, dev_t))f)(dirfd, use, mode, dev) : (int)SYSCALL(SYS_mknodat, (long)dirfd, (long)use, (long)mode, (long)dev); DONE(m); return r; }
 WRAPAT(int, fchownat, (int dirfd, const char *path, uid_t u, gid_t g, int flags), (int, const char *, uid_t, gid_t, int), dirfd, use, u, g, flags)
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
-    ssize_t r = ((ssize_t (*)(int, const char *, char *, size_t))REAL(readlinkat))(dirfd, use, buf, n); DONE(m); return proc_link(path, buf, r, n); }
+    ssize_t r = apklayer_virtual_readlink(m, buf, n); if (r == -2) r = ((ssize_t (*)(int, const char *, char *, size_t))REAL(readlinkat))(dirfd, use, buf, n); DONE(m); return proc_link(path, buf, r, n); }
 /* the fortified spellings (Android code built with FORTIFY: Berberis's guest readlink): the buffer is at least n here */
 ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlinkat(dirfd, path, buf, n); }
 ssize_t __readlink_chk(const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlink(path, buf, n); }
@@ -455,7 +458,8 @@ long syscall(long nr, ...)
     MAP(m2, path2 && path2[0] == '/' ? path2 : NULL);
     if (m) a[link ? 2 : first ? 0 : 1] = (long)m;
     if (m2) a[3] = (long)m2;
-    long r = ((long (*)(long, ...))REAL(syscall))(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+    long r = nr == SYS_readlinkat && m ? apklayer_virtual_readlink(m, (char *)a[2], (size_t)a[3]) : -2;
+    if (r == -2) r = ((long (*)(long, ...))REAL(syscall))(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
     DONE(m);
     DONE(m2);
     if (nr == SYS_openat
