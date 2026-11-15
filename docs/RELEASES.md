@@ -107,6 +107,8 @@ Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still ov
 
 ## Cutting a release
 
+Tags are plain `vX.Y.Z` (no `-rc`: `releases-json.py` sorts versions as integers and fails after the builds). The release is made at once, not as a draft; `docs/RELEASE-0.5.0.md` is the worked checklist with verification and rollback.
+
 1. On `main`: `tools/release/versions` (`runtime`, bumped if the prebuilts changed), `cli/version.h` and the code are what should ship; set
    `meson.build`'s project version to X.Y.Z for source builds (the deb's `apklayer --version` prints the package version either way).
 2. Tag the prebuilts commit the release builds from, then main, and push both tags:
