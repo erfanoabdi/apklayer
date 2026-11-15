@@ -12,7 +12,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- GApps sign-in: after local account creation on GMS 26.44 / Android 17, setup reports “There was a problem communicating with Google servers”; screenshot-time logs include a failed DroidGuard response fetch. Compare with the owner’s working Waydroid Android 13 setup (GMS version unknown) and identify the failing auth/network step.
+- GApps sign-in: after local account creation on GMS 26.44 / Android 17, setup reports “There was a problem communicating with Google servers”; screenshot-time logs include a failed DroidGuard response fetch. Cronet Dynamite also failed to load `ImplVersion`; path-based DEX loader support is patched and covered by a regression check, but end-to-end sign-in is still unverified. Owner reports Waydroid Android 13 works without Integrity (GMS version unknown).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.

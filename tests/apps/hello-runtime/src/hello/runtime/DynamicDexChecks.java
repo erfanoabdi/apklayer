@@ -1,9 +1,14 @@
 package hello.runtime;
 
 import android.content.Context;
+import dalvik.system.DelegateLastClassLoader;
+import dalvik.system.DexClassLoader;
 import dalvik.system.InMemoryDexClassLoader;
+import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -39,7 +44,30 @@ public final class DynamicDexChecks {
         if (!"second".equals(b.getMethod("run").invoke(null))) throw new AssertionError("second DEX");
         String token = "apklayer.relocated.java.fixture.Token";
         if (first.loadClass(token) == second.loadClass(token)) throw new AssertionError("relocation leaked between DEX sessions");
+
+        // GMS loads the Cronet Dynamite split with a path-based DelegateLastClassLoader. The JVM has no
+        // DexFile for that path, so apklayer must convert and define its DEX through this loader too.
+        File apk = File.createTempFile("runtime-dex-", ".apk", context.getCacheDir());
+        try {
+            try (var input = context.getAssets().open("hello-runtime-dex.apk")) {
+                Files.copy(input, apk.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            for (ClassLoader dynamic : new ClassLoader[] {
+                    new DexClassLoader(apk.getPath(), null, null, context.getClassLoader()),
+                    new DelegateLastClassLoader(apk.getPath(), null, context.getClassLoader())}) {
+                Class<?> loaded = dynamic.loadClass("payload.Probe");
+                if (loaded.getClassLoader() != dynamic || !"first".equals(loaded.getMethod("run").invoke(null)))
+                    throw new AssertionError("path DEX not defined by " + dynamic.getClass().getSimpleName());
+            }
+        } finally {
+            if (!apk.delete()) throw new AssertionError("could not remove path DEX fixture");
+        }
+        // ApplicationInfo uses Android's /data/app spelling. A Dynamite module loader receives the same kind of path for an installed split.
+        ClassLoader installedPath = new DelegateLastClassLoader(context.getApplicationInfo().sourceDir, null, context.getClassLoader());
+        Class<?> installedClass = installedPath.loadClass(DynamicDexChecks.class.getName());
+        if (installedClass == DynamicDexChecks.class || installedClass.getClassLoader() != installedPath)
+            throw new AssertionError("Android-visible APK path was not mapped and loaded by its DelegateLastClassLoader");
         System.clearProperty("hello.dynamic.value");
-        System.out.println("[hello-runtime] Dynamic DEX PASS properties/reflection/handles/native loads/relocation/isolation");
+        System.out.println("[hello-runtime] Dynamic DEX PASS in-memory/path loaders, properties/reflection/handles/native loads/relocation/isolation");
     }
 }

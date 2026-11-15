@@ -4,6 +4,11 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: Bridge DEX for path-based dynamic loaders
+- The GMS log showed Cronet's Dynamite module failing to load `ImplVersion` before falling back to Java networking. `ShadowHostBaseDexClassLoader` only converted in-memory DEX; path-based `DexClassLoader` and `DelegateLastClassLoader` had no DEX-to-JVM bridge.
+- Added conversion/indexing for those secondary loaders, including installed APK/split paths spelled as Android `/data/app/...` and app data paths. Added `DynamicDexChecks` coverage for both loader types and Android-visible installed APK paths.
+- Verified: changed runtime shadow and regression source compile against the installed runtime jars; `git diff --check` passes. A temporary patched-runtime Play Store launch previously passed its smoke check, but it did not repeat account setup. The `runtime-identity` group and end-to-end Google sign-in remain unverified because the local Android SDK and VM test configuration are unavailable. Keep GApps sign-in open in `docs/PLAN.md` until account setup succeeds.
+
 ## 2026-11-15: Google Play services (LiteGapps, Android 17 builds): no crash loop, device check-in succeeds, the sign-in page opens
 - Tested on the x86 PC in a separate data home (`setup --gapps`, own instance; the runtime's framework re-patched and host classes swapped there only, APKLAYER_CDS=off for the java.base patch). Each fix was confirmed from the logs and the check-in prefs before the next.
 - **Language kill loop:** the hub's first settings (desktop locale nl-NL, night) reached a process after its Application existed, as a configuration change; Play services' LemonContext kills its process on a language change ("Killing the process due to language change"), so it restarted endlessly. HubClient now keeps them pending and ShadowHostInstrumentation.callApplicationOnCreate applies them before Application.onCreate, without a change callback, as bindApplication's configuration (a later attachment keeps the first-launch path). Play Store also starts dark now.
