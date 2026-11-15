@@ -61,7 +61,7 @@ final class HubAccounts extends IAccountManager.Stub {
     /** isAccountManagedByCaller: the authenticator's package, or one signed with the same certificate. */
     private boolean manages(String pkg, String type) {
         String authenticator = authenticator(type);
-        return authenticator != null && (authenticator.equals(pkg) || HostCertificate.sameSigner(pkg, authenticator));
+        return authenticator != null && (authenticator.equals(pkg) || HostCertificate.signedForAuth(pkg, authenticator));
     }
 
     /** The secrets and the visibility of an account type belong to the packages that manage it. */
@@ -84,7 +84,7 @@ final class HubAccounts extends IAccountManager.Stub {
         if (set != null && set != AccountManager.VISIBILITY_UNDEFINED) return set;
         android.content.pm.PackageParser.Package parsed = packages.get(pkg);
         if (parsed == null) return AccountManager.VISIBILITY_NOT_VISIBLE;
-        boolean legacy = (authenticator != null && HostCertificate.sameSigner(pkg, authenticator))
+        boolean legacy = (authenticator != null && HostCertificate.signedForAuth(pkg, authenticator))
                 || (parsed.applicationInfo.targetSdkVersion < android.os.Build.VERSION_CODES.O && packages.holds(pkg, android.Manifest.permission.GET_ACCOUNTS))
                 || packages.holds(pkg, android.Manifest.permission.GET_ACCOUNTS_PRIVILEGED);
         Integer fallback = store.read(account, e -> e.visibility.get(legacy ? AccountManager.PACKAGE_NAME_KEY_LEGACY_VISIBLE : AccountManager.PACKAGE_NAME_KEY_LEGACY_NOT_VISIBLE));

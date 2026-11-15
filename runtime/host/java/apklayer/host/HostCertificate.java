@@ -89,9 +89,15 @@ final class HostCertificate {
     }
 
     /** Whether two installed packages are signed with the same certificate; an unsigned or unreadable APK (the placeholder) matches none. */
-    static boolean sameSigner(String a, String b) {
-        Signature[] first = of(a), second = of(b);
-        return first != signatures() && second != signatures() && java.util.Arrays.equals(first, second);
+    /**
+     * PackageManagerInternal.hasSignatureCapability(authenticator, caller, AUTH), what AccountManagerService.checkPackageSignature asks: the
+     * authenticator's signing lineage grants the caller's signer AUTH, or the caller's lineage holds the authenticator's signer (Play services
+     * rotated its key; Play Store is signed with the old one in that lineage). The placeholder certificate matches nothing.
+     */
+    static boolean signedForAuth(String caller, String authenticator) {
+        android.content.pm.SigningDetails c = details(caller), a = details(authenticator);
+        if (c.getSignatures() == signatures() || a.getSignatures() == signatures()) return false;
+        return a.checkCapability(c, android.content.pm.SigningDetails.CertCapabilities.AUTH) || c.hasAncestorOrSelf(a);
     }
 
     /** The platform certificate: one per instance (every process of it sees the same "android" signer), made once in the instance's directory (beside accounts.json). */
