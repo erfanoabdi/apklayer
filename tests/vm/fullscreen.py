@@ -93,7 +93,7 @@ try:
                 seen.append(line)
                 if 'script: hover:1,0' in line:
                     first = configure()[:2] + configure()[3:]
-                    assert first[2] == (0 if MOBILE else DECOR_H), 'first configure %s' % (configure(),)
+                    assert first[2] == (0 if MOBILE or 'server-side decorations' in shell_log() else DECOR_H), 'first configure %s' % (configure(),)
                 elif 'script: hover:2,0' in line:
                     assert 'fullscreen on' in shell_log(), 'the shell was not asked for fullscreen'
                     fullscreen('insets-controller')
