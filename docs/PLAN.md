@@ -17,7 +17,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
-- PGR (Tencent ACE) died at 105-144 s on half the runs: cause found, ACE's `/proc/self/root` virtual-app probe (fixed in `bridge/native/paths.c`; 31.7 min idle soak on the tester PC). Open: ship the rebuilt `libapklayer-preload.so` in the deb/bundle; run meson `path-layer` and `tests/run files`; play PGR into a gameplay scene on the tester PC (needs a test-input shell or an unlocked desktop).
+- PGR colours are off and dark (also llvmpipe on the arm server and the NVIDIA tester PC): agent working on it.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
 
 ## Graphics
