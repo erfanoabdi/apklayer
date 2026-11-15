@@ -32,7 +32,8 @@ static const struct wl_seat_listener seat_listener = { .capabilities = seat_caps
 struct wp_viewporter *viewporter;
 struct wp_fractional_scale_manager_v1 *fscale_mgr;
 #define MAX_OUTPUTS 8
-static struct out { struct wl_output *o; uint32_t name; int w, h, scale, mm_w, mm_h; } outs[MAX_OUTPUTS];
+static struct out { struct wl_output *o; uint32_t name; int w, h, scale, mm_w, mm_h, tf; } outs[MAX_OUTPUTS];
+int output_tf;
 int output_px_w, output_px_h, output_mm_w, output_mm_h;
 
 static void outputs_changed(void)
@@ -45,12 +46,15 @@ static void outputs_changed(void)
         if (s * 100 > scale) scale = s * 100;
         if (outs[i].w / s * (outs[i].h / s) > mw * mh) {
             mw = outs[i].w / s; mh = outs[i].h / s;
+            output_tf = outs[i].tf;
             output_px_w = outs[i].w; output_px_h = outs[i].h; output_mm_w = outs[i].mm_w; output_mm_h = outs[i].mm_h;
         }
     }
     output_scale = scale ? scale : 100;
     output_mode_w = mw;
     output_mode_h = mh;
+    for (int i = 0; i < MAX_WINDOWS; i++)
+        if (windows[i].client && windows[i].shell_surface) wlshell_orient(&windows[i]);
     for (int i = 0; i < MAX_WINDOWS; i++)   /* style (auto), density, scale (without a per-surface preferred one) follow the outputs */
         if (windows[i].client) window_display_changed(&windows[i]);
 }
@@ -78,7 +82,7 @@ int window_output_inject(struct window *w, int index)
 static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int32_t pw,
                          int32_t ph, int32_t sub, const char *make, const char *model,
                          int32_t tf)
-{ (void)o; (void)x; (void)y; (void)sub; (void)make; (void)model; (void)tf; ((struct out *)d)->mm_w = pw; ((struct out *)d)->mm_h = ph; }  /* mobile.c: density */
+{ (void)o; (void)x; (void)y; (void)sub; (void)make; (void)model; ((struct out *)d)->tf = tf; ((struct out *)d)->mm_w = pw; ((struct out *)d)->mm_h = ph; }  /* mobile.c: density */
 static void out_mode(void *d, struct wl_output *o, uint32_t f, int32_t w, int32_t h,
                      int32_t refresh)
 {

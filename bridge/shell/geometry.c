@@ -41,6 +41,7 @@ static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, 
  * keeps the letterbox (fit_size). */
 static int want_turn(const struct window *w)
 {
+    if (w->shell_surface) return w->mobile && w->proxy && w->cfg_w > 0 && w->cfg_h > 0 ? (w->tf == 3 ? 90 : w->tf == 1 ? 270 : 0) : 0;  /* Lipstick: wlshell.c */
     if (!w->mobile || !w->lock || w->nav.remote || !w->proxy || w->cfg_w <= 0 || w->cfg_h <= 0 || (w->cfg_w > w->cfg_h) == (w->lock == 1)) return 0;
     return w->lock == 1 ? 90 : 270;
 }
@@ -81,7 +82,7 @@ void window_send_configure(struct window *w)
     /* the output's pixels: the app's screen (Display.getRealSize, WindowManager.getMaximumWindowMetrics), not its window */
     send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, w->dpi, nav, w->mobile, opw, oph, ime }, 10);
     if (w->proxy)
-        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw : ah, s, w->dpi, nav, w->mobile, opw, oph, ime, w->turn }, 11);
+        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw + (w->nav.remote ? turned_nav(w) : 0) : ah, s, w->dpi, nav, w->mobile, opw, oph, ime, w->turn }, 11);
     fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px%s\n",
             w->client->pkg, aw, ah, s, aw * s / 100, ah * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
             w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav, ime,
@@ -241,6 +242,7 @@ void window_request_size(struct window *w, int lw, int lh)
 {
     int fw, fh;
     w->lock = lw <= 0 || lh <= 0 ? 0 : lw > lh ? 1 : lw < lh ? 2 : 0;
+    if (w->shell_surface) { if (w->configured) wlshell_orient(w); return; }  /* Lipstick turns its screen to the window (wlshell.c) */
     if (w->configured && w->turn != want_turn(w)) {  /* a phone turns the app's content, not the window (want_turn) */
         window_layout(w);
         wl_surface_commit(w->surface);

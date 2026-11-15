@@ -197,6 +197,7 @@ void window_attach_input(struct client *c, int own_id, const char *title)
             window_set_mode(w, c->window_mode - 1);
         }
         if (w->configured) {  // its size, scale and state, now that someone listens
+            if (w->shell_surface) { window_layout(w); wl_surface_commit(w->surface); }  /* Lipstick: the turn needs the proxy (geometry.c want_turn) */
             window_send_configure(w);
             send_state(w);
         }

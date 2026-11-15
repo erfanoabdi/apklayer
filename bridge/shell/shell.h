@@ -190,6 +190,7 @@ struct window {
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *toplevel;
     struct wl_shell_surface *shell_surface;  /* instead of the two above where the compositor has no xdg-shell (wlshell.c) */
+    int tf;                     /* wl_shell: the wl_output transform the window is turned to (wlshell.c), 0 none */
     struct qt_extended_surface *qt_ext;      /* with it, Lipstick's qt_surface_extension (raise, lower) */
     void *map;
     size_t map_len;
@@ -229,6 +230,7 @@ extern struct wl_seat *seat;
 extern struct wp_viewporter *viewporter;                     /* registry.c */
 extern struct wp_fractional_scale_manager_v1 *fscale_mgr;
 extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
+extern int output_tf;  /* the largest output's wl_output transform (Lipstick: its screen orientation) */
 extern int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known (fallback without configure_bounds) */
 extern int output_scale;                  /* percent: the largest integer wl_output scale (fallback without wp_fractional_scale_v1) */
 extern int output_px_w, output_px_h, output_mm_w, output_mm_h;  /* the largest output's mode in pixels and its physical size (0: unknown) */
@@ -305,6 +307,7 @@ void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
 void wlshell_create(struct window *w, const char *label, const char *app_id);  /* wlshell.c */
 void wlshell_first_configure(struct window *w);
+void wlshell_orient(struct window *w);  /* turn to the output's orientation or the app's lock */
 void wlshell_lower(struct window *w);
 void wlshell_raise(struct window *w);
 void wlshell_destroy(struct window *w);

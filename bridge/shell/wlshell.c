@@ -21,6 +21,7 @@ static void ext_visibility(void *d, struct qt_extended_surface *e, int32_t visib
     struct window *w = d;
     fprintf(stderr, "[shell] %s: %s by the compositor\n", w->title, visible ? "shown" : "hidden");
     if (visible) resume(w);
+    else if (!text_mgr) maliit_enable(w, 4);  /* another app is up: its keyboard goes (a field keeps focus; the next showSoftInput brings it back) */
 }
 static void ext_property(void *d, struct qt_extended_surface *e, const char *name, struct wl_array *value)
 { (void)d; (void)e; (void)name; (void)value; }
@@ -63,9 +64,36 @@ void wlshell_destroy(struct window *w)
     w->qt_ext = NULL;
 }
 
+/* Lipstick turns its whole screen to a window's content orientation (wl_surface.set_buffer_transform: QtWayland's contentOrientation) and draws
+ * the window's buffer turned back, so the buffer is in the panel's own (portrait) frame: the app's landscape content goes into it turned, as
+ * on Lomiri (geometry.c want_turn, the display's ROTATION_90/270); the window stays the output's size. Lipstick tells the output's orientation
+ * (wl_output transform 3 or 1: the sensor, or the user's lock). The window follows the output; a fixed activity (lock: 1 landscape, 2
+ * portrait) turns it to its own shape: a landscape-locked app on a portrait phone is shown turned, not letterboxed. */
+static int want_tf(const struct window *w)
+{
+    int tf = output_tf == 2 ? 0 : output_tf;  /* upside down: shown upright (no turn of 180) */
+    if (w->lock == 1) return tf & 1 ? tf : 3;
+    if (w->lock == 2) return 0;
+    return tf;
+}
+
+void wlshell_orient(struct window *w)
+{
+    int tf = want_tf(w);
+    if (tf == w->tf || !w->configured) return;
+    w->tf = tf;
+    wl_surface_set_buffer_transform(w->surface, tf);  /* applies with the commit of the next frame */
+    fprintf(stderr, "[shell] %s: turned, content orientation transform %d\n", w->title, tf);
+    window_layout(w);
+    wl_surface_commit(w->surface);
+    window_send_configure(w);
+}
+
 /* The configure an xdg compositor would send first: maximized to the output, then activated (Lipstick tells a client nothing of focus). */
 void wlshell_first_configure(struct window *w)
 {
+    w->tf = want_tf(w);
+    if (w->tf) wl_surface_set_buffer_transform(w->surface, w->tf);
     window_inject_maximize(w, 1, output_mode_w, output_mode_h);
     window_inject_configure(w, 0, 0, 1);
 }
