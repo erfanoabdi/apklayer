@@ -48,7 +48,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
 
 ## Startup and memory
-- `ActivityManager.getMemoryClass()` reports 16 (expected ~256) and `Runtime.maxMemory` 256 MB while an app can hold ~1.7 GB (the host JVM's limit, no ART-style heap cap); find where `memoryClass` comes from.
 - Quintus idle PSS: app JVM ~394 MB, hub ~249 MB, three spares ~235 MB each; composer 22 MB, SurfaceFlinger 38 MB (no ~80 MB GL context seen).
 - A meson-installed dev tree's CLI that runs without `APKLAYER_NATIVE` relinks the shared `~/.local/share/apklayer/runtime/<ver>` to itself (`setUpBundle` / `setup-runtime.sh` use `ln -sfn`); deleting that tree breaks the owner's runtime (this broke the tester PC on 2026-11-15). Make it refuse, copy, or give dev trees their own runtime dir.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
@@ -65,7 +64,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
-- Sailfish RPM from current main is installed and runs apps on the Quintus; open: the per-APK system-app reinstall list on an upgrade is not diffed; the deb build probably has the same dangling `libjavacore.so` link (fixed in `setup-runtime.sh` for the runtime; check the deb); no log line shows the `jni_guest_surface.c` change is active.
+- Sailfish RPM from current main is installed and runs apps on the Quintus; open: no log line shows the `jni_guest_surface.c` change is active; the RPM and deb jobs need one real package build to confirm `tools/check-runtime-links.sh` runs clean in them.
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
