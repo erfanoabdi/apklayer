@@ -81,7 +81,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with the INSTALL.md checklist (the broker now runs `nvidia-modprobe` for missing nodes; only the argument mapping is tested).
-- The VM's `~/prebuilts` has no arm64 dir, so `tools/check-prebuilts.sh` fails there on default runs.
+- UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
 - A release-candidate deb with the sandbox on for a day.
 - Shared spare, cold component hosts.
 - Isolated processes (uid 99000+) hold no permissions and see only the hub; not covered: isolated processes of system-uid apps, `externalService`, `useAppZygote`.
