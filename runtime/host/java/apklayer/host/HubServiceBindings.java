@@ -48,6 +48,7 @@ final class HubServiceBindings {
         if (!system) packages.enforceServicePermission(caller.name(), info);
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
         String key = HubDirectory.key(info.packageName, instance);
+        directory.noteIsolated(key, info);
         System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " bind " + key + " " + info.name + " flags=0x" + Integer.toHexString(flags) + " from " + caller.name());
         Binding binding = new Binding(caller, explicit, connection, flags, key);
         synchronized (bindings) {

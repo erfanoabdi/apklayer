@@ -119,6 +119,8 @@ std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, c
     if (std::string route = property(join(dir, "info.properties"), "nativeRoute"); route.rfind("bridge-", 0) == 0)
         a.push_back("-Dapklayer.nativebridge=" + route.substr(7));  // its libraries load through the native bridge (NativeLoader)
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) a.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
+    // an android:isolatedProcess service's process runs as the uid the hub gave it (99000 and up, cli/sandbox.cpp): Process.myUid() says so
+    if (sandboxOn() && !getenvOr("APKLAYER_ISOLATED_UID", "").empty()) a.push_back("-Dapklayer.uid=" + getenvOr("APKLAYER_ISOLATED_UID", ""));
     // a window process the hub starts for an activity of another android:process ("<package>:jvm"): its name (HostProcessName.windowProcess)
     if (!getenvOr("APKLAYER_PROCESS", "").empty()) a.push_back("-Dapklayer.processname=" + getenvOr("APKLAYER_PROCESS", ""));
     a.push_back(join(dir, "base.apk"));

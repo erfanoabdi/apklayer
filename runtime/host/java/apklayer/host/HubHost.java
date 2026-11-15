@@ -32,7 +32,7 @@ public final class HubHost {
         Path apps = Path.of(System.getProperty("apklayer.apps"));
         HubDirectory directory = new HubDirectory(apps);
         StartTrace.mark("hub: directory");
-        if (!RealBinder.publish(HubProtocol.SERVICE, directory))
+        if (!RealBinder.publish(HubProtocol.SERVICE, directory, true))
             throw new IllegalStateException("Cannot publish instance hub");
         if (!RealBinder.publish(HubAccounts.SERVICE, directory.accounts()))
             throw new IllegalStateException("Cannot publish the account service");

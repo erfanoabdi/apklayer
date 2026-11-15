@@ -195,6 +195,10 @@ public final class HubClient {
     void cancelNotification(String tag, int id, boolean all) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CANCEL, request -> { request.writeString(tag); request.writeInt(id); request.writeBoolean(all); }, reply -> null);
     }
+    /** The package whose isolated process (android:isolatedProcess) runs as this uid, null for none. */
+    String isolatedOwner(int uid) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ISOLATED_OWNER, request -> request.writeInt(uid), reply -> reply.readString());
+    }
     /** The app uid of another app's process (-1 when the hub does not know the pid). */
     int uidOf(int pid) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.UID_OF_PID, request -> request.writeInt(pid), reply -> reply.readInt());

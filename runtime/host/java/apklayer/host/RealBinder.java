@@ -22,9 +22,12 @@ public final class RealBinder {
     }
 
     /** Registers the binder under the name in the instance's service manager. */
-    public static boolean publish(String name, IBinder binder) {
+    public static boolean publish(String name, IBinder binder) { return publish(name, binder, false); }
+
+    /** allowIsolated: also found by isolated processes (android:isolatedProcess, uids 99000 and up), whom the service manager otherwise hides it from: the hub. */
+    public static boolean publish(String name, IBinder binder, boolean allowIsolated) {
         java.util.Objects.requireNonNull(name); java.util.Objects.requireNonNull(binder);
-        init(); return publishNative(name, binder);
+        init(); return publishNative(name, binder, allowIsolated);
     }
 
     /** The binder registered under the name, or null: a BinderProxy when it lives in another JVM. */
@@ -39,9 +42,9 @@ public final class RealBinder {
     private static native IBinder wait0(String name, long timeoutMs);
 
     // The shim registers these uninstrumented native names; the public methods above initialize the pool.
-    private static native boolean publish0(String name, IBinder binder);
+    private static native boolean publish0(String name, IBinder binder, boolean allowIsolated);
     private static native IBinder lookup0(String name);
     private static native void startPool();
-    private static boolean publishNative(String name, IBinder binder) { return publish0(name, binder); }
+    private static boolean publishNative(String name, IBinder binder, boolean allowIsolated) { return publish0(name, binder, allowIsolated); }
     private static IBinder lookupNative(String name) { return lookup0(name); }
 }

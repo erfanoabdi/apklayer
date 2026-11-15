@@ -18,6 +18,7 @@ typedef struct AIBinder AIBinder;
 static AIBinder *(*p_from_java)(JNIEnv *, jobject);
 static jobject (*p_to_java)(JNIEnv *, AIBinder *);
 static int32_t (*p_add_service)(AIBinder *, const char *);
+static int32_t (*p_add_service_flags)(AIBinder *, const char *, uint32_t);  /* ADD_SERVICE_ALLOW_ISOLATED = 1 */
 static AIBinder *(*p_check_service)(const char *);
 static void (*p_dec_strong)(AIBinder *);
 typedef struct AServiceManager_NotificationRegistration Notification;
@@ -90,14 +91,15 @@ int apklayer_register_binder(JNIEnv *env, void *runtime)
     return 0;
 }
 
-static jboolean publish(JNIEnv *env, jclass cls, jstring name, jobject binder)
+static jboolean publish(JNIEnv *env, jclass cls, jstring name, jobject binder, jboolean allow_isolated)
 {
     (void)cls;
     AIBinder *ai = p_from_java(env, binder);
     if (!ai) return JNI_FALSE;
     const char *n = (*env)->GetStringUTFChars(env, name, NULL);
     if (!n) { p_dec_strong(ai); return JNI_FALSE; }
-    int32_t status = p_add_service(ai, n);
+    /* the service manager hides a service from isolated uids (android:isolatedProcess) unless it was added allowing them: the hub is theirs too */
+    int32_t status = allow_isolated && p_add_service_flags ? p_add_service_flags(ai, n, 1) : p_add_service(ai, n);
     p_dec_strong(ai);
     (*env)->ReleaseStringUTFChars(env, name, n);
     fprintf(stderr, "[runtime] publish: addService -> %d\n", status);
@@ -138,6 +140,7 @@ int apklayer_register_binderhelper(JNIEnv *env, jclass helper)
     p_from_java = bionic_dlsym(ndk, "AIBinder_fromJavaBinder");
     p_to_java = bionic_dlsym(ndk, "AIBinder_toJavaBinder");
     p_add_service = bionic_dlsym(ndk, "AServiceManager_addService");
+    p_add_service_flags = bionic_dlsym(ndk, "AServiceManager_addServiceWithFlags");
     p_check_service = bionic_dlsym(ndk, "AServiceManager_checkService");
     p_dec_strong = bionic_dlsym(ndk, "AIBinder_decStrong");
     p_notify = bionic_dlsym(ndk, "AServiceManager_registerForServiceNotifications");
@@ -147,7 +150,7 @@ int apklayer_register_binderhelper(JNIEnv *env, jclass helper)
         return -1;
     }
     JNINativeMethod methods[] = {
-        {"publish0", "(Ljava/lang/String;Landroid/os/IBinder;)Z", (void *)publish},
+        {"publish0", "(Ljava/lang/String;Landroid/os/IBinder;Z)Z", (void *)publish},
         {"lookup0", "(Ljava/lang/String;)Landroid/os/IBinder;", (void *)lookup},
         {"startPool", "()V", (void *)start_pool},
         {"wait0", "(Ljava/lang/String;J)Landroid/os/IBinder;", (void *)wait_service},
