@@ -279,6 +279,16 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     }
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
     setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
+    // the other partitions' ro.<part>.build.* (a device has one set per partition image; the GSI tree only writes system's): the same build, so the same values
+    for (const char* part : {"bootimage", "odm", "product", "system_ext", "vendor"}) {
+        std::string p = std::string("ro.") + part + ".build.";
+        setProperty(l, ne, (p + "fingerprint").c_str(), fingerprint.c_str());
+        setProperty(l, ne, (p + "version.incremental").c_str(), incremental.c_str());
+        for (const char* k : {"id", "tags", "type", "date", "date.utc", "version.release", "version.release_or_codename", "version.sdk"}) {
+            std::string v = get((std::string("ro.build.") + k).c_str());
+            if (!v.empty()) setProperty(l, ne, (p + k).c_str(), v.c_str());
+        }
+    }
     // as the build system writes them for the build type and tags the instance presents (apklayer.prop), not the tree's "userdebug ... test-keys"
     std::string flavor = get("ro.product.name") + "-" + get("ro.build.type");
     setProperty(l, ne, "ro.build.display.id", (get("ro.build.id") + " " + get("ro.build.tags")).c_str());
