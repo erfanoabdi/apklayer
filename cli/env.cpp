@@ -321,8 +321,8 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     std::vector<Gpu> gpus = listGpus(layout);
     if (const Gpu* gpu = instanceGpu(gpus, instance)) {
         env["APKLAYER_RENDER_NODE"] = gpu->node;
-        // shortcut: gstreamer-vaapi reads its device from here; the newer va plugin names elements per device (varenderD129h264dec) and decodebin
-        // takes the first device's: a rank change in bridge/hals/media/codec.c would follow the choice (untested: no machine with two VA GPUs)
+        // gstreamer-vaapi reads its device from here; the va plugin's decoders follow APKLAYER_RENDER_NODE by rank (gst_start, bridge/hals/media/codec.c;
+        // untested with two VA GPUs)
         env["GST_VAAPI_DRM_DEVICE"] = gpu->node;
         for (const Gpu& g : gpus)
             if (g.compositor) env["APKLAYER_COMPOSITOR_NODE"] = g.node;
