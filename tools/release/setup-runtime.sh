@@ -20,6 +20,12 @@ for d in "$half"/android-root/apex/*; do  # the package build's apex dirs the bu
     t="$native/android-root/apex/${d##*/}"
     [ ! -d "$d" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$d" "$t"
 done
+# the package build's libjavacore link points into its build root (/cache/prebuilts/...): the art apex dir becomes a real one, its entries linked, libjavacore from the bundle
+art="$native/android-root/apex/com.android.art"
+if [ -L "$art" ] && [ ! -e "$art/lib64/libjavacore.so" ] && [ -e "$native/android-libs/libjavacore.so" ]; then
+    src="$(readlink "$art")" && rm "$art" && mkdir -p "$art/lib64" && for f in "$src"/lib64/*; do ln -sfn "$f" "$art/lib64/"; done
+    ln -sfn "$native/android-libs/libjavacore.so" "$art/lib64/libjavacore.so"
+fi
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
 echo "apklayer: 1/3 patching the framework jars" >&2
 patch_jar() {
