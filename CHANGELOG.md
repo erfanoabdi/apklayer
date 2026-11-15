@@ -4,6 +4,11 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: File associations (docs/FILE-ASSOCIATIONS.md)
+- The manager's entry opens `.apk/.apks/.xapk/.apkm` (MimeType=, `%F`, `data/apklayer-mime.xml`, update-mime-database in the deb/rpm scripts, Flatpak export) into its install dialog, then a dialog with Open. A source/deb install no longer needs a first app install for the handler (the CLI's `open-apk` entry is the fallback).
+- Apps' manifest VIEW/EDIT file types (`info.properties` open.N) give `apklayer-<pkg>.desktop` MimeType= and `open <pkg> %f`, and a shared-mime-info package for extensions the system lacks (`cli/filetypes.cpp`, `cli/desktop.cpp`); removed on uninstall.
+- `apklayer open <pkg> [file]`: ACTION_VIEW with `content://apklayer.opened/...` (HostOpenedFiles: read only, OpenableColumns, type), `onNewIntent` in a running app. `HostApps.fromProperties` kept no type with a data Uri (setData clears it): fixed. New group `open-files`, test app hello-openfile.
+
 ## 2026-11-15: Scoped storage on every external-storage spelling
 - `bridge/native/paths.c` `other_scoped_path`: other packages' `Android/data` and `Android/obb` are hidden also under `/storage/self/primary`, `/mnt/user/0/{primary,emulated/0}`, `/mnt/runtime/{default,read,write}/emulated/0`, `/mnt/pass_through/0/emulated/0` and `/mnt/androidwritable/0/emulated/0` (the `/mnt` forms are no mapped paths here; ENOENT either way), and `..`/`.` forms under `/mnt` are collapsed first. hello-files `SCOPED=1` (group `files`) checks them and a `/./x/..` form. Not done: symlinks an app makes itself, `/proc/self/cwd`-relative opens.
 - Second sandboxed `services` run on the same data: not reproduced on UTM (own tree, slots tk1 twice, tk2 after unsandboxed groups, and `sandbox services activities providers` together): all pass, the `Ssaid` error did not appear.

@@ -100,6 +100,43 @@ try:
     # removal: uninstall and update take the associations away
     run('bin/apklayer', 'uninstall', PKG)
     check(not entry.exists() and not package_xml.exists(), 'uninstall removes the entry and the mime package')
+    # a real app that opens files: OpenVPN for Android (a local copy of the corpus, when the VM has it)
+    vpn = Path.home() / 'corpus-openvpn.apk'
+    if vpn.exists():
+        out = run('bin/apklayer', 'install', str(vpn))
+        vpn_entry = data / 'applications/apklayer-de.blinkt.openvpn.desktop'
+        vpn_text = vpn_entry.read_text() if vpn_entry.exists() else ''
+        print(re.findall(r'^(?:Exec|MimeType)=.*$', vpn_text, re.M))
+        check('installed de.blinkt.openvpn' in out.stdout, 'install OpenVPN for Android ' + (out.stderr or out.stdout)[-150:])
+        check('application/x-openvpn-profile;' in vpn_text, 'OpenVPN\'s entry carries its profile type (MimeType=)')
+        check(re.search(r'^Exec=.* open de\.blinkt\.openvpn %f$', vpn_text, re.M) is not None, 'OpenVPN\'s entry opens the file')
+        run('bin/apklayer', 'uninstall', 'de.blinkt.openvpn')
+    # .apk, .apks, .xapk, .apkm: the manager's entry (data/apklayer-manager.desktop) takes the files, %F, into its install dialog
+    manager = Path('manager/b/apklayer-manager')
+    if not manager.exists():
+        subprocess.run('meson setup manager/b manager >/dev/null 2>&1; ninja -C manager/b apklayer-manager >/dev/null 2>&1', shell=True)
+    if not manager.exists():
+        print('skipped: no manager build (manager/fetch-slint.sh, manager/meson.build)')
+    else:
+        (data / 'apklayer').mkdir(exist_ok=True)
+        (data / 'apklayer/setup-done').write_text('')  # no first-run checklist over the install dialog
+        check(run('sh', 'manager/install-desktop.sh', str(manager)).returncode == 0, 'manager/install-desktop.sh: the entry and the mime package')
+        manager_entry = data / 'applications/apklayer-manager.desktop'
+        check(run('desktop-file-validate', str(manager_entry)).returncode == 0, 'the installed manager entry validates')
+        for name, kind in (('a.apk', 'application/vnd.android.package-archive'), ('a.apks', 'application/x-android-apks'), ('a.xapk', 'application/x-android-xapk'), ('a.apkm', 'application/x-android-apkm')):
+            (OUT / name).write_bytes(b'PK\x05\x06' + bytes(18))
+            got = run('xdg-mime', 'query', 'filetype', str(OUT / name)).stdout.strip()
+            check(got == kind, '%s is %s (%s)' % (name, kind, got))
+            check('apklayer-manager.desktop' in run('gio', 'mime', kind).stdout, 'gio mime %s lists the manager' % kind)
+        # one process takes every file a file manager selects (%F; `gio open` itself launches once per file)
+        check(re.search(r'^Exec=.* %F$', manager_entry.read_text(), re.M) is not None, 'the manager entry takes a list of files: Exec=... %F')
+        # the install dialog: the file opened with the manager is installed on Install, and the dialog of the new app offers Open
+        out = subprocess.run([str(manager), '--screenshot', str(OUT / 'open-apk.png'), '--size', '400x840', '.tests/apks/hello-openfile.apk',
+                              '--click', 'Install', '--wait-refresh', '1', '--expect', 'Open'], env=env, capture_output=True, text=True, timeout=300)
+        print(out.stdout[-300:], out.stderr[-300:])
+        check(out.returncode == 0, 'the manager opened with an .apk: Install, then the installed dialog with Open')
+        check(entry.exists(), 'the app installed through the manager has its entry')
+        run('bin/apklayer', 'uninstall', PKG)
     # the .apk handler of the packages: data/ files
     for f in ('data/apklayer-manager.desktop', 'data/apklayer-share.desktop'):
         check(run('desktop-file-validate', f).returncode == 0, f + ' validates')
