@@ -291,6 +291,6 @@ claim. NVIDIA: Flatpak needs the `org.freedesktop.Platform.GL.nvidia-<version>` 
 when Flathub has that version); other GPUs use Mesa from `org.freedesktop.Platform.GL.default`.
 
 Build it: `sh flatpak/build.sh <prebuilts checkout> <out dir> [version]` (needs flatpak and flatpak-builder; it joins split prebuilts and installs the
-SDK and openjdk21 extension from Flathub). The build has no network: the bionic_translation wrap, `deps.lock`'s artifacts and Slint are pinned
+SDK and openjdk25 extension from Flathub). The build has no network: the bionic_translation wrap, `deps.lock`'s artifacts and Slint are pinned
 sources in the manifest; after a change to `deps/deps.lock` run `tools/gen/flatpak-sources.py` (it writes `flatpak/deps-sources.json`), after a new
 bionic_translation revision or Slint version change the manifest beside the wrap or `manager/fetch-slint.sh`.

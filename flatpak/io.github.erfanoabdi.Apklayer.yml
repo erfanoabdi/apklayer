@@ -7,7 +7,7 @@ runtime: org.freedesktop.Platform
 runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.openjdk21
+  - org.freedesktop.Sdk.Extension.openjdk25
 command: apklayer-manager
 finish-args:
   # windows: apklayer's shell and the manager are Wayland clients only
@@ -27,12 +27,12 @@ finish-args:
   - --system-talk-name=org.bluez
   - --system-talk-name=org.freedesktop.GeoClue2
   - --talk-name=org.freedesktop.Notifications
-  # the JDK apps run on (the openjdk21 extension's JRE, installed into /app/jre)
+  # the JDK apps run on (the openjdk25 extension's JRE, installed into /app/jre)
   - --env=APKLAYER_NATIVE_JAVA=/app/jre/bin/java
 build-options:
-  append-path: /usr/lib/sdk/openjdk21/bin
+  append-path: /usr/lib/sdk/openjdk25/bin
   env:
-    JAVA_HOME: /usr/lib/sdk/openjdk21/jvm/openjdk-21
+    JAVA_HOME: /usr/lib/sdk/openjdk25/jvm/openjdk-25
 # after every module's debuginfo step: libdl_bio's unstripped copy back (apklayer module's post-install)
 cleanup-commands:
   - for z in /app/lib/apklayer/bionic_translation/b/libdl_bio.so.*.symtab.gz; do gunzip -c "$z" > "${z%.symtab.gz}" && rm "$z"; done
@@ -40,7 +40,7 @@ modules:
   - name: openjdk
     buildsystem: simple
     build-commands:
-      - /usr/lib/sdk/openjdk21/install.sh
+      - /usr/lib/sdk/openjdk25/install.sh
 
   # bionic_translation's libbsd (the 26.08 SDK has neither); the same releases as rpm/sources
   - name: libmd

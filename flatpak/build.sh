@@ -1,7 +1,7 @@
 #!/bin/sh
 # build.sh <prebuilts> <out dir> [version]: the apklayer Flatpak of this machine's CPU, as a single-file bundle
 # <out>/apklayer-<version>-<arch>.flatpak (docs/INSTALL.md "Flatpak"). <prebuilts>: a checkout of the prebuilts branch (joined here when split).
-# Needs flatpak and flatpak-builder; the runtime, SDK and openjdk21 extension come from Flathub (--user).
+# Needs flatpak and flatpak-builder; the runtime, SDK and openjdk25 extension come from Flathub (--user).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 P=$(cd "$1" && pwd)
