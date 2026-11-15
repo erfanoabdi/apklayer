@@ -53,6 +53,11 @@ public final class HubHost {
         volumes.start();
         HubLockScreen.unlockIfProvided();  // before READY: an app's auth-bound keys need the auth token at once
         StartTrace.mark("hub: battery, vibrator, usb");
+        // before READY and the first client: an app that registered in the gap got an empty bundle (en-US), then nl-NL, and Play Store sat in its "locale changed" restart screen
+        directory.hostSettings = new HubHostSettings(RuntimeEnvironment.getApplication(), directory);
+        Thread settings = new Thread(directory.hostSettings::watch, "hub-host-settings");
+        settings.setDaemon(true);
+        settings.start();
         booting = false;
         if (apk != null) {  // the system process's package: registered and its providers created before READY, so no client asks for a host of it
             android.app.Application app = RuntimeEnvironment.getApplication();
@@ -69,10 +74,6 @@ public final class HubHost {
         Thread boot = new Thread(() -> HubBootBroadcasts.sendOnce(directory), "hub-boot-broadcasts");  // after the boot settings, once per stack start
         boot.setDaemon(true);
         boot.start();
-        directory.hostSettings = new HubHostSettings(RuntimeEnvironment.getApplication(), directory);
-        Thread settings = new Thread(directory.hostSettings::watch, "hub-host-settings");
-        settings.setDaemon(true);
-        settings.start();
         Thread audio = new Thread(() -> HubAudioPermissions.watch(directory.packages()), "hub-audio-permissions");
         audio.setDaemon(true);
         audio.start();
