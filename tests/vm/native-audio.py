@@ -15,7 +15,7 @@ import instance  # noqa: E402  (changes into the repo root)
 LOGDIR = instance.LOGDIR
 ENV = dict(instance.ENV, APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
-    APKLAYER_JOPTS='-Dapklayer.nativeattribution=true -Dapklayer.runms=90000')
+    APKLAYER_JOPTS='-Dapklayer.nativeattribution=true -Dapklayer.testClasses=apklayer.host.NativeAttribution,apklayer.host.NativeParcel,org.robolectric.shadow.api.Shadow -Dapklayer.runms=90000')  # the host classes the app reaches by Class.forName
 extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
 if extra.exists(): ENV['APKLAYER_JOPTS'] += ' ' + extra.read_text().strip()
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
@@ -24,7 +24,7 @@ late = sys.argv[1:] == ['late']  # installed while the hub runs: audioserver mus
 audio_mode = late or sys.argv[1:] == ['audio']
 capture = None
 if audio_mode:
-    ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dapklayer.testClasses=apklayer.host.NativeParcel -Dhello.rate=1 -Dhello.record=1'
+    ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dhello.nativeaudio=true -Dapklayer.nativeparcels=true -Dhello.rate=1 -Dhello.record=1'
     ENV['APKLAYER_HOST_LIBS'] += ':' + ENV['APKLAYER_NATIVE'] + '/libapklayer-audio-pipewire.so'
 
 

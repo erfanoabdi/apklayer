@@ -26,7 +26,7 @@ expect "an unknown service falls to 'other' (deny)" 1 $tag-missing x
 account=aplpam$$
 trap 'sudo -n userdel $account >/dev/null 2>&1; sudo -n rm -f /etc/pam.d/$tag-permit /etc/pam.d/$tag-deny /etc/pam.d/$tag-exec; rm -rf "$dir"' EXIT
 sudo -n useradd -M -s /usr/sbin/nologin $account && echo "$account:pw-$$" | sudo -n chpasswd || { echo "FAIL no throwaway user"; exit 1; }
-cp "$helper" "$dir/pamcheck"
+cp "$helper" "$dir/pamcheck"; chmod 755 "$dir"  # the throwaway user must reach it (mktemp makes the directory 0700)
 login() { printf '%s\0' "$2" | sudo -n -u $account "$dir/pamcheck" $account >/dev/null 2>&1; got=$?; [ $got = "$1" ] || { echo "FAIL login service: exit $got, wanted $1"; exit 1; }; }
 login 0 "pw-$$"; echo "ok login service accepts the right password"
 login 1 "pw-wrong"; echo "ok login service refuses a wrong one"
