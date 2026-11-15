@@ -221,6 +221,11 @@ final class HostWindows {
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         View root = topWindow(views, (int) e.getX(), (int) e.getY());
         if (root == null) return;
+        if (e.getActionMasked() == MotionEvent.ACTION_HOVER_EXIT) { // a pen left the screen
+            root.dispatchGenericMotionEvent(e);
+            hoverActive = false;
+            return;
+        }
         if (!hoverActive) { // ViewRootImpl starts a hover stream with ENTER
             MotionEvent enter = MotionEvent.obtain(e);
             enter.setAction(MotionEvent.ACTION_HOVER_ENTER);

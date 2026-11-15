@@ -138,7 +138,7 @@ def keys(*steps, **kw):
 
 MODS = {'alt': 56, 'ctrl': 29, 'shift': 42, 'super': 125}  # evdev codes of combo:<mod>+<code>
 TEST_INPUT, TEST_DONE = 11, 115  # bridge/shell/shell.h
-FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE, IME, OUTPUT, LAYOUT = range(12)
+FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE, IME, OUTPUT, LAYOUT, WHEEL, PEN = range(14)
 
 
 def inject(window, *steps, secret=False):
@@ -147,6 +147,8 @@ def inject(window, *steps, secret=False):
     package. Steps (x, y: logical pixels in the window's content, y < 0: its title bar):
       focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | xclick:<x>,<y> (the back button) | output:<n> (wl_surface.enter of the n-th output) | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | delete:<n> (UTF-8 bytes, as text-input-v3) | layout:<layout[,layout2]>[:<variant>[:<options>]] (the xkb keymap the key steps use, e.g. ru, us,ara:,:grp:caps_toggle) | resize:<w>,<h>
       | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>] | close
+      | wheel:<dx>,<dy>[,hires][,finger][,shift] (a wheel over the window, + = right/down, in notches; hires: in 1/120 notches as a v8 compositor's hi-res wheel; finger: a touchpad's continuous scroll, 15 units a notch; shift: Shift held)
+      | pen:<x>,<y>,<pressure 0..1>[,<tilt_x deg>,<tilt_y deg>,<rotation deg>,<distance 0..1>,<buttons: bit 0 stylus, bit 1 stylus2>,<tool: 0 pen, 1 eraser>] (a tablet tool: in proximity, touching while the pressure is above 0) | pen:out
       | ime:<px> (the host's on-screen keyboard covers the bottom px app pixels, 0: hidden; as the phones' Maliit keyboard)"""
     print('INJECT %s %s' % (window, ' '.join('text:***' if secret and s.startswith('text:') else s for s in steps)), flush=True)  # secret: a password typed in
     messages = []
@@ -170,6 +172,10 @@ def inject(window, *steps, secret=False):
         elif kind == 'resize': messages.append((RESIZE, *xy, 0, ''))
         elif kind == 'scale': messages.append((SCALE, int(arg), 0, 0, ''))
         elif kind == 'output': messages.append((OUTPUT, int(arg), 0, 0, ''))  # the surface enters the n-th output (wl_surface.enter), -1: none
+        elif kind == 'wheel':
+            n = arg.split(',')
+            messages.append((WHEEL, int(n[0]), int(n[1]), sum(1 << i for i, f in enumerate(('hires', 'finger', 'shift')) if f in n[2:]), ''))
+        elif kind == 'pen': messages.append((PEN, 0, 0, 0, arg.replace(',', ' ')))
         elif kind == 'ime': messages.append((IME, int(arg), 0, 0, ''))
         elif kind == 'maximize': messages.append((MAXIMIZE, 1, *xy, ''))
         elif kind == 'unmaximize': messages.append((MAXIMIZE, 0, *xy, ''))  # with w,h: a floating configure of that size

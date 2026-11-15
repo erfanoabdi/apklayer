@@ -575,3 +575,7 @@ run = ["export APKLAYER_SANDBOX=1; APKLAYER_JOPTS=-Dapklayer.runms=45000 bin/apk
 [resize-frame]  # a new frame of the new size reaches the compositor after every window resize, also in a burst (hello-input draws nothing by itself)
 apps = ["hello-input"]
 run = ["python3 -u tests/vm/resize-frame.py"]
+
+[input-wheel-pen]  # the wheel's notches and fractions (AXIS_VSCROLL/HSCROLL) and a stylus's axes through the shell's test input
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/input-wheel-pen.py"]

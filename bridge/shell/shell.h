@@ -34,8 +34,11 @@
  *                104 RELEASE        {i32 id, i32 buf}
  *                105 KEY            {i32 id, i32 action(0 down,1 up), i32 android keycode,
  *                                    i32 unicode (UTF-32), i32 android meta}  (xkb-translated, P2)
- *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*1000, i32 hscroll*1000}
- *                                    (x,y in buffer pixels; scroll in notches, +vscroll = up)
+ *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*10000, i32 hscroll*10000, i32 android meta}
+ *                                    (x,y in buffer pixels; scroll in notches, fractions for hi-res wheels and touchpads, +vscroll = up)
+ *                117 TABLET         {i32 id, i32 android action (0 down, 1 up, 2 move, 7 hover move, 9 hover enter, 10 hover exit), i32 x, i32 y (pixels),
+ *                                    i32 tool (Android TOOL_TYPE_*), i32 buttons (Android BUTTON_STYLUS_*), i32 pressure*10000, i32 distance*10000,
+ *                                    i32 tilt x deg*100, i32 tilt y deg*100, i32 rotation deg*100, i32 slider*10000}  (tablet.c)
  *                111 TOUCH          {i32 id, i32 action(0 down,1 up,2 move,3 cancel), i32 finger, i32 x, i32 y}  (pixels)
  *                110 IME            {i32 id, i32 delete_before, i32 delete_after} utf8 commit "\0" utf8 preedit
  *                109 CLIPBOARD      utf8 text: the system selection changed (text only, < 60 KB)
@@ -105,13 +108,15 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_FULLSCREEN 18    /* app -> shell: {own window id, on}: the app went fullscreen or left it (mobile.c) */
 #define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
+#define MSG_TABLET 117        /* shell -> app: a pen's event (tablet.c) */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
  * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's); close: the compositor's close
  * (xdg_toplevel.close, Lipstick's qt_extended_surface.close); ime {app px}: the host keyboard's area as maliit.c sets it. x, y: logical content pixels, y < 0 = the title bar. */
-enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME, TEST_OUTPUT, TEST_LAYOUT };
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME, TEST_OUTPUT, TEST_LAYOUT,
+       TEST_WHEEL /* {dx, dy, flags}: pointer_inject_wheel */, TEST_PEN /* text: tablet_inject */ };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -314,7 +319,13 @@ void keyboard_inject_focus(struct window *w);  /* keyboard.c */
 void keyboard_inject_leave(struct window *w);  /* keyboard.c */
 void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboard.c */
 void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */
+int pointer_inject_wheel(struct window *w, int dx, int dy, int flags);  /* pointer.c */
 void touch_inject(struct window *w, int action, int x, int y);  /* touch.c */
+/* tablet.c: zwp_tablet_v2 tools (pens) */
+void tablet_bind(struct wl_registry *r, uint32_t name, const char *iface, uint32_t ver);
+void tablet_seat_try(void);                      /* once the manager and the seat are both bound */
+void tablet_forget_window(struct window *w);
+int tablet_inject(struct window *w, const char *text);  /* "x y pressure tilt_x tilt_y rotation distance buttons", "out" */
 int text_input_inject(struct window *w, const char *text, int preedit);  /* textinput.c */
 void window_inject_configure(struct window *w, int cw, int ch, int activated);  /* geometry.c */
 void window_inject_maximize(struct window *w, int on, int gw, int gh);  /* geometry.c */

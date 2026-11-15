@@ -15,6 +15,7 @@ public class Main extends Activity {
     /** Sheet stage 7: a tap that reaches the activity's window (the orphaned popup above it has no window). */
     @Override
     public boolean dispatchTouchEvent(android.view.MotionEvent e) {
+        logPen(e);
         if (Sheet.orphaned && e.getActionMasked() == android.view.MotionEvent.ACTION_UP) Sheet.touched(this);
         return super.dispatchTouchEvent(e);
     }
@@ -57,10 +58,28 @@ public class Main extends Activity {
         else super.onBackPressed();
     }
 
+    /** A stylus event's axes (tests/vm/input-wheel-pen.py). */
+    private static void logPen(android.view.MotionEvent e) {
+        int tool = e.getToolType(0);
+        if (tool != android.view.MotionEvent.TOOL_TYPE_STYLUS && tool != android.view.MotionEvent.TOOL_TYPE_ERASER) return;
+        System.out.println("[hello-input] pen " + android.view.MotionEvent.actionToString(e.getActionMasked()) + " tool=" + tool + " x=" + e.getX() + " y=" + e.getY()
+                + " pressure=" + e.getPressure() + " tilt=" + e.getAxisValue(android.view.MotionEvent.AXIS_TILT) + " orientation=" + e.getOrientation()
+                + " distance=" + e.getAxisValue(android.view.MotionEvent.AXIS_DISTANCE) + " rotation=" + e.getAxisValue(android.view.MotionEvent.AXIS_GENERIC_1)
+                + " buttons=" + e.getButtonState() + " source=0x" + Integer.toHexString(e.getSource()));
+    }
+    @Override public boolean dispatchGenericMotionEvent(android.view.MotionEvent e) { logPen(e); return super.dispatchGenericMotionEvent(e); }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ClipboardManager clipboard = getSystemService(ClipboardManager.class);
-        LinearLayout layout = new LinearLayout(this);
+        LinearLayout layout = new LinearLayout(this) {  // the wheel (tests/vm/input-wheel-pen.py) reaches the views under the pointer as onGenericMotionEvent
+            @Override public boolean onGenericMotionEvent(android.view.MotionEvent e) {
+                if (e.getActionMasked() != android.view.MotionEvent.ACTION_SCROLL) return false;
+                System.out.println("[hello-input] wheel v=" + e.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL) + " h=" + e.getAxisValue(android.view.MotionEvent.AXIS_HSCROLL)
+                        + " shift=" + ((e.getMetaState() & 1) != 0) + " source=0x" + Integer.toHexString(e.getSource()));
+                return true;
+            }
+        };
         layout.setOrientation(LinearLayout.VERTICAL);
         EditText field = new EditText(this);
         field.setHint("Type or paste here");
