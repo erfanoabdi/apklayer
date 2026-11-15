@@ -69,9 +69,9 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Unity: `hpatchz`.
 
 ## Runtime identity (nothing blocking)
-- Path-layer leftovers: `/data/local/tmp` stays writable for apps (Android: EACCES; mode 0111 broke `rm -rf` of an instance); `/proc/self/cwd/..` from the data dir shows the host parent; stat owner vs `/proc/self/status` Uid is mapped by bionic's libc and `raw_syscall.c`, not in glibc-level calls.
-- Modules: `dl_iterate_phdr` lists 285 of 320 (Waydroid's full module list is not in the repo; waydroid.txt is cut at 16 KB). Not loaded: libEGL/libGLESv*/libvulkan (libEGL stalled the app), ~30 libs not staged (libheif, libion, libbufferhub, libRS, HAL/aidl libs, libcgrouprc), `libselinux` is on the eager list but absent (cause unknown); ART libs and boot*.oat cannot exist. libc exports `bionic_*` names.
-- x86: `HWCAP2` is 0, exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the translated guest only; readable on arm64 and for the host user; cause not found).
+- Path-layer leftovers: `/data/local/tmp` stays writable for apps (Android: EACCES; mode 0111 broke `rm -rf` of an instance); `/proc/self/cwd/..` from the data dir shows the host parent (needs a textual rewrite in `paths.c`, the kernel resolves the symlink first); stat owner vs `/proc/self/status` Uid is mapped by bionic's libc and `raw_syscall.c`, not in glibc-level calls.
+- Modules: `dl_iterate_phdr` lists 285 of 320 (Waydroid's full module list is not in the repo; waydroid.txt is cut at 16 KB). Not loaded: libEGL/libGLESv*/libvulkan (libEGL stalled the app), ~30 libs not staged (libheif, libion, libbufferhub, libRS, HAL/aidl libs, libcgrouprc); ART libs and boot*.oat cannot exist. libc exports `bionic_*` names.
+- x86: (`HWCAP2` 0 is deliberate: matrix row 152), exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the x86 guest matches a real phone; arm64 native can read it: owner to decide whether to deny it for app uids).
 - Process attributes: main thread id; the property count is 421 (Waydroid's full list is not in the repo; some values are plausible, not verified).
 - Java: `String.class.getClassLoader()`, `Object.class.getResource`, ArrayStoreException text, StackOverflow depth, main thread id 2.
 
