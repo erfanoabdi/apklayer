@@ -44,6 +44,7 @@ static void init(void)
     void *gl = dlopen("libGLESv2.so.2", RTLD_NOW | RTLD_NOLOAD);
     if (!gl) gl = dlopen("libGLESv2.so.2", RTLD_NOW);
     host_gl = gl;
+    if (!gl) fprintf(stderr, "[gles] cannot open the host's libGLESv2.so.2: every GL query fails (cfg.d needs an app: line for it, cli/env.cpp)\n");
     debug = getenv("APKLAYER_RUNTIME_DEBUG") != NULL;
     if (gl) {
         host_get_string = (get_string_fn)dlsym(gl, "glGetString");

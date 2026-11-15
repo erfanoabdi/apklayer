@@ -11,8 +11,7 @@
 #include <string.h>
 
 /* Every GL function comes from eglGetProcAddress (the platform sets formats_proc), as an engine that loads GL itself does: through Android's
- * libGLESv2 an app's glGetString is a stub that answers NULL (its libEGL half, egl_get_string_for_current_context, is not ours); the platform's
- * own check reports that separately. */
+ * libGLESv2 the platform's own check (linked_checks in glformats.c) asks the plain linked functions. */
 static void *(*formats_proc)(const char *);
 #include "glprocs.h"
 

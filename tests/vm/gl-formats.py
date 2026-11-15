@@ -86,10 +86,7 @@ else:
     bad += ['offscreen %s FAIL' % n for n, v in off_checks.items() if v == 'FAIL']
 win_checks, _ = verdicts(win)
 assert 'glformats: done' in win, 'the window run did not finish:\n' + win[-1500:]
-# shortcut: the linked glGetString/glGetStringi/glGetIntegerv of an app window thread answer NULL/untouched on main (docs/PLAN.md), reported not asserted; drop KNOWN when fixed
-KNOWN = {'linked-glGetString', 'linked-glGetIntegerv'}
-for n in sorted(KNOWN & {n for n, v in win_checks.items() if v == 'FAIL'}): print('known defect, not asserted: window %s FAIL' % n)
-bad += ['window %s FAIL' % n for n, v in win_checks.items() if v == 'FAIL' and n not in KNOWN and (not ref or ref and (ref_checks.get(n) != 'FAIL'))]
+bad += ['window %s FAIL' % n for n, v in win_checks.items() if v == 'FAIL' and (not ref or ref and (ref_checks.get(n) != 'FAIL'))]
 bad += [l.strip() for l in win.splitlines() if 'window-colorspace' in l and ' FAIL ' in l]
 for l in win.splitlines():
     if 'window-colorspace' in l: print(l.strip()[:250])
