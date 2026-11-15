@@ -101,3 +101,4 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
 
 - `kde-window` cannot run on the UTM VM (no KWin; `tests/lib/kwin.py` journalctl cursor parse fails): run it on the KDE PC to cover the SSD first-window size.
+- `fullscreen` and `spare-race` failed once each in the lead's shared tree and pass alone and together in a fresh tree (CHANGELOG 2026-11-16): if either fails again, look at that tree's leftover state first (stale files, foreign-owned sandbox data), then the load.

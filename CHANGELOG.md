@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: fullscreen and spare-race failures of the lead's run: not reproducible, no product regression found
+- UTM VM, own tree `~/apklayer-fsrace` (full push, so no stale incremental files): `fullscreen` alone 4x PASS, `spare-race` alone 3x PASS, and `fullscreen spare-race input-lang decoration kde-window` together (4 instances in parallel) PASS for all but kde-window. So fit_size (ce3a65bc: only the `ssd` case changed), the spare record (56c62fb6) and the push are not the cause; the failures were load or the shared tree's old state (the lead's runs used `~/apklayer-m1`, whose files the incremental push keeps; instances tests1-4 had foreign-owned sandbox data).
+- `tests/vm/fullscreen.py` picture(): the screenshot can be the app's old-size picture right after the configure on a loaded VM (seen: 448x797 for 1280x1024, 1213x866 for 866x1213 mobile); it now retries up to 3 times, 1.5 s apart, before failing. Passes after the change.
+- Not mine, seen: `kde-window` fails 29/29 on this VM, already at `at_start` (`AttributeError: 'NoneType' ... 'group'` parsing KWin's output in tests/lib/kwin): the group is `optional`, the KWin side looks missing or changed here.
+- Removed after: `~/apklayer-fsrace` on the VM (instances stopped, no process left), local copy of local.conf.
+
 ## 2026-11-15: manager `ui.sh` passes on the UTM VM with the refresh-count fix
 - `manager/tests/ui.sh` end to end (the "new instance is not listed" step included): PASS, with the manager built from this tree (`--wait-refresh N` counting only refreshes begun after the input). Run with the shared tree's CLI build and native runtime (`APKLAYER_BUILD`, `APKLAYER_NATIVE`), a private `XDG_DATA_HOME`, instance `uifix`, test app UiBench. Once only: the race is intermittent, so one pass is evidence, not proof. `ui-updater.sh` skipped (no `APKLAYER_CLI`).
 - Removed after: `~/apklayer-uifix` (tree, manager build, data, state, shots), `/tmp/uifix-shots`, instance `uifix` state, local copies of the VM config.

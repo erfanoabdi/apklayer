@@ -52,7 +52,10 @@ def insets():
 
 
 def picture(name, w, h, scale):
-    shot = Image.open(instance.capture(name, PKG)).size
+    for _ in range(3):  # the app redraws at its new size a moment after the configure; a loaded VM takes seconds (the picture may be the old one)
+        shot = Image.open(instance.capture(name, PKG)).size
+        if abs(shot[0] - w * scale // 100) <= 1 and abs(shot[1] - h * scale // 100) <= 1: break
+        time.sleep(1.5)
     assert abs(shot[0] - w * scale // 100) <= 1 and abs(shot[1] - h * scale // 100) <= 1, 'picture %s px for %dx%d @%d%%' % (shot, w, h, scale)
 
 
