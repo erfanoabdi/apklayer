@@ -10,3 +10,4 @@ APKLY_VM_PASS=secret
 # authentication. The Parallels VM (runtime staged beside its old setup in ~/apklayer-rt), tests/vm/parallels.conf:
 # APKLY_VM=parallels@10.211.55.4
 # APKLY_VM_ENV=APKLAYER_PREBUILTS=$HOME/apklayer-rt/prebuilts XDG_DATA_HOME=$HOME/apklayer-rt/data XDG_STATE_HOME=$HOME/apklayer-rt/state
+SAILFISH_LOCK=<lock code of the Sailfish phone>
