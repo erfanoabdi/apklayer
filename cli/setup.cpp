@@ -179,7 +179,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         if (error.empty()) release = manager::parseLatest(readText(file), manager::osCodename(), manager::cpuNames(), error);
         if (error.empty()) printf("latest\t%s\t%s\t%s\n", release.version.c_str(), release.runtimeVersion.c_str(), release.date.c_str());
     }
-    const bool newer = release.runtime.found() && !release.runtimeVersion.empty() && release.runtimeVersion != have;
+    const bool newer = release.runtime.found() && !release.runtimeVersion.empty() && manager::compareVersions(release.runtimeVersion, have.empty() ? "0" : have) > 0;  // never a downgrade: a release index behind the installed runtime
     if (o.check) {
         step("runtime", have.empty() ? "todo" : newer ? "todo" : "done", have.empty() ? "Not installed" : newer ? "Version " + release.runtimeVersion + " is available (have " + have + ")" : "Version " + have);
         step("providers", "done", providersDetail(layout, instance));
