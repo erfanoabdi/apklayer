@@ -97,6 +97,8 @@ int main(int argc, char **argv) {
     assert(fd >= 0 && access(in("own/app/files/x"), F_OK) == 0);
     close(fd);
     assert(access("/data/user/0/p.kg/files/x", F_OK) == 0);
+    assert(access("/proc/self/root//data/user/0/p.kg/files/x", F_OK) == 0 && access("/proc/thread-self/root/data/data/p.kg/files/x", F_OK) == 0);  /* the same files by the /proc root (ACE's virtual-app probe) */
+    assert(access("/proc/self/root//data/data/other/files/x", F_OK) != 0);
     /* the instance's /data/data/p.kg is the app's tree too: a walk component by component (Termux's mkdir -p) lands there */
     int walk = open("/data/data", O_DIRECTORY | O_RDONLY);
     assert(walk >= 0 && mkdirat(walk, "p.kg/files/w", 0700) == 0 && access(in("own/app/files/w"), F_OK) == 0);
