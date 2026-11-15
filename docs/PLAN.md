@@ -54,7 +54,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
-- Unity: `hpatchz`.
 
 ## Sandbox (before it can be the default)
 - NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (nodes are 0666 on the tester PC, no `nvidia-modprobe`).
@@ -74,6 +73,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
+- VPN for apps, phase 1 (agent working): `VpnService` (prepare/establish/protect/onRevoke) with a TUN device in an instance-only network namespace, the VPN as the instance's network in `ConnectivityManager`, the manager shows it and can disconnect it.
 - Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
 - iio-sensor-proxy gives only derived values: no accelerometer or compass type. On Parallels a source-tree CLI needs `--no-daemon` plus `APKLAYER_NATIVE`/`APKLAYER_BT`/`APKLAYER_BINDER=userspace` (the old 0.3.4 daemon takes over).
 - USB: one chooser for several apps; sandbox node access.
