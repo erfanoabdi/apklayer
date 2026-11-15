@@ -31,7 +31,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Vulkan presentation untested on AMD.
 - GPU per instance: VA plugin device, LINEAR on Intel.
 - OTR2 on the PC runs ~30 fps at 2448x1374.
-- Windows: smaller second output, output hotplug, no Back button under server-side decorations, KDE.
+- Windows: KDE untested; `window-geometry` and `decoration` groups need uibench and sway.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
 - Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
 - Sailfish keeps the letterbox; its rotation is unchecked.
