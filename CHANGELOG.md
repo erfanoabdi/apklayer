@@ -4,6 +4,11 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: first real package builds (deb arm64 on the UTM VM, amd64 on the PC)
+- `build-deb.sh noble 0.4.99` ran clean on both (debian/rules' `check-runtime-links.sh` silent, rc 0), the debs installed, `setup --bundle` (runtime 0.4.19 built by `runtime-bundle.sh`) and `setup --check` were all done, gpu-smoke, `hub.py providers/services/activities` passed against the installed CLI (the PC also native-bridge: hello-arm64 PASS translated), `dpkg -r` removed the mime globs and mimeinfo.cache lines, purge left nothing. Only missing build dependency on both: libpulse-dev (built with `dpkg-buildpackage -d`; the Pulse audio backend is optional in Meson, so the debs lack it).
+- Found: `setup` printed `"vnd.android.document/root" is an invalid MIME type` from update-desktop-database for DocumentsUI's entry; cli/filetypes.cpp now drops types without a registered top-level; open-files checks it.
+
+
 ## 2026-11-15: Halium host HALs: camera provider and Codec2 listing (libhidl 0005)
 - Root cause (X23, instance `ut`): with the instance's own hwservicemanager running, `defaultServiceManager1_2` took the real client of it, never the stand-in, because libhwbinder's `isHidlSupported()` is true when `/system/bin/hwservicemanager` exists and the path layer serves a file the instance root lacks from the host: a Halium device's `/system` (-> `/android/system`) has it. So `listManifestByInterface`/`listByInterface`/`registerForNotifications` for the listed device HALs went to the instance's manager (empty) and not to the host (`getService` worked: it asks the host first in `getRawServiceInternal`). Seen with `hidltool manifest` inside a running stack: 0 names; without the stack: the names.
 - Build log (arm64, `gsi_arm64 userdebug`, incremental, under `flock ~/los24-build.lock`, 2026-11-15, Halium agent): `m libhidlbase`. Why: patches/aosp/system/libhidl/0005 (the stand-in stays when the marker `hwservicemanager.local` says the instance runs its own manager). Existing module only. Result below.
