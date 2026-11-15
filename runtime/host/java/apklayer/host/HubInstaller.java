@@ -197,7 +197,7 @@ final class HubInstaller {
 
     private void install(Request request) {
         boolean update = packages.get(request.pkg) != null;
-        List<String> command = new ArrayList<>(List.of(System.getProperty("apklayer.cli"), "install"));
+        List<String> command = new ArrayList<>(List.of(System.getProperty("apklayer.cli"), "install", "--installer", request.installer()));
         try { HubInstallSessions.apks(request.staged).forEach(apk -> command.add(apk.toString())); }
         catch (IOException failure) { send(request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_FAILURE, failure.toString(), null); return; }
         int[] exit = {0};

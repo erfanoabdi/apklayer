@@ -10,7 +10,8 @@ namespace apklayer {
 inline constexpr int kInstallIncompatible = 3, kInstallDowngrade = 4, kInstallUnsigned = 5, kInstallMissingLibrary = 6, kInstallNoMatchingAbis = 7;
 // uninstall: a provider of a static or SDK library an installed app uses exits kUninstallUsedLibrary (DELETE_FAILED_USED_SHARED_LIBRARY)
 inline constexpr int kUninstallUsedLibrary = 8;
-std::string installApp(const Layout& layout, const Instance& instance, const std::vector<std::string>& apks, bool allowDowngrade = false, bool system = false);
+std::string installApp(const Layout& layout, const Instance& instance, const std::vector<std::string>& apks, bool allowDowngrade = false, bool system = false,
+                       const std::string& installer = "");
 // `reconvert <package> | --all-stale`: install again from the kept base.apk and splits (data, uid, system mark kept); a failing app keeps its old
 // install and the others still convert (exit status 1 names the failed ones)
 int reconvert(const Layout& layout, const Instance& instance, const std::string& target);

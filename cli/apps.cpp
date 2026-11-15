@@ -114,7 +114,7 @@ std::string hostClasspath(const Layout& l) {  // no app classes: they get a load
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
-std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade, bool system) {
+std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade, bool system, const std::string& installer) {
     for (const std::string& apk : apks) if (!exists(apk)) die("no such file: " + apk);
     l.requireRuntime();
     if (!exists(l.hostClasses()) || !exists(l.dex2jvmJar()))
@@ -251,6 +251,9 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     // an update keeps the system mark and the app drawer choice; --system (the staging of the tree's system apps) marks it
     if (system || isSystemApp(old)) setProperty(info, "system", "true");
     if (std::string drawer = property(old, "drawer"); !drawer.empty()) setProperty(info, "drawer", drawer);
+    // the installing package (getInstallerPackageName, getInstallSourceInfo: games refuse to run when it is not their store); an install that names none
+    // (apklayer install, reconvert) keeps the earlier one
+    if (std::string by = installer.empty() ? property(old, "installer") : installer; !by.empty()) setProperty(info, "installer", by);
     setProperty(info, "converterAbi", std::to_string(kConverterAbi));
     ensureUid(l, tmp);
     sh({"mv", "-f", info, join(dir, "info.properties")});

@@ -68,7 +68,7 @@ final class HostPackageService extends IPackageManager.Default {
         return new ParceledListSlice<>(pm().queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(flags)));
     }
     @Override public android.content.pm.ResolveInfo resolveIntent(Intent intent, String resolvedType, long flags, int userId) { return pm().resolveActivity(intent, PackageManager.ResolveInfoFlags.of(flags)); }
-    @Override public String getInstallerPackageName(String packageName) { return null; }  // sideloaded, as getInstallSourceInfo
+    @Override public String getInstallerPackageName(String packageName) { return ShadowHostPackageManager.installerOf(packageName); }  // as getInstallSourceInfo
     @Override public android.content.pm.InstallSourceInfo getInstallSourceInfo(String packageName, int userId) {
         try { return pm().getInstallSourceInfo(packageName); } catch (PackageManager.NameNotFoundException e) { return null; }
     }

@@ -111,11 +111,23 @@ public final class NativeLoader {
         try { skipNativeExitHandlers(); } catch (LinkageError noShim) { /* no native runtime in this process: a plain exit */ }
     }
 
+    /** Diagnostic (-Dapklayer.exittrace=true in APKLAYER_JOPTS): who ended the process. The thread that called System.exit waits in Shutdown meanwhile. */
+    private static void traceExit() {
+        Thread.getAllStackTraces().forEach((t, stack) -> {
+            for (StackTraceElement e : stack) if (e.getClassName().equals("java.lang.Shutdown") && e.getMethodName().equals("exit")) {
+                System.out.println("[apklayer] exit called on " + t.getName() + ":");
+                for (StackTraceElement f : stack) System.out.println("\tat " + f);
+                return;
+            }
+        });
+    }
+
     private static final int EXIT_DEADLINE_S = 10;  // past `apklayer stop`'s 5 s and the hub's 4 s for its hosts: only a stuck end reaches it
     private static native void exitDeadline(int seconds);
     /** From the start of the JVM's end (SIGTERM, System.exit) the process has EXIT_DEADLINE_S, whatever a hook or HotSpot's exit waits for (native_loader.c). */
     static void killIfExitStalls() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (Boolean.getBoolean("apklayer.exittrace")) traceExit();
             try { exitDeadline(EXIT_DEADLINE_S); } catch (LinkageError noShim) { /* no native runtime: HotSpot's own exit */ }
         }, "apklayer-exit-deadline"));
     }

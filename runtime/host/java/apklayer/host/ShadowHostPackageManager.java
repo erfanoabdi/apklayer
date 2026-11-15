@@ -108,14 +108,35 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         return info;
     }
 
-    /** An app asks who installed it (F-Droid, StreetComplete in Application.onCreate): nobody, as for a sideloaded APK. */
+    /**
+     * Who installed an app (F-Droid, StreetComplete in Application.onCreate; Endfield's license check refuses an app its store did not install): the
+     * package recorded at install (info.properties "installer", the hub's session installer), nobody for an APK installed with `apklayer install`.
+     */
     @Implementation(minSdk = android.os.Build.VERSION_CODES.R)
     protected android.content.pm.InstallSourceInfo getInstallSourceInfo(String packageName) throws PackageManager.NameNotFoundException {
+        String by = installerOf(packageName);
+        if (by != null) org.robolectric.Shadows.shadowOf(real).setInstallSourceInfo(packageName, by, null, null, by, by, android.content.pm.PackageInstaller.PACKAGE_SOURCE_STORE);
         try { return (android.content.pm.InstallSourceInfo) super.getInstallSourceInfo(packageName); }
         catch (PackageManager.NameNotFoundException unknown) {
             org.robolectric.Shadows.shadowOf(real).setInstallSourceInfo(packageName, null, null);
             return (android.content.pm.InstallSourceInfo) super.getInstallSourceInfo(packageName);
         }
+    }
+
+    @Implementation
+    protected String getInstallerPackageName(String packageName) {
+        return installerOf(packageName);
+    }
+
+    /** The installer recorded for an installed package, or null. */
+    static String installerOf(String packageName) {
+        String apps = System.getProperty("apklayer.apps");
+        if (apps == null || packageName == null) return null;
+        java.util.Properties info = new java.util.Properties();
+        try (java.io.Reader in = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(apps, packageName, "info.properties"))) { info.load(in); }
+        catch (java.io.IOException | RuntimeException none) { return null; }
+        String by = info.getProperty("installer", "");
+        return by.isEmpty() ? null : by;
     }
 
     /** Where an installed app's APK and libraries are (Robolectric leaves them null, Chromium's crash reporter builds file paths from them in Application.onCreate). */
