@@ -231,8 +231,13 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     }
     makeDirs(dir);
     std::string oldUid = property(old, "uid");
-    for (const std::string& f : apkFiles(dir)) if (f != "base.apk") unlink(join(dir, f).c_str());  // the update's own splits replace the old ones
-    for (const std::string& f : apkFiles(tmp)) {
+    // an APK the same as the installed one stays the installed file (its mtime too: a reconvert is no app update, and Play services'
+    // Chimera takes a container APK with a new mtime for an update it then cannot finish); the update's own splits replace the old ones
+    std::vector<std::string> staged = apkFiles(tmp);
+    for (const std::string& f : apkFiles(dir))
+        if (f != "base.apk" && std::find(staged.begin(), staged.end(), f) == staged.end()) unlink(join(dir, f).c_str());
+    for (const std::string& f : staged) {
+        if (exists(join(dir, f)) && sha256File(join(dir, f)) == sha256File(join(tmp, f))) { unlink(join(tmp, f).c_str()); chmod(join(dir, f).c_str(), 0644); continue; }
         sh({"mv", "-f", join(tmp, f), join(dir, f)});
         chmod(join(dir, f).c_str(), 0644);  // readable by every app, as Android's /data/app (a sandboxed app's own uid too); a copy keeps its source's 0600
     }
