@@ -133,6 +133,8 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
                 Map.entry("android.util.Xml", ShadowHostXml.class.getName()),
+                Map.entry("android.telephony.TelephonyManager", ShadowHostSystemGaps.TelephonyManager.class.getName()),  // createForSubscriptionId never null (Play services)
+                Map.entry("android.app.slice.SliceManager", ShadowHostSystemGaps.SliceManager.class.getName()),  // no throw for a grant to an uninstalled package (Play services)
                 Map.entry("dalvik.system.VMRuntime", ShadowHostVMRuntime.class.getName()),
                 Map.entry("dalvik.system.VMStack", ShadowHostVMStack.class.getName()),  // the calling classes (Flogger's logger names, Play services)
                 Map.entry("dalvik.system.DexFile", ShadowHostDexFile.class.getName()),  // dexopt status as ART reports it (Play Store asks isOptimized)
