@@ -18,7 +18,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
-- PGR colours dark in the 3D lobby: a wrapper bug was found and fixed (an sRGB window surface was accepted but linear; `libapklayer_egl` now refuses it with `EGL_BAD_MATCH` and no longer lists `EGL_KHR_gl_colorspace`, arm64 staged 652ac421); not yet confirmed on PGR's lobby. Format paths (ASTC, ETC2, sRGB decode, FP16/R11G11B10, MSAA, framebuffer fetch) are conformant through the wrapper. Open: x86_64 `libapklayer_egl` not built; the linked `glGetString`/`glGetStringi`/`glGetIntegerv` answer NULL on main in an app window thread (`bridge/native/gles_filter.c`); agent working.
+- PGR dies 114-161 s after launch on the repaired tester PC (11 of 11 runs, any preload, translator, runtime or translation mode), after ACE connects to its servers and the invalid-free storm starts; also a HotSpot SIGSEGV on AWS (hs_err_pid335150, core in /var/tmp/pgr-core). Not the `/proc/self/root` probe (none seen in 5 logged runs). Next: reinstall PGR's APK set on the tester PC (an agent's `apklayer install` erased its lib/ and arm64 split there), run with fresh app data (ACE state in files/ano_tmp), look at what ACE gets for /proc/self/fd, /proc/self/map_files, /proc/<pid>, /dev/virtpipe-sec; restore `berberis.mode.<pgr>=lite-translate-or-interpret` (takes effect after a whole-instance `apklayer stop`).
+- New libraries not run on the tester PC/NVIDIA or the phones: x86_64 `libapklayer_egl` (sRGB fix, 14b1af63), the linked-GL query fix; run `gl-formats` there.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with `apklayer prop set berberis.mode.com.kurogame.gplay.punishing.grayraven.en lite-translate-or-interpret` (and unset for the reference); the ASTC fallback in `cli/env.cpp` is a separate lever.
 
 ## Graphics
