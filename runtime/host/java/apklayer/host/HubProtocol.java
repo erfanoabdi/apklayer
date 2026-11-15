@@ -39,6 +39,8 @@ final class HubProtocol {
             CONFIRM_CREDENTIAL = 58,  // {title, description, challenge} -> whether the person confirmed with the login password (HubLockScreen.confirm)
             MICROPHONE_MUTE = 59,  // {on} -> the microphone mute after the request (HubCallAudio: AudioService.setMicrophoneMute and its broadcast)
             BLUETOOTH_PIN = 60;  // {address, name, pairing variant, key} -> the PIN or passkey the person typed for a pairing BlueZ asked about ("yes" to a comparison), null when refused (HubBluetooth.pin)
+    static final int USB_OPEN = 69;  // {device name} -> the device node opened read-write by the hub (as the user: an app uid of the sandbox cannot), null without the caller's permission (HubUsb.open)
+    static final int VPN = 68;  // {op}: "consent" -> whether the person lets the caller set up a VPN (HubVpn; asks once per app); "protect" {socket fd} -> whether the VPN's guard bound the owner's socket to the host's own interface; "disconnect" (the CLI, the manager) -> whether a VPN ended: its owner is revoked
     static final int EJECT_VOLUME = 64;  // {volume id} -> whether the drive is unmounted: StorageManager.unmount (HubVolumes.eject: the instance's processes holding files on it end first)
     static final int AUDIO_ACTIVITY = 67;  // {on}: the caller's process has a player or recorder started (PlayerBase's trackPlayer/playerEvent for AudioService; HubCallAudio.activity)
     static final int ISOLATED_OWNER = 66;  // {isolated uid} -> the package of the process that runs as it, null for none (getPackagesForUid, getNameForUid)

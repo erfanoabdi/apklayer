@@ -12,6 +12,8 @@ int runApp(const Layout& layout, const Instance& instance, const std::string& pa
 std::vector<std::string> windowJvmArgs(const Layout& layout, const Instance& instance, NativeEnv& env);
 int waitHub(const Layout& layout, const Instance& instance);
 int runHub(const Layout& layout, const Instance& instance);
+// The launcher pid (its run.<pid> record) of a running window JVM of the package (or of one of its android:process names); empty: none.
+std::string windowLaunch(const Layout& layout, const Instance& instance, const std::string& target);
 // PNG of what SurfaceFlinger shows on an app window (by package or layer stack); 0 when the file was written.
 int screenshot(const Layout& layout, const Instance& instance, const std::string& target, std::string out);
 

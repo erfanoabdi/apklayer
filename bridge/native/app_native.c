@@ -182,6 +182,16 @@ static jlong linux_lseek(JNIEnv *env, jobject self, jobject fd, jlong offset, ji
 static jstring linux_strerror(JNIEnv *env, jobject self, jint error) { (void)self; char buf[128]; return (*env)->NewStringUTF(env, strerror_r(error, buf, sizeof buf)); }  /* GNU strerror_r (_GNU_SOURCE) */
 static void linux_ftruncate(JNIEnv *env, jobject self, jobject fd, jlong length) { (void)self; if (ftruncate(fd_of(env, fd), length) < 0) throw_errno(env, "ftruncate", errno); }
 
+/* mmap/munmap as libcore's Linux_mmap: Robolectric's stand-in answered 0, and the time zone database (MemoryMappedFile.mmapRO) then read address 0 */
+static jlong linux_mmap(JNIEnv *env, jobject self, jlong address, jlong length, jint prot, jint flags, jobject fd, jlong offset)
+{
+    (void)self;
+    void *p = mmap((void *)(uintptr_t)address, (size_t)length, prot, flags, fd_of(env, fd), (off_t)offset);
+    if (p == MAP_FAILED) { throw_errno(env, "mmap", errno); return 0; }
+    return (jlong)(uintptr_t)p;
+}
+static void linux_munmap(JNIEnv *env, jobject self, jlong address, jlong length) { (void)self; if (munmap((void *)(uintptr_t)address, (size_t)length) < 0) throw_errno(env, "munmap", errno); }
+
 static jobject linux_open(JNIEnv *env, jobject self, jstring path, jint flags, jint mode)
 {
     (void)self;
@@ -388,6 +398,8 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"fcntlVoid", "(Ljava/io/FileDescriptor;I)I", (void *)linux_fcntl_void},
         {"lseek", "(Ljava/io/FileDescriptor;JI)J", (void *)linux_lseek},
         {"ftruncate", "(Ljava/io/FileDescriptor;J)V", (void *)linux_ftruncate},
+        {"mmap", "(JJIILjava/io/FileDescriptor;J)J", (void *)linux_mmap},
+        {"munmap", "(JJ)V", (void *)linux_munmap},
         {"strerror", "(I)Ljava/lang/String;", (void *)linux_strerror},
         {"open", "(Ljava/lang/String;II)Ljava/io/FileDescriptor;", (void *)linux_open},
         {"pipe2", "(I)[Ljava/io/FileDescriptor;", (void *)linux_pipe2},

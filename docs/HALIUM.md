@@ -151,6 +151,7 @@ What was wrong with the camera and what changed:
   hwservicemanager; `listManifestByInterface` falls back to `listByInterface` (the device's Codec2 answers only that).
 - Camera1: libbinder 0007 reports the stack's own uid (phablet 32011) as AID_SYSTEM; cameraserver's trusted uid was the instance's own uid only
   (`patches/aosp/frameworks/av/0003` amended: AID_SYSTEM too). Without it every `android.hardware.Camera.open` died with "Untrusted caller".
+- Listing the device's camera provider and Codec2 store (2026-11-15, libhidl 0005): on a Halium device `/system/bin/hwservicemanager` exists, so libhwbinder counted HIDL as supported and every process of a stack with the instance's own manager took the real client of that manager, never the stand-in: `listManifestByInterface` (CameraProviderManager, Codec2Client) found nothing although `getService` (asked at the host first) worked. With the marker `hwservicemanager.local` the stand-in stays and forwards the listed HALs to the host. `tools/halium/hidl-list.sh [instance]` checks it inside a running stack (`hidltool manifest <fqName>`); after it: X23 and Quintus `hello.camera -Dhello.real=0` lists 3 and 4 cameras, opens the rear one, preview frames, YUV and JPEG stills (Quintus: also an 8192x6144 still and Camera1); `Codec2Client: Available Codec2 services: "default" "software"`, `c2.mtk.avc.decoder` for `hello.nativeplayer`, `hello.nativecodec -Dhello.device=true` DEVICE PASS on both. NewPipe (0.29.1 and 0.29.3) shows "Could not parse website" for a YouTube link on the phone's network, so its playback was not reached.
 - Open Camera (and the `hello.camera` check) draw rotated 90 degrees in the phone's landscape window (the sensor orientation is applied against a window that does not turn): a mobile-window-mode question, not the camera's.
 - With `providers set camera fake` a phone's portrait window gets the camera compat rotate-and-crop (cameraserver turns the bars a quarter, as for a portrait desktop window); hello.camera's Main checks the turned frame there, and the camera-reload check passes on both phones (2026-11-10). Since the rotation fix (2026-11-10, "Rotation on Ubuntu Touch") Lomiri's
   portrait phone gives the landscape-locked Main a landscape letterbox instead (no turn); the camera-reload check was not rerun there.
@@ -452,6 +453,7 @@ What differs from Ubuntu Touch, and what changed:
   `onWindowLowered` hides an application window to the home screen, and the app stops (minimized); `raise` (`apklayer run` of the running app)
   and its `onscreen_visibility` (shown again) resume it. Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
   The navigation bar has Back only since 2026-11-09 (Home is Lipstick's own gesture); checked on the Quintus with the tree's shell.
+- Rotation (2026-11-15): Lipstick turns its screen to the window's content orientation (`wl_surface.set_buffer_transform`) and sends the output's orientation as the wl_output transform (the sensor, or dconf `/lipstick/orientationLock`: `dconf write /lipstick/orientationLock '"landscape"'`, `dconf reset` to undo, as defaultuser). The shell's wl_shell window follows it, or a locked activity's shape, and turns the display like on Lomiri (`want_turn`), so the buffer is in the panel's frame; the bar is a layer of the turned stack on the panel's bottom side. `tools/halium/sf-lshot.sh` shows Lipstick's own (turned) screen; Maliit still draws sideways in a landscape app.
 - Lipstick's switcher (2026-11-09): all apklayer windows are one client's (the session shell's pid), so Lipstick's usual match of a window to its
   launcher entry (the client's pid against the entry's Exec) finds nothing. Entries with `X-apkd-packageName` (Jolla's AppSupport key) are matched
   by the window's wl_shell class instead (lipstick's `isWindowForLauncherItem`; Switcher.qml's `windowIndexOf`): app entries carry it (the
@@ -470,7 +472,7 @@ What differs from Ubuntu Touch, and what changed:
   that stderr is muted for the lookups (it went into programs' output: Termux's `id -u 2>&1`). Termux installs its bootstrap and runs since
   2026-11-10 (CHANGELOG).
 - `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under
-  libdl_bio's constructor call); the instance runs with `apklayer prop set ro.hardware.egl mali`: SurfaceFlinger reports Mali-G68 MC4, OpenGL ES 3.2. Open.
+  libdl_bio's constructor call); cli/stack.cpp now writes `ro.hardware.egl mali` into the device's graphics props when the device says `meow` and `/vendor/lib64/egl/libGLES_mali.so` exists (no manual prop; SurfaceFlinger reports Mali-G68 MC4, OpenGL ES 3.2). The crash itself is not traced further (the layer's constructor jumps to an unmapped address; libGLES_android.so, which it names, is not on the device); Mali's own library is what meow wraps.
 - The prebuilts (75a684a6) carry libraries older than the Halium work of 2026-11-05: libhidlbase without libhidl 0002/0003 ("gralloc-mapper is missing",
   SurfaceFlinger aborted), libbinder without 0007 (AudioPolicyService refused the hub, uid 100000), libapklayer_vdisplay without the android_wlegl path
   (frames went as shm), libapklayer_cameraserver. The phone runs the tree's current outputs of these four; the lock and the prebuilts branch need them
@@ -498,3 +500,26 @@ CameraControllerException; the preview was dark, the phone lying on the desk: no
 
 ## A compositor that stops repainting (weston's VNC output, 2026-11-14)
 weston's VNC backend stops repainting (no frame callbacks, no buffer releases) while no VNC client is connected. The shell then gets no `wl_buffer.release`, SurfaceFlinger's queue runs dry and the app's `dequeueBuffer` times out (-110); the app is not broken, it resumes when a viewer connects (or with another output/compositor). The shell has no timeout-driven release of its own: releasing a buffer the compositor may still read would tear, so this is documented, not worked around. Test on weston with a VNC client attached.
+
+## The phone route (2026-11-15): packages and quick checks from the Mac
+`tests/run` has no phone route; the phones have scripts in `tools/halium` (key auth to both, `UBPORTS`/`SAILFISH` in the untracked `tests/vm/local.conf`):
+- Packages. The click on Parallels (noble arm64, own tree, prebuilts without `x86_64` copied from the Mac, `git archive HEAD` of the repo, bionic_translation
+  from a local checkout, nothing downloaded: Parallels has the Slint and Java caches): `sh tools/release/click.sh <version> ../prebuilts ../out` and
+  `sh tools/release/runtime-bundle.sh ../prebuilts arm64 ../out`. The Sailfish RPM on the Mac (OrbStack, the image `apklayer-sailfish-build:5.0.0.62` and the
+  caches in `~/.cache/apklayer/sailfish` exist; only Jolla's repositories are fetched, `releases.jolla.com` drops connections, rerun):
+  `sh tools/release/sailfish-rpm.sh <version> <prebuilts> <out>` (no extra dev headers were needed: wayland, cairo, xkbcommon come from the target's repositories).
+  A build that ends "Installed (but unpackaged) file(s) found" lacks a file in `rpm/apklayer.spec` (the VPN policy was).
+- `tools/halium/phone-install.sh <ut|sfos> <dir>`: copies the click or RPMs and the bundle over the LAN, installs (click: `gdbus ... com.lomiri.click.Install`,
+  Quintus: `rpm -Uvh --replacepkgs` as root), runs `apklayer setup --bundle`, removes its copies.
+- `tools/halium/phone-test.sh <ut|sfos> <group>...`: runs `phone-checks.sh` on the phone in an instance of its own (`ptest`) and prints PASS/FAIL per group:
+  `hello` (hello.input, SurfaceFlinger's picture), `providers` (graphics, camera, media, vibrator are `device` by default), `hidl` (`hidl-list.sh`),
+  `camera` (hello.camera lists cameras, none is FAIL), `sensors` (hello.hardware), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's
+  orientation lock turns the shell's display; the lock is put back). It copies what it needs, removes it and the instance, and on the X23 wakes the phone
+  with the PIN (`ut-unlock.sh on`: apps are stopped while it is locked; the sudo password is the PIN) and locks it again. The Quintus has to be unlocked
+  by hand (its lock code is not in `local.conf`; a wrong code shows "Incorrect security code", try nothing blindly). A fresh Quintus instance needs no prop (meow is mapped to mali, above).
+- Race `stop <package>` (CHANGELOG 2026-11-15): a launch that took the instance's spare was unknown to `stop <package>`, `info` and relaunch until its JVM
+  renamed itself (seconds on a loaded phone); the run record names the process now. Group `spare-race` (UTM) holds the window with a stopped spare.
+- A keyboard inset for a turned window is not possible through the insets: Android's `InsetsSource.calculateArbitraryInsets` treats a non-floating IME
+  source as a bottom inset whatever its frame ("TODO: non-floating IME always intersects at bottom"). A frame along the content's side made the app see the
+  keyboard over the whole content (bottom inset = the content's height; tried on a simulated phone, turned 270). A side inset needs a framework patch
+  (a new android-all); the shell keeps `ime = turn ? 0`.

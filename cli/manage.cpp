@@ -29,7 +29,8 @@ std::map<std::string, std::vector<std::string>> launches(const Layout& l, const 
         if (!cmd) continue;
         std::string pkg;
         const std::string key = "-Dapklayer.package=";
-        if (size_t at = cmd->find(key); at != std::string::npos) pkg = cmd->substr(at + key.size(), cmd->find('\0', at) - at - key.size());
+        if (pids.size() >= 3 && !pids[2].empty()) pkg = pids[2].substr(0, pids[2].find(':'));  // run.cpp's record: the process the launch runs (a spare's JVM is unnamed at first)
+        else if (size_t at = cmd->find(key); at != std::string::npos) pkg = cmd->substr(at + key.size(), cmd->find('\0', at) - at - key.size());
         else pkg = cmd->substr(0, cmd->find_first_of(std::string(":\0", 2)));
         if (!pkg.empty() && isDir(appDir(l, pkg))) byPackage[pkg].push_back(f);
     }
@@ -206,7 +207,7 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
         {"night", std::regex("yes|no")}, {"accent", std::regex("#?[0-9a-fA-F]{6}")}, {"contrast", std::regex("high|normal")},
         {"animations", std::regex("on|off")}, {"font-scale", std::regex("[0-3](\\.[0-9]+)?")}, {"locale", std::regex("[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*")},
         {"timezone", std::regex("[A-Za-z0-9_+/-]+")}, {"time-format", std::regex("12|24")},
-        {"window-mode", std::regex("auto|mobile|desktop")}};
+        {"window-mode", std::regex("auto|mobile|desktop")}, {"navbar", std::regex("auto|on|off")}};
     auto own = propLines(file);
     if (args.empty() || (args[0] == "list" && args.size() == 1)) {
         for (const auto& [k, v] : own) printf("%s\t%s\n", clean(k).c_str(), clean(v).c_str());
@@ -215,7 +216,7 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
     const std::string& action = args[0];
     if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !(keys.count(args[1]) || args[1].rfind("window-mode.", 0) == 0))
         die("settings [list] | set KEY VALUE | unset KEY; keys: night yes|no, accent #rrggbb, contrast high|normal, animations on|off, "
-            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop");
+            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off");
     if (action == "set" && !std::regex_match(args[2], keys.at(args[1].rfind("window-mode.", 0) == 0 ? "window-mode" : args[1]))) die("not a value for " + args[1] + ": " + args[2]);
     std::string text;
     for (const auto& [k, v] : own) if (k != args[1]) text += k + "=" + v + "\n";

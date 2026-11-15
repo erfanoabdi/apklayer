@@ -21,6 +21,13 @@ export component InstancesPage {
                     color: MaterialPalette.on_surface_variant;
                     wrap: word-wrap;
                 }
+                if Backend.vpn-text != "" : Row {
+                    text: "VPN is active in " + Backend.instance;
+                    supporting-text: Backend.vpn-text;
+                    icon: AppIcons.admin;
+                    clickable: false;
+                    IconButton { icon: AppIcons.stop; tooltip: "Disconnect the VPN"; enabled: !Backend.busy; clicked => { Backend.disconnect-vpn(); } }
+                }
                 for inst in Backend.instances : Row {
                     text: inst.id;
                     supporting-text: (inst.running ? "Running" : "Stopped") + (inst.autostart ? " · always on" : "") + (inst.binder ? "" : " · kernel binder devices missing");

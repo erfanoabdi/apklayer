@@ -143,6 +143,7 @@ void window_create(struct client *c, int id, int width, int height, const char *
     if (!w) return;
     memset(w, 0, sizeof *w);
     w->client = c; w->id = id; w->scale = 100;
+    w->navbar_pref = c->navbar_pref;
     w->surface = wl_compositor_create_surface(compositor);
     if (window_buffers(w, width, height, path) < 0) {
         wl_surface_destroy(w->surface);
@@ -191,8 +192,12 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         clipboard_push(w);
         fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
         if (c->dark) window_set_dark(w, c->dark == 2);
-        if (c->window_mode && w->mode != c->window_mode - 1) window_set_mode(w, c->window_mode - 1);
+        if (c->window_mode && (w->mode != c->window_mode - 1 || w->navbar_pref != c->navbar_pref)) {
+            w->navbar_pref = c->navbar_pref;
+            window_set_mode(w, c->window_mode - 1);
+        }
         if (w->configured) {  // its size, scale and state, now that someone listens
+            if (w->shell_surface) { window_layout(w); wl_surface_commit(w->surface); }  /* Lipstick: the turn needs the proxy (geometry.c want_turn) */
             window_send_configure(w);
             send_state(w);
         }
@@ -254,9 +259,9 @@ void window_frame(struct window *w, int buf, const int32_t *damage)
 
 
 /* Android's Back: KEYCODE_BACK down and up to the app (the title bar's and the navigation bar's Back). */
-void window_send_back(struct window *w)
+void window_send_back(struct window *w, int from_navbar)
 {
-    int32_t down[5] = { W_ID(w), 0, 4 /* KEYCODE_BACK */, 0, 0 };
+    int32_t down[5] = { W_ID(w), 0, 4 /* KEYCODE_BACK */, 0, from_navbar ? KEYMETA_NAVBAR : 0 };
     int32_t up[5] = { W_ID(w), 1, 4, 0, 0 };
     send_msg(W_TARGET(w), MSG_KEY, down, 5);
     send_msg(W_TARGET(w), MSG_KEY, up, 5);

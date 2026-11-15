@@ -1,6 +1,7 @@
 // `apklayer stop`: the instance's recorded processes, then whatever of the instance is left (what started while the stop ran).
 #include "stack.h"
 #include "binder.h"
+#include "vpn.h"
 
 #include <fcntl.h>
 #include <set>
@@ -79,6 +80,7 @@ void stopStack(const Layout& l, const Instance& inst) {
     }
     for (const std::string& f : listDir(inst.stateDir))  // the records of what the sweep ended
         if (f.rfind("run.", 0) == 0) unlink(join(inst.stateDir, f).c_str());
+    vpnSweep(inst);  // the VPN of a hub that ended (docs/VPN.md): its routes would go to a TUN nobody reads
     endShellUnlessShared(l, inst.id);  // a shell a racing launch started after the first check (the sweep spares the session's shell)
     close(lock);
 }

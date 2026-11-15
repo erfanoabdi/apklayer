@@ -70,6 +70,7 @@ try:
     check('application/x-openvpn-profile' in types, 'MimeType has the declared type')
     check('image/png' in types and 'image/jpeg' in types, 'MimeType has the image/* family as concrete types')
     check('*/*' not in types and 'application/x-web-only' not in types and not any('*' in t for t in types), 'no */*, no wildcard, no https-only type')
+    check(all(t.split('/')[0] in ('application', 'audio', 'font', 'image', 'inode', 'message', 'model', 'multipart', 'text', 'video') for t in types if t), 'every MimeType has a registered top-level (no vnd.android.document/*)')
     check(re.search(r'^Exec=.* open %s %%f$' % re.escape(PKG), text, re.M) is not None, 'Exec opens the file: `open <package> %f`')
     xml = package_xml.read_text() if package_xml.exists() else ''
     print(xml)
@@ -97,6 +98,24 @@ try:
     print(line)
     check(line is not None and 'name=second.ovpn' in line and 'remote two.example.org 443' in line, 'a second file reaches the running app in onNewIntent')
     instance.stop()
+    # under the per-app sandbox (`apklayer open`: the copy cannot go into the app's own, uid-owned data): the same Uri, type, name and content in the app
+    if not any(l.startswith(os.environ.get('USER', '?') + ':') for l in Path('/etc/subuid').read_text().splitlines()):
+        print('skipped: no sandbox here (tools/host-setup/sandbox.sh)')
+    else:
+        env['APKLAYER_SANDBOX'] = '1'
+        sbx = OUT / 'sandboxed.ovpn'
+        sbx.write_text('client\nremote sandbox.example.org 1195\n')
+        out = run('bin/apklayer', 'open', PKG, str(sbx))
+        print(out.stdout[-300:], out.stderr[-300:])
+        line = seen('name=sandboxed.ovpn', 120)
+        print(line)
+        check(out.returncode == 0, 'apklayer open under the sandbox: ' + (out.stderr or out.stdout)[-200:])
+        check(line is not None and 'uri=content://apklayer.opened/' in line and 'remote sandbox.example.org 1195' in line and 'size=%d' % sbx.stat().st_size in line,
+              'the sandboxed app reads the opened file through its content Uri')
+        check(any(Path(LOGDIR, 'tmp').glob('sandbox-*/opened/*/data')), 'the copy lies in the app\'s private tmp (sandbox-<uid>/opened), not in its uid-owned data')
+        instance.stop()
+        del env['APKLAYER_SANDBOX']
+        sbx.unlink(missing_ok=True)
     # removal: uninstall and update take the associations away
     run('bin/apklayer', 'uninstall', PKG)
     check(not entry.exists() and not package_xml.exists(), 'uninstall removes the entry and the mime package')
@@ -109,6 +128,8 @@ try:
         print(re.findall(r'^(?:Exec|MimeType)=.*$', vpn_text, re.M))
         check('installed de.blinkt.openvpn' in out.stdout, 'install OpenVPN for Android ' + (out.stderr or out.stdout)[-150:])
         check('application/x-openvpn-profile;' in vpn_text, 'OpenVPN\'s entry carries its profile type (MimeType=)')
+        info = run('bin/apklayer', 'inspect', str(vpn), str(OUT / 'vpn-icon.png')).stdout  # label and icon from resources.arsc
+        check('label\tOpenVPN for Android' in info and 'perm\tandroid.permission.INTERNET' in info and (OUT / 'vpn-icon.png').stat().st_size > 0, 'apklayer inspect: OpenVPN\'s label, permissions and icon')
         check(re.search(r'^Exec=.* open de\.blinkt\.openvpn %f$', vpn_text, re.M) is not None, 'OpenVPN\'s entry opens the file')
         run('bin/apklayer', 'uninstall', 'de.blinkt.openvpn')
     # .apk, .apks, .xapk, .apkm: the manager's entry (data/apklayer-manager.desktop) takes the files, %F, into its install dialog
@@ -130,6 +151,11 @@ try:
             check('apklayer-manager.desktop' in run('gio', 'mime', kind).stdout, 'gio mime %s lists the manager' % kind)
         # one process takes every file a file manager selects (%F; `gio open` itself launches once per file)
         check(re.search(r'^Exec=.* %F$', manager_entry.read_text(), re.M) is not None, 'the manager entry takes a list of files: Exec=... %F')
+        # the install dialog's preview before Install: the app's name, version and permissions read from the manifest (nothing converted yet)
+        out = subprocess.run([str(manager), '--screenshot', str(OUT / 'open-apk-preview.png'), '--size', '400x840', '.tests/apks/hello-openfile.apk',
+                              '--wait-preview', '--expect', 'App openfile', '--expect', 'Permissions'], env=env, capture_output=True, text=True, timeout=300)
+        print(out.stdout[-300:], out.stderr[-300:])
+        check(out.returncode == 0 and not entry.exists(),'the install dialog previews the app (name, permissions) before Install')
         # the install dialog: the file opened with the manager is installed on Install, and the dialog of the new app offers Open
         out = subprocess.run([str(manager), '--screenshot', str(OUT / 'open-apk.png'), '--size', '400x840', '.tests/apks/hello-openfile.apk',
                               '--click', 'Install', '--wait-refresh', '1', '--expect', 'Open'], env=env, capture_output=True, text=True, timeout=300)

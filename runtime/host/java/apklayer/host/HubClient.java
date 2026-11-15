@@ -44,6 +44,11 @@ public final class HubClient {
         synchronized (HubClient.class) { unappliedSettings = settings; }
         AppHost.beforeFirstLaunch(() -> { android.os.Bundle late = takeSettings(); if (late != null) AppHost.configurationChanged(HostConfiguration.update(late)); });
         HostInputMethods.install(context,HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
+        int uid = android.os.Process.myUid();  // known by now in a spare too
+        if (uid >= android.os.Process.FIRST_APPLICATION_UID) {
+            int set = RealBinder.setSenderUid(uid);
+            if (set != 0 && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] oneway sender uid not set: " + set);
+        }
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
     /**
@@ -264,6 +269,11 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_PERMISSION, request -> { request.writeString(device); request.writeBoolean(ask); }, reply -> reply.readBoolean());
     }
 
+    /** UsbManager.openDevice: the node the hub opened for the caller (it holds the permission), null without it or access. */
+    android.os.ParcelFileDescriptor usbOpen(String device) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_OPEN, request -> request.writeString(device), reply -> reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR));
+    }
+
     /** Activity.requestPermissions: per name HostRuntimePermissions' GRANTED, DENIED_ONCE or DENIED; waits for the person's answers. */
     int[] requestPermissions(String[] names) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.PERMISSIONS_REQUEST, request -> request.writeStringArray(names), reply -> reply.createIntArray());
@@ -282,6 +292,12 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CONFIRM_CREDENTIAL, request -> { request.writeString(title); request.writeString(description); request.writeLong(challenge); },
                 reply -> reply.readBoolean());
     }
+    /** VpnService.prepare()'s dialog (HubVpn.consent): whether the person lets this app set up a VPN. */
+    /** VpnService.protect(): the hub has the VPN's guard bind the socket to the host's own interface. */
+    boolean vpnProtect(java.io.FileDescriptor socket) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.VPN, request -> { request.writeString("protect"); request.writeFileDescriptor(socket); }, reply -> reply.readBoolean());
+    }
+    boolean vpnConsent() { return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.VPN, request -> request.writeString("consent"), reply -> reply.readBoolean()); }
     /** The app cancelled its BiometricPrompt: the hub closes the password dialog of this app's open confirmCredential. */
     void cancelCredential() { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CANCEL_CREDENTIAL, request -> { }, reply -> null); }
     /** StorageManager.unmount: whether the drive (volume id) is unmounted now (HubVolumes.eject). */

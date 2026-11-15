@@ -93,6 +93,13 @@ run = ["tests/vm/pamcheck.sh"]
 apps = ["hello-keystore", "hello-keystore-other"]
 run = ["tests/vm/keystore.sh", "python3 -u tests/vm/keystore-auth.py"]
 
+[vpn]
+# the host-wide VPN (docs/VPN.md): consent dialog, a real TUN on the host through NetworkManager, ping and UDP answered by the app, protect(), onRevoke, app crash,
+# `apklayer vpn status|disconnect`, and the default route through the TUN (with the ssh peer's /32 and a watchdog)
+alone = true  # the host's network changes for the others: a TUN with its routes, and in the last phase the default route
+apps = ["hello-vpn"]
+run = ["python3 -u tests/vm/vpn-helper.py", "tests/vm/vpn.sh"]
+
 [settings]
 alone = true  # flips the desktop's colour scheme for a few seconds: every instance's apps follow it (their screenshots too)
 apps = ["hello-settings"]
@@ -142,10 +149,16 @@ run = ["tests/vm/plugins.sh"]
 apps = ["hello-gps", "hello-gps2"]
 run = ["tests/vm/gnss.sh"]
 
-[usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach, permission dialog, transfers
-apps = ["hello-usb"]
+[usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach (one chooser for hello.usb and hello.usb2), permission dialog, transfers
+apps = ["hello-usb", "hello-usb2"]
 run = ["tests/vm/usb.py"]
 alone = true  # one usbip virtual device controller: usb and usb-serial take turns
+
+[usb-sandbox]  # the same with the per-app sandbox: the apps' uids cannot open the node, the hub opens it and hands the descriptor over (HubUsb.open)
+optional = true  # needs tools/host-setup/sandbox.sh once
+apps = ["hello-usb", "hello-usb2"]
+run = ["USB_SANDBOX=1 tests/vm/usb.py"]
+alone = true
 
 [usb-serial]  # the serial gadget (CDC ACM) held by the host's cdc_acm: claimed with force, line coding, a line each way (tests/vm/usb-serial.py)
 apps = ["hello-usb"]
@@ -405,6 +418,16 @@ run = ["python3 -u tests/vm/fences.py"]
 apps = ["hello-glbench"]
 run = ["python3 -u tests/vm/window-formats.py"]
 
+[gl-formats]
+# sRGB, float/packed render targets, depth/stencil, MSAA, ETC2/EAC/ASTC/S3TC blocks and an sRGB window surface: the wrapper must agree with the host driver alone (tests/bench/glformats)
+apps = ["hello-glformats"]
+run = ["python3 -u tests/vm/gl-formats.py"]
+
+[exit-clean]
+# a host JVM that loaded libapklayer_egl ends without a fault at stop: no hs_err file, no stopped-by-signal service (PGR on AWS: SIGSEGV in an exit-time callback)
+apps = ["hello-glbench"]
+run = ["python3 -u tests/vm/exit-clean.py"]
+
 [texture-view]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/texture-view.py"]
@@ -584,6 +607,10 @@ run = ["python3 -u tests/vm/otr2-input.py aspect"]
 apps = ["hello-arm64"]
 run = ["python3 -u tests/vm/art-maps.py"]
 
+[spare-race]  # rapid run / stop <pkg> cycles: no run blocked in the spare socket, no spare holder piled up
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/spare-race.py"]
+
 [spawn]  # a program started from the app JVM (ProcessBuilder) takes no second: exec_preload, jspawnhelper and the path layer
 apps = ["hello-spawn"]
 run = ["tests/vm/spawn.sh"]
@@ -612,3 +639,27 @@ run = ["python3 -u tests/vm/input-wheel-pen.py"]
 # the files an app's manifest opens, from the desktop: .desktop MimeType= and mime package, `apklayer open` (a content Uri, onNewIntent), docs/FILE-ASSOCIATIONS.md
 apps = ["hello-openfile"]
 run = ["python3 -u tests/vm/open-files.py"]
+[kde-navbar]
+# KDE's server-side title bar has no Back button: the shell gives the window the mobile navigation bar (inset, click, maximize/tile/fullscreen, scales, setting navbar), under a KWin of its own
+apps = ["hello-input"]
+optional = true
+run = ["python3 -u tests/vm/kde-navbar.py"]
+
+[navbar-haptic]
+# Back on the navigation bar gives Android's light click (View.performHapticFeedback VIRTUAL_KEY) through the hub's vibrator to the vibrator HAL (the fake backend's log); Esc, Alt+Left, the mouse's back button do not
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/navbar-haptic.py"]
+
+[heap]
+# Runtime.maxMemory, ActivityManager.getMemoryClass/getLargeMemoryClass from the profile's dalvik.vm.heapgrowthlimit/heapsize
+apps = ["hello-heap"]
+run = ["python3 -u tests/vm/heap.py"]
+
+[sysapps-update]
+# `apklayer setup` after a runtime update installs only the changed system APKs and keeps data (cli/setup.cpp system-apps step); the APKs are the runner's installed test apps
+apps = ["hello-payload", "hello-payload2", "hello-heap"]
+run = ["tests/vm/sysapps-update.sh"]
+
+[setup-runtime-foreign]
+# a dev tree CLI must not relink a runtime another build owns (setup-runtime.sh refuses)
+run = ["tests/vm/setup-runtime-foreign.sh"]

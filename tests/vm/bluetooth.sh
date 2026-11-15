@@ -19,6 +19,7 @@ APKLAYER_JOPTS="-Dapklayer.runms=20000 -Dbt.halt=1" bin/apklayer run hello.bluet
 grep -a "\[bt\] halt" $out.halt
 haltpid=$(sed -n 's/^\[bt\] halt listening pid=\([0-9]*\)$/\1/p' $out.halt)
 [ -n "$haltpid" ] || { echo "FAIL: the halting server app did not listen"; exit 1; }
+for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "[b]luez.py serve .*apklayer-bt-$haltpid-" >/dev/null || break; sleep 0.5; done  # the hub ends it when it sees the app die
 ! pgrep -f "[b]luez.py serve .*apklayer-bt-$haltpid-" >/dev/null || { echo "FAIL: a server socket's dispatcher outlived its app"; pgrep -af "[b]luez.py serve .*apklayer-bt-$haltpid-"; exit 1; }
 grep -a "bluetooth: ended the service record" "$APKLY_STATE/hub.log"
 bin/apklayer stop >/dev/null 2>&1

@@ -43,7 +43,6 @@ void progress(double p) {
     fflush(stdout);
 }
 std::string readText(const std::string& path) { return readFile(path).value_or(""); }
-std::string envOr(const char* name, const char* fallback) { return getenvOr(name, fallback); }
 
 // the providers step's line: every domain is automatic unless chosen (cli/providers.cpp); on a Halium device, which are the device's own
 std::string providersDetail(const Layout& layout, const Instance& instance) {
@@ -179,7 +178,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         if (error.empty()) release = manager::parseLatest(readText(file), manager::osCodename(), manager::cpuNames(), error);
         if (error.empty()) printf("latest\t%s\t%s\t%s\n", release.version.c_str(), release.runtimeVersion.c_str(), release.date.c_str());
     }
-    const bool newer = release.runtime.found() && !release.runtimeVersion.empty() && release.runtimeVersion != have;
+    const bool newer = release.runtime.found() && !release.runtimeVersion.empty() && manager::compareVersions(release.runtimeVersion, have.empty() ? "0" : have) > 0;  // never a downgrade: a release index behind the installed runtime
     if (o.check) {
         step("runtime", have.empty() ? "todo" : newer ? "todo" : "done", have.empty() ? "Not installed" : newer ? "Version " + release.runtimeVersion + " is available (have " + have + ")" : "Version " + have);
         step("providers", "done", providersDetail(layout, instance));
@@ -271,17 +270,26 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     }
 
     // 5. the optional ones
-    auto extra = [&](const char* id, const std::string& index, const std::vector<std::string>& packages) {
-        std::string e = installFromIndex(fresh, instance, id, index, packages);
+    manager::Downloads sources;
+    const std::string sourcesError = (o.microg || o.fdroid) ? loadDownloads(fresh, sources) : "";
+    auto extra = [&](const char* id, const char* env) {
+        const std::string index = getenvOr(env, sources.str({id, "index"}));
+        std::string e = !sourcesError.empty() ? sourcesError : index.empty() ? std::string("No ") + id + " index in downloads.json"
+                      : installFromIndex(fresh, instance, id, index, sources.strings({id, "packages"}));
         step(id, e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
     };
-    if (o.microg) extra("microg", envOr("APKLAYER_MICROG_INDEX", "https://microg.org/fdroid/repo/index-v1.json"), {"com.google.android.gms", "com.android.vending"});
+    // microG and Google's own share package names under other signers: Google's go first (with their data), as --gapps removes microG's
+    if (o.microg && gappsInstalled(fresh)) {
+        std::string e = removeGapps(fresh, instance, [](const std::string& detail) { step("microg", "running", detail); });
+        if (!e.empty()) { step("microg", "failed", e); o.microg = false; }
+    }
+    if (o.microg) extra("microg", "APKLAYER_MICROG_INDEX");
     if (o.gapps) {
         std::string e = installGapps(fresh, instance, [](const std::string& detail) { step("gapps", "running", detail); }, progress);
         // the hub reads the allowlists once per JVM (apklayer.host.HubPackages): a running instance keeps its old view until it is restarted
         step("gapps", e.empty() ? "done" : "failed", e.empty() ? "Installed; restart the instance to use them (apklayer stop)" : e);
     }
-    if (o.fdroid) extra("fdroid", envOr("APKLAYER_FDROID_INDEX", "https://f-droid.org/repo/index-v1.json"), {"org.fdroid.fdroid"});
+    if (o.fdroid) extra("fdroid", "APKLAYER_FDROID_INDEX");
     return anyFailed ? 1 : 0;
 }
 

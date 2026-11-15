@@ -43,7 +43,7 @@ struct Detail {
 };
 
 struct Snapshot {
-    Rows apps, instances, props, settings, status, gpus, providers, binder, config;
+    Rows apps, instances, props, settings, status, gpus, providers, binder, config, vpn;
     std::optional<Detail> detail;
     std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
 };
@@ -73,6 +73,7 @@ Snapshot load(const Cli& cli, const std::string& current) {
     s.gpus = rows(cli, {"gpus"}, s.error);
     s.providers = rows(cli, {"providers"}, s.error);
     s.binder = rows(cli, {"binder"}, s.error);
+    s.vpn = rows(cli, {"vpn", "status"}, s.error);  // one VPN row, or "no VPN"
     s.config = rows(cli, {"config", "list"}, s.error);
     if (!current.empty()) s.detail = loadDetail(cli, current);
     return s;
@@ -139,6 +140,9 @@ public:
         }
         b.set_instances(instances);
         b.set_instance_running(running);
+        std::string vpn;  // the instance's VPN (an app's VpnService, docs/VPN.md): "<session> (<app>), <all traffic|some routes>"
+        for (const auto& r : s.vpn) if (field(r, 0) == "VPN") vpn = field(r, 2) + " (" + field(r, 1) + "), " + field(r, 5);
+        b.set_vpn_text(slint::SharedString(vpn));
         if (setup_) setup_->binder(binder);
         auto props = std::make_shared<slint::VectorModel<PropEntry>>();
         for (const auto& r : s.props) {
@@ -156,6 +160,9 @@ public:
         std::string windowMode;
         for (const auto& r : s.settings) if (field(r, 0) == "window-mode") windowMode = field(r, 1);
         b.set_window_mode_setting(slint::SharedString(windowMode));
+        std::string navbar;
+        for (const auto& r : s.settings) if (field(r, 0) == "navbar") navbar = field(r, 1);
+        b.set_navbar_setting(slint::SharedString(navbar));
         appModes_.clear();  // the apps' own overrides: window-mode.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("window-mode.", 0) == 0) appModes_[field(r, 0).substr(12)] = field(r, 1);
         b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
@@ -190,14 +197,16 @@ public:
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
         else if (s.detail && !s.detail->error.empty()) message(s.detail->error);
-        if (applied) applied();
     }
 
     std::map<std::string, std::string> appModes_;
-    std::function<void()> applied;  // the screenshot mode's event: a refresh reached the window
+    std::function<void()> applied;  // the screenshot mode's event: a refresh begun after the scripted input reached the window
+    std::function<void()> previewed;  // and --wait-preview's: the install dialog's preview is shown (or failed)
+    bool previewDone = false;
+    int started = 0, floor = 0;  // refreshes begun; those begun before the input (floor) are not the input's result (a load still running at start came back first)
 
     void refresh() {
-        later([cli = cli_, current = current_] { return load(cli, current); }, [this](const Snapshot& s) { apply(s); });
+        later([cli = cli_, current = current_] { return load(cli, current); }, [this, n = ++started](const Snapshot& s) { apply(s); if (applied && n > floor) applied(); });
     }
     void refreshNow() { apply(load(cli_, current_)); }  // the screenshot mode: everything in place before the first frame
     void select(const std::string& pkg) {
@@ -254,9 +263,7 @@ private:
         std::vector<PermEntry> runtime, other;
         for (const auto& r : rows) {
             PermEntry e;
-            std::string name = field(r, 0), level = field(r, 1), granted = field(r, 2), title = name.substr(name.rfind('.') + 1);
-            for (size_t i = 0; i < title.size(); i++)
-                title[i] = title[i] == '_' ? ' ' : static_cast<char>(i == 0 ? toupper(static_cast<unsigned char>(title[i])) : tolower(static_cast<unsigned char>(title[i])));
+            std::string name = field(r, 0), level = field(r, 1), granted = field(r, 2), title = manager::permTitle(name);
             e.name = slint::SharedString(name);
             e.title = slint::SharedString(title);
             e.runtime = level == "dangerous";
@@ -303,6 +310,28 @@ public:
     void openFiles(std::vector<std::string> files) {
         queue_ = std::move(files);
         nextFile();
+    }
+
+    // the install dialog's name, icon and permissions of the file (`apklayer inspect`: read from its manifest, nothing converted); the dialog shows them once they are for its path
+    void preview(const std::string& path) {
+        ui_->global<Backend>().set_preview_for("");
+        if (path.empty() || access(path.c_str(), R_OK) != 0) return;
+        static int serial = 0;  // one icon file per request: two quick ones do not share it
+        std::string icon = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") + "/apklayer-preview-" + std::to_string(getpid()) + "-" + std::to_string(++serial) + ".png";
+        later([cli = cli_, path, icon] { unlink(icon.c_str()); return cli.run({"inspect", path, icon}); }, [this, path, icon](const Result& r) {
+            auto& b = ui_->global<Backend>();
+            if (r.status == 0) {
+                manager::Preview p = manager::parsePreview(r.out);
+                b.set_preview_icon(access(icon.c_str(), R_OK) == 0 ? slint::Image::load_from_path(slint::SharedString(icon)) : slint::Image());
+                b.set_preview_label(slint::SharedString(p.label));
+                b.set_preview_detail(slint::SharedString(p.detail));
+                b.set_preview_permissions(slint::SharedString(p.permissions));
+                b.set_preview_for(slint::SharedString(path));
+            }
+            unlink(icon.c_str());
+            previewDone = true;
+            if (previewed) previewed();
+        });
     }
 
     // the install dialog's file: the chooser (file-chooser.py: the portal, else Content Hub) for "open"; "import" receives an .apk shared to
@@ -352,6 +381,7 @@ private:
         b.on_refresh([this] { refresh(); });
         // a Content Hub import (Ubuntu Touch) is a copy for this install: dropped once installed
         b.on_install_path([this](slint::SharedString path) { std::string p(path); action("Installing", {"install", p}, "", [p] { manager::dropImported(p); }, [this](const Result& r) { installed(r); }); });
+        b.on_preview_path([this](slint::SharedString path) { preview(std::string(path)); });
         b.on_install_chooser([this] { chooseApk("open"); });
         b.on_open_app([this](slint::SharedString pkg) {
             std::string p(pkg);
@@ -443,6 +473,7 @@ private:
                   });
         });
         b.on_set_autostart([this](slint::SharedString id, bool on) { action(on ? "Turning always-on mode on" : "Turning always-on mode off", {"instance", "autostart", std::string(id), on ? "on" : "off"}, std::string(id)); });
+        b.on_disconnect_vpn([this] { action("Disconnecting the VPN", {"vpn", "disconnect"}); });
         b.on_stop_instance([this](slint::SharedString id) { action("Stopping the instance", {"stop"}, std::string(id)); });
         b.on_set_gpu([this](int i) {
             if (i < 0 || i >= static_cast<int>(gpuIds_.size())) return;
@@ -511,7 +542,7 @@ int main(int argc, char** argv) {
     std::string shot, app, dialog;
     std::vector<std::string> input, expect;
     int width = 0, height = 0, page = 0, scroll = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
-    bool firstRun = false, share = false;
+    bool firstRun = false, share = false, waitPreview = false;
     std::vector<std::string> files;  // opened with the manager from the desktop
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -526,11 +557,12 @@ int main(int argc, char** argv) {
         else if (a == "--dark" || a == "--light") dark = a == "--dark";
         else if ((a == "--click" || a == "--type") && more) input.push_back(argv[++i]);
         else if (a == "--wait-refresh" && more) waitRefreshes = atoi(argv[++i]);
+        else if (a == "--wait-preview") waitPreview = true;
         else if (a == "--expect" && more) expect.push_back(argv[++i]);
         else if (a == "--first-run") firstRun = true;
         else if (a == "--share") share = true;
         else if (a[0] != '-') files.push_back(a);  // .apk, .apks, .xapk, .apkm files of the desktop's open (the entry's %F): the install dialog
-        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
+        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--wait-preview] [--expect LABEL]...]\n"); return 2; }
     }
     // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry). Lomiri gives the window to the app its
     // app id names: started as apklayer-share (--share) it must say so, or Lomiri counts that app windowless and suspends it
@@ -574,6 +606,7 @@ int main(int argc, char** argv) {
     slint::Timer::single_shot(std::chrono::milliseconds(100), [&] {
         // the theme once the window has its own (the system's) scheme, which it would otherwise replace
         if (dark >= 0 && dark != ui->get_is_dark()) ui->invoke_toggle_theme();
+        m.floor = m.started;
         // scripted input: each label's control as a screen reader would press it (the last one: dialogs come after the pages)
         for (std::string label : input) {
             size_t eq = label.find('=');  // LABEL=TEXT types into a text field
@@ -587,9 +620,10 @@ int main(int argc, char** argv) {
             else target->set_accessible_value(slint::SharedString(text));
             printf("apklayer-manager: %s %s\n", eq == std::string::npos ? "pressed" : "typed into", label.c_str());
         }
-        if (waitRefreshes == 0) { settled(); return; }
+        if (waitPreview) { if (m.previewDone) settled(); else m.previewed = settled; }  // the file's preview, which may be shown before this timer
+        if (waitRefreshes == 0 && !waitPreview) { settled(); return; }
         // the picture after the actions' own events (an app's start, a finished uninstall) reached the window, not after a guessed delay
-        m.applied = [&] { if (++refreshes == waitRefreshes) settled(); };
+        if (waitRefreshes > 0) m.applied = [&] { if (++refreshes == waitRefreshes) settled(); };
         slint::Timer::single_shot(std::chrono::minutes(3), [] { fputs("apklayer-manager: the refresh never came\n", stderr); slint::quit_event_loop(); });
     });
     slint::run_event_loop();

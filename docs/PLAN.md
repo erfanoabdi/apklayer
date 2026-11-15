@@ -8,83 +8,67 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - No per-app hacks; the corpus (`tests/corpus/`) measures compatibility. CTS last.
 - Hardware only through Android's own interfaces (AIDL/HIDL HALs, framework classes).
 - Halium: sensors come through sensorfw, location through GeoClue (Sailfish) or Lomiri's location service; vibrator, camera and media use the device HALs.
+- Replace an installed library by writing a temp file and `mv`/`install`/`rsync` (rename), never `cp`/`scp` onto a library a running JVM has mapped: the truncate discards its relocated pages and the process faults at exit (hs_err, 4 GB cores). `tests/vm/exit-clean.py` (`EXIT_CLEAN_REPLACE=cp|mv`) shows both.
 - No cached app processes; always-on only for push/background.
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
-- Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
+- GApps first sign-in: Play Store (52.4.41) started Play services' add-account redirect twice, 20 ms apart (hub.log `com.android.vending starts ...UnpackingRedirectActivity` twice, owner's default instance 2026-11-15 19:00); the second flow added the account, the first one's WrapperControlledActivity stayed open after it. Same start: Play Store showed its LocaleChangedModeActivity (desktop locale nl-NL), a possible second trigger. The locale trigger is fixed (CHANGELOG 2026-11-15, host settings before READY); the double add-account start is not. The Play services exit-137 loop is fixed (CHANGELOG 2026-11-15, six framework gaps at module init); a new uncaught exception in one of its intent operations would bring it back: its crash handler ends the process. Fix merged 2026-11-16 (HubAccounts: an authenticator session answers its client once), untested: on the next sign-in hub.log must show one `UnpackingRedirectActivity` start; if two, trace with `-Dapklayer.tracestart=true`.
+- GApps sign-in: after local account creation on GMS 26.44 / Android 17, setup reports “There was a problem communicating with Google servers”; screenshot-time logs include a failed DroidGuard response fetch. Cronet Dynamite also failed to load `ImplVersion`; path-based DEX loader support is patched and covered by a regression check, but end-to-end sign-in is still unverified. The token exchange over the Java Cronet fallback failed with `System error` (body read into a direct buffer's array copy): fixed at converter ABI 11 (CHANGELOG 2026-11-15); the next run added the account and then deadlocked in `Services.bind` ("Getting account ready"): fixed (same date); then the account was stored with Google's data but Play Store could not see it (signer lineage): fixed (same date); then Play Store's downloads were refused by its internal-only grpc-binder check (oneway sender uid): fixed for the userspace binder (same date; the kernel binder still reads such a caller as nobody); the install then failed on the session's dex metadata file (.dm): fixed (same date); needs a human check: a sign-in in `gwd` (owner's credentials); then the remaining server error, if any, from its log. Owner reports Waydroid Android 13 works without Integrity (GMS version unknown).
+- NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
-- PGR colours are off and dark in the 3D lobby (also llvmpipe on the arm server and the NVIDIA tester PC; 2D UI is right). Ruled out: window alpha/opaque region, an sRGB window surface (Mesa gbm answers BAD_MATCH). Untested: ASTC/ETC2 decode, sRGB/FP16/R11G11B10 render targets through the wrapper, a reference lobby frame outside the tutorial dim. Agent working on it.
+- PGR dies 114-161 s after launch on the repaired tester PC (x86_64 translated; 11 of 11 runs, any preload, translator, runtime or translation mode), after ACE connects to its servers and the invalid-free storm starts; not the `/proc/self/root` probe (none in 5 logged runs). PGR on the AWS arm64 server (native) is stable: 2.5 h or more in the lobby with libapklayer_egl 652ac421; its three hs_err files and the ~13 GB cores in /var/tmp/pgr-core are exit-time faults at `systemctl stop`, not gameplay crashes. Next for the tester PC: reinstall PGR's APK set there (an agent's `apklayer install` erased its lib/ and arm64 split; the full set is on AWS), run with fresh app data (ACE state in files/ano_tmp), look at what ACE gets for /proc/self/fd, /proc/self/map_files, /proc/<pid>, /dev/virtpipe-sec; restore `berberis.mode.<pgr>=lite-translate-or-interpret` (takes effect after a whole-instance `apklayer stop`).
+- New libraries not run on the tester PC/NVIDIA or the phones: x86_64 `libapklayer_egl` (sRGB fix) and the linked-GL query fix (`gl-formats` passes on the Intel PC).
 - Home scene on NVIDIA: block noise on 3D models. Recheck with `apklayer prop set berberis.mode.com.kurogame.gplay.punishing.grayraven.en lite-translate-or-interpret` (and unset for the reference); the ASTC fallback in `cli/env.cpp` is a separate lever.
 
 ## Graphics
 - Vulkan presentation untested on AMD.
 - KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
-- `fit_size` reserves 46 px (`DECOR_H`) also under server-side decorations: the first window is 542 px high where 588 would fit.
-- Lipstick: the pointer on the navigation-bar strip goes to the app.
-- Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
-- Sailfish keeps the letterbox; its rotation is unchecked.
+- Lipstick: a mouse over the navigation-bar strip (pointer.c `in_remote_strip`) is the bar's since 2026-11-15; needs a human check (no pointer device on the phone to try it).
 
 ## Camera
-- `tests/run camera` fails on main in `camera-portrait.py` (`SurfaceTexture.setDefaultBufferSize` NPE, then the shutter-timestamps check).
-- Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
-- Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
+- Fossify Camera on Parallels is unchecked (no APK locally); Open Camera works on the MacBook camera.
+- Halium camera: preview rotation needs a human check (preview and still agree on both phones; whether the picture is upright was not judged). `camera`/`media = device` work (libhidl 0005, `tools/halium/hidl-list.sh`). NewPipe playback with `media = device` is blocked by YouTube extraction ("Could not parse website") on the phones' network, not by the stack. The X23 `hello.camera` large still is cut by the landscape-to-portrait activity recreation (test-app race).
 
 ## Input / IME
-- Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); stylus slider and tool wheel are not delivered; AXIS_TILT/ORIENTATION follow a remembered InputReader formula, not a checked source.
-- Non-Latin input: map the xkb layout to the app's `LocaleList` and IME subtypes; RTL cursor, selection and bidi in an EditText; layout-switch hotkeys (Alt+Shift, Super+Space); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
-- text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
+- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): pixel-check the light scheme.
+- Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) are delivered through the test input only (AXIS choice is ours: Android has no stylus-specific ones).
+- Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `getUnicodeChar()` of a non-Latin key is the shell's character with no meta variants (no per-layout .kcm: dead keys, Shift/AltGr levels through `getUnicodeChar(meta)`).
+- text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own): hide = disable until show/new field and MULTILINE only without an action are sent, never run against a real compositor (GNOME/KWin/Phosh OSK); a desktop input method (fcitx) stops composing while hidden. Fn keys (F1-F12) have no Android keycode in `keysym_to_android`.
 - OTR2 in a mobile maximized window and FlorisBoard typing.
-- Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
 - HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
-- Storage: `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by); scoped storage does not see symlinks an app makes itself or `/proc/self/cwd`-relative opens.
-- Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
-
-## Startup and memory
-- Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
-- ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
-- Composer GL context ~80 MB: measure on a phone while an app draws.
-- A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap.
-
-## Native bridge (x86_64)
-- Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
+- Storage: `UNMOUNTABLE` is decided not to be sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by; a drive nobody can mount stays unlisted, as a drive the desktop does not mount). Scoped storage follows symlinks only in a process that made one itself (or its children) and cwd-relative paths only when the cwd is under the instance's Android/ directory; a link made by an earlier process and `openat(dirfd, ...)` into another package's directory are not seen (needs a fd-based check).
+- Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide). Not doable from apklayer's side: the stock libaudiopolicyservice has no per-uid/per-client activity query (the per-client configs live in AudioService's PlaybackActivityMonitor, which apklayer does not run); it needs a patch in frameworks/av's policy service (an `isActiveForUid`-like call) built in los24.
+- A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap: the HAL's Stream calls the one backend library the stack was started with (APKLAYER_HOST_LIBS); a swap means dlopen of the other `libapklayer-audio-*.so` from the HAL process and a per-stream function table (Stream.cpp, ~12 call sites), to be built and checked in los24.
 
 ## Sandbox (before it can be the default)
-- NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (nodes are 0666 on the tester PC, no `nvidia-modprobe`).
-- UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
+- NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes run only on a real Debian-style NVIDIA box (code read and the node-to-arguments table tested with a Debian node list; nodes are 0666 on the tester PC, no `nvidia-modprobe`).
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
-- File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
+- Sailfish RPM: the `jni_guest_surface.c` change now logs `[runtime] jni_guest_surface active: ...` once per app JVM; needs an RPM of this tree installed on the Quintus and one app run to see it there.
+- File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: `apklayer open` under the sandbox is tested only for a fresh launch, not the running app's `onNewIntent`; the install preview resolves plain-string labels and PNG icons only (no adaptive/vector icon, no sparse/16-bit arsc types: package name fallback); Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
-- Flatpak: the `org.freedesktop.Sdk.Extension.openjdk25` extension and 26.08 runtime are unverified (manifest now names JDK 25).
-- amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
-- First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
+- Release: the first real tag run, the GitHub runners (the fetch steps, `actions/checkout` of the `prebuilts-v<version>` tag, upload/download of `~` file names) are unrun here; the guard, SHA256SUMS rename and `releases-json.py` ran locally with a fake tag (2026-11-16); PackageKit/pkexec install untested; the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
-- Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
-
-## Manager
-- `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
-- VPN for apps, host-wide (owner decided 2026-11-15; the instance-only variant is dropped): `VpnService` with a real TUN device on the host and the default route through the app's VPN (WireGuard, OpenVPN for Android), the VPN in `ConnectivityManager`, the manager shows it and can disconnect it. Agent working.
-- Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
-- iio-sensor-proxy gives only derived values: no accelerometer or compass type. On Parallels a source-tree CLI needs `--no-daemon` plus `APKLAYER_NATIVE`/`APKLAYER_BT`/`APKLAYER_BINDER=userspace` (the old 0.3.4 daemon takes over).
-- USB: one chooser for several apps; sandbox node access.
-- Bluetooth: pairing paths, Sailfish agent, truly simultaneous connects to one server socket (the mock keeps one client profile per UUID).
-- Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
+- Sailfish phone: needs a person for the Maliit-hide check, a finger on the keypad and the lock code; Maliit's sideways keyboard in a landscape app; the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client); sensorfw rotation by physically turning the phone; Bluetooth, scoped storage not run.
+- Sailfish location: needs `/var/lib/location/location.conf` enabled and connman's gps `Powered=true` (off by default); a real fix outdoors unchecked; sensorfw stops sensors with the screen off (the app reads zeros): documented, not changed.
+- VPN for apps (host-wide, `docs/VPN.md`, group `vpn`): built through NetworkManager (user-owned TUN, `apklayer vpn-guard`, `/1` default route, pkexec helper fallback); open: drive WireGuard and OpenVPN for Android to an established TUN (WireGuard needs a tunnel made in its UI, OpenVPN a profile and a server); a person's check of the pkexec dialog on a real desktop and the notification's Disconnect button; the pkexec path end to end through the hub; the per-app sandbox; Sailfish via connman; several instances with VPNs (they share the `/1` routes); no kill switch, `setMtu` ignored on the NM path.
+- USB: the sandbox path (`tests/vm/usb.py` with `USB_SANDBOX=1`, group `usb-sandbox`, optional) is unrun: the UTM VM lacks `tools/host-setup/sandbox.sh` (machine-wide AppArmor change); the hub opens the node and hands the descriptor over (the same path as without the sandbox, which `usb` runs).
+- Bluetooth: pairing paths on real devices; Sailfish: `ensure_agent` (bridge/portal/bluez.py) leaves `agent` set when RegisterAgent fails, so only the first bond reports `pairing without our agent` (no functional harm); our agent is not the default agent, so a pairing a remote device starts reaches the system's agent only; real BlueZ's choice between two client profiles of one UUID is unchecked (the mock hands each registration one connection).
+- Push: no `hello-work` test app: androidx.work is not on this machine (no downloads); WorkManager itself runs (Nextcloud 3.27 debug: 15 jobs through the hub, periodic ones at 15 min); a test app needs a work-runtime AAR from the owner; constraints stopping a running job, periodic runs and resume after suspend untested; microG 0.3.x.
 
 ## Tests and tooling
-- `check-prebuilts.sh` does not catch stale `libvulkan.so`, `libapklayer_vulkan.so`, `vulkan.apklayer.so` (not in the lock; the tester PC's `~/apklayer-build/prebuilts` copy is ~25 libraries behind): add them to the lock.
-- `tests/run` pushes the whole tree each time (4-8 min over the tester PC's link): push changed files only.
-- UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
+- Tester PC: run `kde-window.py` once at 150% on its KWin (the prebuilts there are current; the new deb is built, not installed).
+- Needs the Quintus lock code (not in `local.conf`): re-run `phone-test.sh sfos` groups with the current RPM.
 - AMD: Vulkan presentation and host ES1 untested.
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
 - Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
@@ -99,4 +83,5 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - NFC, biometrics, game controllers, ModemManager telephony, screen capture portal.
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
 - Several phone instances as a product; a JRE for the Ubuntu Touch deb.
-- Google's own Play services (`setup --gapps`): signing in to an account. Check-in and the login page work (CHANGELOG 2026-11-15), but adding the account ends with `AddAccountTask: Failed to sign in SERVICE_UNAVAILABLE`: Play services' integrity token (PoTokenGenerator, DroidGuard and a keystore-signed token) is not produced ("Unable to generate a new integrity token", no underlying error). Checked: keystore attestation works (software KeyMint, chain of 3), DroidGuard runs without crashing. Getting past Google's integrity check is not pursued; Google sign-in goes through microG.
+- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
+

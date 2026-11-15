@@ -53,6 +53,7 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
     private static IBinder hub(String name) {
         IBinder own = HostPackageService.binder(name);
         if (own != null) return own;
+        if (android.content.Context.VPN_MANAGEMENT_SERVICE.equals(name)) return RealBinder.lookup(HubVpn.SERVICE);
         if (!android.content.Context.ACCOUNT_SERVICE.equals(name)) return null;
         HubClient.attachEarly();  // the accounts service knows its callers by their registration (an app may ask from attachBaseContext)
         return RealBinder.lookup(HubAccounts.SERVICE);
@@ -98,6 +99,8 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
                 return org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration().densityDpi;
             // an app's own link handling (Settings' "Open by default"): its web hosts, none verified
             if ("domain_verification".equals(name) && method.getName().equals("getDomainVerificationUserState")) return HostDomainVerification.userState((String) args[0], (Integer) args[1]);
+            // the packages with a verification request pending: none, and a list, not the fake's null (Play services' DomainVerificationModuleInitIntentOperation iterates it, and ended its process)
+            if ("domain_verification".equals(name) && method.getName().equals("queryValidVerificationPackageNames")) return new java.util.ArrayList<String>();
             try {
                 return method.invoke(fake, args);
             } catch (InvocationTargetException e) {

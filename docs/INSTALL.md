@@ -149,7 +149,7 @@ the desktop. In microG's settings (the microG Settings app in the instance) "Goo
 ### USB devices
 
 Apps reach a USB device the way they do on Android (UsbManager: the device list, the attach intent, a permission question, `openDevice`); apklayer
-then opens the device's node `/dev/bus/usb/BBB/DDD` read-write as your user. By default those nodes are root's: give your user the device with a udev
+then opens the device's node `/dev/bus/usb/BBB/DDD` read-write as your user (the hub does it for an app that holds the permission and hands the descriptor over, as Android's UsbService does: also for the sandbox's app uids). Several apps that handle one device share one chooser when it is plugged in. By default those nodes are root's: give your user the device with a udev
 rule (`uaccess`: the logged-in desktop user gets it while their session is active), e.g. for a USB serial adapter:
 
 ```sh
@@ -172,12 +172,12 @@ permissions close to others.
 
 - The deb sets the host up at install: the AppArmor profile that lets apklayer make user namespaces (Ubuntu 23.10+ restricts them), GPU render
   nodes usable by app uids (`/usr/lib/udev/rules.d/70-apklayer-render.rules`), `uidmap`. A source tree: `sudo sh tools/host-setup/sandbox.sh` once.
-- Your user needs 65536 subordinate ids: `grep $USER /etc/subuid /etc/subgid`; without a line,
+- Your user needs 65536 subordinate ids (the deb's postinst adds a range for regular users that have none; `sandbox.sh` does it for its user): `grep $USER /etc/subuid /etc/subgid`; without a line,
   `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER`.
 - Opt-in: `APKLAYER_SANDBOX=1` for your session in `~/.config/environment.d/60-apklayer.conf` (0.4.5 turned it on by default where the host was
   set up; 0.4.6 made it opt-in again: on NVIDIA's driver and on deb installs it broke apps; both are addressed since 2026-11-08, NVIDIA not yet
-  confirmed on real hardware: Troubleshooting below). `systemctl --user enable apklayerd` starts the
-  daemon at login (else it starts on demand). `apklayer stop` before switching.
+  confirmed on real hardware: Troubleshooting below). the deb enables `apklayerd` for every user, so it starts at login
+  (`systemctl --user disable apklayerd` turns that off; it then starts on demand). `apklayer stop` before switching.
 - An app's data becomes its uid's at its first sandboxed start and yours again when it runs without the sandbox.
 - A source tree on a machine where you cannot use sudo yourself: the owner runs
   `sudo sh tools/host-setup/sandbox.sh <tree>/b/cli/apklayer` once (the profile names that exact binary).
@@ -237,8 +237,9 @@ In place of microG, `apklayer setup --gapps` (the "Google Play" tile) installs G
 (~250 MB from SourceForge, sha256-pinned in cli/gapps.cpp; `APKLAYER_GAPPS_URL`/`APKLAYER_GAPPS_SHA256` for another copy, `file://` works): the Services
 Framework, Play services, Play Store and the contacts/calendar sync adapters as system apps, with Google's privileged-permission and sysconfig XMLs
 (kept in `~/.local/share/apklayer/google-apps/etc` and read from there, never copied into the runtime's android-root, so a package build that serves
-that read-only -- the Nix one -- works too). Restart the instance afterwards: the hub reads the allowlists once. microG is removed first; the two
-cannot be installed together.
+that read-only -- the Nix one -- works too; restart the instance afterwards, as the hub reads the allowlists once). The two share package
+names, so installing one replaces the other: `--gapps` removes microG first, and `--microg` (the microG tile) removes Google's five apps first,
+with their data and Google's XMLs (`google-apps/` goes with them; a later `--gapps` downloads again). Signed-in Google accounts go with them.
 Space: the runtime takes ~1.6 GB unpacked per version and an update unpacks the new one beside the current one (the one before stays; older
 ones go), with the bundle (~0.5 GB) downloaded beside them. Setup checks the free space of `~/.local/share/apklayer` before it downloads or unpacks
 and fails early with what is needed, what is free and where; when only removing the runtimes other than the current one makes room it removes

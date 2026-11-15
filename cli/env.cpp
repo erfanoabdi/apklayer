@@ -253,7 +253,9 @@ static void glesFilterEnv(const Instance& instance, Env& env, const std::string&
     makeDirs(join(share, "bionic_translation/cfg.d"));
     writeFile(join(share, "bionic_translation/cfg.d/gles-filter.cfg"),
               "# the host's GLES with APKLAYER_GL_HIDE's extensions hidden and at most 16 fragment samplers (cli/env.cpp glesFilterEnv)\n"
-              "libGLESv2.so " + lib + "\nlibGLESv3.so " + lib + "\n");
+              "libGLESv2.so " + lib + "\nlibGLESv3.so " + lib + "\n"
+              // the filter opens the host's libGLESv2.so.2 itself (gles_filter.c): bionic_translation 0073 refuses an app-namespace dlopen of a host name the cfg does not map for the app ("app:" line)
+              "app:libGLESv2.so.2 libGLESv2.so.2\n");
     env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
 }
 

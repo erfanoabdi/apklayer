@@ -49,6 +49,7 @@ final class HubDirectory extends Binder {
     private final HubScheduler scheduler;
     private final HubAccounts accounts;
     private final HubInstaller installer;
+    private final HubVpn vpn;
     private final HubInputMethods inputMethods;
     private final HubBluetooth bluetooth = new HubBluetooth(this);
     private final HubGnss gnss = new HubGnss(this);
@@ -76,6 +77,7 @@ final class HubDirectory extends Binder {
         inputMethods = new HubInputMethods(bindings, packages);
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
         accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
+        vpn = new HubVpn(this, packages);
         installer = new HubInstaller(this, packages, pendingIntents, Path.of(System.getProperty("apklayer.storage")).getParent());
         usb = new HubUsb(this, packages, apps);
         permissionPrompt = new HubPermissionPrompt(packages);
@@ -124,6 +126,7 @@ final class HubDirectory extends Binder {
     void hostChanged() { scheduler.constraintsChanged(); }
     HubProviders providers() { return providers; }
     HubServiceBindings bindings() { return bindings; }
+    HubVpn vpn() { return vpn; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }
     /** The installer finished its work: a hub that lost its last app meanwhile (an installer that updated itself) ends as it would have. */
@@ -596,6 +599,19 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); String pkg = request.readString(); IBinder status = request.readStrongBinder(); boolean now = request.readBoolean(); request.enforceNoDataAvail();
                 installer.uninstall(caller, pkg, status, now); reply.writeNoException(); return true;
             }
+            case HubProtocol.VPN -> {
+                String op = request.readString();
+                if (op.equals("protect")) {  // VpnService.protect(): the owner's socket
+                    Peer caller = caller(); android.os.ParcelFileDescriptor socket = request.readFileDescriptor(); request.enforceNoDataAvail();
+                    boolean done = vpn.protect(caller.name(), socket.getFileDescriptor());
+                    try { socket.close(); } catch (java.io.IOException ignored) { /* closed */ }
+                    reply.writeNoException(); reply.writeBoolean(done); return true;
+                }
+                request.enforceNoDataAvail();
+                if (op.equals("consent")) { Peer caller = caller(); reply.writeNoException(); reply.writeBoolean(vpn.consent(caller.name())); return true; }
+                if (!op.equals("disconnect") || !sameUser(Binder.getCallingPid())) throw new SecurityException("VPN request " + op);  // the CLI, as RELAUNCH
+                reply.writeNoException(); reply.writeBoolean(vpn.disconnectRequest()); return true;
+            }
             case HubProtocol.INSTALL_SOURCE -> {
                 Peer caller = caller(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(installer.source(caller, ask)); return true;
@@ -624,6 +640,10 @@ final class HubDirectory extends Binder {
             case HubProtocol.USB_PERMISSION -> {
                 Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
+            }
+            case HubProtocol.USB_OPEN -> {
+                Peer caller = caller(); String device = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeTypedObject(usb.open(caller.name(), device), android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
             }
             case HubProtocol.PERMISSIONS_REQUEST -> {
                 Peer caller = caller(); String[] names = request.createStringArray(); request.enforceNoDataAvail();

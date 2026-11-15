@@ -41,7 +41,15 @@ final class HubServices {
         android.content.pm.ResolveInfo found = context.getPackageManager().resolveService(intent, 0);
         return found == null || found.serviceInfo == null ? intent : new Intent(intent).setComponent(new android.content.ComponentName(found.serviceInfo.packageName, found.serviceInfo.name));
     }
-    /** The process of an own-package service that has one of its own (each GeckoView child is a process): its own hub peer, as an isolated instance is. Null for the app's process. */
+    /** ownProcess: the package's main process, reached through the hub from another of its processes (the hub's key has no instance). */
+    private static final String MAIN = "";
+
+    /**
+     * The hub instance of the process an own-package service runs in, as ActivityManagerService picks it: its android:process by name (services that
+     * share one, as Play services' ".persistent" brokers, share one process; each GeckoView child names its own), MAIN for the package's main process when
+     * this is another of its processes (Play services' ".ui" binding its account backend), the service itself for an android:isolatedProcess one.
+     * Null: this process.
+     */
     private static String ownProcess(Context context, Intent intent) {
         if (intent.getComponent() == null || !intent.getComponent().getPackageName().equals(context.getPackageName())) return null;
         try {
@@ -51,7 +59,9 @@ final class HubServices {
             if (info.name.equals(System.getProperty("apklayer.isolated"))) return null;  // the service this component host was started for runs here
             String here = System.getProperty("apklayer.processname", context.getPackageName());
             String process = info.processName != null ? info.processName : context.getPackageName();
-            return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(here) ? info.name : null;
+            if ((info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0) return info.name;  // one process per instance
+            if (process.equals(here)) return null;
+            return process.equals(context.getPackageName()) ? MAIN : process;
         } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return null; }
     }
     /** One handler, as ContextImpl passes the main thread's: LoadedApk refuses a connection bound again with another one. */
@@ -80,7 +90,7 @@ final class HubServices {
         boolean accepted;
         try {
             accepted = HubProtocol.call(client.binder(), HubProtocol.DESCRIPTOR, HubProtocol.BIND, request -> {
-                request.writeTypedObject(intent, 0); request.writeStrongBinder(dispatcher.asBinder()); request.writeInt(flags); request.writeString(instance);
+                request.writeTypedObject(intent, 0); request.writeStrongBinder(dispatcher.asBinder()); request.writeInt(flags); request.writeString(MAIN.equals(instance) ? null : instance);
             }, reply -> reply.readBoolean());
         } catch (RuntimeException failure) {
             if (!known) loaded.forgetServiceDispatcher(outer, used);

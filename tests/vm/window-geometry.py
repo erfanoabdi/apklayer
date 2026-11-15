@@ -43,7 +43,10 @@ def expect(w, h, scale, maximized=False):
     assert c == (w, h, scale) + px + (bar_h, (bar_h * scale + 99) // 100, maximized), 'configure %s, expected %dx%d @%d%%' % (c, w, h, scale)
     assert any('configure %dx%d @%d%%' % (w, h, scale) in line and '@%ddpi' % (160 * scale // 100) in line for line in seen), \
         'the app did not take %dx%d @%d%%' % (w, h, scale)
-    shot = Image.open(instance.capture('geometry %dx%d@%d' % (w, h, scale), PKG)).size
+    for _ in range(15):  # the picture follows the configure by a frame or more: slow on a loaded VM
+        shot = Image.open(instance.capture('geometry %dx%d@%d' % (w, h, scale), PKG)).size
+        if abs(shot[0] - px[0]) <= 1 and abs(shot[1] - px[1]) <= 1: break
+        time.sleep(2)
     assert abs(shot[0] - px[0]) <= 1 and abs(shot[1] - px[1]) <= 1, 'the app renders %s px, expected %s' % (shot, px)
     checks.append('%dx%d@%d%s' % (w, h, scale, ' maximized' if maximized else ''))
     print('OK %dx%d @%d%%: %dx%d px, title bar %d px' % (w, h, scale, *shot, c[6]), flush=True)
@@ -55,11 +58,11 @@ app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.
 try:
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
-    end = time.monotonic() + 90
+    end = time.monotonic() + 180  # a loaded VM (two groups on 4 CPUs) is slow
     pending, first, landscape = b'', None, None
     with open(instance.OUT / 'window-geometry.log', 'wb') as log:
         while True:
-            assert selector.select(30) and time.monotonic() < end, 'geometry test stalled'
+            assert selector.select(60) and time.monotonic() < end, 'geometry test stalled'
             data = os.read(app.stdout.fileno(), 65536)
             if not data: break
             log.write(data)
@@ -93,9 +96,9 @@ try:
                     landscape = configures()[-1]
                     assert landscape[0] > landscape[1], 'the landscape request did not reshape the window: %s' % (landscape,)
                     # turned, the window fills 85% of the work area as the first (portrait) one does: grown, not only shrunk (bridge/shell/geometry.c fit_size)
-                    # fit_size reserves DECOR_H also for a compositor's own bar
+                    # the bar is ours (DECOR_H) or the compositor's (0): fit_size reserves only our own
                     bw, bh = (int(n) for n in re.search(r'first configure: display \d+x\d+, bounds (\d+)x(\d+)', (instance.STATE / 'shell.log').read_text(errors='replace')).groups())
-                    assert bw <= 0 or abs(landscape[0] - bw * 85 // 100) <= 1 or abs(landscape[1] - (bh * 85 // 100 - DECOR_H)) <= 1, \
+                    assert bw <= 0 or abs(landscape[0] - bw * 85 // 100) <= 1 or abs(landscape[1] - (bh * 85 // 100 - bar_h)) <= 1, \
                         'the landscape window %s does not fill 85%% of the %dx%d work area' % (landscape[:2], bw, bh)
                     expect(*landscape[:3])
                     count = len(configures())

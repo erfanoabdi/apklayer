@@ -536,7 +536,59 @@ static int other_package_path(const char *path)
 
 /* apklayer patch (scoped storage, Android 11+): <external>/Android/data/<other> and Android/obb/<other> are the owning package's alone (the FUSE daemon answers
  * ENOENT for the others), also for an app with MANAGE_EXTERNAL_STORAGE. The system's (no own package), MediaProvider, the storage provider and DownloadProvider (it writes a download into the requesting app's
- * Android/data/<pkg>/files) see them. shortcut: the spellings listed (/storage/emulated/0, /storage/self/primary, /sdcard, /data/media/0 and Android's /mnt/user, /mnt/runtime, /mnt/pass_through forms; ".." and "." are collapsed first), not symlinks an app makes or /proc/self/cwd-relative opens; upgrade with a fd-based check. */
+ * Android/data/<pkg>/files) see them. The spellings listed (/storage/emulated/0, /storage/self/primary, /sdcard, /data/media/0 and Android's /mnt/user, /mnt/runtime, /mnt/pass_through forms; ".." and "." are collapsed first) are judged textually, any other path by other_scoped_resolved (relative paths against the cwd, symlinks). shortcut: a symlink is followed only in a process that made a symlink itself (or a child of it); a link made by an earlier process and a path relative to a directory fd are not; upgrade with a fd-based check. */
+static bool mapped_path(char **path);
+static int symlinks_made;
+void apklayer_note_symlink(void) { __atomic_store_n(&symlinks_made, 1, __ATOMIC_RELEASE); }  /* paths_preload.c: the process made a symlink (the flag is per process, children inherit it) */
+
+/* The same check for what the path names once resolved: a relative path against the process's working directory, a path through a symlink the process made
+ * (Android's kernel resolves both, FUSE answers for the target). Judged on the instance's host storage directory, the real spelling after the kernel's resolution. */
+static int other_scoped_resolved(const char *path)
+{
+    static __thread volatile int busy;
+    static char base[PATH_MAX]; static size_t base_len; static int known;
+    char abs[PATH_MAX], real[PATH_MAX], tail[NAME_MAX + 1] = "";
+    if (!storage_env[0] || busy) return 0;
+    if (!__atomic_load_n(&known, __ATOMIC_ACQUIRE)) {
+        char tmp[PATH_MAX];
+        busy = 1;  /* realpath is a wrapper of this layer too */
+        char *got = realpath(storage_env, tmp);
+        busy = 0;
+        if (!got) return 0;
+        snprintf(base, sizeof base, "%s/emulated/0/Android/", tmp);
+        base_len = strlen(base);
+        __atomic_store_n(&known, 1, __ATOMIC_RELEASE);
+    }
+    if (path[0] != '/') {
+        if (syscall(SYS_getcwd, abs, sizeof abs) <= 0) return 0;
+        if (!__atomic_load_n(&symlinks_made, __ATOMIC_ACQUIRE) && strncmp(abs, base, base_len - 1)) return 0;
+        size_t n = strlen(abs);
+        if (n + 1 + strlen(path) >= sizeof abs) return 0;
+        snprintf(abs + n, sizeof abs - n, "/%s", path);
+    } else if ((!__atomic_load_n(&symlinks_made, __ATOMIC_ACQUIRE) && strncmp(path, "/proc/", 6)) || strlen(path) >= sizeof abs) return 0;  /* /proc/self/cwd and the like are links the kernel follows */
+    else strcpy(abs, path);
+    char *m = abs;
+    busy = 1;
+    bool alloc = mapped_path(&m);  /* an Android spelling (a link into /sdcard) to the host's */
+    int ok = realpath(m, real) != NULL;
+    if (!ok) {  /* a file yet to be made: its directory resolved, the name appended */
+        char *slash = strrchr(m, '/');
+        if (slash && strlen(slash + 1) <= NAME_MAX) { snprintf(tail, sizeof tail, "%s", slash + 1); *slash = 0; ok = realpath(*m ? m : "/", real) != NULL; }
+    }
+    busy = 0;
+    if (alloc) free(m);
+    if (!ok) return 0;
+    size_t rl = strlen(real);
+    if (rl + 1 + strlen(tail) + 1 >= sizeof real) return 0;
+    if (tail[0]) snprintf(real + rl, sizeof real - rl, "/%s", tail);
+    if (strncmp(real, base, base_len)) return 0;
+    const char *rest = real + base_len;
+    if (!strncmp(rest, "data/", 5)) rest += 5; else if (!strncmp(rest, "obb/", 4)) rest += 4; else return 0;
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    size_t k = strlen(o->pkg);
+    return *rest && !(!strncmp(rest, o->pkg, k) && (!rest[k] || rest[k] == '/'));
+}
+
 static int other_scoped_path(const char *path)
 {
     static const char *const roots[] = { "/storage/emulated/0/Android/", "/storage/self/primary/Android/", "/sdcard/Android/", "/data/media/0/Android/",
@@ -555,7 +607,7 @@ static int other_scoped_path(const char *path)
         if (!*rest) return 0;
         return !(!strncmp(rest, o->pkg, k) && (!rest[k] || rest[k] == '/'));
     }
-    return 0;
+    return other_scoped_resolved(path);
 }
 
 /* The desktop's terminals: /dev/pts/<n> are the user's shells and terminal tabs. An app on Android has none of them in its /dev/pts; ACE (PGR) probes
@@ -710,7 +762,9 @@ static const char *proc_root_rest(const char *p)
     if (!n || (p[n] && p[n] != '/')) return NULL;
     p += n;
     while (p[0] == '/' && p[1] == '/') p++;
-    return p[0] == '/' && strncmp(p, "/proc", 5) ? p : NULL;  /* /proc/self/root/proc/... is the hidden-process rules' */
+    /* /proc/self/root/proc/... is the hidden-process rules'. Only the data and storage spellings: apklayer's own CLI under the preload (the stack, `run`) reads the host's
+     * /vendor and /odm as /proc/self/root/vendor (cli/device_hals.cpp), which must stay the host's (the device's HALs, 27 manifest fragments, not the Android root's 9) */
+    return p[0] == '/' && (!strncmp(p, "/data", 5) || !strncmp(p, "/storage", 8) || !strncmp(p, "/sdcard", 7) || !strncmp(p, "/mnt", 4)) ? p : NULL;
 }
 
 /* apklayer patch: what readlink says of the three links Android has and the instance's data and storage have as host links (their targets are host-relative):

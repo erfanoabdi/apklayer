@@ -31,8 +31,11 @@ public class ShadowHostRealBinder {
         if (HubClient.connected() && pid == HubClient.current().hubPid()) return android.os.Process.SYSTEM_UID;  // the hub JVM stands for system_server
         if (pid == 0) {  // oneway: the kernel gives no calling pid; the sender's uid came in the request header (ShadowHostRealParcel)
             Integer sender = HEADER_UID.get();
-            // no header (a raw parcel, native code): nobody, not the desktop user's uid, which can be 1000, the system's
-            return sender != null ? sender : Process.NOBODY_UID;
+            if (sender != null) return sender;
+            // no header (a raw parcel, grpc-binder, native code): the app uid the sender gave the userspace binder (RealBinder.setSenderUid), else
+            // nobody, not the desktop user's uid, which can be 1000, the system's
+            int kernel = kernelCallingUid();
+            return kernel >= Process.FIRST_APPLICATION_UID && kernel <= Process.LAST_APPLICATION_UID && kernel != linuxUid() ? kernel : Process.NOBODY_UID;
         }
         Integer known = APP_UIDS.get(pid);
         if (known != null) return known;
@@ -46,6 +49,16 @@ public class ShadowHostRealBinder {
         if (uid < 0) return ShadowHostProcess.ownUid();
         APP_UIDS.put(pid, uid);
         return uid;
+    }
+
+    private static volatile int linuxUid = -1;
+    /** This JVM's Linux uid (the desktop user's when unsandboxed): /proc/self's owner, not Os.getuid (Android's view). */
+    private static int linuxUid() {
+        if (linuxUid < 0) {
+            try { linuxUid = (Integer) java.nio.file.Files.getAttribute(java.nio.file.Path.of("/proc/self"), "unix:uid"); }
+            catch (java.io.IOException | RuntimeException unknown) { return -2; }
+        }
+        return linuxUid;
     }
 
     private static final boolean SANDBOXED = "1".equals(System.getenv("APKLAYER_SANDBOX"));

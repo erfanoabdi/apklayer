@@ -4,6 +4,7 @@
  * (at most BD_MAX_MSG): a BINDER_WRITE_READ's write stream goes through the thread's shared buffer (BD_HELLO_THREAD), which the daemon maps
  * read-only and copies transaction data from straight into the target's receive area. */
 #pragma once
+#include <linux/ioctl.h>
 #include <stdint.h>
 
 #define BD_VERSION 2
@@ -20,6 +21,12 @@ enum bd_op {
     BD_MMAP,           /* a0: size. Reply: one fd, the receive area (a memfd the daemon maps too) */
     BD_MAPPED,         /* a0: the address the process mapped the receive area at (the daemon writes pointers into it) */
 };
+
+/* apklayer's own ioctl on a binder fd (not the kernel's): the Android app uid of this process, the sender_euid of its oneway transactions. All
+ * processes of an unsandboxed instance run as one Linux user, and a oneway transaction has no sender pid, so without it a receiver could not tell
+ * which app sent one (grpc-binder's internal-only policy, Play Store). Taken only from a process of the daemon's own user (a sandboxed app has its
+ * own Linux uid, the true answer). Arg: uint32_t uid. */
+#define APKLAYER_BINDER_SET_SENDER_UID _IOW('b', 0xa0, uint32_t)
 
 #define BD_RD_NONBLOCK 1u /* the fd was opened O_NONBLOCK */
 #define BD_RD_FIRST 2u    /* read_consumed was 0: the read starts with BR_NOOP, as the kernel's */

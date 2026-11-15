@@ -61,7 +61,7 @@ final class HubAccounts extends IAccountManager.Stub {
     /** isAccountManagedByCaller: the authenticator's package, or one signed with the same certificate. */
     private boolean manages(String pkg, String type) {
         String authenticator = authenticator(type);
-        return authenticator != null && (authenticator.equals(pkg) || HostCertificate.sameSigner(pkg, authenticator));
+        return authenticator != null && (authenticator.equals(pkg) || HostCertificate.signedForAuth(pkg, authenticator));
     }
 
     /** The secrets and the visibility of an account type belong to the packages that manage it. */
@@ -84,7 +84,7 @@ final class HubAccounts extends IAccountManager.Stub {
         if (set != null && set != AccountManager.VISIBILITY_UNDEFINED) return set;
         android.content.pm.PackageParser.Package parsed = packages.get(pkg);
         if (parsed == null) return AccountManager.VISIBILITY_NOT_VISIBLE;
-        boolean legacy = (authenticator != null && HostCertificate.sameSigner(pkg, authenticator))
+        boolean legacy = (authenticator != null && HostCertificate.signedForAuth(pkg, authenticator))
                 || (parsed.applicationInfo.targetSdkVersion < android.os.Build.VERSION_CODES.O && packages.holds(pkg, android.Manifest.permission.GET_ACCOUNTS))
                 || packages.holds(pkg, android.Manifest.permission.GET_ACCOUNTS_PRIVILEGED);
         Integer fallback = store.read(account, e -> e.visibility.get(legacy ? AccountManager.PACKAGE_NAME_KEY_LEGACY_VISIBLE : AccountManager.PACKAGE_NAME_KEY_LEGACY_NOT_VISIBLE));
@@ -145,13 +145,16 @@ final class HubAccounts extends IAccountManager.Stub {
                 synchronized (this) { if (service == null || called) return; called = true; }
                 try {
                     call.run(IAccountAuthenticator.Stub.asInterface(service), new IAccountAuthenticatorResponse.Stub() {
+                        private final java.util.concurrent.atomic.AtomicBoolean answered = new java.util.concurrent.atomic.AtomicBoolean();
+                        // AccountManagerService.Session.getResponseAndClose: the client gets one answer; a second onResult/onError of the authenticator is dropped
                         @Override public void onResult(Bundle result) {
+                            if (answered.getAndSet(true)) return;
                             if (result != null && onResult != null) onResult.accept(result);
                             reply(response, result);
                             done();
                         }
                         @Override public void onRequestContinued() { /* the authenticator answers later */ }
-                        @Override public void onError(int code, String message) { error(response, code, message); done(); }
+                        @Override public void onError(int code, String message) { if (answered.getAndSet(true)) return; error(response, code, message); done(); }
                     });
                 } catch (RemoteException | RuntimeException failure) {
                     error(response, AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "authenticator of " + type + ": " + failure);

@@ -62,6 +62,12 @@ static void nav_press(struct window *w, int button)
     wl_surface_commit(w->surface);
 }
 
+/* The strip where the display composes the navigation bar itself (Lipstick, nav.remote) is on the window's own surface: the pointer over it is the bar's, not the app's. */
+static int in_remote_strip(const struct window *w)
+{
+    return w && W_NAVBAR(w) && w->nav.remote && w->nav.shown && ptr_y >= w->cfg_h - w->nav_h;
+}
+
 static void ptr_leave(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf)
 {
     (void)d; (void)p; (void)s; (void)sf;
@@ -80,7 +86,7 @@ static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, 
         bar_set_hover(pointer_decor_win, decor_hit(&pointer_decor_win->decor, ptr_x, ptr_y));
         return;
     }
-    if (pointer_nav_win) return;
+    if (pointer_nav_win || (!ptr_down && in_remote_strip(pointer_focus))) return;
     if (ptr_down) send_input(pointer_focus, EV_MOVE, ptr_x, ptr_y);
     else if (pointer_focus) send_input(pointer_focus, EV_HOVER, ptr_x, ptr_y);
 }
@@ -179,7 +185,7 @@ static void bar_button(struct window *w, uint32_t serial, uint32_t time)
     uint32_t edge = resize_edge(w, ptr_x, ptr_y);
     if (edge) { xdg_toplevel_resize(w->toplevel, seat, serial, edge); return; }
     switch (hit) {
-    case DECOR_BACK: window_send_back(w); break;
+    case DECOR_BACK: window_send_back(w, 0); break;
     case DECOR_MIN: window_minimize(w); break;
     case DECOR_MAX: toggle_maximize(w); break;
     case DECOR_CLOSE: {
@@ -201,10 +207,11 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
     last_input_serial = s;
     int pressed = st == WL_POINTER_BUTTON_STATE_PRESSED;
     if (b == 0x113 || b == 0x116) {  /* BTN_SIDE / BTN_BACK: the mouse's back button is Android's Back (the title bar has none under server-side decorations) */
-        if (pressed && pointer_focus) window_send_back(pointer_focus);
+        if (pressed && pointer_focus) window_send_back(pointer_focus, 0);
         return;
     }
     if (pressed && pointer_decor_win && b == 0x110) { bar_button(pointer_decor_win, s, t); return; }
+    if (pressed && b == 0x110 && !ptr_down && in_remote_strip(pointer_focus)) pointer_nav_win = pointer_focus;
     if (pointer_nav_win) {  /* a navigation bar button acts when let go over it, as Android's */
         struct window *w = pointer_nav_win;
         int hit = navbar_hit(&w->nav, ptr_x);
@@ -212,6 +219,7 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
         if (pressed) { nav_press(w, hit == NAV_BAR ? NAV_NONE : hit); return; }
         int held = w->nav.pressed;
         nav_press(w, NAV_NONE);
+        if (w->nav.remote) pointer_nav_win = NULL;  /* the strip is part of the window's surface: no leave comes */
         if (held != NAV_NONE && held == hit) window_nav_action(w, held);
         return;
     }
@@ -302,7 +310,7 @@ const struct wl_pointer_listener ptr_listener = {
  * motion and button go through the wl_pointer handlers. */
 void pointer_inject(struct window *w, int x, int y, int button)
 {
-    int bar = y < 0 && !w->mobile, nav = w->mobile && w->nav.shown && !w->nav.remote && y >= w->cfg_h - w->nav_h;  /* shortcut: a remote bar takes touch only, not the pointer */
+    int bar = y < 0 && !w->mobile && w->decor.surface, nav = W_NAVBAR(w) && w->nav.shown && !w->nav.remote && y >= w->cfg_h - w->nav_h;  /* shortcut: a remote bar takes touch only, not the pointer */
     struct wl_surface *sf = bar ? w->decor.surface : nav ? w->nav.surface : w->surface;
     wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(bar ? y + DECOR_H : nav ? y - (w->cfg_h - w->nav_h) : y);
     if ((bar ? pointer_decor_win : nav ? pointer_nav_win : pointer_focus) != w) {

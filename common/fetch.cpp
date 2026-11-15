@@ -251,9 +251,10 @@ Result installDeb(const std::string& path) {
 }
 
 Result installClick(const std::string& path) {
-    Result r = runProgram({"pkcon", "-y", "--allow-untrusted", "install-local", path});
-    // shortcut: untested off a phone; the fallback needs the click CLI and asks no password
-    return r.status == 0 ? r : runProgram({"click", "install", "--user", "--allow-unauthenticated", path});
+    // Ubuntu Touch has no PackageKit: the system bus's click service installs for the user without a password and without the signature check
+    // (docs/HALIUM.md "Ubuntu Touch: the click"; checked on the Volla X23, 2026-11-15). `click install --user` fails there: debsig refuses an unsigned click.
+    Result r = runProgram({"gdbus", "call", "--system", "-d", "com.lomiri.click", "-o", "/com/lomiri/click", "-m", "com.lomiri.click.Install", path});
+    return r.status == 0 ? r : runProgram({"pkcon", "-y", "--allow-untrusted", "install-local", path});
 }
 
 }  // namespace manager

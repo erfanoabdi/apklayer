@@ -11,6 +11,11 @@
         "apklayer": {
             "desktop": "apklayer.desktop",
             "apparmor": "apklayer.apparmor"
+        },
+        "share": {
+            "desktop": "apklayer-share.desktop",
+            "apparmor": "apklayer.apparmor",
+            "content-hub": "content-hub-peer.json"
         }
     }
 }

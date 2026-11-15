@@ -16,7 +16,7 @@ struct Addon {
 };
 // the first run's optional apps (setup.slint, cli/setup.cpp) and Google's own: microG is its Services and its Companion (Play Store stand-in), apps need both
 const std::vector<Addon> kAddons = {
-    {"microg", "microG", "Google's services, for apps that need them (Services and Companion)", {"com.google.android.gms", "com.android.vending"}, nullptr, "com.google.android.gsf"},
+    {"microg", "microG", "Google's services, for apps that need them (Services and Companion; replaces Google Play)", {"com.google.android.gms", "com.android.vending"}, nullptr, "com.google.android.gsf"},
     // Google's own (cli/gapps.cpp, `setup --gapps`): one or the other with microG
     {"gapps", "Google Play", "Google's own Play services and Play Store (replaces microG)",
      {"com.google.android.gms", "com.google.android.gsf", "com.android.vending", "com.google.android.syncadapters.contacts", "com.google.android.syncadapters.calendar"},

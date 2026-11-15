@@ -12,6 +12,7 @@
 #include <android/hardware/media/c2/1.0/IComponentStore.h>
 #include <android/hardware/atrace/1.0/IAtraceDevice.h>
 #include <android/hidl/manager/1.0/IServiceManager.h>
+#include <android/hidl/manager/1.2/IServiceManager.h>
 #include <hidl/HidlBinderSupport.h>
 #include <hidl/HidlTransportSupport.h>
 #include <hidl/ServiceManagement.h>
@@ -116,6 +117,17 @@ extern "C" int main(int argc, char** argv) {
             for (const auto& t : traits) printf("codec: %s %s\n", t.name.c_str(), t.mediaType.c_str());
         });
         printf("codecs: %zu\n", n);
+        return r.isOk() && n > 0 ? 0 : 1;
+    }
+    if (!strcmp(cmd, "manifest") && argc > 2) {  // the listing camera and codec clients start from (CameraProviderManager, Codec2Client): listManifestByInterface, then listByInterface
+        sp<android::hidl::manager::V1_2::IServiceManager> sm = android::hardware::defaultServiceManager1_2();
+        if (sm == nullptr) { printf("manifest: no manager\n"); return 1; }
+        size_t n = 0;
+        Return<void> r = sm->listManifestByInterface(argv[2], [&](const hidl_vec<hidl_string>& names) { n = names.size(); for (const auto& s : names) printf("manifest: %s\n", s.c_str()); });
+        printf("manifest: %zu, listManifestByInterface %s\n", n, r.isOk() ? "ok" : "failed");
+        size_t m = 0;
+        sm->listByInterface(argv[2], [&](const hidl_vec<hidl_string>& names) { m = names.size(); for (const auto& s : names) printf("registered: %s\n", s.c_str()); });
+        printf("registered: %zu\n", m);
         return r.isOk() && n > 0 ? 0 : 1;
     }
     if (!strcmp(cmd, "manager")) {

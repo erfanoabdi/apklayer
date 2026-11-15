@@ -32,6 +32,9 @@
 #ifndef SYS_SECCOMP
 #define SYS_SECCOMP 1  /* si_code of a seccomp trap (asm-generic/siginfo.h) */
 #endif
+#ifndef __NR_statx
+#define __NR_statx 291  /* arm64's number; Sailfish OS 5.0's kernel headers (3.18) lack it */
+#endif
 #define WINDOW_SIZE (1UL << 32)
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
 

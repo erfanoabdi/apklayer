@@ -2,7 +2,7 @@
 """Wheel and stylus input of one instance through the shell's test input (instance.inject wheel:/pen:, bridge/shell/pointer.c and tablet.c, the
 paths of wl_pointer's axis/axis_discrete/axis_value120 and zwp_tablet_tool_v2): hello.input prints the MotionEvent axes it gets. The wheel's
 notches are AXIS_VSCROLL/AXIS_HSCROLL (+ = up/right, hi-res and touchpad scrolls as fractions, Shift in the meta state); the pen's pressure, distance,
-tilt, orientation (TouchInputMapper's formulas), barrel rotation (AXIS_GENERIC_1), stylus buttons, eraser and hover/touch actions."""
+tilt, orientation (TouchInputMapper's formulas, checked against the LineageOS 24 source), slider (AXIS_WHEEL), tool wheel (AXIS_SCROLL), barrel rotation (AXIS_GENERIC_1), stylus buttons, eraser and hover/touch actions."""
 import math
 import os
 from pathlib import Path
@@ -31,9 +31,9 @@ log = open(instance.OUT / 'input-wheel-pen.log', 'wb')
 def expect(what, after=0):
     """Reads the app's output until a line from index `after` on contains `what`; returns it."""
     global pending
-    end = time.monotonic() + 30
+    end = time.monotonic() + 90  # a loaded VM (two groups on 4 CPUs) starts the app slowly
     while not any(what in l for l in seen[after:]):
-        assert selector.select(10) and time.monotonic() < end, 'no "%s"; last lines: %s' % (what, seen[-6:])
+        assert selector.select(30) and time.monotonic() < end, 'no "%s"; last lines: %s' % (what, seen[-6:])
         data = os.read(app.stdout.fileno(), 65536)
         assert data, 'the app ended without "%s"' % what
         log.write(data)
@@ -84,7 +84,9 @@ try:
     wheel('wheel:0,-5,finger', 0.3333, 0)     # a touchpad's continuous scroll, 15 units a notch
     wheel('wheel:0,1,shift', -1, 0, shift=True)  # Shift+wheel: the meta state, the view (HorizontalScrollView) decides
     # a pen: hover, touch with tilt and rotation, a button held, lifted, the eraser end
-    pen('pen:100,200,0,0,0,0,0.5', 'HOVER_MOVE', distance=0.5, pressure=0, x=100, y=200)
+    f = pen('pen:100,200,0,0,0,0,0.5', 'HOVER_MOVE', distance=0.5, pressure=0)
+    scale = float(f['x']) / 100  # the shell converts surface coordinates by the output's scale (200% on a HiDPI desktop)
+    assert scale >= 1 and abs(float(f['y']) - 200 * scale) < 1e-3, 'pen position %s,%s at 100,200 (scale %s)' % (f['x'], f['y'], scale)
     pen('pen:100,200,0.6,30,0,90,0', 'DOWN', pressure=0.6, tilt=math.radians(30), orientation=math.atan2(-math.sin(math.radians(30)), 0),
         rotation=math.pi / 2, buttons=0)
     pen('pen:110,210,0.8,0,45,0,0,1', 'MOVE', pressure=0.8, tilt=math.radians(45), orientation=0, buttons=32)  # BUTTON_STYLUS_PRIMARY
@@ -93,7 +95,11 @@ try:
     instance.inject(PKG, 'pen:out')
     pen('pen:120,120,0.3,0,0,0,0,0,1', 'DOWN', tool=4, pressure=0.3)  # TOOL_TYPE_ERASER
     pen('pen:out', 'UP', tool=4)
-    print('PASS wheel notches, hi-res and touchpad fractions on both axes, Shift, and stylus pressure, tilt, orientation, rotation, buttons, eraser, hover and touch', flush=True)
+    # the airbrush's slider (AXIS_WHEEL, -1..1) and the tool wheel's clicks (AXIS_SCROLL, once per frame it turned in)
+    pen('pen:130,130,0,0,0,0,0.2,0,0,0.5,3', 'HOVER_MOVE', slider=0.5, wheel=3)
+    pen('pen:131,130,0,0,0,0,0.2,0,0,-1', 'HOVER_MOVE', slider=-1, wheel=0)
+    instance.inject(PKG, 'pen:out')
+    print('PASS wheel notches, hi-res and touchpad fractions on both axes, Shift, and stylus pressure, tilt, orientation, rotation, buttons, eraser, slider, tool wheel, hover and touch', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)

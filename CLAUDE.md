@@ -30,6 +30,12 @@ Whoever creates something on a test host removes it before finishing, in the sam
 - Say in your report what you deleted and what you left, with its size and why.
 - Disk is a shared limit: check `df -h /` before you copy a tree; at 90% free space first (your own leftovers), then stop and ask.
 
+## MUST: never upload from the owner's internet (owner, 2026-11-16)
+Nothing is uploaded from the owner's connection to a host outside the LAN (the tester PC over Tailscale, AWS, any other remote machine): no rsync/scp/tar-over-ssh of prebuilts, APKs, libraries or trees. Push to git (main, prebuilts) and the host runs `git pull`/`git fetch` on its own connection; host-to-host copies (AWS to the tester PC) do not use the owner's line. A few KB of script is fine. LAN hosts (UTM, Parallels, the x86 PC, phones) are not affected. Every agent brief repeats this.
+
+## MUST: never delete app data on hosts in use (owner, 2026-11-16)
+No `clear-data`, uninstall or `rm` of an app's data, `app-data`, `storage` or `Android/data|obb` on the owner's, the tester's or AWS hosts without asking first (say what it deletes, with `du` size). A game's downloaded resources cost the owner tens of GB (PGR 60 GB lost on the tester PC, 2026-11-16). Test with a separate instance or a copy. Every agent brief repeats this.
+
 ## Before writing or downloading anything
 1. Read `STATUS.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer (ATL) and the AOSP tree are all **local**; never clone or download what is there.
 2. Look for real code to copy or reuse first (those projects, Mesa, AOSP). Write new code only if nothing fits, and say why in the commit message.

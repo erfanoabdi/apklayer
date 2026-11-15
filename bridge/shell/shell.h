@@ -54,7 +54,8 @@
  *                                    (160 * scale on a desktop, the handheld's physical density bucket: mobile.c); navigation bar: the
  *                                    bottom inset the shell's navigation bar covers in mobile style (navbar.c), 0 without one; keyboard:
  *                                    the app pixels the host's on-screen keyboard covers at the bottom (maliit.c), the app's IME inset
- *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
+ *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode[, i32 navbar]}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
+ *                                   navbar: 0 auto, 1 on, 2 off: the navigation bar on a desktop window (auto: where the compositor draws the title bar);
  *                                   sent before WINDOW_CREATE it sets the new window's style, later it switches it (mobile.c)
  *                 16 NAVBAR         {i32 id, i32 visible}: the app shows or hides the navigation bar (immersive mode)
  *                 18 FULLSCREEN     {i32 id, i32 on}: the app hides (1) or shows (0) the status bar, Android's fullscreen: the shell asks the
@@ -103,13 +104,16 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
 #define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
 #define MSG_DECOR_DARK 13    /* app -> shell: {own window id, 1 light | 2 dark}: the instance's colour scheme (its host settings), for the title bar */
-#define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*} (mobile.c) */
+#define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*[, NB_*]} (mobile.c) */
 #define MSG_NAVBAR 16        /* app -> shell: {own window id, visible}: the app's navigation bar visibility (immersive mode) */
 #define MSG_FULLSCREEN 18    /* app -> shell: {own window id, on}: the app went fullscreen or left it (mobile.c) */
 #define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
+#define MSG_LAYOUT 118        /* shell -> app: {i32 id} + utf8 language tag of the keyboard layout in use (keyboard.c): the input method subtype */
 #define MSG_TABLET 117        /* shell -> app: a pen's event (tablet.c) */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
+enum { NB_AUTO = 0, NB_ON = 1, NB_OFF = 2 };  /* the navbar setting: a desktop window gets the navigation bar when the compositor draws its title bar (auto), always, never */
+#define KEYMETA_NAVBAR 0x40000000  /* MSG_KEY meta bit: the Back key is a navigation bar press (the host gives a haptic tick) */
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
@@ -137,6 +141,7 @@ struct client {
     int attach_id;
     int dark;                  /* MSG_DECOR_DARK: 0 not said (the bar keeps the desktop's), 1 light, 2 dark */
     int window_mode;           /* MSG_WINDOW_MODE before its window exists: WM_* + 1 of the windows it creates or takes over, 0 = not said */
+    int navbar_pref;           /* MSG_WINDOW_MODE: the instance's navbar setting for a desktop window (NB_*) */
 };
 struct window {
     struct client *client;
@@ -160,6 +165,9 @@ struct window {
     struct wp_viewport *viewport;            /* buffer -> logical size (any scale, fractional included) */
     struct wp_fractional_scale_v1 *fscale;
     int text_input_enabled;
+    char *sur_text;              /* the field's text as the host last reported it, with the cursor's byte offset: converts delete_surrounding_text (kept while the window has no input focus) */
+    size_t sur_cursor;
+    int ime_hidden;              /* the app asked to hide the keyboard (hideSoftInputFromWindow): text-input-v3 disabled until a show or a new field */
     int input_type, ime_options; /* the focused field's EditorInfo (MSG_TEXT_INPUT): the keyboard's layout and Enter key */
     int ime_px;                 /* app pixels the host's on-screen keyboard covers at the bottom (maliit.c): the app's IME inset (CONFIGURE) */
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
@@ -170,6 +178,8 @@ struct window {
     int mode;                   /* WM_* asked for (WM_AUTO: by the session and the output, mobile.c) */
     int mobile;                 /* mobile style: maximized, no title bar, a navigation bar over the content's bottom (navbar.c) */
     struct navbar nav;
+    int deskbar;                /* a floating (desktop style) window has the navigation bar too (mobile.c: server-side decorations, setting navbar) */
+    int navbar_pref;            /* NB_AUTO, NB_ON, NB_OFF */
     int nav_hidden;             /* the app hid the navigation bar (immersive) */
     int nav_h;                  /* logical height of the navigation bar, 0 without one */
     int nav_layer;              /* the window's owner composes the bar (MSG_NAVBAR_LAYER): used without subsurfaces */
@@ -184,6 +194,7 @@ struct window {
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *toplevel;
     struct wl_shell_surface *shell_surface;  /* instead of the two above where the compositor has no xdg-shell (wlshell.c) */
+    int tf;                     /* wl_shell: the wl_output transform the window is turned to (wlshell.c), 0 none */
     struct qt_extended_surface *qt_ext;      /* with it, Lipstick's qt_surface_extension (raise, lower) */
     void *map;
     size_t map_len;
@@ -202,6 +213,8 @@ struct window {
 #define W_TARGET(w) ((w)->proxy ? (w)->proxy : (w)->client)
 #define W_ID(w) ((w)->proxy ? (w)->proxy_id : (w)->id)
 /* logical height of our title bar above the content: none in mobile style or under the compositor's (server-side) bar */
+/* the window has the navigation bar: mobile style, or a desktop window under the compositor's title bar (deskbar) */
+#define W_NAVBAR(w) ((w)->mobile || (w)->deskbar)
 #define W_BAR(w) ((w)->mobile || (w)->ssd || (w)->fullscreen ? 0 : DECOR_H)
 
 /* ---- state shared between the modules (defined in main.c) ---- */
@@ -221,6 +234,7 @@ extern struct wl_seat *seat;
 extern struct wp_viewporter *viewporter;                     /* registry.c */
 extern struct wp_fractional_scale_manager_v1 *fscale_mgr;
 extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
+extern int output_tf;  /* the largest output's wl_output transform (Lipstick: its screen orientation) */
 extern int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known (fallback without configure_bounds) */
 extern int output_scale;                  /* percent: the largest integer wl_output scale (fallback without wp_fractional_scale_v1) */
 extern int output_px_w, output_px_h, output_mm_w, output_mm_h;  /* the largest output's mode in pixels and its physical size (0: unknown) */
@@ -297,6 +311,7 @@ void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
 void wlshell_create(struct window *w, const char *label, const char *app_id);  /* wlshell.c */
 void wlshell_first_configure(struct window *w);
+void wlshell_orient(struct window *w);  /* turn to the output's orientation or the app's lock */
 void wlshell_lower(struct window *w);
 void wlshell_raise(struct window *w);
 void wlshell_destroy(struct window *w);
@@ -339,7 +354,8 @@ void window_nav_visible(struct window *w, int visible);  /* MSG_NAVBAR */
 void window_nav_layer(struct window *w);  /* MSG_NAVBAR_LAYER */
 void window_set_fullscreen(struct window *w, int on);  /* MSG_FULLSCREEN */
 void window_nav_action(struct window *w, int button);    /* a navigation bar button (NAV_*) was pressed */
-void window_send_back(struct window *w);         /* pointer.c: KEYCODE_BACK down and up */
+void window_send_back(struct window *w, int from_navbar); /* pointer.c: KEYCODE_BACK down and up (from_navbar: KEYMETA_NAVBAR) */
+int window_nav(const struct window *w);  /* geometry.c: the navigation bar inset in effect (logical) */
 void window_minimize(struct window *w);          /* pointer.c: the app stops, then the compositor minimizes */
 int print_display_info(void);                    /* --display-info (cli/stack.cpp: ro.sf.lcd_density) */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */

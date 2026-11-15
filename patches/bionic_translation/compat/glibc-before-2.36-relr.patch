@@ -8,9 +8,9 @@ Meson 1.8 on. Applied by meson.build only when elf.h lacks Elf64_Relr.
 diff --git a/linker/linker.h b/linker/linker.h
 --- a/linker/linker.h
 +++ b/linker/linker.h
-@@ -30,6 +30,13 @@
- #define _LINKER_H_
-
+@@ -34,6 +34,13 @@
+ void *apkenv_environment_symbol(const char *name);
+ 
  #include <elf.h>
 +#ifndef DT_RELR
 +typedef Elf32_Word Elf32_Relr;

@@ -119,7 +119,7 @@ final class HostInput {
                     new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
                     ev.length > 5 ? ev[5] : 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
             main.post(() -> HostWindows.dispatchToTopWindow(scroll));
-        } else if (ev[0] == 17) { // pen: {17, action, x, y, tool, buttons, pressure, distance, tilt x, tilt y, rotation, slider} (ShellClient)
+        } else if (ev[0] == 17) { // pen: {17, action, x, y, tool, buttons, pressure, distance, tilt x, tilt y, rotation, slider, wheel clicks} (ShellClient)
             pen(now, ev);
         } else if (ev[0] == 16) { // touch: {16, action, finger, x, y}
             touch(now, ev[1], ev[2], ev[3], ev[4]);
@@ -159,8 +159,39 @@ final class HostInput {
     /** Commits text into the focused text field (the IME path); false when no field has focus. */
     java.util.function.Predicate<String> textCommit;
 
+    /** MSG_KEY meta bit of the shell (bridge/shell/shell.h KEYMETA_NAVBAR): the Back key came from a navigation bar press. */
+    static final int NAVBAR_KEY = 0x40000000;
+
+    /** SystemUI's navigation bar haptic: VIRTUAL_KEY (the click effect) asked of the hub's vibrator as the system (the app needs no VIBRATE for the system's own bar),
+     *  off the main thread so the key is not held; no vibrator in the instance (no service): nothing. */
+    private static void navbarClick() {
+        new Thread(() -> {
+            try {
+                android.os.IBinder vibrator = android.os.ServiceManager.getService("vibrator_manager");
+                if (vibrator != null) android.os.IVibratorManagerService.Stub.asInterface(vibrator).performHapticFeedback(android.os.Process.SYSTEM_UID, 0, "android",
+                        android.view.HapticFeedbackConstants.VIRTUAL_KEY, 0, "navigation bar", 0, 0);
+            } catch (Exception e) { /* a tick lost */ }
+        }, "navbar-haptic").start();
+    }
+
+    /** The physical key with the character the active xkb layout gives it (Cyrillic, Arabic...): the host's key character map is the US one, so
+     *  getUnicodeChar() answers from the shell's character instead (shortcut: no dead-key or meta-dependent variants; upgrade with per-layout .kcm files). */
+    private static final class CharKeyEvent extends KeyEvent {
+        private final int unicode;
+        CharKeyEvent(long now, int action, int code, int meta, int unicode) {
+            super(now, now, action, code, 0, meta);
+            this.unicode = unicode;
+        }
+        @Override public int getUnicodeChar() { return unicode; }
+        @Override public int getUnicodeChar(int metaState) { return unicode; }
+    }
+
     /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */
     void hostKey(long now, int action, int code, int unicode, int meta) {
+        if ((meta & NAVBAR_KEY) != 0) {  // the shell's navigation bar pressed (not Esc, Alt+Left or the mouse's back button): Android's light click, fire and forget
+            meta &= ~NAVBAR_KEY;
+            if (action == 0) navbarClick();
+        }
         if (Boolean.getBoolean("apklayer.debugkeys"))
             System.out.println("[apklayer] key action=" + action + " code=" + code + " uni=" + unicode + " meta=" + meta);
         int act = action == 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
@@ -175,6 +206,7 @@ final class HostInput {
         }
         // a non-ASCII character (Cyrillic, Arabic, Hebrew...) comes with its key's physical (US) keycode, which a shortcut (Ctrl, Alt, Meta held) uses;
         // without a shortcut modifier the character is typed whatever the keycode says
+        int physical = code;
         if (unicode >= 128 && (meta & (0x2 | 0x1000 | 0x10000)) == 0) code = 0;
         if (code == 0 && unicode > 0 && unicode < 128 && !Character.isISOControl(unicode)) {
             // ASCII punctuation: a real keycode + shift meta, so KeyEvent.getUnicodeChar() works (Termux ignores ACTION_MULTIPLE)
@@ -187,7 +219,10 @@ final class HostInput {
             }
         }
         if (code == 0) { // no Android keycode (non-US characters): type the character
-            if (act == KeyEvent.ACTION_DOWN && unicode > 0) {
+            if (unicode > 0 && physical != 0 && HostWindows.focusedEditor() == null) {
+                // no field to type into: the app reads key events (a game, a terminal); the key with its layout's character, as the active key character map gives it
+                injectKey(new CharKeyEvent(now, act, physical, meta, unicode), false);
+            } else if (act == KeyEvent.ACTION_DOWN && unicode > 0) {
                 String chars = new String(Character.toChars(unicode));
                 if (textCommit == null || !textCommit.test(chars)) inject(new KeyEvent(now, chars, 0, 0));
             }
@@ -308,7 +343,9 @@ final class HostInput {
      * A stylus event as the InputReader makes it: pressure and distance 0..1, AXIS_TILT (0 upright, pi/2 flat) and AXIS_ORIENTATION (the
      * direction of the tilt, -pi..pi, 0 = toward the top of the screen; the barrel's rotation where there is no tilt) from the tablet's
      * tilt angles (TouchInputMapper), the barrel rotation also as AXIS_GENERIC_1. Touching events go through the input pipeline like touch,
-     * hovering ones to the window under the pen like a mouse's.
+     * hovering ones to the window under the pen like a mouse's. The airbrush's slider is AXIS_WHEEL (-1..1) and the tool wheel's clicks since the last
+     * frame AXIS_SCROLL (Android has no stylus-specific axes for them; the formulas are TouchInputMapper::cookPointerData's, checked against the
+     * LineageOS 24 source, with the orientation of an upright pen (no tilt) taken from the barrel rotation as a pen without tilt axes reports it).
      */
     private void pen(long now, int[] ev) {
         int action = ev[1];
@@ -327,6 +364,8 @@ final class HostInput {
         pc.setAxisValue(MotionEvent.AXIS_TILT, (float) tilt);
         pc.setAxisValue(MotionEvent.AXIS_ORIENTATION, (float) (tilt != 0 ? Math.atan2(-Math.sin(tx), Math.sin(ty)) : rot));
         pc.setAxisValue(MotionEvent.AXIS_GENERIC_1, (float) rot);
+        pc.setAxisValue(MotionEvent.AXIS_WHEEL, ev[11] / 10000f);
+        pc.setAxisValue(MotionEvent.AXIS_SCROLL, ev[12]);
         boolean hover = action >= MotionEvent.ACTION_HOVER_MOVE;
         if (action == MotionEvent.ACTION_DOWN) penDownTime = now;
         int act = action == MotionEvent.ACTION_HOVER_ENTER ? MotionEvent.ACTION_HOVER_MOVE : action;  // dispatchHover starts the stream with ENTER

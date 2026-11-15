@@ -7,10 +7,12 @@ import org.robolectric.annotation.internal.DoNotInstrument;
 public final class GuestLoaders {
     private GuestLoaders() {}
 
-    /** Runtime.maxMemory as ART reports it: the growth limit of the device's heap (dalvik.vm.heapgrowthlimit, "256m"), the host's own when that is smaller. */
+    /** Runtime.maxMemory as ART reports it: the growth limit of the device's heap (dalvik.vm.heapgrowthlimit, "256m"; heapsize, "512m", with android:largeHeap), the host's own when that is smaller. */
     public static long maxMemory(Runtime runtime) {
         long host = runtime.maxMemory();
-        String limit = android.os.SystemProperties.get("dalvik.vm.heapgrowthlimit", "");
+        android.app.Application app = org.robolectric.RuntimeEnvironment.getApplication();
+        boolean large = app != null && (app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_LARGE_HEAP) != 0;
+        String limit = android.os.SystemProperties.get(large ? "dalvik.vm.heapsize" : "dalvik.vm.heapgrowthlimit", "");
         try {
             if (limit.length() < 2) return host;
             long unit = switch (Character.toLowerCase(limit.charAt(limit.length() - 1))) { case 'k' -> 1L << 10; case 'm' -> 1L << 20; case 'g' -> 1L << 30; default -> 0; };

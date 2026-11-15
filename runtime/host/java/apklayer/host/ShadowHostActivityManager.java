@@ -21,6 +21,11 @@ public class ShadowHostActivityManager extends ShadowActivityManager {
         return HubActivityManager.service(ShadowActivityManager.getService());
     }
 
+    /** What the device reports (dalvik.vm.heapgrowthlimit, 256 on the Pixel 5 profile); Robolectric's shadow answers a fixed 16. getLargeMemoryClass is not shadowed (heapsize). */
+    @Implementation
+    @Override
+    protected int getMemoryClass() { return ActivityManager.staticGetMemoryClass(); }
+
     /** The host's memory from /proc/meminfo, as ActivityManagerService reports the device's (Robolectric's is all zeros: PGR's script then
      *  warned "Your device RAM is less than 2048MB"). */
     @Implementation

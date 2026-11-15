@@ -21,10 +21,10 @@ mock.AddDevice('hci0', 'AA:BB:CC:00:00:03', 'mock-compare')
 
 CALLS = "exec(open(%r).read(), globals()); " % os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bluez-mock-calls.py')
 bus.get_object('org.bluez', '/org/bluez').AddMethod('org.bluez.ProfileManager1', 'RegisterProfile', 'osa{sv}', '',
-                                                    "self.profiles = {**getattr(self, 'profiles', {}), (args[1].lower(), str(args[2].get('Role', 'client'))): args[0]}",
+                                                    "key = (args[1].lower(), str(args[2].get('Role', 'client'))); profiles = dict(getattr(self, 'profiles', {})); profiles[key] = profiles.get(key, []) + [str(args[0])]; self.profiles = profiles",
                                                     dbus_interface=MOCK)
 bus.get_object('org.bluez', '/org/bluez').AddMethod('org.bluez.ProfileManager1', 'UnregisterProfile', 'o', '',
-                                                    "self.profiles = {k: v for k, v in getattr(self, 'profiles', {}).items() if v != args[0]}", dbus_interface=MOCK)
+                                                    "self.profiles = {k: [p for p in v if p != str(args[0])] for k, v in getattr(self, 'profiles', {}).items()}", dbus_interface=MOCK)
 bus.get_object('org.bluez', '/org/bluez/hci0/dev_11_22_33_44_55_66').AddMethod('org.bluez.Device1', 'ConnectProfile', 's', '',
                                                                                  CALLS + 'connect_profile(self, args[0])', dbus_interface=MOCK)
 bus.get_object('org.bluez', '/org/bluez/hci0/dev_AA_BB_CC_00_00_01').AddMethod('org.bluez.Device1', 'Pair', '', '', CALLS + 'pair(self)', dbus_interface=MOCK)

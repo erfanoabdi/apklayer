@@ -146,8 +146,11 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
     case MSG_WINDOW_MODE: {  /* before its window: the style it is created with; later: a live switch */
         if (len < 8 || v[1] < WM_AUTO || v[1] > WM_MOBILE) return;
         c->window_mode = v[1] + 1;
+        int pref = len >= 12 && v[2] >= NB_AUTO && v[2] <= NB_OFF ? v[2] : NB_AUTO, pref_changed = pref != c->navbar_pref;
+        c->navbar_pref = pref;
         struct window *w = window_find_input(c, v[0]);
-        if (w && w->mode != v[1]) window_set_mode(w, v[1]);
+        if (w) w->navbar_pref = pref;
+        if (w && (w->mode != v[1] || pref_changed)) window_set_mode(w, v[1]);
         break;
     }
     case MSG_NAVBAR: {

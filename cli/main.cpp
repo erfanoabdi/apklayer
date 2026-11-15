@@ -26,12 +26,14 @@
 #include "spare.h"
 #include "unit.h"
 #include "version.h"
+#include "vpn.h"
 
 using namespace apklayer;
 
 namespace {
 int usage() {
     fputs("usage: apklayer [--instance ID] <command>\n"
+          "  inspect <file> <icon.png>                         what an install would add: package, version, label, permissions (icon written to the path)\n"
           "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
@@ -64,7 +66,7 @@ int usage() {
           "                         manager's Settings page; list rows: key kind default value choices title help per-app own\n"
           "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24,\n"
-          "                         window-mode[.<package>] auto|mobile|desktop); live in a running instance\n"
+          "                         window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off); live in a running instance\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
           "  logs [<package> [--previous]]  the app's log of its last launch (its output and android.util.Log; --previous: the launch before);\n"
           "                         without a package: the instance's log files\n"
@@ -108,9 +110,9 @@ int main(int argc, char** argv) {
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
     bool autostart = (args.size() >= 3 && args[0] == "instance" && args[1] == "autostart")  // systemctl --user is the user's, not apklayerd's
                      || (args[0] == "hub" && currentUnit().rfind("apklayer-instance@", 0) == 0);  // the always-on unit's hub is its main process, not apklayerd's child
-    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup", "config"};
+    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup", "config", "vpn-guard"};
     bool opens = args[0] == "open" && (args.size() == 2 || args.size() == 3);  // run with a host file as the intent's data (cli/open.cpp)
-    if ((opens || (args[0] == "run" && args.size() == 2)) && !inDaemon) startLomiriAppShell(layout, id);  // in the drawer launch's unit, before it is left
+    if ((opens || (args[0] == "run" && args.size() == 2)) && !inDaemon) startLomiriAppShell(layout, id, args[0] == "run" ? args[1] : "");  // in the drawer launch's unit, before it is left
     bool local = kLocal.count(args[0]) && !(inFlatpak() && args[0] == "setup");  // the Flatpak's setup starts a stack: the daemon's, as every command's
     if (int status = 0; !inDaemon && !autostart && !local && forwardToDaemon(layout, full, &status)) return status;
     if (args[0] == "config") return configCommand(std::vector<std::string>(args.begin() + 1, args.end()));
@@ -137,6 +139,7 @@ int main(int argc, char** argv) {
         installApp(layout, inst, std::vector<std::string>(args.begin() + first, args.end()), downgrade, system);
         return 0;
     }
+    if (cmd == "inspect" && n == 3) return previewApk(layout, args[1], args[2]);
     if (cmd == "setup") return setupCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "reconvert" && n == 2) return reconvert(layout, inst, args[1]);
     if (cmd == "run" && n == 2) {
@@ -151,6 +154,8 @@ int main(int argc, char** argv) {
     if (cmd == "app-spare" && sandboxOn()) return 0;
     if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by a launch (cli/spare.cpp)
     if (cmd == "app-spare" && n == 1) { wakeAppSpare(layout, inst); return 0; }  // the hub's, at its start
+    if (cmd == "vpn-guard") return vpnGuard(std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "vpn" && n == 2) return vpnCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "sandbox-exec") return sandboxExec(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "home-access" && n == 3) return homeAccessCommand(layout, inst, args[1], args[2]);
     if (cmd == "portal") return portalCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));

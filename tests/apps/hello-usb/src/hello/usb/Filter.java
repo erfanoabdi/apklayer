@@ -13,7 +13,7 @@ final class Filter {
 
     /** The host's own class: not on the app's loader, found through the others. */
     private static Class<?> hostUsb() throws ClassNotFoundException {
-        for (ClassLoader loader : new ClassLoader[] {Thread.currentThread().getContextClassLoader(), ClassLoader.getSystemClassLoader(), Context.class.getClassLoader()}) {
+        for (ClassLoader loader : new ClassLoader[] {Filter.class.getClassLoader(), Thread.currentThread().getContextClassLoader(), ClassLoader.getSystemClassLoader(), Context.class.getClassLoader()}) {
             try { if (loader != null) return Class.forName("apklayer.host.HostUsb", false, loader); } catch (ClassNotFoundException next) { }
         }
         throw new ClassNotFoundException("apklayer.host.HostUsb");

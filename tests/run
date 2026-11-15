@@ -114,12 +114,15 @@ def run_group(name, slot):
             out.write('$ ' + command + '\n')
             out.flush()
             if run_watched(argv, out, group.get('silence', SILENCE_S)) != 0:
-                ok = False
+                out.flush()
+                # a script that cannot run here ends with a last line `SKIP <why>` (sys.exit('SKIP ...')): a skip, not a failure
+                last = log.read_text(errors='replace').rstrip().rsplit('\n', 1)[-1]
+                ok = None if last.startswith('SKIP') else False
                 break
         vm.ssh(env + 'python3 -c "import sys; sys.path.insert(0, \'tests/lib\'); import instance; instance.stop()"', stdout=out, stderr=subprocess.STDOUT)
     seconds = time.monotonic() - t
-    say('%s %-16s %4.0f s  [%s]' % ('PASS' if ok else 'FAIL', name, seconds, slot))
-    if not ok:
+    say('%s %-16s %4.0f s  [%s]' % ({True: 'PASS', None: 'SKIP'}.get(ok, 'FAIL'), name, seconds, slot))
+    if ok is False:
         say(''.join('    | ' + line for line in log.read_text(errors='replace').splitlines(True)[-25:]))
     return name, ok, seconds
 
@@ -181,7 +184,7 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
         results += list(pool.map(job, together))
     results += [job(g) for g in groups if GROUPS[g].get('alone')]
-    failed = [n for n, ok, _ in results if not ok]
+    failed = [n for n, ok, _ in results if ok is False]
     say('%d groups in %.0f s wall after %.0f s of preparation (%.0f s of group time, the sequential cost), %d at a time: %s' % (len(results), time.monotonic() - ready, ready - start, sum(s for *_, s in results), jobs,
         'all passed' if not failed else 'FAILED: ' + ' '.join(failed)))
     return 1 if failed else 0

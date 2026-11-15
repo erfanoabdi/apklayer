@@ -139,8 +139,15 @@ final class HubInstallSessions {
         return root.resolve(Integer.toString(id));
     }
 
+    /** The session's APKs: PackageInstallerSession's sAddedApkFilter leaves out dex metadata (.dm, Play Store sends one with an app; no ART
+     *  here to use its profile), fs-verity signatures, checksum files and remove markers. */
     static List<Path> apks(Path dir) throws IOException {
-        try (var files = Files.list(dir)) { return files.filter(f -> !f.getFileName().toString().startsWith("session.properties")).sorted().toList(); }
+        try (var files = Files.list(dir)) { return files.filter(f -> !Files.isDirectory(f) && !auxiliary(f.getFileName().toString())).sorted().toList(); }
+    }
+
+    private static boolean auxiliary(String name) {
+        return name.startsWith("session.properties") || name.endsWith(".dm") || name.endsWith(".fsv_sig") || name.endsWith(".digests")
+            || name.endsWith(".signature") || name.endsWith(".removed");
     }
 
     /** A SessionInfo's fields (ShadowHostPackageInstaller makes one of them): present, then id, installer, package, label, committed. */

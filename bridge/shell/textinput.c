@@ -12,8 +12,6 @@ static struct window *ime_window;           /* window whose field has the IME en
 static char *pending_commit, *pending_preedit;
 static int pending_before, pending_after;
 static uint32_t ti_serial;                  /* number of commit requests we made */
-static char *sur_text;                      /* the field's text as last sent to the compositor, with the cursor's byte offset: converts delete_surrounding_text */
-static size_t sur_cursor;
 
 static void apply_enabled(void);
 static void ti_enter(void *d, struct zwp_text_input_v3 *t, struct wl_surface *s)
@@ -63,8 +61,9 @@ static void ti_done(void *d, struct zwp_text_input_v3 *t, uint32_t serial)
     (void)d; (void)t; (void)serial;
     /* delete_surrounding_text counts UTF-8 bytes around the cursor, the host's InputConnection UTF-16 units (Cyrillic, Arabic: 2 bytes, 1 unit) */
     int before = pending_before, after = pending_after;
+    const char *sur_text = ime_window ? ime_window->sur_text : NULL;
     if (sur_text) {
-        size_t len = strlen(sur_text), c = sur_cursor < len ? sur_cursor : len;
+        size_t len = strlen(sur_text), c = ime_window->sur_cursor < len ? ime_window->sur_cursor : len;
         size_t from = (size_t)before < c ? c - (size_t)before : 0, to = c + (size_t)after < len ? c + (size_t)after : len;
         before = utf8_units(sur_text, from, c);
         after = utf8_units(sur_text, c, to);
@@ -79,7 +78,9 @@ static const struct zwp_text_input_v3_listener ti_listener = {
     .delete_surrounding_text = ti_delete, .done = ti_done };
 
 /* No enter key hint: text-input-v3 (content_type) has only hint and purpose; the Enter key's label or icon is the on-screen keyboard's own (GNOME's
- * OSK derives it from purpose and hints). The EditorInfo's imeOptions action reaches only Maliit (maliit.c actionKey), as words. */
+ * OSK derives it from purpose and hints). What the protocol can say of the EditorInfo's imeOptions action: MULTILINE (Enter is a newline) only where
+ * Enter does not run the action, so a keyboard shows its action/send key for a single-line or an action field. The action's words reach only Maliit
+ * (maliit.c actionKey). */
 /* Android's EditorInfo.inputType (class, variation, flags: android.text.InputType) as text-input-v3's content hint and purpose. */
 void text_input_kind(const struct window *w, uint32_t *hint, uint32_t *purpose)
 {
@@ -104,14 +105,15 @@ void text_input_kind(const struct window *w, uint32_t *hint, uint32_t *purpose)
         if (t & 0x1000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_UPPERCASE;  /* CAP_CHARACTERS */
         else if (t & 0x2000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_TITLECASE;  /* CAP_WORDS */
         else if (t & 0x4000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_AUTO_CAPITALIZATION;  /* CAP_SENTENCES */
-        if (t & 0x20000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_MULTILINE;
+        int action = w->ime_options & 0xff;
+        if (t & 0x20000 && (w->ime_options & 0x40000000 || action <= 1)) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_MULTILINE;  /* IME_FLAG_NO_ENTER_ACTION, or no action */
     }
 }
 
 static void apply_enabled(void)
 {
     if (!text_input) return;
-    int enable = entered_window && entered_window->text_input_enabled;
+    int enable = entered_window && entered_window->text_input_enabled && !entered_window->ime_hidden;
     ime_window = enable ? entered_window : NULL;
     uint32_t hint = 0, purpose = 0;
     if (enable) {
@@ -133,10 +135,10 @@ void text_input_surrounding(struct window *w, int cursor, int anchor, const char
     int c = (int)utf16_to_byte(t, len, cursor), a = (int)utf16_to_byte(t, len, anchor);
     /* logged on receipt: the compositor may have moved the keyboard focus elsewhere (another window of the session), then nothing is forwarded */
     if (debug_input) fprintf(stderr, "[shell] text input surrounding cursor %d anchor %d of %zu bytes%s\n", c, a, len, w == ime_window ? "" : " (not forwarded: no input focus)");
+    free(w->sur_text);  /* kept per window: a window without input focus (test input, or the compositor moved the focus) still converts its deletes by it */
+    w->sur_text = strdup(t);
+    w->sur_cursor = (size_t)c;
     if (w != ime_window) { free(t); return; }
-    free(sur_text);
-    sur_text = strdup(t);
-    sur_cursor = (size_t)c;
     zwp_text_input_v3_set_surrounding_text(text_input, t, c, a);
     zwp_text_input_v3_set_text_change_cause(text_input, ZWP_TEXT_INPUT_V3_CHANGE_CAUSE_OTHER);
     zwp_text_input_v3_commit(text_input);
@@ -151,15 +153,18 @@ void text_input_enable(struct window *w, int enable)
                          * shortcut: text-input-v3 has no show request (compositors show theirs on enable); re-enable if a touch desktop needs it */
         if (debug_input) fprintf(stderr, "[shell] text input show request%s\n", w->text_input_enabled ? "" : " without a field");
         if (!text_mgr && w->text_input_enabled) maliit_enable(w, 2);
+        if (text_mgr && w->ime_hidden) { w->ime_hidden = 0; if (entered_window == w) apply_enabled(); }  /* the enable brings the compositor's keyboard back */
         return;
     }
     if (enable == 4) {  /* hideSoftInputFromWindow: the keyboard goes, the field keeps focus (a later showSoftInput brings it back).
-                         * text-input-v3 has no hide request and a disable would also end a desktop input method's composing: a no-op there */
+                         * text-input-v3 has no hide request: a disable (compositors hide their keyboard on it; it also ends a desktop input method's composing) until a show or a new field */
         if (debug_input) fprintf(stderr, "[shell] text input hide request%s\n", w->text_input_enabled ? "" : " without a field");
         if (!text_mgr && w->text_input_enabled) maliit_enable(w, 4);
+        if (text_mgr && w->text_input_enabled && !w->ime_hidden) { w->ime_hidden = 1; if (entered_window == w) apply_enabled(); }
         return;
     }
     w->text_input_enabled = enable;
+    w->ime_hidden = 0;
     if (!text_mgr) { maliit_enable(w, enable); return; }
     if (!seat) return;
     if (!text_input) {

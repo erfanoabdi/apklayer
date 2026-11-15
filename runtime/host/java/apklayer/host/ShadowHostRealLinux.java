@@ -66,6 +66,12 @@ public class ShadowHostRealLinux extends ShadowLinux {
         return natively("lseek", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, offset), ClassParameter.from(int.class, whence));
     }
     /** Os.strerror, and with it every ErrnoException message (a native Robolectric leaves returning null: apps that print it crashed). */
+    /** Real mappings (bridge/native/app_native.c): Robolectric's stand-in answered 0, and the time zone database (MemoryMappedFile) read address 0. */
+    @Implementation protected long mmap(long address, long byteCount, int prot, int flags, FileDescriptor fd, long offset) {
+        return natively("mmap", ClassParameter.from(long.class, address), ClassParameter.from(long.class, byteCount), ClassParameter.from(int.class, prot),
+                ClassParameter.from(int.class, flags), ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, offset));
+    }
+    @Implementation protected void munmap(long address, long byteCount) { natively("munmap", ClassParameter.from(long.class, address), ClassParameter.from(long.class, byteCount)); }
     @Implementation protected String strerror(int errno) { return natively("strerror", ClassParameter.from(int.class, errno)); }
     @Implementation protected void ftruncate(FileDescriptor fd, long length) { natively("ftruncate", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, length)); }
     @Implementation @Override protected FileDescriptor open(String path, int flags, int mode) {

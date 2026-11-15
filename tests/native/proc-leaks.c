@@ -13,6 +13,9 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#ifndef SYS_statx
+#define SYS_statx 291  /* arm64; Sailfish OS 5.0's kernel headers (3.18) lack it */
+#endif
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/xattr.h>

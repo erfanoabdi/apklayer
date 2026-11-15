@@ -131,6 +131,7 @@ final class ActivityTask {
                     .asSubclass(Activity.class);
         } catch (ClassNotFoundException | NullPointerException | android.content.pm.PackageManager.NameNotFoundException e) {
             if (HostInstallIntents.handle(intent, wantsResult ? stack.peek().get() : null)) return;  // the package installer's activities are the hub's
+            if (HostVpnIntents.handle(intent, stack.peek().get(), wantsResult)) return;  // VpnService.prepare()'s consent dialog is the hub's
             if (HostPortals.open(intent)) return;
             if (HostPortals.requestPermissions(intent, request == null ? -1 : request.requestCode, stack.peek().get())) return;
             if (HostPortals.requestRole(intent, stack.peek().get(), wantsResult)) return;

@@ -42,7 +42,8 @@ public final class Services {
     private static final Map<String, Running> RUNNING = new java.util.concurrent.ConcurrentHashMap<>();  // read off the main thread too (stopSelf, stopService)
     /** The services each connection is bound to (one ServiceConnection may be bound to several, as on Android). */
     private record Bound(String service, Intent.FilterComparison filter) {}
-    private static final Map<ServiceConnection, java.util.List<Bound>> CONNECTIONS = new IdentityHashMap<>();
+    private static final Map<ServiceConnection, java.util.List<Bound>> CONNECTIONS = new IdentityHashMap<>();  // guarded by itself
+    private static final Map<ServiceConnection, Integer> PENDING = new IdentityHashMap<>();  // binds posted to the main thread, not yet run (guarded by CONNECTIONS)
     private static int startId;
     /** ServiceController.create (and destroy) idles the main looper: a bind queued behind the one that creates a service would run inside it and create the service again. */
     private static boolean creating;
@@ -263,12 +264,29 @@ public final class Services {
 
     /** Binds to our service; onServiceConnected runs on the executor when there is one (bindService(Intent, int, Executor, ServiceConnection)), else on the main thread. */
     private static boolean bind(Context ctx, ComponentName cn, Intent intent, ServiceConnection conn, int flags, java.util.concurrent.Executor executor) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            // Android's bindService returns before onBind runs: a caller that holds a lock its onServiceConnected also takes (Play services'
+            // GmsClientSupervisor binding under its connection map while the main thread delivers an earlier connection) would deadlock
+            try { Class.forName(className(cn), false, Services.class.getClassLoader()); } catch (ClassNotFoundException e) { return false; }
+            synchronized (CONNECTIONS) { PENDING.merge(conn, 1, Integer::sum); }
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try { bindOnMain(ctx, cn, intent, conn, flags, executor); }
+                catch (RuntimeException failure) { System.out.println("[apklayer] bind " + cn + " failed: " + failure); failure.printStackTrace(System.out); }
+                finally { synchronized (CONNECTIONS) { PENDING.computeIfPresent(conn, (c, n) -> n > 1 ? n - 1 : null); } }
+            });
+            return true;
+        }
+        return bindOnMain(ctx, cn, intent, conn, flags, executor);
+    }
+
+    private static boolean bindOnMain(Context ctx, ComponentName cn, Intent intent, ServiceConnection conn, int flags, java.util.concurrent.Executor executor) {
         return onMain(() -> {
             if (creating) { DEFERRED.add(() -> bind(ctx, cn, intent, conn, flags, executor)); return true; }
             try {
                 Running r = instance(cn, intent);
                 Bound pair = new Bound(className(cn), new Intent.FilterComparison(new Intent(intent)));
-                java.util.List<Bound> bound = CONNECTIONS.computeIfAbsent(conn, c -> new java.util.ArrayList<>());
+                java.util.List<Bound> bound;
+                synchronized (CONNECTIONS) { bound = CONNECTIONS.computeIfAbsent(conn, c -> new java.util.ArrayList<>()); }
                 Filter filter = r.filters.computeIfAbsent(pair.filter(), f -> new Filter());
                 if (!bound.contains(pair)) {  // the same connection and intent again only changes flags on Android: still one binding
                     r.connections++; // before onBind: a service that calls stopSelf() there (Chromium's ChildProcessService) stays while it is bound
@@ -324,7 +342,18 @@ public final class Services {
 
     /** Ends the connection's bindings to services of this process; false when it has none. */
     static boolean unbindHere(ServiceConnection conn) {
-        java.util.List<Bound> pairs = CONNECTIONS.remove(conn);
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            // returns at once, as Android's: the unbind runs on the main thread after any bind of this connection posted before it
+            synchronized (CONNECTIONS) { if (!CONNECTIONS.containsKey(conn) && !PENDING.containsKey(conn)) return false; }
+            new Handler(Looper.getMainLooper()).post(() -> unbindOnMain(conn));
+            return true;
+        }
+        return unbindOnMain(conn);
+    }
+
+    private static boolean unbindOnMain(ServiceConnection conn) {
+        java.util.List<Bound> pairs;
+        synchronized (CONNECTIONS) { pairs = CONNECTIONS.remove(conn); }
         if (pairs == null) return false;
         for (Bound pair : pairs) onMain(() -> {
             Running r = RUNNING.get(pair.service());

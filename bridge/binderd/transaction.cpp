@@ -196,7 +196,7 @@ void Driver::transaction(Thread* thread, const binder_transaction_data& tr, bool
     t->debug_id = debug_id;
     t->from = !reply && !oneway ? thread : nullptr;
     t->from_pid = proc->pid;
-    t->sender_euid = proc->euid;
+    t->sender_euid = oneway && !reply && proc->app_uid ? proc->app_uid : proc->euid;
     t->to_proc = target_proc;
     t->to_thread = target_thread;
     t->code = tr.code;

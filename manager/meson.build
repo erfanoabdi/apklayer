@@ -30,7 +30,7 @@ ui = custom_target('app.h',
 
 common = '../common'  # shared with the CLI (cli/setup.cpp)
 add_project_arguments('-I' + meson.current_source_dir() / common, language: 'cpp')
-backend = static_library('backend', 'src/backend.cpp', common / 'proc.cpp', common / 'json.cpp', common / 'releases.cpp', common / 'fetch.cpp',
+backend = static_library('backend', 'src/backend.cpp', common / 'proc.cpp', common / 'json.cpp', common / 'releases.cpp', common / 'fetch.cpp', common / 'downloads.cpp',
   include_directories: include_directories(common))
 manager_src = ['src/main.cpp', 'src/setup.cpp', 'src/hardware.cpp', 'src/addons.cpp', 'src/settings.cpp', ui]
 manager_deps = [slint_dep, dependency('libpng'), dependency('threads')]
@@ -47,4 +47,5 @@ executable('apklayer-manager', manager_src,
 
 backend_test = executable('backend-test', 'tests/backend_test.cpp', link_with: backend, dependencies: dependency('threads'))
 test('updater', executable('updater-test', 'tests/updater_test.cpp', link_with: backend))  # no CLI, no network: runs anywhere
+test('downloads', executable('downloads-test', 'tests/downloads_test.cpp', link_with: backend))
 test('backend', backend_test, args: [meson.current_source_dir() / '../tests/uibench/uibench.apk'], timeout: 600)

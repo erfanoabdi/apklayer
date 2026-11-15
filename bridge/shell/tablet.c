@@ -17,6 +17,7 @@ struct tool {
     int f_in, f_out, f_down, f_up, dirty;   /* what happened since the last frame */
     double x, y, tilt_x, tilt_y, rot;       /* surface-local pixels; degrees */
     int pressure, distance, slider;         /* the protocol's 0..65535 (slider -65535..65535) */
+    int wheel;                              /* tool wheel clicks since the last frame */
     int buttons;                            /* Android BUTTON_STYLUS_* bits */
     struct tool *next;
 };
@@ -27,11 +28,11 @@ static void emit(struct tool *t, int action)
     struct window *w = t->w;
     int x = (int)t->x, y = (int)t->y;
     window_to_app(w, &x, &y);
-    int32_t v[12] = { W_ID(w), action, x * w->scale / 100, y * w->scale / 100, t->type, t->buttons,
+    int32_t v[13] = { W_ID(w), action, x * w->scale / 100, y * w->scale / 100, t->type, t->buttons,
                       t->pressure * 10000 / 65535, t->distance * 10000 / 65535,
-                      (int32_t)(t->tilt_x * 100), (int32_t)(t->tilt_y * 100), (int32_t)(t->rot * 100), t->slider * 10000 / 65535 };
+                      (int32_t)(t->tilt_x * 100), (int32_t)(t->tilt_y * 100), (int32_t)(t->rot * 100), t->slider * 10000 / 65535, t->wheel };
     if (debug_input) fprintf(stderr, "[shell] tablet action %d at %d,%d pressure %d tool %d\n", action, x, y, t->pressure, t->type);
-    send_msg(W_TARGET(w), MSG_TABLET, v, 12);
+    send_msg(W_TARGET(w), MSG_TABLET, v, 13);
 }
 
 static void tool_type(void *d, struct zwp_tablet_tool_v2 *tt, uint32_t type)
@@ -100,7 +101,7 @@ static void tool_tilt(void *d, struct zwp_tablet_tool_v2 *tt, wl_fixed_t x, wl_f
 }
 static void tool_rotation(void *d, struct zwp_tablet_tool_v2 *tt, wl_fixed_t r) { (void)tt; ((struct tool *)d)->rot = wl_fixed_to_double(r); ((struct tool *)d)->dirty = 1; }
 static void tool_slider(void *d, struct zwp_tablet_tool_v2 *tt, int32_t p) { (void)tt; ((struct tool *)d)->slider = p; ((struct tool *)d)->dirty = 1; }
-static void tool_wheel(void *d, struct zwp_tablet_tool_v2 *tt, int32_t deg, int32_t clicks) { (void)d; (void)tt; (void)deg; (void)clicks; }
+static void tool_wheel(void *d, struct zwp_tablet_tool_v2 *tt, int32_t deg, int32_t clicks) { (void)tt; (void)deg; ((struct tool *)d)->wheel += clicks; ((struct tool *)d)->dirty = 1; }
 static void tool_button(void *d, struct zwp_tablet_tool_v2 *tt, uint32_t serial, uint32_t button, uint32_t state)
 {
     (void)tt; (void)serial;
@@ -123,7 +124,7 @@ static void tool_frame(void *d, struct zwp_tablet_tool_v2 *tt, uint32_t time)
         if (t->f_out && t->f_up) emit(t, A_HOVER_EXIT);
     }
     if (t->f_out) { t->w = NULL; t->down = t->buttons = 0; }
-    t->f_in = t->f_out = t->f_down = t->f_up = t->dirty = 0;
+    t->f_in = t->f_out = t->f_down = t->f_up = t->dirty = t->wheel = 0;
 }
 static const struct zwp_tablet_tool_v2_listener tool_listener = {
     .type = tool_type, .hardware_serial = tool_serial, .hardware_id_wacom = tool_serial, .capability = tool_capability, .done = tool_done,
@@ -167,7 +168,7 @@ void tablet_forget_window(struct window *w)
     if (inj.w == w) memset(&inj, 0, sizeof inj);
 }
 
-/* "x y pressure(0..1) tilt_x tilt_y rotation(deg) distance(0..1) buttons(bit 0 BTN_STYLUS, bit 1 BTN_STYLUS2) tool(0 pen, 1 eraser)" in content
+/* "x y pressure(0..1) tilt_x tilt_y rotation(deg) distance(0..1) buttons(bit 0 BTN_STYLUS, bit 1 BTN_STYLUS2) tool(0 pen, 1 eraser) slider(-1..1) wheel(clicks)" in content
  * pixels and degrees: the tool comes into proximity if it is not, touches while the pressure is above 0; "out": it leaves. */
 int tablet_inject(struct window *w, const char *text)
 {
@@ -177,8 +178,8 @@ int tablet_inject(struct window *w, const char *text)
         tool_frame(&inj, NULL, 0);
         return 0;
     }
-    double x, y, pressure, tx = 0, ty = 0, rot = 0, dist = 0, buttons = 0, eraser = 0;
-    if (sscanf(text, "%lf %lf %lf %lf %lf %lf %lf %lf %lf", &x, &y, &pressure, &tx, &ty, &rot, &dist, &buttons, &eraser) < 3) return -3;
+    double x, y, pressure, tx = 0, ty = 0, rot = 0, dist = 0, buttons = 0, eraser = 0, slider = 0, wheel = 0;
+    if (sscanf(text, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf", &x, &y, &pressure, &tx, &ty, &rot, &dist, &buttons, &eraser, &slider, &wheel) < 3) return -3;
     if (!inj.w) {
         tool_type(&inj, NULL, eraser ? ZWP_TABLET_TOOL_V2_TYPE_ERASER : ZWP_TABLET_TOOL_V2_TYPE_PEN);
         tool_in(&inj, NULL, last_input_serial, NULL, w->surface);
@@ -189,6 +190,8 @@ int tablet_inject(struct window *w, const char *text)
     tool_rotation(&inj, NULL, wl_fixed_from_double(rot));
     tool_distance(&inj, NULL, (uint32_t)(dist * 65535));
     tool_pressure(&inj, NULL, (uint32_t)(pressure * 65535));
+    tool_slider(&inj, NULL, (int32_t)(slider * 65535));
+    if (wheel != 0) tool_wheel(&inj, NULL, (int32_t)wheel * 15, (int32_t)wheel);
     if (pressure > 0 && !inj.down) tool_down(&inj, NULL, last_input_serial);
     else if (pressure <= 0 && inj.down) tool_up(&inj, NULL);
     for (int i = 0; i < 2; i++)

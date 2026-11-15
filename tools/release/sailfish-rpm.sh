@@ -18,7 +18,7 @@ if [ "${1:-}" = --in-root ]; then  # inside the build root: <version>; /work the
     done
     set -- --define "_topdir $top" --define "apklayer_version $version" --define "apklayer_prebuilts /cache/prebuilts" \
         --define "apklayer_slint /cache/slint" /work/rpm/apklayer.spec
-    zyp -n in $(rpmspec -q --buildrequires "$@" | sed 's/ .*//' | sort -u)
+    zyp -n in $(rpmspec -q --buildrequires "$@" | grep -v '^(' | sed 's/ .*//' | sort -u)  # a rich dependency (the JDK, installed above) is not a name
     sh /work/tools/release/sailfish-slint.sh /cache/slint  # apklayer-manager's Slint, built once (crates in /cache/cargo)
     rpmbuild -bb "$@"
     cp "$top"/RPMS/*/apklayer-*"$version"-*.rpm /out/

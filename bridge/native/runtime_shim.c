@@ -212,6 +212,8 @@ static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNI
 
 /* libcore.util.NativeAllocationRegistry.applyFreeFunction: part of ART's libcore on a device, a host-runtime function in
  * Google's HostRuntime.cpp; neither exists here, so it is provided (it just calls the free function). */
+int register_i18n_memory(JNIEnv *env);  /* i18n_memory.c: libicu_jni's Memory natives (the time zone database) */
+
 static void JNICALL apply_free_function(JNIEnv *env, jclass cls, jlong free_function, jlong ptr)
 {
     (void)env; (void)cls;
@@ -388,6 +390,7 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
     jclass nar = (*env)->FindClass(env, "libcore/util/NativeAllocationRegistry");
     if (nar) (*env)->GetMethodID(env, nar, "<init>", "()V"), (*env)->ExceptionClear(env), (*env)->RegisterNatives(env, nar, &registry, 1);
     else { (*env)->ExceptionClear(env); failed++; }
+    if (register_i18n_memory(env) < 0) { fprintf(stderr, "[runtime] com.android.i18n.timezone.internal.Memory natives not registered\n"); failed++; }  /* i18n_memory.c */
 
     /* declared ANDROID_API in jni_runtime.h: extern "C" (unmangled) or not, depending on the build */
     void (*init_graphics)(void) = hwui ? bionic_dlsym(hwui, "init_android_graphics") : NULL;

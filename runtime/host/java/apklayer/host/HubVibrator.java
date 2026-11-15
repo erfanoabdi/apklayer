@@ -35,8 +35,9 @@ final class HubVibrator extends IVibratorManagerService.Stub {
     // IVibrator's transactions (hardware/interfaces/vibrator/aidl/aidl_api/.../4/IVibrator.aidl, in declaration order) and capabilities
     private static final int GET_CAPABILITIES = IBinder.FIRST_CALL_TRANSACTION, OFF = GET_CAPABILITIES + 1, ON = GET_CAPABILITIES + 2,
             PERFORM = GET_CAPABILITIES + 3, SET_AMPLITUDE = GET_CAPABILITIES + 5, GET_COMPOSITION_DELAY_MAX = GET_CAPABILITIES + 7,
-            GET_COMPOSITION_SIZE_MAX = GET_CAPABILITIES + 8, GET_PRIMITIVE_DURATION = GET_CAPABILITIES + 10, COMPOSE = GET_CAPABILITIES + 11;
-    private static final int CAP_AMPLITUDE_CONTROL = 4, CAP_COMPOSE_EFFECTS = 32, PRIMITIVES = 9;  // CompositePrimitive NOOP..LOW_TICK
+            GET_COMPOSITION_SIZE_MAX = GET_CAPABILITIES + 8, GET_PRIMITIVE_DURATION = GET_CAPABILITIES + 10, COMPOSE = GET_CAPABILITIES + 11, GET_FREQUENCY_RESOLUTION = GET_CAPABILITIES + 17, GET_FREQUENCY_MINIMUM = GET_CAPABILITIES + 18,
+            GET_BANDWIDTH_AMPLITUDE_MAP = GET_CAPABILITIES + 19, COMPOSE_PWLE = GET_CAPABILITIES + 23;
+    private static final int CAP_AMPLITUDE_CONTROL = 4, CAP_COMPOSE_EFFECTS = 32, CAP_COMPOSE_PWLE_EFFECTS = 1024, PRIMITIVES = 9;  // CompositePrimitive NOOP..LOW_TICK
 
     private final BiPredicate<Integer, String> holds;  // uid, permission
     private static final int RAMP_STEP_MS = 20;
@@ -119,7 +120,7 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         player.start();
     }
 
-    // shortcut: ramp (PWLE, PwleSegment and BasicPwleSegment) segments play as amplitude steps (the HAL's composePwle needs its frequency map), and a repeating waveform plays once
+    // shortcut: a PwleSegment goes to the HAL's composePwle when it has the capability (else, or when the HAL refuses it, as steps); BasicPwleSegment (intensity, no frequency) always as steps; a repeating waveform plays once
     private void play(VibrationEffect.Composed effect) {
         try {
             for (VibrationEffectSegment segment : effect.getSegments()) {
@@ -145,7 +146,10 @@ final class HubVibrator extends IVibratorManagerService.Stub {
                     Thread.sleep(primitive.getDelay() + hal(GET_PRIMITIVE_DURATION, ints(primitive.getPrimitiveId())));
                     continue;
                 }
-                if (segment instanceof PwleSegment pwle) { ramp(pwle.getStartAmplitude(), pwle.getEndAmplitude(), pwle.getDuration()); continue; }
+                if (segment instanceof PwleSegment pwle) {
+                    if (!composePwle(pwle)) ramp(pwle.getStartAmplitude(), pwle.getEndAmplitude(), pwle.getDuration());
+                    continue;
+                }
                 if (segment instanceof BasicPwleSegment pwle) { ramp(pwle.getStartIntensity(), pwle.getEndIntensity(), pwle.getDuration()); continue; }
                 if (!(segment instanceof StepSegment step) || step.getDuration() <= 0) continue;
                 step(step.getAmplitude() == VibrationEffect.DEFAULT_AMPLITUDE ? 1f : step.getAmplitude(), step.getDuration());
@@ -156,6 +160,30 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         } catch (RemoteException gone) {
             System.out.println("[apklayer-hub] vibrator: " + gone);
         }
+    }
+
+    /** The segment as one IVibrator.composePwle (a vector of one PrimitivePwle union: active; ActivePwle's fields in AIDL order); false: the HAL cannot, play steps. */
+    private boolean composePwle(PwleSegment pwle) throws RemoteException, InterruptedException {
+        if ((hal(GET_CAPABILITIES, null) & CAP_COMPOSE_PWLE_EFFECTS) == 0) return false;
+        // the HAL's range: from its minimum in its resolution's steps, one per entry of the bandwidth amplitude map (the float results read as ints by hal(); the array's first int is its length)
+        float min = Float.intBitsToFloat(hal(GET_FREQUENCY_MINIMUM, null)), max = min + Float.intBitsToFloat(hal(GET_FREQUENCY_RESOLUTION, null)) * (hal(GET_BANDWIDTH_AMPLITUDE_MAP, null) - 1);
+        Parcel args = Parcel.obtain();
+        args.writeInt(1);  // one element
+        args.writeInt(1);  // not null
+        args.writeInt(0);  // the union's tag: active
+        args.writeInt(1);  // the ActivePwle is not null
+        args.writeInt(24);  // its size with its own header
+        args.writeFloat(pwle.getStartAmplitude());
+        args.writeFloat(Math.max(min, Math.min(max, pwle.getStartFrequencyHz())));  // as the framework's adapters keep a segment in the vibrator's range
+        args.writeFloat(pwle.getEndAmplitude());
+        args.writeFloat(Math.max(min, Math.min(max, pwle.getEndFrequencyHz())));
+        args.writeInt((int) pwle.getDuration());
+        args.writeStrongBinder(null);
+        try { hal(COMPOSE_PWLE, args); }
+        catch (RuntimeException refused) { System.out.println("[apklayer-hub] vibrator: composePwle refused (" + refused + "): steps"); return false; }  // IllegalArgument (frequency outside the HAL's range), Unsupported
+        System.out.println("[apklayer-hub] vibrator: PWLE segment on the HAL");
+        Thread.sleep(pwle.getDuration());
+        return true;
     }
 
     /** A ramp (PWLE) as steps of RAMP_STEP_MS at the amplitude of each step's middle, as Android's RampToStepAdapter does where the HAL has no PWLE. */
@@ -185,6 +213,7 @@ final class HubVibrator extends IVibratorManagerService.Stub {
 
     @Override public void performHapticFeedback(int uid, int deviceId, String opPkg, int constant, int usage, String reason, int flags, int privFlags) {
         if (!holds.test(uid, android.Manifest.permission.VIBRATE) || constant == HapticFeedbackConstants.NO_HAPTICS) return;
+        if ((flags & HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING) == 0 && !hapticFeedbackEnabled()) return;  // Settings > Sound > Touch feedback, as VibratorManagerService
         // the effects of system_server's HapticFeedbackVibrationProvider.getVibration (the HAL's own effects; no per-device or setting overrides)
         int effect = switch (constant) {
             case HapticFeedbackConstants.CONTEXT_CLICK, HapticFeedbackConstants.GESTURE_END, HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE,
@@ -201,6 +230,14 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         };
         System.out.println("[apklayer-hub] vibrator: haptic feedback " + constant + " -> effect " + effect);
         vibrate(uid, deviceId, opPkg, CombinedVibration.createParallel(VibrationEffect.get(effect)), null, reason, null);
+    }
+
+    /** Settings.System.HAPTIC_FEEDBACK_ENABLED (default on); unreadable (no settings provider yet): on. */
+    private static boolean hapticFeedbackEnabled() {
+        try {
+            return android.provider.Settings.System.getInt(org.robolectric.RuntimeEnvironment.getApplication().getContentResolver(),
+                    android.provider.Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0;
+        } catch (RuntimeException e) { return true; }
     }
 
     @Override public void performHapticFeedbackForInputDevice(int uid, int deviceId, String opPkg, int constant, int inputDeviceId, int inputSource,

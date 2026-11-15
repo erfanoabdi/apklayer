@@ -20,13 +20,14 @@ final class ShellClient {
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106, TABLET = 117,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
-            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
+            LAYOUT = 118, DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
     private static final int WINDOW_ID = 1;
 
     private final SocketChannel channel;
     private final ConcurrentLinkedQueue<int[]> input = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<Object[]> imeIn = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<String> clipboardIn = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<String> layoutIn = new ConcurrentLinkedQueue<>();
     private volatile boolean closed;
     private HostVsync vsync;
     private int width, height;
@@ -77,6 +78,11 @@ final class ShellClient {
         return clipboardIn.poll();
     }
 
+    /** The language tag of the keyboard layout now in use (the shell's xkb group), or null. */
+    String pollLayout() {
+        return layoutIn.poll();
+    }
+
     /** The app copied text: the shell becomes the selection owner. */
     void sendClipboard(String text) {
         try {
@@ -102,9 +108,10 @@ final class ShellClient {
     }
 
     /** The window style (HostConfiguration.windowMode of this app: auto, desktop or mobile): the shell lays the window out in it, live. */
-    void sendWindowMode(String mode) {
+    void sendWindowMode(String mode, String navbar) {
         try {
-            send(WINDOW_MODE, buf(8).putInt(WINDOW_ID).putInt(mode.equals("mobile") ? 2 : mode.equals("desktop") ? 1 : 0));
+            send(WINDOW_MODE, buf(12).putInt(WINDOW_ID).putInt(mode.equals("mobile") ? 2 : mode.equals("desktop") ? 1 : 0)
+                    .putInt(navbar.equals("on") ? 1 : navbar.equals("off") ? 2 : 0));
         } catch (IOException e) {
             // shell gone: the read loop notices
         }
@@ -189,10 +196,10 @@ final class ShellClient {
                     input.add(new int[] {13, body.getInt(4), body.getInt(8), body.getInt(12),
                             body.getInt(16), len >= 24 ? body.getInt(20) : 0});
                 } else if (type == TABLET) {
-                    // {17, action, x, y, tool, buttons, pressure*10000, distance*10000, tilt x deg*100, tilt y deg*100, rotation deg*100, slider*10000}
-                    int[] ev = new int[12];
+                    // {17, action, x, y, tool, buttons, pressure*10000, distance*10000, tilt x deg*100, tilt y deg*100, rotation deg*100, slider*10000, tool wheel clicks}
+                    int[] ev = new int[13];
                     ev[0] = 17;
-                    for (int i = 1; i < 12; i++) ev[i] = body.getInt(4 * i);
+                    for (int i = 1; i < 13; i++) ev[i] = body.getInt(4 * i);
                     input.add(ev);
                 } else if (type == CONFIGURE) {
                     // {14, w, h, scale*100, density dpi (0: 160 x scale), navigation bar px (0: none), output w, h px (0: unknown),
@@ -214,6 +221,8 @@ final class ShellClient {
                             split + 1 <= len ? new String(raw, split + 1, len - split - 1, StandardCharsets.UTF_8) : ""});
                 } else if (type == CLIPBOARD) {
                     clipboardIn.add(new String(body.array(), 0, len, StandardCharsets.UTF_8));
+                } else if (type == LAYOUT) {
+                    layoutIn.add(new String(body.array(), 4, len - 4, StandardCharsets.UTF_8));
                 } else if (type == STATE) {
                     // {15, flags}: bit0 active, bit1 minimized
                     input.add(new int[] {15, body.getInt(4)});

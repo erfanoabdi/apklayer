@@ -7,6 +7,11 @@ set -eu
 native="$(realpath "$1")" half="$(cd "$2" && pwd)" share="$(cd "$(dirname "$0")/.." && pwd)"
 # a wrong half (a CLI built for another layout resolved it to /) would link every entry of it into the runtime
 [ -f "$half/native-runtime.jar" ] || { echo "apklayer: $half is not apklayer's native dir (no native-runtime.jar); runtime not set up" >&2; exit 1; }
+# a runtime another build linked into (its native-runtime.jar link still resolves) is not ours to relink: a dev tree's CLI would leave it dangling once the tree is deleted
+owner="$(readlink "$native/native-runtime.jar" 2>/dev/null || true)"
+if [ -n "$owner" ] && [ -e "$owner" ] && [ "$(dirname "$owner")" != "$half" ]; then
+    echo "apklayer: the runtime $native is set up by $(dirname "$owner"), not by $half; not relinking it (APKLAYER_NATIVE=<own copy of the runtime> for this build)" >&2; exit 1
+fi
 exec 9>"$native/.setup.lock" && flock 9
 [ "$(stat -c %Y "$native/.setup" 2>/dev/null)" != "$(stat -c %Y "$half/native-runtime.jar")" ] || exit 0  # another CLI did it meanwhile
 echo "apklayer: setting up the Android runtime in $native (after each update, a few minutes)" >&2
@@ -16,6 +21,16 @@ for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an upd
     [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"
 done
 tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
+for d in "$half"/android-root/apex/*; do  # the package build's apex dirs the bundle lacks: com.android.art (libart.so: the JNI tables), com.android.runtime (bionic, linker); linked, so their own links resolve
+    t="$native/android-root/apex/${d##*/}"
+    [ ! -d "$d" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$d" "$t"
+done
+# the package build's libjavacore link points into its build root (/cache/prebuilts/...): the art apex dir becomes a real one, its entries linked, libjavacore from the bundle
+art="$native/android-root/apex/com.android.art"
+if [ -L "$art" ] && [ ! -e "$art/lib64/libjavacore.so" ] && [ -e "$native/android-libs/libjavacore.so" ]; then
+    src="$(readlink "$art")" && rm "$art" && mkdir -p "$art/lib64" && for f in "$src"/lib64/*; do ln -sfn "$f" "$art/lib64/"; done
+    ln -sfn ../../../../android-libs/libjavacore.so "$art/lib64/libjavacore.so"  # relative: the runtime dir may move
+fi
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
 echo "apklayer: 1/3 patching the framework jars" >&2
 patch_jar() {

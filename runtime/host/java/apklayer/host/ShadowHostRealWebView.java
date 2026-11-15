@@ -18,4 +18,16 @@ public class ShadowHostRealWebView extends ShadowViewGroup {
         catch (ClassNotFoundException missing) { throw new IllegalStateException(missing); }
         return ShadowHostWebViewFactory.providerLoader();
     }
+    /**
+     * WebView.getCurrentWebViewPackage: the provider package, as the webviewupdate service answers it. There is no such service here, and the framework's
+     * WebViewUpdateManager.getInstance then throws "WebView not supported by device", which Play services' AdServicesBackCompatModuleInitIntentOperation
+     * does not catch: its crash handler ended the whole process, again and again (Play Store's binds to it timed out). Asks the package manager, not the
+     * provider: no native library load for a version query.
+     */
+    @Implementation protected static android.content.pm.PackageInfo getCurrentWebViewPackage() {
+        String dir = System.getProperty("apklayer.webviewprovider");
+        if (dir == null) return null;
+        try { return org.robolectric.RuntimeEnvironment.getApplication().getPackageManager().getPackageInfo(new java.io.File(dir).getName(), 0); }
+        catch (android.content.pm.PackageManager.NameNotFoundException none) { return null; }
+    }
 }

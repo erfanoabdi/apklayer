@@ -84,6 +84,13 @@ death notifications (request, clear, dead binder done, the AND_CLEAR state); fd 
 BINDER_SET_CONTEXT_MGR(_EXT), BINDER_VERSION (8), BINDER_SET_MAX_THREADS, BINDER_THREAD_EXIT, BINDER_GET_NODE_DEBUG_INFO,
 BINDER_GET_NODE_INFO_FOR_REF, BINDER_ENABLE_ONEWAY_SPAM_DETECTION, BINDER_GET_EXTENDED_ERROR, BINDER_FREEZE, BINDER_GET_FROZEN_INFO.
 
+apklayer's own: `APKLAYER_BINDER_SET_SENDER_UID` (protocol.h), the app uid an unsandboxed process names once it knows its app (HubClient ->
+RealBinder.setSenderUid -> binder_route): its oneway transactions carry it as `sender_euid`. Unsandboxed, every process is the desktop user and a
+oneway call has no `sender_pid`, so a receiver without an interface-token header (grpc-binder: Play Store's internal-only policy) could not
+tell the sender; on Android the kernel's `sender_euid` is the app uid. Taken only from a process of the daemon's own user (a sandboxed app keeps
+its kernel-attested uid); two-way transactions keep the euid (the receiver names those by pid). The kernel's binder has no equivalent: there such
+a call still reads as nobody.
+
 ## Threading and BR_SPAWN_LOOPER
 
 One thread per context runs that context's model (binder, hwbinder and vndbinder share no state: a Driver each); the main thread accepts

@@ -39,6 +39,18 @@ public final class Main extends Activity {
                         obbHidden &= !new java.io.File(root + "/Android/obb/" + other + "/secret").exists();
                         try { new java.io.FileInputStream(root + "/Android/data/" + other + "/files/secret").close(); dataHidden = false; } catch (java.io.IOException denied) { /* expected */ }
                     }
+                    java.io.File link = new java.io.File(getFilesDir(), "lnk");  // a symlink the app makes itself to another package's directory or a parent of it: Android resolves it and answers as for the real path
+                    boolean linkHidden = true;
+                    for (String target : new String[] {"/storage/emulated/0/Android/data/" + other, "/storage/emulated/0/Android/data", "/storage/emulated/0/Android", "/proc/self/root/sdcard/Android/data/" + other}) {
+                        link.delete();
+                        android.system.Os.symlink(target, link.getPath());
+                        String tail = target.endsWith(other) ? "/files/secret" : target.endsWith("data") ? "/" + other + "/files/secret" : target.endsWith("Android") ? "/data/" + other + "/files/secret" : "/files/secret";
+                        linkHidden &= !new java.io.File(link.getPath() + tail).exists();
+                        try { new java.io.FileInputStream(link.getPath() + tail).close(); linkHidden = false; } catch (java.io.IOException denied) { /* expected */ }
+                        try { android.system.Os.stat(link.getPath() + tail); linkHidden = false; } catch (android.system.ErrnoException denied) { /* expected */ }
+                    }
+                    link.delete();
+                    System.out.println("[files] scoped link=" + linkHidden);
                     System.out.println("[files] scoped own=" + own + " dataHidden=" + dataHidden + " obbHidden=" + obbHidden);
                     System.out.println("[files] DONE"); finish(); return;
                 }

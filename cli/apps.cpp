@@ -31,7 +31,7 @@ std::string cacheKey(const Layout& l, const std::string& apk, const std::vector<
     std::string text = sha256File(apk);
     for (const std::string& s : splits) text += " " + sha256File(s);  // a split's code converts with the base (dex2jvm reads split_*.apk beside base.apk)
     text += "\nconverter-abi " + std::to_string(kConverterAbi);
-    text += "\npost-processing v19: platform Class.getClassLoader/getResource, guest environment and process launches, per-session postprocessing, parent context metadata, genuine PathClassLoader casts, app-facing ART properties, verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
+    text += "\npost-processing v20: direct-buffer position write-back, platform Class.getClassLoader/getResource, guest environment and process launches, per-session postprocessing, parent context metadata, genuine PathClassLoader casts, app-facing ART properties, verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
     std::vector<std::string> jars = listDir(l.frameworkDir());
     std::sort(jars.begin(), jars.end());
     for (const std::string& j : jars)
@@ -112,6 +112,14 @@ std::string hostClasspath(const Layout& l) {  // no app classes: they get a load
     std::string shim = exists(join(n, "shim.jar")) ? join(n, "shim.jar") + ":" : "";
     return shim + n + "/native-runtime.jar:" + l.hostClasses() + ":" + sim + ":" + n + "/aosp/Robolectric_all.jar:" + l.deps +
            "/android-stub.jar:" + l.dex2jvmJar();
+}
+
+int previewApk(const Layout& l, const std::string& file, const std::string& iconOut) {
+    if (!exists(file)) die("no such file: " + file);
+    Spawn s;
+    s.argv = {findJava(l), "-cp", l.hostClasses(), "apklayer.tools.ApkPreview", file, iconOut};
+    s.env = currentEnv();
+    return runAndWait(s);
 }
 
 std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade, bool system) {
@@ -231,8 +239,13 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     }
     makeDirs(dir);
     std::string oldUid = property(old, "uid");
-    for (const std::string& f : apkFiles(dir)) if (f != "base.apk") unlink(join(dir, f).c_str());  // the update's own splits replace the old ones
-    for (const std::string& f : apkFiles(tmp)) {
+    // an APK the same as the installed one stays the installed file (its mtime too: a reconvert is no app update, and Play services'
+    // Chimera takes a container APK with a new mtime for an update it then cannot finish); the update's own splits replace the old ones
+    std::vector<std::string> staged = apkFiles(tmp);
+    for (const std::string& f : apkFiles(dir))
+        if (f != "base.apk" && std::find(staged.begin(), staged.end(), f) == staged.end()) unlink(join(dir, f).c_str());
+    for (const std::string& f : staged) {
+        if (exists(join(dir, f)) && sha256File(join(dir, f)) == sha256File(join(tmp, f))) { unlink(join(tmp, f).c_str()); chmod(join(dir, f).c_str(), 0644); continue; }
         sh({"mv", "-f", join(tmp, f), join(dir, f)});
         chmod(join(dir, f).c_str(), 0644);  // readable by every app, as Android's /data/app (a sandboxed app's own uid too); a copy keeps its source's 0600
     }

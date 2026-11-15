@@ -50,6 +50,13 @@ final class HubUsb {
         return yes && attached.containsKey(device);
     }
 
+    /** The node read-write as the user, for a package that holds the permission (ParcelFileDescriptor.open; the caller closes its copy); null otherwise or without access. */
+    android.os.ParcelFileDescriptor open(String pkg, String device) {
+        if (!grants.contains(pkg + "\t" + device) || !attached.containsKey(device)) return null;
+        try { return android.os.ParcelFileDescriptor.open(new java.io.File(device), android.os.ParcelFileDescriptor.MODE_READ_WRITE); }
+        catch (IOException noAccess) { System.out.println("[apklayer-hub] usb: cannot open " + device + ": " + noAccess.getMessage()); return null; }
+    }
+
     /** udev's usb events (`udevadm monitor`, as HostBattery's): the device list again, broadcasts for what came and went. */
     void watch() {
         attached = HostUsb.devices();  // the devices present at start: no events, as after a device's boot
@@ -84,8 +91,9 @@ final class HubUsb {
         }
     }
 
-    /** The activities that asked for this device in their manifest: the person picks one (asked in turn, the first yes wins); it gets the permission and the intent. */
+    /** The activities that asked for this device in their manifest: one asks as UsbConfirmActivity does, several share one chooser (UsbResolverActivity); the pick gets the permission and the intent. */
     private void offer(UsbDevice device, Intent intent) {
+        java.util.List<String[]> found = new java.util.ArrayList<>();  // {package, activity class}
         for (String pkg : packages.installed()) {
             PackageParser.Package parsed;
             try { parsed = packages.get(pkg); } catch (RuntimeException unreadable) { continue; }
@@ -93,15 +101,25 @@ final class HubUsb {
             for (PackageParser.Activity activity : parsed.activities) {
                 if (activity.intents.stream().noneMatch(filter -> filter.hasAction(UsbManager.ACTION_USB_DEVICE_ATTACHED))) continue;
                 int xml = activity.metaData == null ? 0 : activity.metaData.getInt(UsbManager.ACTION_USB_DEVICE_ATTACHED);
-                if (xml == 0 || !matches(pkg, xml, device) || !attached.containsKey(device.getDeviceName())) continue;
-                String label = HubInstaller.labelOf(pkg, pkg);
-                if (!HubInstallDialog.ask("Open " + label + " to handle " + name(device) + "?", "The app gets the USB device " + device.getDeviceName() + ".", "OK", "Cancel")) continue;
-                grants.add(pkg + "\t" + device.getDeviceName());
-                System.out.println("[apklayer-hub] usb: " + device.getDeviceName() + " opens " + pkg + "/" + activity.info.name);
-                directory.startSystem(new Intent(intent).setComponent(new ComponentName(pkg, activity.info.name)));
-                return;
+                if (xml != 0 && matches(pkg, xml, device)) { found.add(new String[] {pkg, activity.info.name}); break; }  // one activity per app
             }
         }
+        if (found.isEmpty() || !attached.containsKey(device.getDeviceName())) return;
+        String[] pick;
+        if (found.size() == 1) {
+            String label = HubInstaller.labelOf(found.get(0)[0], found.get(0)[0]);
+            pick = HubInstallDialog.ask("Open " + label + " to handle " + name(device) + "?", "The app gets the USB device " + device.getDeviceName() + ".", "OK", "Cancel") ? found.get(0) : null;
+        } else {
+            String[] labels = found.stream().map(f -> HubInstaller.labelOf(f[0], f[0])).toArray(String[]::new);
+            int[] picked = {0};
+            int button = HubInstallDialog.choose("Open " + name(device) + " with", "The app you pick gets the USB device " + device.getDeviceName() + ".", labels, picked,
+                    new String[] {"OK", "Cancel"}, new String[] {"yes", "no"});
+            pick = button == 0 ? found.get(picked[0]) : null;
+        }
+        if (pick == null || !attached.containsKey(device.getDeviceName())) return;
+        grants.add(pick[0] + "\t" + device.getDeviceName());
+        System.out.println("[apklayer-hub] usb: " + device.getDeviceName() + " opens " + pick[0] + "/" + pick[1]);
+        directory.startSystem(new Intent(intent).setComponent(new ComponentName(pick[0], pick[1])));
     }
 
     /** The package's device_filter resource: any usb-device element that matches (DeviceFilter, as UsbProfileGroupSettingsManager.packageMatchesLocked). */
