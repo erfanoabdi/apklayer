@@ -54,7 +54,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
-- Owner to decide: `dh_installsystemduser` enables `apklayerd` for every user at login (`/etc/systemd/user/default.target.wants/apklayerd.service` after `dpkg -i`) although `debian/rules` and `docs/INSTALL.md` say it starts on demand: keep it, or `override_dh_installsystemduser: dh_installsystemduser --no-enable`.
 - Sailfish RPM: the `jni_guest_surface.c` change now logs `[runtime] jni_guest_surface active: ...` once per app JVM; needs an RPM of this tree installed on the Quintus and one app run to see it there.
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
