@@ -83,7 +83,14 @@ final class HubPackages {
 
     /** The Android app uid of an installed package (info.properties), or -1. */
     int uid(String name) {
-        try { return Integer.parseInt(property(name, "uid")); } catch (NumberFormatException none) { return -1; }
+        installed();  // refreshes the directory's scan, which keeps the uids read so far
+        Scan known = scan;
+        Integer kept = known == null ? null : known.uids.get(name);
+        if (kept != null) return kept;
+        int uid;
+        try { uid = Integer.parseInt(property(name, "uid")); } catch (NumberFormatException none) { uid = -1; }
+        if (known != null && uid >= 0) known.uids.put(name, uid);
+        return uid;
     }
 
     /** A key of the package's info.properties (written by `apklayer install`), "" when absent. */
@@ -158,14 +165,28 @@ final class HubPackages {
         return null;
     }
 
-    /** Installed package names (every directory with an APK). */
+    /** What the apps directory held when it last changed (its modification time: an install, update or removal renames or removes a directory in it). */
+    private record Scan(long stamp, List<String> names, java.util.concurrent.ConcurrentHashMap<String, Integer> uids) {}
+    private volatile Scan scan;
+
+    /**
+     * Installed package names (every directory with an APK). Kept while the apps directory is unchanged: the permission checks (uidHolds, definition) ask for it
+     * per package and permission, ~700 times when audioserver is fed with 147 packages (4 s of directory listings and info.properties reads at the hub's start).
+     * shortcut: a change within 2 s of the directory's time is not trusted (file system time granularity): listed anew until it is older.
+     */
     List<String> installed() {
+        long stamp;
+        try { stamp = Files.getLastModifiedTime(root).to(java.util.concurrent.TimeUnit.NANOSECONDS); } catch (IOException failure) { throw new IllegalStateException("Cannot list installed packages", failure); }
+        Scan known = scan;
+        if (known != null && known.stamp == stamp) return known.names;
         List<String> names = new ArrayList<>();
         try (var stream = Files.list(root)) {
             // an install in progress stages in apps/.install.XXXXXX (cli/apps.cpp) before its rename: no package name starts with a dot
             stream.filter(directory -> !directory.getFileName().toString().startsWith(".") && Files.isRegularFile(directory.resolve("base.apk")) && Files.isRegularFile(directory.resolve("info.properties"))).forEach(directory -> names.add(directory.getFileName().toString()));
         } catch (IOException failure) { throw new IllegalStateException("Cannot list installed packages", failure); }
-        return names;
+        List<String> listed = List.copyOf(names);
+        scan = System.currentTimeMillis() - stamp / 1_000_000 < 2000 ? null : new Scan(stamp, listed, new java.util.concurrent.ConcurrentHashMap<>());
+        return listed;
     }
 
     /** Manifest receivers whose intent filter matches the broadcast (all packages, or the one named). */
