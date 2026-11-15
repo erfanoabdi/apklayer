@@ -15,7 +15,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - x86 PC: `system-apps` case `downloads` and `input` `ime-insets` fail (also unsandboxed).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
-- FCL: no new frame after a window resize.
+- FCL: no new frame after a window resize (Vulkan game window). Not reproduced on Parallels (`tests/run resize-frame` passes); needs the game window on the x86 PC (`RESIZE_PKG` picks the app); suspect `bridge/shell/vsync.c`'s single shared frame callback.
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
@@ -107,7 +107,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- Finish `tools/stage` in Python and fold `tools/release/*` into Meson.
 - F-Droid update and uninstall flows are not scripted in the corpus (Aurora and Telegram scripts exist).
 - Flaky, not reproduced: webview-input, native-media AVC on Parallels, audio-silent on the x86 PC (watch for a recurrence with its log).
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
