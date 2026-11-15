@@ -1,0 +1,175 @@
+/* generated list of the GL functions formats.c calls: each is fetched with eglGetProcAddress (as an engine that loads GL itself does; through Android's libGLESv2 a linked call can hit its stubs). */
+static __typeof__(&glActiveTexture) p_glActiveTexture;
+static __typeof__(&glAttachShader) p_glAttachShader;
+static __typeof__(&glBindFramebuffer) p_glBindFramebuffer;
+static __typeof__(&glBindRenderbuffer) p_glBindRenderbuffer;
+static __typeof__(&glBindTexture) p_glBindTexture;
+static __typeof__(&glBindVertexArray) p_glBindVertexArray;
+static __typeof__(&glBlendFunc) p_glBlendFunc;
+static __typeof__(&glBlitFramebuffer) p_glBlitFramebuffer;
+static __typeof__(&glCheckFramebufferStatus) p_glCheckFramebufferStatus;
+static __typeof__(&glClear) p_glClear;
+static __typeof__(&glClearColor) p_glClearColor;
+static __typeof__(&glClearDepthf) p_glClearDepthf;
+static __typeof__(&glClearStencil) p_glClearStencil;
+static __typeof__(&glCompileShader) p_glCompileShader;
+static __typeof__(&glCompressedTexImage2D) p_glCompressedTexImage2D;
+static __typeof__(&glCreateProgram) p_glCreateProgram;
+static __typeof__(&glCreateShader) p_glCreateShader;
+static __typeof__(&glDeleteFramebuffers) p_glDeleteFramebuffers;
+static __typeof__(&glDeleteRenderbuffers) p_glDeleteRenderbuffers;
+static __typeof__(&glDeleteTextures) p_glDeleteTextures;
+static __typeof__(&glDepthFunc) p_glDepthFunc;
+static __typeof__(&glDisable) p_glDisable;
+static __typeof__(&glDrawArrays) p_glDrawArrays;
+static __typeof__(&glEnable) p_glEnable;
+static __typeof__(&glFramebufferRenderbuffer) p_glFramebufferRenderbuffer;
+static __typeof__(&glFramebufferTexture2D) p_glFramebufferTexture2D;
+static __typeof__(&glGenerateMipmap) p_glGenerateMipmap;
+static __typeof__(&glGenFramebuffers) p_glGenFramebuffers;
+static __typeof__(&glGenRenderbuffers) p_glGenRenderbuffers;
+static __typeof__(&glGenTextures) p_glGenTextures;
+static __typeof__(&glGenVertexArrays) p_glGenVertexArrays;
+static __typeof__(&glGetError) p_glGetError;
+static __typeof__(&glGetFramebufferAttachmentParameteriv) p_glGetFramebufferAttachmentParameteriv;
+static __typeof__(&glGetIntegerv) p_glGetIntegerv;
+static __typeof__(&glGetInternalformativ) p_glGetInternalformativ;
+static __typeof__(&glGetShaderInfoLog) p_glGetShaderInfoLog;
+static __typeof__(&glGetShaderiv) p_glGetShaderiv;
+static __typeof__(&glGetString) p_glGetString;
+static __typeof__(&glGetStringi) p_glGetStringi;
+static __typeof__(&glGetUniformLocation) p_glGetUniformLocation;
+static __typeof__(&glIsEnabled) p_glIsEnabled;
+static __typeof__(&glLinkProgram) p_glLinkProgram;
+static __typeof__(&glPixelStorei) p_glPixelStorei;
+static __typeof__(&glReadPixels) p_glReadPixels;
+static __typeof__(&glRenderbufferStorage) p_glRenderbufferStorage;
+static __typeof__(&glRenderbufferStorageMultisample) p_glRenderbufferStorageMultisample;
+static __typeof__(&glShaderSource) p_glShaderSource;
+static __typeof__(&glStencilFunc) p_glStencilFunc;
+static __typeof__(&glStencilOp) p_glStencilOp;
+static __typeof__(&glTexImage2D) p_glTexImage2D;
+static __typeof__(&glTexParameteri) p_glTexParameteri;
+static __typeof__(&glTexStorage2D) p_glTexStorage2D;
+static __typeof__(&glUniform1f) p_glUniform1f;
+static __typeof__(&glUniform1i) p_glUniform1i;
+static __typeof__(&glUniform4f) p_glUniform4f;
+static __typeof__(&glUseProgram) p_glUseProgram;
+static __typeof__(&glViewport) p_glViewport;
+#define glActiveTexture p_glActiveTexture
+#define glAttachShader p_glAttachShader
+#define glBindFramebuffer p_glBindFramebuffer
+#define glBindRenderbuffer p_glBindRenderbuffer
+#define glBindTexture p_glBindTexture
+#define glBindVertexArray p_glBindVertexArray
+#define glBlendFunc p_glBlendFunc
+#define glBlitFramebuffer p_glBlitFramebuffer
+#define glCheckFramebufferStatus p_glCheckFramebufferStatus
+#define glClear p_glClear
+#define glClearColor p_glClearColor
+#define glClearDepthf p_glClearDepthf
+#define glClearStencil p_glClearStencil
+#define glCompileShader p_glCompileShader
+#define glCompressedTexImage2D p_glCompressedTexImage2D
+#define glCreateProgram p_glCreateProgram
+#define glCreateShader p_glCreateShader
+#define glDeleteFramebuffers p_glDeleteFramebuffers
+#define glDeleteRenderbuffers p_glDeleteRenderbuffers
+#define glDeleteTextures p_glDeleteTextures
+#define glDepthFunc p_glDepthFunc
+#define glDisable p_glDisable
+#define glDrawArrays p_glDrawArrays
+#define glEnable p_glEnable
+#define glFramebufferRenderbuffer p_glFramebufferRenderbuffer
+#define glFramebufferTexture2D p_glFramebufferTexture2D
+#define glGenerateMipmap p_glGenerateMipmap
+#define glGenFramebuffers p_glGenFramebuffers
+#define glGenRenderbuffers p_glGenRenderbuffers
+#define glGenTextures p_glGenTextures
+#define glGenVertexArrays p_glGenVertexArrays
+#define glGetError p_glGetError
+#define glGetFramebufferAttachmentParameteriv p_glGetFramebufferAttachmentParameteriv
+#define glGetIntegerv p_glGetIntegerv
+#define glGetInternalformativ p_glGetInternalformativ
+#define glGetShaderInfoLog p_glGetShaderInfoLog
+#define glGetShaderiv p_glGetShaderiv
+#define glGetString p_glGetString
+#define glGetStringi p_glGetStringi
+#define glGetUniformLocation p_glGetUniformLocation
+#define glIsEnabled p_glIsEnabled
+#define glLinkProgram p_glLinkProgram
+#define glPixelStorei p_glPixelStorei
+#define glReadPixels p_glReadPixels
+#define glRenderbufferStorage p_glRenderbufferStorage
+#define glRenderbufferStorageMultisample p_glRenderbufferStorageMultisample
+#define glShaderSource p_glShaderSource
+#define glStencilFunc p_glStencilFunc
+#define glStencilOp p_glStencilOp
+#define glTexImage2D p_glTexImage2D
+#define glTexParameteri p_glTexParameteri
+#define glTexStorage2D p_glTexStorage2D
+#define glUniform1f p_glUniform1f
+#define glUniform1i p_glUniform1i
+#define glUniform4f p_glUniform4f
+#define glUseProgram p_glUseProgram
+#define glViewport p_glViewport
+static void load_procs(void *(*proc)(const char *))
+{
+    p_glActiveTexture = (__typeof__(p_glActiveTexture))proc("glActiveTexture");
+    p_glAttachShader = (__typeof__(p_glAttachShader))proc("glAttachShader");
+    p_glBindFramebuffer = (__typeof__(p_glBindFramebuffer))proc("glBindFramebuffer");
+    p_glBindRenderbuffer = (__typeof__(p_glBindRenderbuffer))proc("glBindRenderbuffer");
+    p_glBindTexture = (__typeof__(p_glBindTexture))proc("glBindTexture");
+    p_glBindVertexArray = (__typeof__(p_glBindVertexArray))proc("glBindVertexArray");
+    p_glBlendFunc = (__typeof__(p_glBlendFunc))proc("glBlendFunc");
+    p_glBlitFramebuffer = (__typeof__(p_glBlitFramebuffer))proc("glBlitFramebuffer");
+    p_glCheckFramebufferStatus = (__typeof__(p_glCheckFramebufferStatus))proc("glCheckFramebufferStatus");
+    p_glClear = (__typeof__(p_glClear))proc("glClear");
+    p_glClearColor = (__typeof__(p_glClearColor))proc("glClearColor");
+    p_glClearDepthf = (__typeof__(p_glClearDepthf))proc("glClearDepthf");
+    p_glClearStencil = (__typeof__(p_glClearStencil))proc("glClearStencil");
+    p_glCompileShader = (__typeof__(p_glCompileShader))proc("glCompileShader");
+    p_glCompressedTexImage2D = (__typeof__(p_glCompressedTexImage2D))proc("glCompressedTexImage2D");
+    p_glCreateProgram = (__typeof__(p_glCreateProgram))proc("glCreateProgram");
+    p_glCreateShader = (__typeof__(p_glCreateShader))proc("glCreateShader");
+    p_glDeleteFramebuffers = (__typeof__(p_glDeleteFramebuffers))proc("glDeleteFramebuffers");
+    p_glDeleteRenderbuffers = (__typeof__(p_glDeleteRenderbuffers))proc("glDeleteRenderbuffers");
+    p_glDeleteTextures = (__typeof__(p_glDeleteTextures))proc("glDeleteTextures");
+    p_glDepthFunc = (__typeof__(p_glDepthFunc))proc("glDepthFunc");
+    p_glDisable = (__typeof__(p_glDisable))proc("glDisable");
+    p_glDrawArrays = (__typeof__(p_glDrawArrays))proc("glDrawArrays");
+    p_glEnable = (__typeof__(p_glEnable))proc("glEnable");
+    p_glFramebufferRenderbuffer = (__typeof__(p_glFramebufferRenderbuffer))proc("glFramebufferRenderbuffer");
+    p_glFramebufferTexture2D = (__typeof__(p_glFramebufferTexture2D))proc("glFramebufferTexture2D");
+    p_glGenerateMipmap = (__typeof__(p_glGenerateMipmap))proc("glGenerateMipmap");
+    p_glGenFramebuffers = (__typeof__(p_glGenFramebuffers))proc("glGenFramebuffers");
+    p_glGenRenderbuffers = (__typeof__(p_glGenRenderbuffers))proc("glGenRenderbuffers");
+    p_glGenTextures = (__typeof__(p_glGenTextures))proc("glGenTextures");
+    p_glGenVertexArrays = (__typeof__(p_glGenVertexArrays))proc("glGenVertexArrays");
+    p_glGetError = (__typeof__(p_glGetError))proc("glGetError");
+    p_glGetFramebufferAttachmentParameteriv = (__typeof__(p_glGetFramebufferAttachmentParameteriv))proc("glGetFramebufferAttachmentParameteriv");
+    p_glGetIntegerv = (__typeof__(p_glGetIntegerv))proc("glGetIntegerv");
+    p_glGetInternalformativ = (__typeof__(p_glGetInternalformativ))proc("glGetInternalformativ");
+    p_glGetShaderInfoLog = (__typeof__(p_glGetShaderInfoLog))proc("glGetShaderInfoLog");
+    p_glGetShaderiv = (__typeof__(p_glGetShaderiv))proc("glGetShaderiv");
+    p_glGetString = (__typeof__(p_glGetString))proc("glGetString");
+    p_glGetStringi = (__typeof__(p_glGetStringi))proc("glGetStringi");
+    p_glGetUniformLocation = (__typeof__(p_glGetUniformLocation))proc("glGetUniformLocation");
+    p_glIsEnabled = (__typeof__(p_glIsEnabled))proc("glIsEnabled");
+    p_glLinkProgram = (__typeof__(p_glLinkProgram))proc("glLinkProgram");
+    p_glPixelStorei = (__typeof__(p_glPixelStorei))proc("glPixelStorei");
+    p_glReadPixels = (__typeof__(p_glReadPixels))proc("glReadPixels");
+    p_glRenderbufferStorage = (__typeof__(p_glRenderbufferStorage))proc("glRenderbufferStorage");
+    p_glRenderbufferStorageMultisample = (__typeof__(p_glRenderbufferStorageMultisample))proc("glRenderbufferStorageMultisample");
+    p_glShaderSource = (__typeof__(p_glShaderSource))proc("glShaderSource");
+    p_glStencilFunc = (__typeof__(p_glStencilFunc))proc("glStencilFunc");
+    p_glStencilOp = (__typeof__(p_glStencilOp))proc("glStencilOp");
+    p_glTexImage2D = (__typeof__(p_glTexImage2D))proc("glTexImage2D");
+    p_glTexParameteri = (__typeof__(p_glTexParameteri))proc("glTexParameteri");
+    p_glTexStorage2D = (__typeof__(p_glTexStorage2D))proc("glTexStorage2D");
+    p_glUniform1f = (__typeof__(p_glUniform1f))proc("glUniform1f");
+    p_glUniform1i = (__typeof__(p_glUniform1i))proc("glUniform1i");
+    p_glUniform4f = (__typeof__(p_glUniform4f))proc("glUniform4f");
+    p_glUseProgram = (__typeof__(p_glUseProgram))proc("glUseProgram");
+    p_glViewport = (__typeof__(p_glViewport))proc("glViewport");
+}

@@ -18,7 +18,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
-- PGR colours are off and dark in the 3D lobby (also llvmpipe on the arm server and the NVIDIA tester PC; 2D UI is right). Ruled out: window alpha/opaque region, an sRGB window surface (Mesa gbm answers BAD_MATCH). Untested: ASTC/ETC2 decode, sRGB/FP16/R11G11B10 render targets through the wrapper, a reference lobby frame outside the tutorial dim. Agent working on it.
+- PGR colours dark in the 3D lobby: a wrapper bug was found and fixed (an sRGB window surface was accepted but linear; `libapklayer_egl` now refuses it with `EGL_BAD_MATCH` and no longer lists `EGL_KHR_gl_colorspace`, arm64 staged 652ac421); not yet confirmed on PGR's lobby. Format paths (ASTC, ETC2, sRGB decode, FP16/R11G11B10, MSAA, framebuffer fetch) are conformant through the wrapper. Open: x86_64 `libapklayer_egl` not built; the linked `glGetString`/`glGetStringi`/`glGetIntegerv` answer NULL on main in an app window thread (`bridge/native/gles_filter.c`); agent working.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with `apklayer prop set berberis.mode.com.kurogame.gplay.punishing.grayraven.en lite-translate-or-interpret` (and unset for the reference); the ASTC fallback in `cli/env.cpp` is a separate lever.
 
 ## Graphics
