@@ -205,6 +205,7 @@ final class HubDirectory extends Binder {
 
     /** Every other running app's package manager learns that the package was installed, updated or removed (before the package broadcasts go out). */
     void packageChanged(String name, boolean removed) {
+        packages.declarationsChanged();
         for (Peer peer : peersExcept(null)) {
             if (peer.name.equals(name)) continue;
             try { HubProtocol.call(peer.endpoint, HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_PACKAGE_CHANGED, request -> { request.writeString(name); request.writeBoolean(removed); }, reply -> null); }

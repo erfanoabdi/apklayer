@@ -257,14 +257,32 @@ final class HubPackages {
         }
     }
 
+    /** What the installed packages declare, by permission name (the first package in installed() order wins). Built once per set of packages. */
+    private record Declared(List<String> names, Map<String, PermissionInfo> byName) {}
+    private volatile Declared declared;
+    private volatile int declaredGeneration;
+
+    /** An install, update or removal went through the hub (HubDirectory.packageChanged): declarations are read again. In-place updates by a CLI outside the hub are not seen until the directory changes. */
+    void declarationsChanged() { declaredGeneration++; declared = null; }
+
+    private Map<String, PermissionInfo> declared() {
+        List<String> names = installed();  // the same list while the apps directory is unchanged
+        Declared known = declared;
+        if (known != null && known.names == names) return known.byName;
+        int generation = declaredGeneration;
+        Map<String, PermissionInfo> byName = new HashMap<>();
+        for (String other : names) {
+            PackageParser.Package owner = get(other);
+            if (owner != null) for (var declaredPermission : owner.permissions) byName.putIfAbsent(declaredPermission.info.name, declaredPermission.info);
+        }
+        if (generation == declaredGeneration) declared = new Declared(names, byName);
+        return byName;
+    }
+
     /** The permission's definition: an installed package's, the framework's, or null. */
     PermissionInfo definition(String permission) {
-        for (String other : installed()) {
-            PackageParser.Package owner = get(other);
-            if (owner == null) continue;
-            PermissionInfo found = owner.permissions.stream().map(declared -> declared.info).filter(info -> permission.equals(info.name)).findFirst().orElse(null);
-            if (found != null) return found;
-        }
+        PermissionInfo declaredBy = declared().get(permission);
+        if (declaredBy != null) return declaredBy;
         PermissionInfo found = frameworkPermission(permission);
         if (found != null) return found;
         try { return RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(permission, 0); }
