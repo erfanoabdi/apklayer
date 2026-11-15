@@ -8,6 +8,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - No per-app hacks; the corpus (`tests/corpus/`) measures compatibility. CTS last.
 - Hardware only through Android's own interfaces (AIDL/HIDL HALs, framework classes).
 - Halium: sensors come through sensorfw, location through GeoClue (Sailfish) or Lomiri's location service; vibrator, camera and media use the device HALs.
+- Replace an installed library by writing a temp file and `mv`/`install`/`rsync` (rename), never `cp`/`scp` onto a library a running JVM has mapped: the truncate discards its relocated pages and the process faults at exit (hs_err, 4 GB cores). `tests/vm/exit-clean.py` (`EXIT_CLEAN_REPLACE=cp|mv`) shows both.
 - No cached app processes; always-on only for push/background.
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
@@ -46,7 +47,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
 
 ## Startup and memory
-- Stopping an instance with `libapklayer_egl` loaded: the host JVM faults at exit through an unrelocated GOT/PLT slot in an exit-time callback of `libapklayer_egl.so` (VM Thread, `vm_exit` -> libc `exit`; SEGV_MAPERR, pc 0x15dc0), writing hs_err files and 4 GB cores; harmless to the game. Mitigation: `LimitCORE=0` on the unit.
 - Measured on the X23: JVM max heap 1.39 GB (25% of RAM; the API says 256 MB), 700 MB live heap fine, instance PSS 605 MB with NewPipe idle, composer 24 MB, SurfaceFlinger 37 MB; first `apklayer setup` 63 s. After a runtime change `setup` says Installed but 9 apps stay marked stale (converter ABI) until launched or converted from the manager banner.
 - Quintus idle PSS: app JVM ~394 MB, hub ~249 MB, three spares ~235 MB each; composer 22 MB, SurfaceFlinger 38 MB (no ~80 MB GL context seen).
 - A meson-installed dev tree's CLI that runs without `APKLAYER_NATIVE` relinks the shared `~/.local/share/apklayer/runtime/<ver>` to itself (`setUpBundle` / `setup-runtime.sh` use `ln -sfn`); deleting that tree breaks the owner's runtime (this broke the tester PC on 2026-11-15). Make it refuse, copy, or give dev trees their own runtime dir.
