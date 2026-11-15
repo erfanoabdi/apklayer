@@ -105,6 +105,7 @@ try:
                 if steps: instance.inject(PKG, *steps)
     compare('ru1', 'ru2', 'Cyrillic'); compare('ara1', 'ara2', 'Arabic'); compare('deva1', 'deva2', 'Devanagari')
     langs = [line.split('input layout: ')[1] for line in seen if 'input layout: ' in line]  # the input method subtype the host got from the xkb group
+    langs = [l for i, l in enumerate(langs) if i == 0 or l != langs[i - 1]]  # a keyboard re-enter (the compositor moved the focus) reports the layout again
     for want in ('ru', 'ar', 'fa'): assert want in langs, 'no input method subtype %s (got %s)' % (want, langs)
     assert langs[-4:-1] == ['ru', 'en', 'ar'], 'the layout hotkeys did not switch the xkb group: %s' % langs
     keys = [l for l in seen if '[hello-input] key code=' in l]
