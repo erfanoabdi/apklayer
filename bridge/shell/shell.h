@@ -111,7 +111,7 @@ enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
  * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's); close: the compositor's close
  * (xdg_toplevel.close, Lipstick's qt_extended_surface.close); ime {app px}: the host keyboard's area as maliit.c sets it. x, y: logical content pixels, y < 0 = the title bar. */
-enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME };
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME, TEST_OUTPUT };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -167,6 +167,8 @@ struct window {
     int nav_hidden;             /* the app hid the navigation bar (immersive) */
     int nav_h;                  /* logical height of the navigation bar, 0 without one */
     int nav_layer;              /* the window's owner composes the bar (MSG_NAVBAR_LAYER): used without subsurfaces */
+    struct wl_output *out;      /* the output the surface is on (wl_surface.enter), NULL = unknown: the largest one (registry.c) */
+    int told_px_w, told_px_h;   /* the screen size (that output, in pixels) the app was last told */
     int dpi, told_dpi, told_nav;/* density the app is told (mobile.c), and what it was last told */
     char label[64];             /* the app's name: the title bar's text */
     int dark;                   /* the bars' colour scheme: the desktop's, then the instance's (window_set_dark) */
@@ -216,6 +218,8 @@ extern int output_refresh_mhz;       /* the output's current mode (wl_output.mod
 extern int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known (fallback without configure_bounds) */
 extern int output_scale;                  /* percent: the largest integer wl_output scale (fallback without wp_fractional_scale_v1) */
 extern int output_px_w, output_px_h, output_mm_w, output_mm_h;  /* the largest output's mode in pixels and its physical size (0: unknown) */
+void window_output(const struct window *w, int *px_w, int *px_h, int *scale);
+int window_output_inject(struct window *w, int index);  /* registry.c, test input: the surface enters the index-th output (-1: none) */  /* registry.c: the output w is on, else the largest */
 extern struct window windows[MAX_WINDOWS];
 extern struct window *pointer_focus, *keyboard_focus;
 extern int debug_input;               /* APKLAYER_DEBUG_INPUT=1: log focus changes and key codes */

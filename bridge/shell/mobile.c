@@ -135,7 +135,9 @@ void window_display_changed(struct window *w)
 {
     if (w->mode == WM_AUTO && w->styled && w->mobile != display_mobile()) { window_set_mode(w, WM_AUTO); return; }
     metrics(w);
-    if (!w->configured || (w->told_dpi == w->dpi && w->told_nav == w->nav_h && w->told_scale == window_scale(w))) return;
+    int opw, oph, os;
+    window_output(w, &opw, &oph, &os);  /* a hotplug or a mode change reaches the app now (its display's size), not at its next configure */
+    if (!w->configured || (w->told_dpi == w->dpi && w->told_nav == w->nav_h && w->told_scale == window_scale(w) && w->told_px_w == opw && w->told_px_h == oph)) return;
     window_layout(w);
     wl_surface_commit(w->surface);
     window_send_configure(w);

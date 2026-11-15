@@ -198,6 +198,10 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
     (void)d; (void)p;
     last_input_serial = s;
     int pressed = st == WL_POINTER_BUTTON_STATE_PRESSED;
+    if (b == 0x113 || b == 0x116) {  /* BTN_SIDE / BTN_BACK: the mouse's back button is Android's Back (the title bar has none under server-side decorations) */
+        if (pressed && pointer_focus) window_send_back(pointer_focus);
+        return;
+    }
     if (pressed && pointer_decor_win && b == 0x110) { bar_button(pointer_decor_win, s, t); return; }
     if (pointer_nav_win) {  /* a navigation bar button acts when let go over it, as Android's */
         struct window *w = pointer_nav_win;
