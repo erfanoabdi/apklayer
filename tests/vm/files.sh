@@ -19,6 +19,6 @@ volumes() { grep -aq "\[volumes\] external /storage/emulated/0 state=mounted man
     && grep -aq "\[volumes\] volume /storage/emulated/0 desc=.* primary=true removable=false emulated=true state=mounted" $out && grep -aq "\[volumes\] DONE" $out; }
 if [ -n "$LIBCORE" ]; then grep -a "\[libcore\]" $out; grep -aq "\[libcore\] cleaner ran=true" $out && grep -aq "shm prot=5 perms=r-xs" $out && grep -aq "shm prot=0 perms=---s" $out && grep -aq "shm prot=3 perms=rw-s" $out && grep -aq "\[libcore\] DONE" $out; exit; fi
 if [ -n "$VOLUMES" ]; then volumes; exit; fi
-if [ -n "$SCOPED" ]; then rm -rf $ext/Android/data/hello.scopedother $ext/Android/obb/hello.scopedother; grep -a "\[files\] scoped" $out; grep -aq "\[files\] scoped own=true dataHidden=true obbHidden=true" $out; exit; fi
+if [ -n "$SCOPED" ]; then rm -rf $ext/Android/data/hello.scopedother $ext/Android/obb/hello.scopedother; grep -a "\[files\] scoped" $out; grep -aq "\[files\] scoped own=true dataHidden=true obbHidden=true" $out && grep -aq "\[files\] scoped link=true" $out; exit; fi
 grep -aq "\[files\] DONE" $out && { [ -z "$OWNDATA" ] || grep -aq "\[files\] owndata java=java os=os nio=true other=false" $out; }
 

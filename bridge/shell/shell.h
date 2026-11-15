@@ -165,6 +165,7 @@ struct window {
     struct wp_viewport *viewport;            /* buffer -> logical size (any scale, fractional included) */
     struct wp_fractional_scale_v1 *fscale;
     int text_input_enabled;
+    int ime_hidden;              /* the app asked to hide the keyboard (hideSoftInputFromWindow): text-input-v3 disabled until a show or a new field */
     int input_type, ime_options; /* the focused field's EditorInfo (MSG_TEXT_INPUT): the keyboard's layout and Enter key */
     int ime_px;                 /* app pixels the host's on-screen keyboard covers at the bottom (maliit.c): the app's IME inset (CONFIGURE) */
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */

@@ -176,8 +176,8 @@ permissions close to others.
   `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER`.
 - Opt-in: `APKLAYER_SANDBOX=1` for your session in `~/.config/environment.d/60-apklayer.conf` (0.4.5 turned it on by default where the host was
   set up; 0.4.6 made it opt-in again: on NVIDIA's driver and on deb installs it broke apps; both are addressed since 2026-11-08, NVIDIA not yet
-  confirmed on real hardware: Troubleshooting below). `systemctl --user enable apklayerd` starts the
-  daemon at login (else it starts on demand). `apklayer stop` before switching.
+  confirmed on real hardware: Troubleshooting below). the deb enables `apklayerd` for every user, so it starts at login
+  (`systemctl --user disable apklayerd` turns that off; it then starts on demand). `apklayer stop` before switching.
 - An app's data becomes its uid's at its first sandboxed start and yours again when it runs without the sandbox.
 - A source tree on a machine where you cannot use sudo yourself: the owner runs
   `sudo sh tools/host-setup/sandbox.sh <tree>/b/cli/apklayer` once (the profile names that exact binary).

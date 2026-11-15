@@ -36,24 +36,17 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Halium camera: preview rotation needs a human check (preview and still agree on both phones; whether the picture is upright was not judged). `camera`/`media = device` work (libhidl 0005, `tools/halium/hidl-list.sh`). NewPipe playback with `media = device` is blocked by YouTube extraction ("Could not parse website") on the phones' network, not by the stack. The X23 `hello.camera` large still is cut by the landscape-to-portrait activity recreation (test-app race).
 
 ## Input / IME
-- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): pixel-check the light scheme; `haptic_feedback_enabled` is not modelled by the hub's vibrator.
-- Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); stylus slider and tool wheel are not delivered; AXIS_TILT/ORIENTATION follow a remembered InputReader formula, not a checked source.
-- Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
-- text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
+- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): pixel-check the light scheme.
+- Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) are delivered through the test input only (AXIS choice is ours: Android has no stylus-specific ones).
+- Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `getUnicodeChar()` of a non-Latin key is the shell's character with no meta variants (no per-layout .kcm: dead keys, Shift/AltGr levels through `getUnicodeChar(meta)`).
+- text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own): hide = disable until show/new field and MULTILINE only without an action are sent, never run against a real compositor (GNOME/KWin/Phosh OSK); a desktop input method (fcitx) stops composing while hidden. Fn keys (F1-F12) have no Android keycode in `keysym_to_android`.
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 
 ## Permissions and Android rules
 - HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
-- Storage: `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by); scoped storage does not see symlinks an app makes itself or `/proc/self/cwd`-relative opens.
-- Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
-
-## Startup and memory
-- Measured on the X23: JVM max heap 1.39 GB (25% of RAM; the API says 256 MB), 700 MB live heap fine, instance PSS 605 MB with NewPipe idle, composer 24 MB, SurfaceFlinger 37 MB; first `apklayer setup` 63 s. After a runtime change `setup` says Installed but 9 apps stay marked stale (converter ABI) until launched or converted from the manager banner.
-- Quintus idle PSS: app JVM ~394 MB, hub ~249 MB, three spares ~235 MB each; composer 22 MB, SurfaceFlinger 38 MB (no ~80 MB GL context seen).
-- Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
-- ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
-- Composer GL context ~80 MB: measure on a phone while an app draws.
-- A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap.
+- Storage: `UNMOUNTABLE` is decided not to be sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by; a drive nobody can mount stays unlisted, as a drive the desktop does not mount). Scoped storage follows symlinks only in a process that made one itself (or its children) and cwd-relative paths only when the cwd is under the instance's Android/ directory; a link made by an earlier process and `openat(dirfd, ...)` into another package's directory are not seen (needs a fd-based check).
+- Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide). Not doable from apklayer's side: the stock libaudiopolicyservice has no per-uid/per-client activity query (the per-client configs live in AudioService's PlaybackActivityMonitor, which apklayer does not run); it needs a patch in frameworks/av's policy service (an `isActiveForUid`-like call) built in los24.
+- A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap: the HAL's Stream calls the one backend library the stack was started with (APKLAYER_HOST_LIBS); a swap means dlopen of the other `libapklayer-audio-*.so` from the HAL process and a per-stream function table (Stream.cpp, ~12 call sites), to be built and checked in los24.
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
@@ -64,14 +57,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
-- Owner to decide: `dh_installsystemduser` enables `apklayerd` for every user at login (`/etc/systemd/user/default.target.wants/apklayerd.service` after `dpkg -i`) although `debian/rules` and `docs/INSTALL.md` say it starts on demand: keep it, or `override_dh_installsystemduser: dh_installsystemduser --no-enable`.
-- Sailfish RPM 0.4.19 on the Quintus does not turn `media = device` on by default (fixed in main since, needs a new RPM and runtime); the same new RPM brings the Lipstick rotation and Maliit fixes.
-- Sailfish RPM from current main is installed and runs apps on the Quintus; open: no log line shows the `jni_guest_surface.c` change is active; the RPM and deb jobs need one real package build to confirm `tools/check-runtime-links.sh` runs clean in them.
+- Sailfish RPM: the `jni_guest_surface.c` change now logs `[runtime] jni_guest_surface active: ...` once per app JVM; needs an RPM of this tree installed on the Quintus and one app run to see it there.
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
-- Release: the first real tag run (`release.yml` fetch steps and tag-to-version handling), the Sailfish RPM job and the GitHub runners are unrun; the release guard (`tools/release/check-runtime.py`) was checked locally only; PackageKit/pkexec install untested. The debs built here lack the PulseAudio backend (`libpulse-dev` missing on both hosts); the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
-- First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
+- Release: the first real tag run, the GitHub runners (the fetch steps, `actions/checkout` of the `prebuilts-v<version>` tag, upload/download of `~` file names) are unrun here; the guard, SHA256SUMS rename and `releases-json.py` ran locally with a fake tag (2026-11-16); PackageKit/pkexec install untested; the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 
 ## Manager
@@ -87,12 +77,12 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- Tester PC: its `~/apklayer-build/prebuilts` is stale (~25 libraries behind); its address is in no config here, so it needs the owner's host (rsync from the Mac). The rebuilt x86_64 hidlbase/hidltool (`manifest`) are untested on a device.
 - Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
-- `kde-window.py` fractional-scale tolerance (1 px) is unverified at 150% on a real KWin: run it once on the tester PC.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
+- Needs the tester PC login (it takes a password; my key is refused; host `wesley-a520mhdv`): refresh its stale `~/apklayer-build/prebuilts` by rsync from the Mac; run `kde-window.py` once at 150% on its KWin.
+- Needs the Quintus lock code (not in `local.conf`): re-run `phone-test.sh sfos` groups with the current RPM.
 - AMD: Vulkan presentation and host ES1 untested.
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
 - Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
@@ -111,8 +101,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish has no bash (busybox): phone tests must be POSIX sh or Python.
 - Share / Open with on the X23 is not driven through the UI by `phone-test.sh`.
 - Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
-- Manager UI test (`manager/tests/ui.sh`) on the UTM VM: step "the new instance is not listed" fails (`--wait-refresh 1` returns on a refresh before the instance exists; same race kind as the first-run one), so the Properties navbar step after it is only checked on its own; `ui-updater.sh` needs an installed package's CLI (`APKLAYER_CLI`), none is on the VM: never run there end to end.
 
-- Manager `ui.sh` on the UTM VM fails at "the new instance is not listed" (`--wait-refresh 1` returns before the instance exists).
-- `manager/tests/ui-updater.sh` needs an installed package's CLI (`APKLAYER_CLI`); never run end to end: run once on the tester PC or a VM with the deb.
 - `kde-window` cannot run on the UTM VM (no KWin; `tests/lib/kwin.py` journalctl cursor parse fails): run it on the KDE PC to cover the SSD first-window size.
+- `fullscreen` and `spare-race` failed once each in the lead's shared tree and pass alone and together in a fresh tree (CHANGELOG 2026-11-16): if either fails again, look at that tree's leftover state first (stale files, foreign-owned sandbox data), then the load.

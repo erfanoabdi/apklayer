@@ -24,7 +24,7 @@ override_dh_auto_install:
 	DESTDIR=$(CURDIR)/debian/apklayer meson install -C $(B)-manager --no-rebuild --quiet
 	install -D -m644 debian/instances debian/apklayer/etc/apklayer/instances
 	# the per-app sandbox (cli/sandbox.cpp): the AppArmor profile that allows its user namespaces (postinst puts it in place where AppArmor
-	# knows userns rules), render nodes for app uids, apklayerd's user unit (not enabled: `systemctl --user enable --now apklayerd`)
+	# knows userns rules), render nodes for app uids, apklayerd's user unit (enabled for every user by dh_installsystemduser: the owner wants it on by default)
 	install -d debian/apklayer/usr/share/apklayer/apparmor
 	sed 's#@NAME@##; s#@BIN@#/usr/lib/apklayer/cli/apklayer#' tools/host-setup/apklayer.apparmor > debian/apklayer/usr/share/apklayer/apparmor/apklayer
 	install -D -m644 tools/host-setup/70-apklayer-render.rules debian/apklayer/usr/lib/udev/rules.d/70-apklayer-render.rules
@@ -34,6 +34,8 @@ override_dh_auto_install:
 	mv debian/apklayer/usr/include debian/apklayer-dev/usr/
 	mv debian/apklayer/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig debian/apklayer-dev/usr/lib/$(DEB_HOST_MULTIARCH)/
 	rmdir debian/apklayer/usr/lib/$(DEB_HOST_MULTIARCH)
+	# the audio backends are `required: false` in meson: a build env without libpulse-dev/libpipewire-0.3-dev (Build-Depends) must fail here, not ship a deb without one
+	for b in pulse pipewire; do test -n "$$(find debian/apklayer -name libapklayer-audio-$$b.so)" || { echo "debian/rules: libapklayer-audio-$$b.so missing: install Build-Depends"; exit 1; }; done
 	# no link of the package may dangle or point into this build root (the RPM's libjavacore.so did)
 	APKLAYER_BUILD_ROOT=$(CURDIR) sh tools/check-runtime-links.sh debian/apklayer
 

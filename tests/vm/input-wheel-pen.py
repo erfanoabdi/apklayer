@@ -2,7 +2,7 @@
 """Wheel and stylus input of one instance through the shell's test input (instance.inject wheel:/pen:, bridge/shell/pointer.c and tablet.c, the
 paths of wl_pointer's axis/axis_discrete/axis_value120 and zwp_tablet_tool_v2): hello.input prints the MotionEvent axes it gets. The wheel's
 notches are AXIS_VSCROLL/AXIS_HSCROLL (+ = up/right, hi-res and touchpad scrolls as fractions, Shift in the meta state); the pen's pressure, distance,
-tilt, orientation (TouchInputMapper's formulas), barrel rotation (AXIS_GENERIC_1), stylus buttons, eraser and hover/touch actions."""
+tilt, orientation (TouchInputMapper's formulas, checked against the LineageOS 24 source), slider (AXIS_WHEEL), tool wheel (AXIS_SCROLL), barrel rotation (AXIS_GENERIC_1), stylus buttons, eraser and hover/touch actions."""
 import math
 import os
 from pathlib import Path
@@ -95,7 +95,11 @@ try:
     instance.inject(PKG, 'pen:out')
     pen('pen:120,120,0.3,0,0,0,0,0,1', 'DOWN', tool=4, pressure=0.3)  # TOOL_TYPE_ERASER
     pen('pen:out', 'UP', tool=4)
-    print('PASS wheel notches, hi-res and touchpad fractions on both axes, Shift, and stylus pressure, tilt, orientation, rotation, buttons, eraser, hover and touch', flush=True)
+    # the airbrush's slider (AXIS_WHEEL, -1..1) and the tool wheel's clicks (AXIS_SCROLL, once per frame it turned in)
+    pen('pen:130,130,0,0,0,0,0.2,0,0,0.5,3', 'HOVER_MOVE', slider=0.5, wheel=3)
+    pen('pen:131,130,0,0,0,0,0.2,0,0,-1', 'HOVER_MOVE', slider=-1, wheel=0)
+    instance.inject(PKG, 'pen:out')
+    print('PASS wheel notches, hi-res and touchpad fractions on both axes, Shift, and stylus pressure, tilt, orientation, rotation, buttons, eraser, slider, tool wheel, hover and touch', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)
