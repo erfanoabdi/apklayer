@@ -640,6 +640,10 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); int mode = request.readInt(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeInt(callAudio.setMode(caller, mode)); return true;
             }
+            case HubProtocol.AUDIO_ACTIVITY -> {
+                Peer caller = caller(); boolean on = request.readBoolean(); request.enforceNoDataAvail();
+                callAudio.activity(caller, on); reply.writeNoException(); return true;
+            }
             case HubProtocol.AUDIO_COMMUNICATION_DEVICE -> {
                 Peer caller = caller(); boolean set = request.readBoolean();
                 android.media.AudioDeviceAttributes device = request.readTypedObject(android.media.AudioDeviceAttributes.CREATOR); request.enforceNoDataAvail();

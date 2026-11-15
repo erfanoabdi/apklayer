@@ -40,6 +40,7 @@ final class HubProtocol {
             MICROPHONE_MUTE = 59,  // {on} -> the microphone mute after the request (HubCallAudio: AudioService.setMicrophoneMute and its broadcast)
             BLUETOOTH_PIN = 60;  // {address, name, pairing variant, key} -> the PIN or passkey the person typed for a pairing BlueZ asked about ("yes" to a comparison), null when refused (HubBluetooth.pin)
     static final int EJECT_VOLUME = 64;  // {volume id} -> whether the drive is unmounted: StorageManager.unmount (HubVolumes.eject: the instance's processes holding files on it end first)
+    static final int AUDIO_ACTIVITY = 67;  // {on}: the caller's process has a player or recorder started (PlayerBase's trackPlayer/playerEvent for AudioService; HubCallAudio.activity)
     static final int ISOLATED_OWNER = 66;  // {isolated uid} -> the package of the process that runs as it, null for none (getPackagesForUid, getNameForUid)
     static final int TOAST_SLOT = 99;  // {duration ms}: returns when the caller's toast may go on screen (one at a time over the instance, in call order: HubDirectory.toastSlot)
     static final int NOTIFICATION_SETTINGS = 65;  // {} -> the app's notification settings page, shown by the hub; returns when the person closed it (HubPermissionPrompt.notificationSettings)

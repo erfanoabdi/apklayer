@@ -68,6 +68,7 @@ final class CommCheck {
         Listener.await(context, "mode " + AudioManager.MODE_NORMAL);
         System.out.println("[hello-native-audio] CROSS PASS another process heard the mode, the communication device and the mute broadcast");
         System.out.println("[hello-native-audio] CALL PASS mode, communication device and microphone mute reach the policy");
+        OwnerCheck.run(context, audio);
     }
 
     // The policy's own view (hidden APIs, as a system app would read them): IAudioPolicyService.getPhoneState and the call strategy's preferred devices

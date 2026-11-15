@@ -85,6 +85,10 @@ run = ["tests/vm/dex2jvm-stub.sh"]
 [reconvert]
 run = ["tests/vm/reconvert.sh"]
 
+[pamcheck]
+# the lock screen's password check through any PAM stack (temporary services in /etc/pam.d, needs sudo -n)
+run = ["tests/vm/pamcheck.sh"]
+
 [keystore]
 apps = ["hello-keystore", "hello-keystore-other"]
 run = ["tests/vm/keystore.sh", "python3 -u tests/vm/keystore-auth.py"]

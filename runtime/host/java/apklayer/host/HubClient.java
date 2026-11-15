@@ -291,6 +291,8 @@ public final class HubClient {
     int audioMode(int mode) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_MODE, request -> request.writeInt(mode), reply -> reply.readInt());
     }
+    /** Whether this process plays or records now (AudioPlaybackConfiguration/AudioRecordingConfiguration of AudioService): the mode owner's rule (HubCallAudio). */
+    void audioActivity(boolean on) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_ACTIVITY, request -> request.writeBoolean(on), reply -> null); }
     /** setCommunicationDevice ({@code set}; null clears this app's choice) or only the read: the communication device in force, null for none. */
     android.media.AudioDeviceAttributes communicationDevice(boolean set, android.media.AudioDeviceAttributes device) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_COMMUNICATION_DEVICE, request -> { request.writeBoolean(set); request.writeTypedObject(device, 0); },

@@ -118,7 +118,14 @@ try:
         assert '[hello-native-audio] MUTE PASS silent while muted' in text  # setMicrophoneMute: AudioFlinger's mute, the HAL's silent capture
         assert '[hello-native-audio] CALL PASS' in text
         assert '[hello-native-audio] CROSS PASS' in text  # another process's mode/device listeners and ACTION_MICROPHONE_MUTE_CHANGED (HubCallAudio)  # setMode and setCommunicationDevice reach the policy through the hub (HubCallAudio)
-        assert '[hello-native-audio] VOIP PASS' in text  # WebRTC's call audio: direct buffers with an array, mono capture, effects, ByteBuffer I/O
+        # two requesters (the app's two processes): the one with a player started owns the call mode, the newest of those (HubCallAudio.owner), in the hub log
+        import re
+        pids = re.search(r'OWNER PASS pids main=(\d+) listener=(\d+)', text)
+        assert pids, 'no OWNER PASS'
+        owners = re.findall(r'audio mode 3 of hello\.nativeaudio pid (\d+)', ''.join(p.read_text(errors='replace') for p in [logs / 'hub.log'] + ([hub_log] if late else []) if p.exists()))
+        main_pid, listener_pid = pids.groups()
+        assert listener_pid in owners and main_pid in owners[owners.index(listener_pid):], 'call mode owners (main %s, listener %s): %s' % (main_pid, listener_pid, owners)
+        assert '[hello-native-audio] VOIP PASS' in text # WebRTC's call audio: direct buffers with an array, mono capture, effects, ByteBuffer I/O
         capture.verify()
     if late:
         hub_text = hub_log.read_text(errors='replace')  # fed again when the app registered (the hub's start knew no hello.nativeaudio)
