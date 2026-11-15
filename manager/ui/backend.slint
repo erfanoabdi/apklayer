@@ -30,6 +30,7 @@ export struct HwDomain { name: string, title: string, configured: string, curren
                          unavailable: string, test: string }
 
 export global Backend {
+    in property <length> scroll-y;           // the screenshot mode's --scroll: the app detail and the hardware page start scrolled by it
     // the first run's checklist (FirstRunPage) and its choices
     in property <bool> first-run;
     in property <[SetupStep]> setup-steps;
