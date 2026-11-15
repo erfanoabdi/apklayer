@@ -35,6 +35,28 @@ public class Main extends Activity {
         System.out.println("[hello-input] alt dialog shown");
     }
 
+    /** tests/vm/window-output.py: the screen the app sees (Display.getRealMetrics), at start and at each DisplayListener callback. */
+    private void displayLog() {
+        android.hardware.display.DisplayManager dm = getSystemService(android.hardware.display.DisplayManager.class);
+        Runnable log = () -> {
+            android.util.DisplayMetrics m = new android.util.DisplayMetrics();
+            dm.getDisplay(android.view.Display.DEFAULT_DISPLAY).getRealMetrics(m);
+            System.out.println("[hello-input] display " + m.widthPixels + "x" + m.heightPixels + " dpi=" + m.densityDpi);
+        };
+        dm.registerDisplayListener(new android.hardware.display.DisplayManager.DisplayListener() {
+            public void onDisplayAdded(int id) { System.out.println("[hello-input] display added " + id); }
+            public void onDisplayRemoved(int id) { System.out.println("[hello-input] display removed " + id); }
+            public void onDisplayChanged(int id) { System.out.println("[hello-input] display changed " + id); log.run(); }
+        }, new android.os.Handler(android.os.Looper.getMainLooper()));
+        log.run();
+    }
+
+    /** tests/vm/input-inject.py (-Dhello.backlog): Back is counted, not obeyed (the activity stays). */
+    @Override public void onBackPressed() {
+        if (System.getProperty("hello.backlog") != null) System.out.println("[hello-input] back pressed");
+        else super.onBackPressed();
+    }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ClipboardManager clipboard = getSystemService(ClipboardManager.class);
@@ -107,6 +129,8 @@ public class Main extends Activity {
         if (System.getProperty("hello.covered") != null) Covered.coverWithDialog(this);
         if (System.getProperty("hello.translucent") != null && state == null) Translucent.underTranslucent(this);
         if (System.getProperty("hello.altim") != null) field.postDelayed(this::altFocusableIm, 1000);
+        if (System.getProperty("hello.display") != null) displayLog();
+
         if (System.getProperty("hello.sheet") != null) field.postDelayed(() -> Sheet.show(this, 1), 1500);
         if (System.getProperty("hello.magnifier") != null) {
             field.setText("magnify me");

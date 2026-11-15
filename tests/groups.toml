@@ -293,6 +293,10 @@ run = ["python3 -u tests/vm/splash.py"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/dialog-resize.py"]
 
+[window-output]  # an app sees its window's output (two virtual monitors of a headless GNOME Shell), an output change reaches it at once
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/window-output.py"]
+
 [window-geometry]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/window-geometry.py"]

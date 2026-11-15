@@ -4,7 +4,12 @@
  * its buffer's pixel size, and the title bar is drawn at the window's scale. Window geometry = content + title bar. */
 #include "shell.h"
 
-int window_scale(const struct window *w) { return w->pref_scale > 0 ? w->pref_scale : output_scale; }
+int window_scale(const struct window *w)
+{
+    int pw, ph, s;
+    window_output(w, &pw, &ph, &s);
+    return w->pref_scale > 0 ? w->pref_scale : s;
+}
 
 /* The logical content size for an app asking for lw x lh: that shape, the whole window at most 85% of the work area; grow: exactly that
  * (an orientation turn fills the screen as the first portrait window does, which the display's default shape makes larger than the box). */
@@ -60,15 +65,17 @@ void window_to_app(const struct window *w, int *x, int *y)
 void window_send_configure(struct window *w)
 {
     int s = window_scale(w), nav = w->mobile && !w->turn ? (w->nav_h * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
-    int aw, ah, ime = w->turn ? 0 : w->ime_px;  /* shortcut: turned, the keyboard is beside the content and gets no inset */
+    int aw, ah, ime = w->turn ? 0 : w->ime_px, opw, oph, os;
+    window_output(w, &opw, &oph, &os);  /* shortcut: turned, the keyboard is beside the content and gets no inset */
     window_app_size(w, &aw, &ah);
     w->told_scale = s;
     w->told_dpi = w->dpi;
     w->told_nav = w->nav_h;
+    w->told_px_w = opw; w->told_px_h = oph;
     /* the output's pixels: the app's screen (Display.getRealSize, WindowManager.getMaximumWindowMetrics), not its window */
-    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, ime }, 10);
+    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, w->dpi, nav, w->mobile, opw, oph, ime }, 10);
     if (w->proxy)
-        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw : ah, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, ime, w->turn }, 11);
+        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw : ah, s, w->dpi, nav, w->mobile, opw, oph, ime, w->turn }, 11);
     fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px%s\n",
             w->client->pkg, aw, ah, s, aw * s / 100, ah * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
             w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav, ime,
@@ -178,6 +185,13 @@ void window_close(struct window *w)
 static void top_close(void *data, struct xdg_toplevel *t) { (void)t; window_close(data); }
 static const struct xdg_toplevel_listener top_listener = { .configure = top_configure, .close = top_close, .configure_bounds = top_bounds };
 
+/* The surface moved to another output (wl_surface.enter/leave): its size and scale are the app's screen. */
+static void surf_enter(void *d, struct wl_surface *s, struct wl_output *o)
+{ (void)s; struct window *w = d; w->out = o; window_display_changed(w); }
+static void surf_leave(void *d, struct wl_surface *s, struct wl_output *o)
+{ (void)s; struct window *w = d; if (w->out == o) w->out = NULL; }
+static const struct wl_surface_listener surf_listener = { surf_enter, surf_leave };
+
 /* The compositor prefers another scale for the window (pref: percent, 0 = follow the outputs): the bars redraw, the app re-renders. */
 void window_scale_changed(struct window *w, int pref)
 {
@@ -194,6 +208,7 @@ void window_geometry_init(struct window *w)
         xdg_surface_add_listener(w->xdg_surface, &xs_listener, w);
         xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
     }
+    wl_surface_add_listener(w->surface, &surf_listener, w);
     if (viewporter) w->viewport = wp_viewporter_get_viewport(viewporter, w->surface);
     if (fscale_mgr) {
         w->fscale = wp_fractional_scale_manager_v1_get_fractional_scale(fscale_mgr, w->surface);

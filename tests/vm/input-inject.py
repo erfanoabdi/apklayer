@@ -18,7 +18,7 @@ ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_DEBUG_INPUT='1', A
 FIELD, COPY = (240, 82), (240, 154)  # content pixels of hello.input's field and "Copy Android text" button (below the action bar)
 WORD = (20, 82)  # on the field's text: a long press there selects a word
 TICK_MS = 500  # the script's ticks, the app's clock: a step runs at the first tick its precondition holds (ticks queued while the app was busy come at once)
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=120000 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
+ENV['APKLAYER_JOPTS'] = '-Dhello.backlog=1 -Dapklayer.runms=120000 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
     '%d:hover:%d,0' % (i * TICK_MS, i) for i in range(1, 230))
 STALL = float(os.environ.get('APKLY_INPUT_STALL', '0'))  # seconds the app's JVM is stopped right after each step (a loaded host's stall)
 seen = []
@@ -82,7 +82,10 @@ STEPS = [
     ('empty done', lambda: count('[hello-input] action mode started') >= 3, ['text:'], None),
     ('back', lambda: count('[apklayer] ime applied') > sum('[apklayer] ime applied' in l for l in seen[:mark['empty done']]),
      ['key:1'], empty_done_kept),  # Esc is Back: it ends the action mode
-    ('end', lambda: saw('[hello-input] action mode finished', mark['back']), [], None),
+    # the mouse's back button and Alt+Left are Back too (the shell sends KEYCODE_BACK; Esc/Backspace are the host's own mapping)
+    ('mouse back', lambda: saw('[hello-input] action mode finished', mark['back']), ['xclick:%d,%d' % FIELD], None),
+    ('alt left', lambda: count('[hello-input] back pressed') >= 1, ['combo:alt+105'], None),
+    ('end', lambda: count('[hello-input] back pressed') >= 2, [], None),
 ]
 
 
