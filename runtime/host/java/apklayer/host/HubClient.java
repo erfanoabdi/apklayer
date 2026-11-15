@@ -82,11 +82,13 @@ public final class HubClient {
         org.robolectric.shadows.ShadowPackageManager packageManager = org.robolectric.Shadows.shadowOf(context.getPackageManager());
         java.util.List<String> names = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.LIST_PACKAGES, request -> {}, reply -> reply.createStringArrayList());
         int count = 0;
+        StartTrace.mark("packages listed " + names.size());
         for (String name : names) {
             if (name.equals(context.getPackageName())) continue;
             try { if (registerPackage(packageManager, name)) count++; }
             catch (RuntimeException failure) { System.out.println("[apklayer] package " + name + " not registered: " + failure); }
         }
+        StartTrace.mark("packages registered");
         System.out.println("[apklayer] packages registered: " + count);
     }
 
