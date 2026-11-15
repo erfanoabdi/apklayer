@@ -48,6 +48,7 @@ and list it here. (2026-11-14: JdkIdentityPatch also rewrites plain IndexOutOfBo
 | compat/gcc-before-11-cxx20 | `-std=c++20` for gcc before 11 (Sailfish OS 5.0: gcc 10), on top of the previous one |
 | compat/glibc-before-2.36-relr | RELR types in the linker for glibc before 2.36 (Ubuntu 22.04, Sailfish OS 5.0: 2.30) |
 | compat/glibc-before-2.38-libc | libc functions Android's libraries use that glibc before 2.38 lacks: `__strlcpy_chk`, `__strlcat_chk`, `fstat64`, `pidfd_open`, `res_mkquery` (Sailfish OS 5.0: 2.30) |
+| compat/glibc-before-2.34-spawn | `posix_spawn_file_actions_addclosefrom_np` of the guest spawn launcher: closes up to fd 1024 one by one on glibc before 2.34 (Sailfish OS 5.0) |
 | compat/libunwind-before-1.8-meson | accept libunwind before 1.8 |
 | compat/libunwind-before-1.8-weak-phdr | weak `unw_set_iterate_phdr_function` |
 

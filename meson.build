@@ -99,6 +99,9 @@ if host_machine.system() == 'linux'
   if not cc.has_function('strlcpy')  # glibc before 2.38 (Sailfish OS 5.0: 2.30): libc functions Android's libraries use
     run_command(apply, compat / 'glibc-before-2.38-libc.patch', bt_src, check: true)
   endif
+  if not cc.has_function('posix_spawn_file_actions_addclosefrom_np', prefix: '#define _GNU_SOURCE\n#include <spawn.h>')  # glibc before 2.34
+    run_command(apply, compat / 'glibc-before-2.34-spawn.patch', bt_src, check: true)
+  endif
   unwind = dependency('libunwind', required: false)
   if not unwind.found() or unwind.version().version_compare('<1.8')  # one call each: a copy may have meson.build reset and keep linker.c
     run_command(apply, compat / 'libunwind-before-1.8-meson.patch', bt_src, check: true)
