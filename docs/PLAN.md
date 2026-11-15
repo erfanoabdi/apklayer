@@ -86,7 +86,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- The UTM VM's `~/prebuilts` is behind the lock (libapklayer_egl, hidltool, vdisplay, libhidlbase): refresh it. The rebuilt x86_64 hidlbase/hidltool (`manifest`) are untested on a device.
+- Tester PC: its `~/apklayer-build/prebuilts` is stale (~25 libraries behind); its address is in no config here, so it needs the owner's host (rsync from the Mac). The rebuilt x86_64 hidlbase/hidltool (`manifest`) are untested on a device.
 - Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
 - Password-ssh hosts (UTM VM, tester PC) intermittently refuse auth ("Permission denied" about every other connection): `tests/run` needs a retry in `vm.ssh`/`vm.copy`.
 - `fullscreen.py` and `kde-window.py` compare integer sizes against KWin's fractional geometry (fail at 150% scale on the tester PC, also on main).
