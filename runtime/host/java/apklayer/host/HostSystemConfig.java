@@ -77,6 +77,9 @@ final class HostSystemConfig {
             config.features.addAll(java.util.List.of("android.hardware.bluetooth", "android.hardware.bluetooth_le"));
         if (HostCameraShadows.declared())  // the stack runs cameraserver over a camera HAL (providers.toml)
             config.features.addAll(java.util.List.of("android.hardware.camera", "android.hardware.camera.any"));
+        try {  // the sensors HAL's list (aosp/hals/sensors/Service.cpp)
+            config.features.addAll(java.nio.file.Files.readAllLines(new File(System.getenv("APKLAYER_DATA"), "apklayer/sensor_features").toPath()));
+        } catch (java.io.IOException | RuntimeException none) { /* no sensors provider */ }
         if (HostLocation.gnssDeclared())  // the GNSS HAL (gps) and GeoClue's network provider (HostLocation)
             config.features.addAll(java.util.List.of("android.hardware.location", "android.hardware.location.gps", "android.hardware.location.network"));
         String vulkan = System.getenv("APKLAYER_VULKAN_PRESENT") != null ? System.getenv().getOrDefault("APKLAYER_VULKAN_VERSION", "1.1") : null;

@@ -54,6 +54,8 @@ want $out "accelerometer=null"  # an orientation is not an accelerometer
 want $out "type=27 name=iio-sensor-proxy orientation max=3.00 mindelay=200000 value=3.000"  # left-up: rotated 90 degrees clockwise
 want $out "type=5 name=iio-sensor-proxy light max=100000.00 mindelay=200000 value=456.000"
 want $out "type=8 name=iio-sensor-proxy proximity max=5.00 mindelay=200000 value=0.000"  # near
+want $out "feature sensor.light=true"; want $out "feature sensor.proximity=true"  # the backend's sensors are declared as features
+want $out "feature sensor.accelerometer=false"; want $out "feature sensor.compass=false"
 grep -aq "type=3 " $out && fail "the compass heading was listed (it has no honest Android type)"
 grep -a "Vibrate" $APKLY_STATE/feedbackd.calls
 # amplitude/ms of each Vibrate call; off is a 1 ms step at 0

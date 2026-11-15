@@ -68,6 +68,8 @@ public final class Main extends Activity {
         SensorManager sm = getSystemService(SensorManager.class);
         Sensor accel = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         System.out.println("[hw] sensors " + sm.getSensorList(Sensor.TYPE_ALL).size() + " accelerometer=" + (accel == null ? null : accel.getName()));
+        for (String f : new String[] {"accelerometer", "light", "proximity", "compass", "gyroscope"})  // declared from the backend's sensors (sensor_features)
+            System.out.println("[hw] feature sensor." + f + "=" + getPackageManager().hasSystemFeature("android.hardware.sensor." + f));
         for (Sensor s : sm.getSensorList(Sensor.TYPE_ALL)) {  // every sensor's range and a value (the host backends' mapping: tests/vm/providers-host.sh)
             System.out.println("[hw] listening type=" + s.getType() + " name=" + s.getName());
             float[] v = listen(sm, s, 1000);
