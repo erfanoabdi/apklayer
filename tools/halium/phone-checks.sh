@@ -22,6 +22,10 @@ for g in "$@"; do
     hello)
         INSTANCE=$APKLAYER_INSTANCE APKLAYER=$A RUNMS=20000 bash "$R/ut-shot.sh" hello.input "$R/hello.png" > "$R/hello.out" 2>&1
         [ -s "$R/hello.png" ] && [ "$(wc -c < "$R/hello.png")" -gt 3000 ]; report $? hello "picture $(wc -c < "$R/hello.png" 2>/dev/null) bytes" ;;
+    newpipe)  # org.schabi.newpipe installed by hand (apklayer install): runs, draws, no fatal exception
+        INSTANCE=$APKLAYER_INSTANCE APKLAYER=$A RUNMS=40000 bash "$R/ut-shot.sh" org.schabi.newpipe "$R/newpipe.png" > "$R/newpipe.out" 2>&1
+        ! grep -a -q "FATAL EXCEPTION" "$R/newpipe.png.log" && [ "$(wc -c < "$R/newpipe.png" 2>/dev/null || echo 0)" -gt 3000 ]
+        report $? newpipe "picture $(wc -c < "$R/newpipe.png" 2>/dev/null) bytes" ;;
     providers)
         p=$($A providers); ok=0
         for h in graphics camera media vibrator; do echo "$p" | awk -F'\t' -v h=$h '$1 == "default" && $2 == h && $3 == "device" { f = 1 } END { exit !f }' || { ok=1; echo "  $h is not device"; }; done
@@ -44,7 +48,7 @@ for g in "$@"; do
         [ "$os" = sfos ] || { echo "SKIP rotate: Lipstick only"; continue; }
         old=$(dconf read /lipstick/orientationLock); dconf write /lipstick/orientationLock '"landscape"'
         run_app hello.input rotate 30000
-        dconf write /lipstick/orientationLock "${old:-'dynamic'}"
+        if [ -n "$old" ]; then dconf write /lipstick/orientationLock "$old"; else dconf reset /lipstick/orientationLock; fi
         grep -a -q 'turned' "$state/shell.log"; report $? rotate "$(grep -a 'configure content' "$state/shell.log" | tail -1 | grep -o 'content [0-9x]*.*turned [0-9]*\|content [0-9x]*' | head -1)" ;;
     *) report 1 "$g" "unknown group" ;;
     esac

@@ -3,7 +3,7 @@
 # Ubuntu Touch X23 (UBPORTS in tests/vm/local.conf, key auth), sfos the Sailfish Quintus (SAILFISH). Copies tools/halium's helpers, spare-race.py and the hello
 # apps (the apks of $APKLAYER_APKS, default the repo's build/; tests/apps/build.sh builds them) into a scratch directory, runs phone-checks.sh there in an
 # instance of its own (ptest), prints PASS/FAIL per group, removes what it made (scratch, instance) and, on ut, locks the phone again when it woke it.
-# Groups: hello providers hidl camera sensors race (both), rotate (sfos). ut: the screen is woken and the PIN typed (ut-unlock.sh; apps are stopped while the
+# Groups: hello newpipe providers hidl camera sensors race (both), rotate (sfos). ut: the screen is woken and the PIN typed (ut-unlock.sh; apps are stopped while the
 # phone is locked). sfos: unlock the phone by hand first (its lock code is not in local.conf; sf-unlock.sh takes it on stdin).
 set -u
 os=${1:-}; shift || true
