@@ -50,7 +50,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
 - Composer GL context ~80 MB: measure on a phone while an app draws.
 - A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap.
-- Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
