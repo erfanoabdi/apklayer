@@ -10,6 +10,9 @@ case $(uname -m) in
 esac
 # an x86_64 home needs these folders too (the x86 PC's lead home had neither: no system apps, no gfxstream); a note only
 [ "$(uname -m)" != x86_64 ] || for d in x86_64/system-apps common/gfxstream; do [ -d "$p/$d" ] || echo "check-prebuilts: note: $p has no $d (copy it from the prebuilts branch)" >&2; done
+# the lock's libraries live in <cpu>/android-libs/lib64: a prebuilts copy without that folder (only common/ copied) is not a stale one
+case $(uname -m) in x86_64) cpu=x86_64 ;; *) cpu=arm64 ;; esac
+[ -d "$p/$cpu/android-libs/lib64" ] || { echo "check-prebuilts: $p has no $cpu/android-libs/lib64: copy the prebuilts branch's $cpu/ folder there too (not only common/)" >&2; exit 1; }
 list=$(mktemp); trap 'rm -f "$list"' EXIT
 awk '!/^#/ && NF >= 3 { f = $3; sub(/^android-arm64\/lib64\//, "arm64/android-libs/lib64/", f); if (f ~ /^(x86_64|arm64)\/android-libs\/lib64\//) print $1, f }' "$lock" |
     while read -r sum f; do [ -f "$p/$f" ] && printf '%s  %s\n' "$sum" "$f"; done > "$list" || true
