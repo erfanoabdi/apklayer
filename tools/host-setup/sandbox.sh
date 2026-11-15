@@ -14,11 +14,12 @@ command -v newuidmap >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get instal
 grep -q "^$user:" /etc/subuid || usermod --add-subuids 100000-165535 "$user"
 grep -q "^$user:" /etc/subgid || usermod --add-subgids 100000-165535 "$user"
 if [ -d /etc/apparmor.d ] && command -v apparmor_parser >/dev/null; then
-    n=0
     for bin in "$@"; do
-        bin=$(readlink -f "$bin"); n=$((n + 1))
-        f=/etc/apparmor.d/apklayer${n#1}
-        sed "s#@NAME@#${n#1}#; s#@BIN@#$bin#" "$here/apklayer.apparmor" > "$f"
+        bin=$(readlink -f "$bin")
+        # one file per binary path: a second tree's run must not replace the first tree's profile (its sandbox then fails in the user namespace)
+        n=-$(printf %s "$bin" | cksum | cut -d' ' -f1)
+        f=/etc/apparmor.d/apklayer$n
+        sed "s#@NAME@#$n#; s#@BIN@#$bin#" "$here/apklayer.apparmor" > "$f"
         apparmor_parser -r "$f"
         echo "sandbox-setup: AppArmor profile $f for $bin"
     done
