@@ -18,12 +18,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR colours are off and dark (also llvmpipe on the arm server and the NVIDIA tester PC): agent working on it.
-- Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
+- Home scene on NVIDIA: block noise on 3D models. Recheck with `apklayer prop set berberis.mode.com.kurogame.gplay.punishing.grayraven.en lite-translate-or-interpret` (and unset for the reference); the ASTC fallback in `cli/env.cpp` is a separate lever.
 
 ## Graphics
-- Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
 - Vulkan presentation untested on AMD.
-- OTR2 on the PC runs ~30 fps at 2448x1374.
+- OTR2 on the NVIDIA PC at 2448x1374: not measured (no APK on the tester PC; glbench there: 180 fps vsynced, 2.8k-4.9k fps unsynced while PGR renders). The ~30 fps was on the Intel PC.
 - Windows: KDE untested; `window-geometry` and `decoration` groups need uibench and sway.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
 - Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
@@ -60,7 +59,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Unity: `hpatchz`.
 
 ## Sandbox (before it can be the default)
-- The NVIDIA tester's box with the INSTALL.md checklist (the broker now runs `nvidia-modprobe` for missing nodes; only the argument mapping is tested).
+- NVIDIA sandbox checklist passes on the tester PC; open: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (the tester PC's nodes are 0666, no `nvidia-modprobe`).
 - UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
 - A release-candidate deb with the sandbox on for a day.
 
@@ -85,10 +84,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
+- `check-prebuilts.sh` does not catch stale `libvulkan.so`, `libapklayer_vulkan.so`, `vulkan.apklayer.so` (not in the lock; the tester PC's `~/apklayer-build/prebuilts` copy is ~25 libraries behind): add them to the lock.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
-- NVIDIA/AMD: Vulkan presentation, host ES1.
+- AMD: Vulkan presentation, host ES1. NVIDIA is confirmed (RTX 5060 Ti 615.71, sandboxed and not).
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
 - Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
 - Ubuntu Touch: manager on screen, navigation bar under the panel, drawer tap, shell window, maximize, turning by hand.
