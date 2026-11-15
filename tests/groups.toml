@@ -97,6 +97,10 @@ run = ["tests/vm/devices.sh"]
 apps = ["hello-camera"]
 run = ["tests/vm/camera.sh", "tests/vm/camera-reload.sh", "python3 -u tests/vm/camera-portrait.py", "CAMERA1=1 python3 -u tests/vm/camera-portrait.py"]
 
+[camera-ndk]  # the NDK camera API (Android's libcamera2ndk) from a native app
+apps = ["hello-camera-ndk"]
+run = ["tests/vm/camera-ndk.sh"]
+
 [camera-pipewire]  # a camera node on the desktop's PipeWire (other instances' PipeWire backends see it while it runs)
 apps = ["hello-camera"]
 run = ["CAMERA_APP=1 tests/vm/camera-pipewire.sh"]

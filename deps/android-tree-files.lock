@@ -241,6 +241,7 @@ e9e92fcc52aeb1ad732e55f015881d3060557e8d5970eeb0e2f5ada75b0e05d3 102888 android-
 9d42d67e622d36424588091318b8c91a244a2a5fda01d83dc5046362c6388c5f 84768 android-arm64/lib64/libbpf_bcc.so out/target/product/generic_arm64/system/lib64/libbpf_bcc.so same
 1c9d73b624c3ee3ef61d154e08c9e19c900ecaa7abe9a723bfcbcc111b47c899 68208 android-arm64/lib64/libbpf_minimal.so out/target/product/generic_arm64/system/lib64/libbpf_minimal.so same
 b3f9261acf0dc87a012eb19a1d632dab5a78a0991aa3c0ff7af351b28eb38953 1154016 android-arm64/lib64/libc++.so out/target/product/generic_arm64/system/lib64/libc++.so same
+ae4092fbb479618081715666b5b020b345cfe81b691184cf6a65e622a69b023c 339952 android-arm64/lib64/libcamera2ndk.so out/target/product/generic_arm64/system/lib64/libcamera2ndk.so same
 f88be99b70c58853a82df683947a83cd8af9f5da56c3dcde2c4d7143ab8129f8 649944 android-arm64/lib64/libcamera_client.so out/target/product/generic_arm64/system/lib64/libcamera_client.so patched
 f3e2723a2d6fd16d180694d29c5628128bc393a909c99c92990d992ab049587c 90616 android-arm64/lib64/libcamera_metadata.so out/target/product/generic_arm64/system/lib64/libcamera_metadata.so same
 482cd98aebe9002f6c29022f2a7d72fca252a0b1d935a10cba65a9bd92bd805f 35504 android-arm64/lib64/libcameracompatbilityinfo.so out/target/product/generic_arm64/system/lib64/libcameracompatbilityinfo.so same
