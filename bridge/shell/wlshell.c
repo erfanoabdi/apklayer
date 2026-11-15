@@ -21,6 +21,7 @@ static void ext_visibility(void *d, struct qt_extended_surface *e, int32_t visib
     struct window *w = d;
     fprintf(stderr, "[shell] %s: %s by the compositor\n", w->title, visible ? "shown" : "hidden");
     if (visible) resume(w);
+    else if (!text_mgr) maliit_enable(w, 4);  /* another app is up: its keyboard goes (a field keeps focus; the next showSoftInput brings it back) */
 }
 static void ext_property(void *d, struct qt_extended_surface *e, const char *name, struct wl_array *value)
 { (void)d; (void)e; (void)name; (void)value; }
