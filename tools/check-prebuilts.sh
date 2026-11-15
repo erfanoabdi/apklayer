@@ -17,6 +17,8 @@ list=$(mktemp); trap 'rm -f "$list"' EXIT
 awk '!/^#/ && NF >= 3 { f = $3; sub(/^android-arm64\/lib64\//, "arm64/android-libs/lib64/", f); if (f ~ /^(x86_64|arm64)\/android-libs\/lib64\//) print $1, f }' "$lock" |
     while read -r sum f; do [ -f "$p/$f" ] && printf '%s  %s\n' "$sum" "$f"; done > "$list" || true
 [ -s "$list" ] || { echo "check-prebuilts: no locked library found under $p" >&2; exit 1; }
+# a staged library the lock does not name is never compared (libvulkan, libapklayer_vulkan, vulkan.apklayer were once missing): a note
+awk '{ print $2 }' "$list" | LC_ALL=C sort > "$list.l"; (cd "$p" && ls -d "$cpu"/android-libs/lib64/*.so | LC_ALL=C sort) | LC_ALL=C comm -13 "$list.l" - | sed 's/^/check-prebuilts: note: not in the lock, unchecked: /' >&2; rm -f "$list.l"
 stale=$(cd "$p" && sha256sum -c --quiet "$list" 2>/dev/null | sed -n 's/: FAILED$//p') || true
 [ -z "$stale" ] && exit 0
 echo "check-prebuilts: $p is behind $(basename "$lock") (copy these from the prebuilts branch):" >&2

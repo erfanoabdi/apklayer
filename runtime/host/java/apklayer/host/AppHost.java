@@ -313,6 +313,7 @@ public final class AppHost implements Runnable {
 
         for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
         for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) text.ime((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
+        for (String tag; shell != null && (tag = shell.pollLayout()) != null; ) HostInputMethods.layout(tag);
         for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) text.clipboardIn(clip);
         while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
 

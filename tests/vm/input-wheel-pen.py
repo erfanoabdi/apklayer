@@ -31,9 +31,9 @@ log = open(instance.OUT / 'input-wheel-pen.log', 'wb')
 def expect(what, after=0):
     """Reads the app's output until a line from index `after` on contains `what`; returns it."""
     global pending
-    end = time.monotonic() + 30
+    end = time.monotonic() + 90  # a loaded VM (two groups on 4 CPUs) starts the app slowly
     while not any(what in l for l in seen[after:]):
-        assert selector.select(10) and time.monotonic() < end, 'no "%s"; last lines: %s' % (what, seen[-6:])
+        assert selector.select(30) and time.monotonic() < end, 'no "%s"; last lines: %s' % (what, seen[-6:])
         data = os.read(app.stdout.fileno(), 65536)
         assert data, 'the app ended without "%s"' % what
         log.write(data)

@@ -13,8 +13,6 @@ run_app() { APKLAYER_JOPTS="-Dapklayer.runms=${3:-30000} $4" $A run "$1" > "$R/$
 state=~/.local/state/apklayer/$APKLAYER_INSTANCE
 
 $A stop >/dev/null 2>&1
-# MediaTek's EGL layer (libGLES_meow, the Quintus) crashes in SurfaceFlinger's dlopen (docs/HALIUM.md): the instance uses Mali's own
-[ "$os" = sfos ] && $A prop set ro.hardware.egl mali >/dev/null 2>&1
 for apk in "$R"/apks/*.apk; do [ -e "$apk" ] && $A install "$apk" >/dev/null 2>&1; done
 
 for g in "$@"; do

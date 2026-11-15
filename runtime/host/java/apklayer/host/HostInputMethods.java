@@ -19,6 +19,14 @@ import org.robolectric.Shadows;
 final class HostInputMethods {
     private HostInputMethods() {}
 
+    /** The keyboard layout in use (the shell's xkb group, a language tag): the current input method subtype, as the system's follows the hardware keyboard's layout. */
+    static void layout(String tag) {
+        android.view.inputmethod.InputMethodSubtype subtype = new android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder()
+                .setSubtypeLocale(tag).setSubtypeMode("keyboard").build();
+        Shadows.shadowOf(org.robolectric.RuntimeEnvironment.getApplication().getSystemService(InputMethodManager.class)).setCurrentInputMethodSubtype(subtype);
+        System.out.println("[apklayer] input layout: " + tag);
+    }
+
     /** {@code setting}: ENABLED_INPUT_METHODS as the system answers it (the hub: an app targeting 34+ may not read the setting). */
     static void install(Context app, String setting) {
         List<InputMethodInfo> all = new ArrayList<>(), enabled = new ArrayList<>();

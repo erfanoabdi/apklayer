@@ -20,13 +20,14 @@ final class ShellClient {
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106, TABLET = 117,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
-            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
+            LAYOUT = 118, DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
     private static final int WINDOW_ID = 1;
 
     private final SocketChannel channel;
     private final ConcurrentLinkedQueue<int[]> input = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<Object[]> imeIn = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<String> clipboardIn = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<String> layoutIn = new ConcurrentLinkedQueue<>();
     private volatile boolean closed;
     private HostVsync vsync;
     private int width, height;
@@ -75,6 +76,11 @@ final class ShellClient {
     /** Text the system selection changed to (from the shell), or null. */
     String pollClipboard() {
         return clipboardIn.poll();
+    }
+
+    /** The language tag of the keyboard layout now in use (the shell's xkb group), or null. */
+    String pollLayout() {
+        return layoutIn.poll();
     }
 
     /** The app copied text: the shell becomes the selection owner. */
@@ -215,6 +221,8 @@ final class ShellClient {
                             split + 1 <= len ? new String(raw, split + 1, len - split - 1, StandardCharsets.UTF_8) : ""});
                 } else if (type == CLIPBOARD) {
                     clipboardIn.add(new String(body.array(), 0, len, StandardCharsets.UTF_8));
+                } else if (type == LAYOUT) {
+                    layoutIn.add(new String(body.array(), 4, len - 4, StandardCharsets.UTF_8));
                 } else if (type == STATE) {
                     // {15, flags}: bit0 active, bit1 minimized
                     input.add(new int[] {15, body.getInt(4)});
