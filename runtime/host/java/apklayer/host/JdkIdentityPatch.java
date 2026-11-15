@@ -15,7 +15,8 @@ import org.objectweb.asm.commons.SimpleRemapper;
 /**
  * The runtime-identity part of the java.base patch (run by {@link JdkPatch}): java.lang.ApklayerHooks and java.lang.BootClassLoader from their
  * templates (JdkHooks, JdkBootLoader), and the JDK methods that answer through the hooks: a Throwable's frames, another thread's frames,
- * Thread.getAllStackTraces, annotation enum values (by field), NullPointerException.getMessage, and the messages HotSpot gives the index, cast and arithmetic exceptions it throws.
+ * Thread.getAllStackTraces, annotation enum values (by field), NullPointerException.getMessage, and the messages HotSpot gives the index, cast and arithmetic exceptions it throws;
+ * also a wrapped socket's SocketImpl.fd (socketDescriptor).
  */
 final class JdkIdentityPatch {
     private JdkIdentityPatch() {}
@@ -32,6 +33,7 @@ final class JdkIdentityPatch {
         copy("apklayer/host/JdkArt", ART, names, dir);
         copy("apklayer/host/JdkAnnotationEnums", ENUMS, names, dir);
         for (String c : new String[]{"Method", "Constructor"}) artInit(dir, "java/lang/reflect/" + c, "Ljava/lang/reflect/Executable;");
+        socketDescriptor(dir);
         // a Throwable's frames, made once from its backtrace: through the hook before they are kept
         patch(dir, "java/lang/Throwable", (owner, name, desc, mv) -> name.equals("getOurStackTrace") ? new MethodVisitor(Opcodes.ASM9, mv) {
             @Override public void visitMethodInsn(int op, String o, String n, String d, boolean itf) {
@@ -75,6 +77,26 @@ final class JdkIdentityPatch {
                 }
             };
             return mv;
+        });
+    }
+
+    /**
+     * Android's SocketImpl.fd holds a socket's descriptor. The JDK's Socket keeps a SocksSocketImpl (a DelegatingSocketImpl) around the NioSocketImpl
+     * that has it, and the wrapper's fd stayed null: Conscrypt read {@code Socket.impl.fd} by reflection for its file-descriptor socket (Play services'
+     * own copy) and failed every TLS handshake with "Socket is closed" (no check-in, no sign-in). After the delegate's create: this.fd = delegate.fd.
+     */
+    private static void socketDescriptor(Path dir) throws Exception {
+        patch(dir, "java/net/DelegatingSocketImpl", (o, name, desc, mv) -> !(name.equals("create") && desc.equals("(Z)V")) ? mv : new MethodVisitor(Opcodes.ASM9, mv) {
+            @Override public void visitInsn(int op) {
+                if (op == Opcodes.RETURN) {
+                    mv.visitVarInsn(Opcodes.ALOAD, 0);
+                    mv.visitVarInsn(Opcodes.ALOAD, 0);
+                    mv.visitFieldInsn(Opcodes.GETFIELD, "java/net/DelegatingSocketImpl", "delegate", "Ljava/net/SocketImpl;");
+                    mv.visitFieldInsn(Opcodes.GETFIELD, "java/net/SocketImpl", "fd", "Ljava/io/FileDescriptor;");
+                    mv.visitFieldInsn(Opcodes.PUTFIELD, "java/net/SocketImpl", "fd", "Ljava/io/FileDescriptor;");
+                }
+                super.visitInsn(op);
+            }
         });
     }
 

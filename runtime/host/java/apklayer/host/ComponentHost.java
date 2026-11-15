@@ -21,6 +21,7 @@ public final class ComponentHost implements Runnable {
         AppEnvironment.setUpApplication(sandbox, apk, false);
         StartTrace.mark("application set up");
         AppEnvironment.nameProcessEarly();  // before the app's code, as Android's setArgV0
+        HostProviders.installEarly();  // Android's security providers before the app's code (its onCreate may take a default trust manager)
         Application app = RuntimeEnvironment.getApplication();
         StartTrace.mark("application created (onCreate done)");
         AppEnvironment.startRuntime(app);

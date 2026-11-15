@@ -18,20 +18,42 @@ import java.util.Map;
 final class HostProviders {
     private HostProviders() {}
 
-    static void install(Context app) {
+    private static Boolean early;  // installEarly ran: true with Android's providers, false with the JDK's (HostTrust)
+
+    /**
+     * Android's providers before the app's code, as a device has them from zygote: an Application's onCreate that installs a provider of its own
+     * (Play services' ProviderInstaller: GmsCore_OpenSSL) takes its default trust manager then, and with the JDK's providers it kept SunJSSE's
+     * X509TrustManagerImpl, whose checkServerTrusted(chain, authType, socket) Conscrypt calls reflectively and java.base does not open: every TLS
+     * handshake of Play services failed (no check-in, no sign-in). AppHost and ComponentHost call it before the Application is created.
+     */
+    static synchronized void installEarly() {
+        if (early != null) return;
         Provider conscrypt;
         try {
             conscrypt = new com.android.org.conscrypt.OpenSSLProvider();  // Conscrypt.checkAvailability: loads libjavacrypto
         } catch (Throwable unavailable) {
             System.err.println("[apklayer] warning: Android's Conscrypt (AndroidOpenSSL) is not available (" + unavailable + "); keeping the JDK security providers");
             HostTrust.install();
+            early = false;
             return;
         }
+        order(conscrypt);
+        early = true;
+    }
+
+    /** The app's network_security_config (AndroidNSSP, first, as handleBindApplication installs it), after the providers (installEarly). */
+    static void install(Context app) {
+        installEarly();
+        if (!early) return;
         try {
             android.security.net.config.NetworkSecurityConfigProvider.install(app);  // the app's network_security_config; inserts AndroidNSSP first
         } catch (Throwable noConfig) {
             System.err.println("[apklayer] warning: AndroidNSSP not installed (" + noConfig + ")");
         }
+        if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] security providers: " + java.util.Arrays.stream(Security.getProviders()).map(Provider::getName).toList());
+    }
+
+    private static void order(Provider conscrypt) {
         Map<String, Provider> have = new LinkedHashMap<>();
         for (Provider p : Security.getProviders()) have.put(p.getName(), p);
         Provider sun = have.get("SUN");
@@ -39,7 +61,7 @@ final class HostProviders {
         if (sun != null) have.put("CertPathProvider", new CertPath(sun));
         try { have.put("HarmonyJSSE", new HarmonyJsse(have.get("SunEC"), have.get("SunRsaSign"))); } catch (Throwable none) { System.err.println("[apklayer] warning: HarmonyJSSE: " + none); }
         List<Provider> order = new ArrayList<>();
-        for (String name : new String[] {"AndroidNSSP", "AndroidOpenSSL", "CertPathProvider", "AndroidKeyStoreBCWorkaround", "BC", "HarmonyJSSE", "AndroidKeyStore"}) {
+        for (String name : new String[] {"AndroidOpenSSL", "CertPathProvider", "AndroidKeyStoreBCWorkaround", "BC", "HarmonyJSSE", "AndroidKeyStore"}) {
             Provider p = have.get(name);
             if (p != null) order.add(p);
         }
@@ -56,7 +78,6 @@ final class HostProviders {
         // libcore's HttpsURLConnection verifies host names with okhttp's verifier; the JDK's default one refuses every name (it relies on its own TLS stack's check)
         try { javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier(com.android.okhttp.internal.tls.OkHostnameVerifier.INSTANCE); }
         catch (Throwable none) { System.err.println("[apklayer] warning: default hostname verifier: " + none); }
-        if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] security providers: " + order.stream().map(Provider::getName).toList());
     }
 
     /** Android's CertPathProvider (libcore's sun.security.provider.CertPathProvider): CertPathBuilder/Validator PKIX and the Collection CertStore, which are the JDK's own certpath classes. */

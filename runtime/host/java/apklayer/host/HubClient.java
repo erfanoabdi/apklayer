@@ -38,8 +38,11 @@ public final class HubClient {
         HubProviders_registerRemote(context);
         StartTrace.mark("remote providers registered");
         android.os.Bundle settings = HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.HOST_SETTINGS, request -> {}, reply -> reply.readBundle(HubClient.class.getClassLoader()));
-        // on the main thread later (an early attachment runs inside the application's creation), ahead of the first launch (AppHost.run)
-        AppHost.beforeFirstLaunch(() -> AppHost.configurationChanged(HostConfiguration.update(settings)));
+        // as bindApplication's configuration: in place before Application.onCreate (ShadowHostInstrumentation.callApplicationOnCreate), with no change
+        // callback; an attachment from inside the application's creation (attachEarly) waits for that point. Else (a later attachment) on the main
+        // thread ahead of the first launch (AppHost.run). Play services kills its process on a language change it sees (LemonContext)
+        synchronized (HubClient.class) { unappliedSettings = settings; }
+        AppHost.beforeFirstLaunch(() -> { android.os.Bundle late = takeSettings(); if (late != null) AppHost.configurationChanged(HostConfiguration.update(late)); });
         HostInputMethods.install(context,HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
@@ -313,6 +316,16 @@ public final class HubClient {
     }
     void retryJob(int jobId, boolean systemStop) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_RETRY, request -> { request.writeInt(jobId); request.writeBoolean(systemStop); }, reply -> null); }
     void cancelJob(int jobId) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_CANCEL, request -> request.writeInt(jobId), reply -> null); }
+
+    private static android.os.Bundle unappliedSettings;  // the hub's settings from registration, until applied
+
+    private static synchronized android.os.Bundle takeSettings() { android.os.Bundle s = unappliedSettings; unappliedSettings = null; return s; }
+
+    /** The hub's settings before Application.onCreate (main thread), as the configuration bindApplication brings: the app starts with them, no callback. */
+    static void applySettingsBeforeOnCreate() {
+        android.os.Bundle settings = takeSettings();
+        if (settings != null) HostConfiguration.update(settings);
+    }
 
     static synchronized HubClient attach(Context context) {
         Context app = context.getApplicationContext();  // null while Application.attach runs (LoadedApk has no Application yet): the Application itself

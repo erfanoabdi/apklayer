@@ -86,6 +86,7 @@ public final class AppHost implements Runnable {
             new Handler(Looper.getMainLooper()).post(AppHost::firstLaunchMessage);
         }
         if (describe == null) AppEnvironment.nameProcessEarly();  // before the app's code, as Android's setArgV0
+        HostProviders.installEarly();  // Android's security providers before the app's code (its onCreate may take a default trust manager)
         Application app = RuntimeEnvironment.getApplication(); // created here (lazy), on persistent dirs
         if (describe != null) {
             AppMetadata.describe(app, describe);
