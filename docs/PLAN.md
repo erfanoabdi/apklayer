@@ -30,7 +30,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- NDK camera: the first `getCameraIdList` can be empty for ~200 ms because cameraserver publishes `media.camera` before its provider listed cameras. Fix: construct `CameraService` by hand in `aosp/hals/camera/services/Service.cpp`, wait for `getNumberOfCameras() > 0`, then `addService` (needs a ~/los24 build and a re-stage).
+- `tests/run camera` fails on main in `camera-portrait.py` (`SurfaceTexture.setDefaultBufferSize` NPE, then the shutter-timestamps check); `camera-ndk` passes.
 - Portrait desktop monitor: the right camera mount degrees per monitor direction are unknown (no way to detect it).
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
