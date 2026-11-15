@@ -325,7 +325,7 @@ final class HubDirectory extends Binder {
                 }
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + (instance != null ? "#" + instance : "") + " pid=" + pid + " uid=" + uid + " kernel-uid=" + kernel + " t=" + System.nanoTime() / 1_000_000);
                 synchronized (failures) { failures.remove(key(peer)); }  // launches are counted per host (package#process): a host that registered did not fail
-                HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
+                if (pid != android.os.Process.myPid()) HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package (not the hub's own: it plays no track and waited for a whole feed, ~0.3 s of every hub start)
                 HubLockScreen.appStarted();
                 bindings.registered(peer);
                 broadcasts.registered(peer);

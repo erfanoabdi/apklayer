@@ -28,6 +28,7 @@ public final class HubClient {
                 HubStartup.awaitDeath(found);
             }
         }
+        StartTrace.mark("hub registered (REGISTER done)");
         hub = found; endpoint = own; hubPid = own.hubPid();
         try { hub.linkToDeath(() -> { alive = false; hubDied(); }, 0); }
         catch (android.os.RemoteException failure) { throw new IllegalStateException("Hub disconnected during registration", failure); }
@@ -35,6 +36,7 @@ public final class HubClient {
         HubPermissionChecker.install();
         registerPackages(context);
         HubProviders_registerRemote(context);
+        StartTrace.mark("remote providers registered");
         android.os.Bundle settings = HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.HOST_SETTINGS, request -> {}, reply -> reply.readBundle(HubClient.class.getClassLoader()));
         // on the main thread later (an early attachment runs inside the application's creation), ahead of the first launch (AppHost.run)
         AppHost.beforeFirstLaunch(() -> AppHost.configurationChanged(HostConfiguration.update(settings)));

@@ -345,6 +345,7 @@ int runHub(const Layout& l, const Instance& inst) {
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     // uid 1000: the hub is the instance's system_server, also as the uid its oneway calls carry (HubProviders.check)
     jvm.insert(jvm.end(), {"-Dapklayer.uid=1000", "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()});
+    for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (o.rfind("-Dapklayer.perf", 0) == 0) jvm.push_back(o);  // the hub's own start-up marks (startup-timeline.py)
     // SettingsProvider is system_server's own (android:process="system"): it runs in the hub's JVM, as on a device, not in a JVM of its own (docs/history/PLAN-2026-11-10.md
     // "app start speed on phones" 8). Its data and package as for its own process, the hub's uid. Under the sandbox it keeps its own host (its app uid's files).
     std::vector<std::string> system;

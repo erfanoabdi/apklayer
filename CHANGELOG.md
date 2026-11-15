@@ -4,6 +4,14 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: Startup and memory measured (UTM VM, uibench, 148 packages)
+- Hub start: the hub's own registration waited for a whole audio-permission feed (`HubAudioPermissions.registered`: build 150 ms + audioserver `onServiceStart` 350 ms, started by the first registering app and serialized by its lock). The hub's own pid plays no track: it skips the check. Quiet VM, 4 cold runs each: hub ready 2.35 s -> 2.03 s, first frame 3.17 s -> 3.0 s; warm unchanged (0.99 s).
+- Marks: the hub JVM now gets `-Dapklayer.perf*` from APKLAYER_JOPTS; `startup-timeline.py` reads its `hub:` lines; new marks "hub: system package installed", "hub: attached", "hub registered (REGISTER done)", "remote providers registered". Hub boot cold: JVM main -> Robolectric ready 0.8 s, REGISTER 0.43 s (was the feed), settings provider's providers 0.34 s.
+- Not a cost: the app's `registerPackages` for 148 packages is 54 ms warm / 150 ms cold (binder 27-73 ms, Robolectric install 3 ms), `Application.onCreate` of uibench 53 ms cold / 94 ms warm; the old "~2 s with ~20 packages" is an app with its own onCreate work, not the hub path.
+- App JVM (NMT summary at exit, serial/C1 flags of cli/env.cpp): committed 296 MB = heap 112, metaspace 88 + class 15, symbols 37, code 14.5, CDS 14.6, threads 3.5; flags already tuned (2026-11-09 table above), no further change measured. PSS idle after a run: hub JVM 478-503 MB, instance spare 279 MB, surfaceflinger 61, audio-services 46, composer 7 (virgl: no 80 MB GL context after the app exits; the Mali block exists on the phones only).
+- SurfaceFlinger shader priming is already off (`service.sf.prime_shader_cache=0`, bridge/native/apklayer.prop).
+
+
 ## 2026-11-15: libselinux listed in the app's module view (bionic_translation 0082)
 - Cause of "libselinux is on the eager list but absent": the mapped `libapklayer_selinux.so` (bridge/ndk, plain C) is loaded by glibc, a host-only module, and 0073 hides those from app callbacks. 0082 names it `/system/lib64/libselinux.so`; the identity matrix lists 286 modules (285). Its soname column stays empty (glibc relocates .dynamic; the probe reads it as unrelocated).
 - Left, with reasons: x86 HWCAP2 0 is deliberate (the ID registers and cpuinfo report RNDR/I8MM absent and the three must agree, translator tree); `/proc/net/unix` EACCES for the x86 guest matches a real phone (Android 10+), it is arm64 that reads it; `/proc/self/cwd/..` needs a textual rewrite of the symlink in the path layer, not done.
