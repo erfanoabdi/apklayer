@@ -187,12 +187,14 @@ public final class NativeLoader {
             }
             if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + (guest ? bridgeError() : dlerror()));
             LOADED.put(path, handle);
+            // by name first: what JNI_OnLoad registers (RegisterNatives) then wins, as on ART, where an exported Java_* function is only looked up for a
+            // native nothing registered (libgoogle3 exports functions for natives its JNI_OnLoad registers with others)
+            int bound = bindByName(path, handle, loader, guest);
             long onLoad = guest ? bridgeSymbol(handle, "JNI_OnLoad", null) : dlsym(handle, "JNI_OnLoad");
             if (onLoad != 0) {
                 int version = callOnLoad(onLoad, loader);
                 if (version < 0) throw new UnsatisfiedLinkError(path + ": JNI_OnLoad failed");
             }
-            int bound = bindByName(path, handle, loader, guest);
             System.out.println("[apklayer] loaded " + new File(path).getName() + " (JNI_OnLoad "
                     + (onLoad != 0 ? "ran" : "absent") + ", " + bound + " natives bound by name)");
         }
@@ -236,9 +238,31 @@ public final class NativeLoader {
 
     // ---- binding Java_* functions by name ----
 
+    /** The app's libraries whose Java_* functions were bound through a library that needs them (each once). */
+    private static final java.util.Set<String> SCANNED = new java.util.HashSet<>();
+
+    /**
+     * ART resolves a native through dlsym on each loaded library's handle, which searches that library and its dependencies: YouTube loads
+     * libelements.so, whose DT_NEEDED libgoogle3.so holds the Java_* functions. So the app's own libraries it needs (same directory, transitively,
+     * not loaded by name themselves) are bound too, through this handle.
+     */
     private static int bindByName(String path, long handle, ClassLoader cl, boolean guest) {
+        int bound = bindSymbols(exportedJavaFunctions(path), handle, cl, guest);
+        java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(neededLibraries(path));
+        File dir = new File(path).getParentFile();
+        while (!todo.isEmpty()) {
+            File dep = new File(dir, todo.pop());
+            String p = dep.getPath();
+            if (!dep.isFile() || LOADED.containsKey(p) || !SCANNED.add(p)) continue;
+            bound += bindSymbols(exportedJavaFunctions(p), handle, cl, guest);
+            todo.addAll(neededLibraries(p));
+        }
+        return bound;
+    }
+
+    private static int bindSymbols(java.util.List<String> symbols, long handle, ClassLoader cl, boolean guest) {
         int bound = 0;
-        for (String symbol : exportedJavaFunctions(path)) {
+        for (String symbol : symbols) {
             try {
                 String[] parts = demangle(symbol);
                 Class<?> cls = Class.forName(parts[0], false, cl);
@@ -248,13 +272,45 @@ public final class NativeLoader {
                     String sig = descriptor(m);
                     if (parts[2] != null && !sig.startsWith("(" + parts[2] + ")")) continue; // overload suffix: the whole argument list ("__" is no arguments)
                     if (guest) fn = bridgeSymbol(handle, symbol, shorty(m)); // a trampoline per signature
-                    if (registerNative(cls, m.getName(), sig, fn) == 0) bound++;
+                    if (fn != 0 && registerNative(cls, m.getName(), sig, fn) == 0) bound++;
                 }
             } catch (ClassNotFoundException | LinkageError e) {
                 // a class of this library that the app never ships: nothing to bind
             }
         }
         return bound;
+    }
+
+    /** The DT_NEEDED names of an ELF library (from its SHT_DYNAMIC section), empty when it cannot be read. */
+    private static java.util.List<String> neededLibraries(String path) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        try (java.nio.channels.FileChannel f = java.nio.channels.FileChannel.open(new File(path).toPath())) {
+            ByteBuffer b = f.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, f.size()).order(ByteOrder.LITTLE_ENDIAN);
+            if (b.getInt(0) != 0x464c457f || (b.get(4) != 1 && b.get(4) != 2)) return names;
+            boolean e64 = b.get(4) == 2;
+            long shoff = e64 ? b.getLong(0x28) : b.getInt(0x20) & 0xffffffffL;
+            int shentsize = b.getShort(e64 ? 0x3A : 0x2E) & 0xffff, shnum = b.getShort(e64 ? 0x3C : 0x30) & 0xffff, dynEnt = e64 ? 16 : 8;
+            for (int i = 0; i < shnum; i++) {
+                int sh = (int) shoff + i * shentsize;
+                if (b.getInt(sh + 4) != 6) continue; // SHT_DYNAMIC
+                long off = e64 ? b.getLong(sh + 0x18) : b.getInt(sh + 0x10), size = e64 ? b.getLong(sh + 0x20) : b.getInt(sh + 0x14);
+                int strSh = (int) shoff + b.getInt(sh + (e64 ? 0x28 : 0x18)) * shentsize;
+                long strOff = e64 ? b.getLong(strSh + 0x18) : b.getInt(strSh + 0x10);
+                for (long d = off; d + dynEnt <= off + size; d += dynEnt) {
+                    long tag = e64 ? b.getLong((int) d) : b.getInt((int) d), val = e64 ? b.getLong((int) d + 8) : b.getInt((int) d + 4) & 0xffffffffL;
+                    if (tag == 0) break;
+                    if (tag != 1) continue; // DT_NEEDED
+                    int p = (int) (strOff + val), end = p;
+                    while (b.get(end) != 0) end++;
+                    byte[] n = new byte[end - p];
+                    b.get(p, n);
+                    names.add(new String(n, StandardCharsets.US_ASCII));
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            // not readable: nothing more to bind
+        }
+        return names;
     }
 
     /**
