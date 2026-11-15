@@ -351,6 +351,11 @@ run = ["python3 -u tests/vm/gpu-smoke.py", "LANG=nl_NL.UTF-8 LC_ALL=nl_NL.UTF-8 
 needs = ["com.android.test.uibench"]
 run = ["APKLAYER_RUNTIME_DEBUG=egl-import-fail python3 -u tests/vm/gpu-smoke.py"]
 
+[gles1]
+# an OpenGL ES 1 app (GLSurfaceView's default context): the host driver's libGLESv1_CM (NVIDIA, Mesa with ES 1) or libapklayer-gles1's translator
+apps = ["hello-gles1"]
+run = ["python3 -u tests/vm/gles1.py"]
+
 [gfx-readback]
 # the GPU copy of buffers the CPU cannot map (readback.c: NVIDIA's tiled window and capture buffers), every format it moves, tiled and LINEAR
 run = ["b/bridge/hals/graphics/readback-test"]
