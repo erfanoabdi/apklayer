@@ -61,7 +61,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - ~1 GB per app JVM on the Volla; NewPipe ~21 s cold, ~12 s warm.
 - Hub ready with 146 packages is 2.1 s, ~0.5 s above the 5-package floor (`onServiceStart` 0.36 s; `definition()` scans all packages per permission; no caching on the apps directory mtime because in-place updates in `cli/apps.cpp` don't change it).
 - `tests/lib/instance.wait_file` races with app-log rotation (exists, then read_text).
-- Cold-start costs: Hyphenator `nInit`; `JNI_OnLoad` ~150 ms (eager libraries); the keystore step waits 1.3-4.4 s for the hub's gatekeeper enrollment on every cold start (async would let an early `isDeviceSecure()` see false).
+- Cold start: `Hyphenator.nInit` (~45 ms) and the eager `JNI_OnLoad` libraries (4 ms; the 144 ms is `libandroid_runtime`) need no work. Remaining: `Application.onCreate` with ~20 packages (~2 s). A key generated with user authentication before the keystore enrollment finishes could miss the secure user id (not covered by a test).
 - SurfaceFlinger shader-cache priming; composer GL context ~80 MB.
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
