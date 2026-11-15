@@ -12,7 +12,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
@@ -60,6 +59,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
+- File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: the manager install dialog has no name/icon/permissions preview before Install; `apklayer open` under the sandbox; Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
 - Flatpak: the `org.freedesktop.Sdk.Extension.openjdk25` extension and 26.08 runtime are unverified (manifest now names JDK 25).

@@ -56,6 +56,8 @@ export component AppWindow inherits MaterialWindow {
     property <string> apk-path;
     property <string> chosen: Backend.chosen-path;
     changed chosen => { root.apk-path = root.chosen; }
+    property <int> installed-serial: Backend.installed-serial;
+    changed installed-serial => { installed-dialog.show(); }
     property <int> binder-serial: Backend.binder-serial;
     changed binder-serial => { binder-dialog.show(); }
 
@@ -229,6 +231,17 @@ export component AppWindow inherits MaterialWindow {
             instance-id := TextField { min-width: 280px; label: "Name"; accessible-label: "Instance name"; }
         }
         default-action-clicked => { if instance-id.text != "" { Backend.create-instance(instance-id.text); instance-id.text = ""; self.close(); } }
+        action-clicked => { self.close(); }
+    }
+
+    // after an install the manager made (an .apk opened from the file manager, the install dialog): the app, and Open
+    installed-dialog := PageDialog {
+        x: 0; y: 0; width: root.width; height: root.height; full: !root.wide;
+        title: Backend.installed-label + " installed";
+        default-action-text: "Open";
+        actions: ["Close"];
+        MaterialText { max-width: 400px; wrap: word-wrap; text: Backend.installed-package; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; }
+        default-action-clicked => { Backend.open-app(Backend.installed-package); self.close(); }
         action-clicked => { self.close(); }
     }
 

@@ -9,6 +9,8 @@ share="${XDG_DATA_HOME:-$HOME/.local/share}"
 install -Dm644 data/apklayer.svg "$share/icons/hicolor/scalable/apps/apklayer.svg"
 install -Dm644 data/apklayer-256.png "$share/icons/hicolor/256x256/apps/apklayer.png"
 mkdir -p "$share/applications"
-sed "s|^Exec=.*|Exec=$bin|" data/apklayer-manager.desktop > "$share/applications/apklayer-manager.desktop"
+sed "s|^Exec=.*|Exec=$bin %F|" data/apklayer-manager.desktop > "$share/applications/apklayer-manager.desktop"
+install -Dm644 data/apklayer-mime.xml "$share/mime/packages/apklayer.xml"
+command -v update-mime-database >/dev/null && update-mime-database "$share/mime" || true
 command -v update-desktop-database >/dev/null && update-desktop-database -q "$share/applications" || true
 echo "installed $share/applications/apklayer-manager.desktop -> $bin"

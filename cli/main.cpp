@@ -20,6 +20,7 @@
 #include "sandbox.h"
 #include "manage.h"
 #include "migrate.h"
+#include "open.h"
 #include "providers.h"
 #include "run.h"
 #include "spare.h"
@@ -42,6 +43,8 @@ int usage() {
           "  reconvert <package> | --all-stale  convert an installed app again from its kept APKs (its data stays); --all-stale: every app converted\n"
           "                         with an older converter ABI (the stale column of list --tsv)\n"
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"
+          "  open <package> [file]  run it with a host file as an ACTION_VIEW (a read-only content Uri, the file's type and name; a running app gets it\n"
+          "                         in onNewIntent): what the desktop's \"Open with\" runs for the files an app's manifest declares (docs/FILE-ASSOCIATIONS.md)\n"
           "  list [--tsv]           installed apps (--tsv: package, label, version, dir, uid, running in this instance, system app, in the app drawer, stale)\n"
           "  launcher show|hide <package>  the app's launcher in the desktop's app drawer (system apps are hidden by default)\n"
           "  info <package>         the app's description, sizes and directories (key<TAB>value)\n"
@@ -106,14 +109,15 @@ int main(int argc, char** argv) {
     bool autostart = (args.size() >= 3 && args[0] == "instance" && args[1] == "autostart")  // systemctl --user is the user's, not apklayerd's
                      || (args[0] == "hub" && currentUnit().rfind("apklayer-instance@", 0) == 0);  // the always-on unit's hub is its main process, not apklayerd's child
     static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup", "config"};
-    if (args[0] == "run" && args.size() == 2 && !inDaemon) startLomiriAppShell(layout, id);  // in the drawer launch's unit, before it is left
+    bool opens = args[0] == "open" && (args.size() == 2 || args.size() == 3);  // run with a host file as the intent's data (cli/open.cpp)
+    if ((opens || (args[0] == "run" && args.size() == 2)) && !inDaemon) startLomiriAppShell(layout, id);  // in the drawer launch's unit, before it is left
     bool local = kLocal.count(args[0]) && !(inFlatpak() && args[0] == "setup");  // the Flatpak's setup starts a stack: the daemon's, as every command's
     if (int status = 0; !inDaemon && !autostart && !local && forwardToDaemon(layout, full, &status)) return status;
     if (args[0] == "config") return configCommand(std::vector<std::string>(args.begin() + 1, args.end()));
     if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
     // what lives on leaves the caller's systemd unit, which its session may freeze (Lomiri): each launch, the spare, the hub, the stack, setup (cli/unit.h)
     const std::string& what = args[0];
-    if ((what == "run" || what == "component-host") && args.size() == 2) enterOwnUnit("apklayer-" + id + "-app-" + args[1]);
+    if (opens || ((what == "run" || what == "component-host") && args.size() == 2)) enterOwnUnit("apklayer-" + id + "-app-" + args[1]);
     else if (what == "app-spare" && args.size() == 3) enterOwnUnit("apklayer-" + id + "-spare");
     else if (what == "hub" || what == "stack-daemon") enterOwnUnit("apklayer-" + id + (what == "hub" ? "-hub" : "-stack"), true);
     else if (what == "setup" && std::find(args.begin(), args.end(), "--check") == args.end()) enterOwnUnit("apklayer-setup");
@@ -124,7 +128,7 @@ int main(int argc, char** argv) {
     // the sandbox's answer for this command and every process it starts (the Java side reads the variable)
     bool sandbox = sandboxOn();
     setenv("APKLAYER_SANDBOX", sandbox ? "1" : "0", 1);
-    if (cmd == "run" || cmd == "list") refreshDesktops(layout), refreshAutostart(layout);  // a launch from a working entry or the manager mends the others
+    if (cmd == "run" || cmd == "open" || cmd == "list") refreshDesktops(layout), refreshAutostart(layout);  // a launch from a working entry or the manager mends the others
     if (cmd == "install" && n >= 2) {
         bool downgrade = false, system = false;
         size_t first = 1;
@@ -140,6 +144,7 @@ int main(int argc, char** argv) {
         if (exists(target)) target = installApp(layout, inst, {target});
         return runApp(layout, inst, target, RunMode::App);
     }
+    if (opens) return openCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);
     // under the sandbox a spare is one app's (cli/spare.cpp): only a launch names it, the hub's wake has none
     if (cmd == "app-spare" && n == 5 && args[1] == "--after" && args[3] == "--package" && sandboxOn()) return runAppSpare(layout, inst, atoi(args[2].c_str()), args[4]);

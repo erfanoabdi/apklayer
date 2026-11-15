@@ -13,6 +13,9 @@ if [ "$1" = configure ]; then
         udevadm control --reload || true
         udevadm trigger --subsystem-match=drm --action=change || true
     fi
+    # the .apks/.xapk/.apkm types and the manager's MimeType= (dpkg's triggers do this too; here it also holds where they are off)
+    if command -v update-mime-database >/dev/null; then update-mime-database /usr/share/mime || true; fi
+    if command -v update-desktop-database >/dev/null; then update-desktop-database -q /usr/share/applications || true; fi
     # a running instance keeps the programs it started with (the manager's Update stops them: `apklayer --instance ID stop`); a package manager must not stop a user's apps
     if [ -n "$2" ] && command -v pgrep >/dev/null && pgrep -x apklayer-shell >/dev/null 2>&1; then
         echo "apklayer: updated from $2; running instances keep the old programs until stopped: run 'apklayer stop' (and 'apklayer --instance ID stop' for each other instance), or log out" >&2
