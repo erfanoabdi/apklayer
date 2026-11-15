@@ -71,7 +71,7 @@
 in
   stdenv.mkDerivation (finalAttrs: {
     pname = "apklayer";
-    version = "0.4.18";
+    version = "0.5.0";
 
     src = lib.fileset.toSource {
       root = ../.;
