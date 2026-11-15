@@ -16,6 +16,10 @@ for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an upd
     [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"
 done
 tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
+for d in "$half"/android-root/apex/*; do  # the package build's apex dirs the bundle lacks: com.android.art (libart.so: the JNI tables), com.android.runtime (bionic, linker); linked, so their own links resolve
+    t="$native/android-root/apex/${d##*/}"
+    [ ! -d "$d" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$d" "$t"
+done
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
 echo "apklayer: 1/3 patching the framework jars" >&2
 patch_jar() {
