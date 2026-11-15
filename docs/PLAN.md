@@ -120,7 +120,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Tests and tooling
 - Finish `tools/stage` in Python and fold `tools/release/*` into Meson.
-- Script store clients in the corpus (Aurora, Telegram: HTTPS needs scripted onboarding input).
+- F-Droid update and uninstall flows are not scripted in the corpus (Aurora and Telegram scripts exist).
 - Flaky, not reproduced: webview-input, native-media AVC on Parallels, audio-silent on the x86 PC (watch for a recurrence with its log).
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 

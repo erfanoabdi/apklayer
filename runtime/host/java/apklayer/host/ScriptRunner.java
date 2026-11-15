@@ -221,7 +221,20 @@ final class ScriptRunner {
         String text = v instanceof android.widget.TextView ? " \"" + ((android.widget.TextView) v).getText() + "\"" : "";
         System.out.println("[apklayer] view " + "  ".repeat(depth) + v.getClass().getName() + " vis=" + v.getVisibility() + " alpha=" + v.getAlpha()
                 + " scale=" + v.getScaleX() + " " + v.getWidth() + "x" + v.getHeight() + "@" + at[0] + "," + at[1] + text);
+        // Compose draws its text itself: the semantics tree reaches us as accessibility nodes (the view's provider), texts only
+        android.view.accessibility.AccessibilityNodeProvider provider = v.getAccessibilityNodeProvider();
+        if (provider != null) dumpNodes(provider, android.view.accessibility.AccessibilityNodeProvider.HOST_VIEW_ID, depth + 1);
         if (depth < 14 && v instanceof android.view.ViewGroup g)
             for (int c = 0; c < g.getChildCount(); c++) dumpView(g.getChildAt(c), depth + 1);
+    }
+
+    private static void dumpNodes(android.view.accessibility.AccessibilityNodeProvider provider, int id, int depth) {
+        android.view.accessibility.AccessibilityNodeInfo info = provider.createAccessibilityNodeInfo(id);
+        if (info == null || depth > 40) return;
+        CharSequence text = info.getText() != null ? info.getText() : info.getContentDescription();
+        if (text != null && text.length() > 0)
+            System.out.println("[apklayer] view " + "  ".repeat(depth) + "AccessibilityNode vis=0 \"" + text + "\"");
+        for (int c = 0; c < info.getChildCount(); c++)
+            dumpNodes(provider, android.view.accessibility.AccessibilityNodeInfo.getVirtualDescendantId(info.getChildId(c)), depth + 1);
     }
 }
