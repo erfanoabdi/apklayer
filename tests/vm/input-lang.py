@@ -102,6 +102,10 @@ try:
                 waited = matched = 0
                 if shot: field(shot)
                 step += 1
+                # the "Plain keys" button where the app says it is (window coordinates: a title bar of ours, 46, is above the content, none under server-side decorations)
+                ssd = 'server-side decorations' in (instance.STATE / 'shell.log').read_text(errors='replace')
+                plain = [l for l in seen if '[hello-input] plain keys at ' in l]
+                if plain and steps == ['tap:240,520']: steps = ['tap:%s,%d' % (240, int(plain[-1].rsplit(',', 1)[1]) + (0 if ssd else 46))]
                 if steps: instance.inject(PKG, *steps)
     compare('ru1', 'ru2', 'Cyrillic'); compare('ara1', 'ara2', 'Arabic'); compare('deva1', 'deva2', 'Devanagari')
     langs = [line.split('input layout: ')[1] for line in seen if 'input layout: ' in line]  # the input method subtype the host got from the xkb group
