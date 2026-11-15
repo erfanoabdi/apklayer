@@ -3,7 +3,7 @@
 (UiBench) and the shell's CONFIGUREs must follow KWin's geometry each time: a drag of the title bar, the right edge, the bottom edge and the bottom-right
 corner, Alt+F8 (keyboard resize), a drag to the left screen edge (quick tile) and out of it, a drag to the top edge (maximize) and back down, F11 and again.
 The pointer is an absolute device over the whole screen, positioned in the device's own steps (a pixel anywhere). KWin's edge snapping needs its defaults.
-Real input goes to the focused window of the session: the group runs alone. Needs the KDE session, sudo -n and gcc on the host; tests/lib/kwin.py."""
+Real input goes to the focused window of the session: the group runs alone; a locked screen is unlocked only with APKLY_KDE_UNLOCK=1 (a test machine). Needs the KDE session, sudo -n and gcc on the host; tests/lib/kwin.py."""
 import os
 from pathlib import Path
 import shutil
@@ -65,22 +65,26 @@ def check_size(name, info, c, grew, detail=''):
     case(name, matches(info, c) and grew, '%s KWin frame %s client %s, shell %s' % (detail, info['frame'], info['client'], c))
 
 
-def ksetting(*args):
-    return subprocess.run([next((t for t in ('kwriteconfig6', 'kwriteconfig5') if shutil.which(t)), 'kwriteconfig5'), '--file', 'kscreenlockerrc', '--group', 'Daemon', '--key', 'Autolock', *args], capture_output=True)
+def kconfig(tool, *args):
+    exe = next((t for t in ('%s6' % tool, '%s5' % tool) if shutil.which(t)), tool + '5')
+    return subprocess.run([exe, '--file', 'kscreenlockerrc', '--group', 'Daemon', '--key', 'Autolock', *args], capture_output=True, text=True).stdout.strip()
 
 
 def screen_locked():
     return subprocess.run([kwin.QDBUS, 'org.freedesktop.ScreenSaver', '/ScreenSaver', 'org.freedesktop.ScreenSaver.GetActive'], env=kwin._env(), capture_output=True, text=True).stdout.strip() == 'true'
 
 
-# the locked screen takes every pointer and key event: unlock, and no idle lock while the test runs (the setting is removed again at the end)
+# the locked screen takes every pointer and key event. A test machine's session may be unlocked by the test (APKLY_KDE_UNLOCK=1: logind unlocks the user's
+# sessions, so never on a desktop somebody uses); no idle lock while the test runs, the setting as it was afterwards
 if screen_locked():
+    if os.environ.get('APKLY_KDE_UNLOCK') != '1': sys.exit('SKIP the screen is locked (the KDE lock screen takes the input; APKLY_KDE_UNLOCK=1 unlocks it on a test machine)')
     subprocess.run(['sudo', '-n', 'loginctl', 'unlock-sessions'], check=False)
     for _ in range(25):  # the lock screen goes away a moment after logind's request
         if not screen_locked(): break
         time.sleep(0.2)
-    assert not screen_locked(), 'the screen is locked (the KDE lock screen takes the input): unlock it'
-ksetting('false')
+    assert not screen_locked(), 'the screen is still locked after loginctl unlock-sessions'
+autolock = kconfig('kreadconfig')  # '' = not set
+kconfig('kwriteconfig', 'false')
 instance.stop()
 (instance.STATE / 'shell.log').unlink(missing_ok=True)
 app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=dict(instance.ENV, APKLAYER_JOPTS='-Dapklayer.runms=150000'), stdout=open(instance.OUT / 'kde-interact-app.log', 'wb'), stderr=subprocess.STDOUT, start_new_session=True)
@@ -169,7 +173,7 @@ try:
     print('%s KDE interactive: %d cases, %d failed %s' % ('FAIL' if failed or not results else 'PASS', len(results), len(failed), failed), flush=True)
     sys.exit(1 if failed or not results else 0)
 finally:
-    ksetting('--delete')
+    kconfig('kwriteconfig', autolock) if autolock else kconfig('kwriteconfig', '--delete')
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)
     app.wait()

@@ -1,7 +1,7 @@
 """KDE Plasma's compositor (KWin 5.27 and 6) from a test, as sway's swaymsg is for sway: a KWin script is loaded through D-Bus (org.kde.KWin /Scripting),
-runs once, and what it prints (P(), a marker with this run's tag) is read back: from the user journal (the session's KWin: its process is kwin_wayland on
-Plasma 6, kwin_wayland_wrapper on 5.27) or, for a KWin of its own (kwin_wayland --virtual, own D-Bus; tests/vm/kde-output.py, kde-navbar.py), from its log
-file: set LOG (and ENV, the environment of kscreen-doctor there, WAYLAND_DISPLAY and the D-Bus address) then. info() is the state of an app's window,
+runs once, and what it prints (P(), a marker with this run's tag) is read back: from the user journal (the session's KWin, _COMM kwin_wayland; a KWin of its own,
+kwin_wayland --virtual with its own D-Bus (tests/vm/kde-output.py, kde-navbar.py), logs there too when its output is the journal) and, when LOG is set, from
+that KWin's log file as well (its stdout and stderr in a file: 5.27 writes there); ENV is the environment of kscreen-doctor and qdbus for it (WAYLAND_DISPLAY, the D-Bus address). info() is the state of an app's window,
 act() changes it (maximize, fullscreen, tile, minimize, close ...). Needs qdbus6 (or qdbus) and journalctl on the host, a KWin session.
 KWin 5.27 has no output objects, maximizeMode, clientGeometry or scale in scripts: the shims below and kscreen-doctor fill them in."""
 import json
@@ -13,7 +13,7 @@ import time
 from itertools import count
 from pathlib import Path
 
-LOG = None  # a private KWin's log file (its stdout and stderr), None: the session's journal
+LOG = None  # a private KWin's log file (its stdout and stderr), also read when set
 ENV = None  # environment for kscreen-doctor / qdbus of a private KWin (None: this process's, with Qt on Wayland)
 _ids = count(1)
 QDBUS = next((t for t in ('qdbus6', 'qdbus-qt6', 'qdbus') if shutil.which(t)), 'qdbus6')
@@ -48,8 +48,9 @@ def _lines(tag):
     """The marked lines of this run, once its end marker is in the log (journald is a moment behind the script: a bounded wait); None while missing."""
     pattern = re.compile(r'KWT %s (.*)' % tag)
     for _ in range(50):
-        if LOG: text = Path(LOG).read_text(errors='replace')
-        else: text = _run(['journalctl', '--user', '_COMM=kwin_wayland', '_COMM=kwin_wayland_wrapper', '-n', '600', '-o', 'cat'])
+        text = Path(LOG).read_text(errors='replace') if LOG else ''
+        journal = subprocess.run(['journalctl', '--user', '_COMM=kwin_wayland', '-n', '600', '-o', 'cat'], capture_output=True, text=True)
+        text += journal.stdout
         found = [m[1] for m in map(pattern.search, text.splitlines()) if m]
         if found and found[-1] == 'END': return found[:-1]
         time.sleep(0.1)
