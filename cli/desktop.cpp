@@ -35,17 +35,17 @@ int launcherPortal(const Layout& l, std::vector<std::string> args) {
 // (the deb also installs data/apklayer.menu in /etc/xdg: the same submenu, merged by name)
 void writeMenu(const Layout& l) {
     if (viaPortal()) return;  // the portal's launchers have no submenu
-    std::string config = hostXdg("XDG_CONFIG_HOME", ".config"), menu = join(config, "menus/applications-merged/" + launcherPrefix() + "menu");
+    std::string config = hostXdg("XDG_CONFIG_HOME", ".config"), menu = join(config, "menus/applications-merged/" + menuPrefix() + "menu");
     static bool written;  // writeDesktop below calls this again: never loop when the file cannot be written
     std::string data = hostXdg("XDG_DATA_HOME", ".local/share");
-    if (written || (exists(menu) && exists(join(data, "desktop-directories/" + launcherPrefix() + "directory")))) return;  // another data home beside the same config: its own entry
+    if (written || (exists(menu) && exists(join(data, "desktop-directories/" + menuPrefix() + "directory")))) return;  // another data home beside the same config: its own entry
     written = true;
     makeDirs(join(data, "desktop-directories"));
-    writeFile(join(data, "desktop-directories/" + launcherPrefix() + "directory"),
+    writeFile(join(data, "desktop-directories/" + menuPrefix() + "directory"),
               "[Desktop Entry]\nType=Directory\nName=Apklayer\nIcon=" + getenvOr("FLATPAK_ID", "apklayer") + "\n");  // the Flatpak's icon is named by its id
     makeDirs(join(config, "menus/applications-merged"));
     writeFile(menu, "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n \"http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd\">\n"
-                    "<Menu>\n <Name>Applications</Name>\n <Menu>\n  <Name>Apklayer</Name>\n  <Directory>" + launcherPrefix() + "directory</Directory>\n"
+                    "<Menu>\n <Name>Applications</Name>\n <Menu>\n  <Name>Apklayer</Name>\n  <Directory>" + menuPrefix() + "directory</Directory>\n"
                     "  <Include><Category>X-Apklayer-App</Category></Include>\n </Menu>\n</Menu>\n");
     // the first menu: the entries written before it get their category
     for (const std::string& pkg : listDir(l.appsDir))

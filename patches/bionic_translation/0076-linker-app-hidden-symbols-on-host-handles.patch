@@ -27,10 +27,10 @@ diff --git a/linker/dlfcn.c b/linker/dlfcn.c
  		goto err;
  	}
  
-+	/* apklayer patch (0076): what an app's dlsym does not find on Android, whatever the handle (the host's glibc/JVM symbols; JNI_GetCreatedJavaVMs only in the
-+	 * global scope: libnativehelper's own handle has it) */
-+	if (apkenv_in_app_namespace(caller) && (apkenv_app_symbol_hidden(symbol)
-+	    || (!strcmp(symbol, "JNI_GetCreatedJavaVMs") && (handle == RTLD_DEFAULT || handle == RTLD_NEXT)))) {
++	/* apklayer patch (0076): what an app's dlsym does not find on Android, whatever the handle (the host's glibc/JVM symbols; the JNI_* invocation API only in
++	 * the global scope: libnativehelper's own handle has JNI_CreateJavaVM, JNI_GetDefaultJavaVMInitArgs and JNI_GetCreatedJavaVMs) */
++	if (apkenv_in_app_namespace(caller) && (handle == RTLD_DEFAULT || handle == RTLD_NEXT ? apkenv_app_symbol_hidden(symbol) || !strcmp(symbol, "JNI_GetCreatedJavaVMs")
++	    : apkenv_app_symbol_hidden(symbol) && strncmp(symbol, "JNI_", 4))) {
 +		set_dlerror(DL_ERR_SYMBOL_NOT_FOUND);
 +		goto err;
 +	}
