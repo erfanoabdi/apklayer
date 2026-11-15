@@ -79,7 +79,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Runtime identity (nothing blocking)
 - Path-layer leftovers: `/data/local/tmp` stays writable for apps (Android: EACCES; mode 0111 broke `rm -rf` of an instance); `/proc/self/cwd/..` from the data dir shows the host parent; stat owner vs `/proc/self/status` Uid is mapped by bionic's libc and `raw_syscall.c`, not in glibc-level calls.
-- Termux corpus (`termux-env`, `termux-sys`) was not rerun after the `/data/data`-as-symlink change.
 - Modules: `dl_iterate_phdr` lists 285 of 320 (Waydroid's full module list is not in the repo; waydroid.txt is cut at 16 KB). Not loaded: libEGL/libGLESv*/libvulkan (libEGL stalled the app), ~30 libs not staged (libheif, libion, libbufferhub, libRS, HAL/aidl libs, libcgrouprc), `libselinux` is on the eager list but absent (cause unknown); ART libs and boot*.oat cannot exist. libc exports `bionic_*` names.
 - x86: `HWCAP2` is 0, exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the translated guest only; readable on arm64 and for the host user; cause not found).
 - Process attributes: main thread id; the property count is 421 (Waydroid's full list is not in the repo; some values are plausible, not verified).
