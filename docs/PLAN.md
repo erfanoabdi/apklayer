@@ -24,10 +24,9 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
 
 ## Graphics
-- Present fences signal at hand-over, not at the real present.
+- Present fences signal at hand-over, not the real present: that needs an unsignaled kernel fence, and syncobj export and TRANSFER of an unsubmitted point fail (PC, Intel, 2026-11-15); remaining options are vgem or blocking `presentDisplay` until the frame callback (stalls SurfaceFlinger's HWC thread).
 - Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
 - Vulkan presentation untested on AMD.
-- GPU per instance: VA plugin device, LINEAR on Intel.
 - OTR2 on the PC runs ~30 fps at 2448x1374.
 - Windows: KDE untested; `window-geometry` and `decoration` groups need uibench and sway.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
