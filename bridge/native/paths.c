@@ -536,10 +536,12 @@ static int other_package_path(const char *path)
 
 /* apklayer patch (scoped storage, Android 11+): <external>/Android/data/<other> and Android/obb/<other> are the owning package's alone (the FUSE daemon answers
  * ENOENT for the others), also for an app with MANAGE_EXTERNAL_STORAGE. The system's (no own package), MediaProvider, the storage provider and DownloadProvider (it writes a download into the requesting app's
- * Android/data/<pkg>/files) see them. shortcut: only the spellings /storage/emulated/0, /sdcard and /data/media/0 and no "..", the paths an app writes; upgrade with a fd-based check. */
+ * Android/data/<pkg>/files) see them. shortcut: the spellings listed (/storage/emulated/0, /storage/self/primary, /sdcard, /data/media/0 and Android's /mnt/user, /mnt/runtime, /mnt/pass_through forms; ".." and "." are collapsed first), not symlinks an app makes or /proc/self/cwd-relative opens; upgrade with a fd-based check. */
 static int other_scoped_path(const char *path)
 {
-    static const char *const roots[] = { "/storage/emulated/0/Android/", "/sdcard/Android/", "/data/media/0/Android/", NULL };
+    static const char *const roots[] = { "/storage/emulated/0/Android/", "/storage/self/primary/Android/", "/sdcard/Android/", "/data/media/0/Android/",
+        "/mnt/user/0/primary/Android/", "/mnt/user/0/emulated/0/Android/", "/mnt/pass_through/0/emulated/0/Android/", "/mnt/androidwritable/0/emulated/0/Android/",
+        "/mnt/runtime/default/emulated/0/Android/", "/mnt/runtime/read/emulated/0/Android/", "/mnt/runtime/write/emulated/0/Android/", NULL };
     const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
     if (!data_filter_active() || !strcmp(o->pkg, "com.android.providers.media.module") || !strcmp(o->pkg, "com.android.providers.media")
         || !strcmp(o->pkg, "com.android.externalstorage")
@@ -734,7 +736,7 @@ ssize_t apklayer_virtual_readlink(const char *mapped, char *buf, size_t n)
  * package would pass the other-package check) */
 static char *collapsed(const char *p)
 {
-    if (strncmp(p, "/data/", 6) && strncmp(p, "/storage/", 9) && strncmp(p, "/sdcard/", 8)) return NULL;
+    if (strncmp(p, "/data/", 6) && strncmp(p, "/storage/", 9) && strncmp(p, "/sdcard/", 8) && strncmp(p, "/mnt/", 5)) return NULL;
     size_t len = strlen(p);
     if (!strstr(p, "//") && !strstr(p, "/./") && !strstr(p, "/../") && strcmp(p + len - 2, "/.") && strcmp(p + len - 3, "/..")) return NULL;
     char *out = malloc(len + 2), *w = out;

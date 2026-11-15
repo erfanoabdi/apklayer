@@ -4,6 +4,11 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: Scoped storage on every external-storage spelling
+- `bridge/native/paths.c` `other_scoped_path`: other packages' `Android/data` and `Android/obb` are hidden also under `/storage/self/primary`, `/mnt/user/0/{primary,emulated/0}`, `/mnt/runtime/{default,read,write}/emulated/0`, `/mnt/pass_through/0/emulated/0` and `/mnt/androidwritable/0/emulated/0` (the `/mnt` forms are no mapped paths here; ENOENT either way), and `..`/`.` forms under `/mnt` are collapsed first. hello-files `SCOPED=1` (group `files`) checks them and a `/./x/..` form. Not done: symlinks an app makes itself, `/proc/self/cwd`-relative opens.
+- Second sandboxed `services` run on the same data: not reproduced on UTM (own tree, slots tk1 twice, tk2 after unsandboxed groups, and `sandbox services activities providers` together): all pass, the `Ssaid` error did not appear.
+- Sound server started later: with none at stack start the PipeWire backend is used (`audioLibrary` fallback) and connects per stream, so a PipeWire (or pipewire-pulse) started later is used by the next stream already; only a PulseAudio-only server started later (pulse backend not chosen) and a switch between backends need a stack start (a HAL swap, not small).
+
 ## 2026-11-15: Platform Class.getClassLoader/getResource (converter ABI 10)
 - An app's `String.class.getClassLoader()` / `Activity.class.getClassLoader()` is `java.lang.BootClassLoader` and `Object.class.getResource(..)` is null, as on Android (DenyInstrument -> `GuestLoaders`). identity-matrix and files pass on UTM. Not done: ArrayStoreException text, StackOverflow depth, main thread id 2 (JVM/ART limits, docs/ART-DEFERRED.md); direct-buffer `array()` write-back (docs/PATCHES.md says why).
 ## 2026-11-15: Sandbox: component hosts take the package's spare
