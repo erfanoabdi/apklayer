@@ -310,6 +310,22 @@ signal sigaction roundtrip flags=0x58000004 handler=1 mask-usr2=1 mask-term=1 ma
 signal altstack roundtrip size=65536 flags=0 same=1
 signal bad-sp no-altstack child: killed by signal 11
 signal misaligned-handler child: exited 101
+signal default-action Segmentation fault via kill: killed by signal 11
+signal default-action Segmentation fault via raise: killed by signal 11
+signal default-action Segmentation fault via tgkill: killed by signal 11
+signal default-action Bus error via kill: killed by signal 7
+signal default-action Bus error via raise: killed by signal 7
+signal default-action Bus error via tgkill: killed by signal 7
+signal default-action Illegal instruction via kill: killed by signal 4
+signal default-action Illegal instruction via raise: killed by signal 4
+signal default-action Illegal instruction via tgkill: killed by signal 4
+signal default-action Floating point exception via kill: killed by signal 8
+signal default-action Floating point exception via raise: killed by signal 8
+signal default-action Floating point exception via tgkill: killed by signal 8
+signal default-action Aborted via kill: killed by signal 6
+signal default-action Aborted via raise: killed by signal 6
+signal default-action Aborted via tgkill: killed by signal 6
+signal default-action Aborted via abort: killed by signal 6
 signal br-misaligned: in_handler=2 signo=7 code=1 addr==target 1
 signal blr-misaligned: in_handler=2 signo=7 code=1 addr==target 1
 signal ret-misaligned: in_handler=2 signo=7 code=1 addr==target 1

@@ -22,6 +22,7 @@ public class Main extends Activity {
     private static native int vdsoVerdef();
     private static native int missingGlFunctions();
     private static native int ignoreTerm();
+    private static native String threadStress(int n);
     private static native int uid();
     private static native int ownerUid(String path);
     private static native int procView();
@@ -67,6 +68,11 @@ public class Main extends Activity {
             boolean ok = javaMaps && nativeBits == 255 && "Dalvik".equals(System.getProperty("java.vm.name"));
             log("ART maps " + (ok ? "PASS" : "FAIL") + " java=" + javaMaps + " nativeBits=" + nativeBits);
             TextView text = new TextView(this); text.setText("ART maps: " + ok); setContentView(text);
+            return;
+        }
+        if (System.getProperty("hello.threads") != null) {  // thread lifetime stress (threads.c); -Dhello.threads=<iterations>
+            for (String line : threadStress(Integer.getInteger("hello.threads", 2000)).split("\n")) log("threads " + line);
+            log("threads DONE");
             return;
         }
         long t1 = System.nanoTime();
