@@ -239,7 +239,7 @@ int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<
     const std::string& pkg = args.size() == 1 ? args[0] : args[1];
     std::string info = join(appDir(l, pkg), "info.properties");
     if (!exists(info)) die("not installed: " + pkg);
-    if (readFile(info).value_or("").find("\npermissions=") == std::string::npos) die("reinstall " + pkg + " to list its permissions (installed before apklayer recorded them)");
+    if (readFile(info).value_or("").find("\npermissions=") == std::string::npos) die("`apklayer reconvert " + pkg + "` to list its permissions (installed before apklayer recorded them; its data stays)");
     std::string etc = join(l.native, "android-root/system/etc");
     std::map<std::string, std::string> levels;  // the framework's protection levels (tools/gen/permission-levels.py), as HostSystemConfig reads them
     for (const std::string& line : split(readFile(join(etc, "apklayer-permission-levels.tsv")).value_or(""), '\n'))

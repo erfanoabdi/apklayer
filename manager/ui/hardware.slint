@@ -147,6 +147,7 @@ component BinderRow {
 
 export component HardwarePage {
     ScrollView {
+        init => { self.content_y = -Backend.scroll-y; }
         HorizontalLayout {
             alignment: center;
             VerticalLayout {

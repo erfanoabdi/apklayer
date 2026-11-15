@@ -268,7 +268,9 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
 }
 
 // none recorded: converted before the number existed, which is ABI 1 (installs from then are not stale under 1)
+// Or converted before the permission list was recorded (2026-11-04): reconvert keeps its data and records it, no reinstall.
 bool isStale(const std::string& info) {
+    if (readFile(info).value_or("").find("\npermissions=") == std::string::npos) return true;
     std::string abi = property(info, "converterAbi");
     return (abi.empty() ? 1 : atoi(abi.c_str())) < kConverterAbi;
 }

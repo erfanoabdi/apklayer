@@ -86,6 +86,17 @@ int main(int argc, char** argv) {
     CHECK(cli.run({"uninstall", pkg}).status == 0 && !hasRow(cli.rows({"list", "--tsv"}), pkg), "uninstall");
     CHECK(cli.run({"stop"}).status == 0, "stop the instance");
 
+    // the Hardware page's source: every domain it has a card for answers with its backends and the automatic choice ("(none: off)" where the host has no device)
+    const Rows providers = cli.rows({"providers"});
+    for (const char* domain : {"sensors", "gnss", "vibrator", "camera", "audio", "graphics", "media"}) {
+        bool listed = false, automatic = false;
+        for (const auto& r : providers) {
+            listed = listed || (r.size() >= 4 && r[0] == "backend" && r[1] == domain && !r[2].empty() && !r[3].empty());
+            automatic = automatic || (r.size() >= 3 && r[0] == "default" && r[1] == domain && !r[2].empty());
+        }
+        CHECK(listed && automatic, (std::string("providers lists ") + domain + " with its backends and the automatic choice").c_str());
+    }
+
     // the Hardware page's Apply: the camera set to the fake backend with a source (an empty option is the backend's default, left out), then unset
     const std::string source = "/tmp/apklayer manager/camera source.png";
     CHECK(cli.run(providerArgs("camera", "fake", {{"source", source}, {"fps", ""}})).status == 0 &&
