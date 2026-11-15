@@ -471,6 +471,19 @@ optional = true
 alone = true
 mac = ["python3 tests/corpus/run.py"]
 
+[corpus-aurora]
+# real Aurora Store: onboarding clicks, anonymous login and a Google Play search over HTTPS; the result list's texts come from the host's `views` step
+# (Compose's accessibility nodes). Needs the network and Google accepting an anonymous token
+optional = true
+needs = ["com.aurora.store"]
+run = ["python3 -u tests/corpus/aurora-search.py"]
+
+[corpus-telegram]
+# real Telegram FOSS: the intro screen's Start Messaging button leads to the Your Phone page (no login)
+optional = true
+needs = ["org.telegram.messenger"]
+run = ["python3 -u tests/corpus/telegram-intro.py"]
+
 [fennec]
 optional = true  # its page-text check fails on virgl hosts (ints set in shader branches come back as NaN: tests/vm/gles-int-branch.c)
 needs = ["org.mozilla.fennec_fdroid"]

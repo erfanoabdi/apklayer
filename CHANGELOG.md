@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: store clients in the corpus (Aurora search, Telegram intro) and a host `views` step that reads Compose
+- tests/corpus/aurora-search.py (group corpus-aurora, optional): data cleared, Welcome -> Next -> Permissions (Grant, the hub's yes) -> Finish -> Anonymous login -> home -> search "Telegram": the result list shows "Telegram" / "Telegram FZ-LLC" (HTTPS to Aurora's token service and Google Play). Passes on UTM (own tree, instance c7) with and without the hub's earlier install-source grant. tests/corpus/telegram-intro.py (group corpus-telegram, optional): intro -> Start Messaging -> the Your Phone page (screenshot pixels: Telegram draws its own views); passes. Helper tests/corpus/uidrive.py. F-Droid update/uninstall flows not scripted (not reachable in this round).
+- ScriptRunner's `views` step now also prints the text of a view's accessibility node tree (Compose draws its text itself: Aurora's screens had no TextView); the scripts schedule it every 3 s and wait for texts by inotify.
+- Found on the way: main did not build (`HubProtocol.EJECT_VOLUME` = 64 like `NOTIFICATION_SETTINGS`: duplicate case label after a merge); EJECT_VOLUME is 65 now.
+
 ## 2026-11-15: libcore fstat(fd) is the real one; setup-runtime.sh 21 s -> 10 s
 - `Os.fstat(fd)` stats `/proc/self/fd/<fd>` (mode, size, uid real; EBADF for a closed one); `files` and `system-apps` (MediaProvider scan) pass with it on Parallels.
 - `tools/release/setup-runtime.sh`: jars patched one job per jar, the JDK image built beside the instrumenting, "1/3..3/3" progress lines. Fresh dir on Parallels (12 cores): 21 s -> 10 s; the 75 s on a phone is mostly the single PreInstrument JVM (cores) and jlink.
