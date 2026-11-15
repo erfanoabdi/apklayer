@@ -34,7 +34,7 @@ public final class Main extends Activity {
                     String other = System.getProperty("hello.scoped.other");
                     boolean own = new String(java.nio.file.Files.readAllBytes(mine.toPath())).equals("mine");
                     boolean dataHidden = true, obbHidden = true;
-                    for (String root : new String[] {"/storage/emulated/0", "/sdcard"}) {
+                    for (String root : new String[] {"/storage/emulated/0", "/sdcard", "/storage/self/primary", "/data/media/0", "/mnt/user/0/primary", "/mnt/runtime/default/emulated/0", "/mnt/runtime/write/emulated/0", "/storage/emulated/0/./x/.."}) {
                         dataHidden &= !new java.io.File(root + "/Android/data/" + other + "/files/secret").exists() && !new java.io.File(root + "/Android/data/" + other).exists();
                         obbHidden &= !new java.io.File(root + "/Android/obb/" + other + "/secret").exists();
                         try { new java.io.FileInputStream(root + "/Android/data/" + other + "/files/secret").close(); dataHidden = false; } catch (java.io.IOException denied) { /* expected */ }
