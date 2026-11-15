@@ -54,6 +54,8 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.drm.DrmManagerClient", ShadowHostDrmManagerClient.class.getName()),
                 Map.entry("android.app.StatsManager", ShadowHostStatsManager.class.getName()),
                 Map.entry("android.net.Network", ShadowHostNetwork.class.getName()),
+                Map.entry("android.view.KeyEvent", ShadowHostKeyEvent.class.getName()),  // getDevice(): the device of the event's id (gamepads, docs/GAMEPAD.md)
+                Map.entry("android.view.MotionEvent", ShadowHostMotionEvent.class.getName()),
                 Map.entry("android.app.PendingIntent", ShadowHostRealPendingIntent.class.getName()),
                 Map.entry("android.app.Service", ShadowHostService.class.getName()),
                 Map.entry("android.app.IntentService", ShadowHostIntentService.class.getName()),  // its shadow must be a ShadowHostService (stopSelf)

@@ -59,7 +59,7 @@ Read where they are needed; set them for one command (`APKLAYER_RUNTIME_DEBUG=1 
 
 ## Test only
 
-`APKLAYER_TEST_INPUT` (the shell takes injected input), `APKLAYER_OUTPUT_MM`, `APKLAYER_OUTPUT_PX` (a simulated phone output), `APKLAYER_SUBSURFACES`
+`APKLAYER_INPUT_DIR` (the shell's gamepad scan and watch directory, default `/dev/input`; docs/GAMEPAD.md), `APKLAYER_TEST_INPUT` (the shell takes injected input), `APKLAYER_OUTPUT_MM`, `APKLAYER_OUTPUT_PX` (a simulated phone output), `APKLAYER_SUBSURFACES`
 (a compositor without subsurfaces), `APKLAYER_PICKER`, `APKLAYER_CHOOSER` (stand-ins for the file dialog and the app chooser),
 `APKLAYER_GEOCLUE_PROBE`, `APKLAYER_PLUGIN_PATH` (a plugin under development), `APKLAYER_RELEASES_URL`, `APKLAYER_RUNTIME_BUNDLE`,
 `APKLAYER_MICROG_INDEX`, `APKLAYER_FDROID_INDEX` (offline and local setup sources). Set by `tests/` and `tools/`; `tests/` use the debug
