@@ -10,7 +10,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/android/binder.h>
+#include <poll.h>
 #include <pthread.h>
+#include <time.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,6 +28,7 @@
 #include "../binderd/protocol.h"
 
 #define MAX_CONNS 8
+#define BD_SPIN_US 60
 
 struct fda_entry { uint64_t buffer; int fd; };
 
@@ -288,6 +291,19 @@ static void drain(struct conn *c, uint32_t n)
     while (n-- && recv(c->fd, &b, 1, MSG_DONTWAIT) > 0) {}  /* one-byte messages */
 }
 
+/* after a write, the answer (a reply, or the next work) usually comes within microseconds: poll for it before the blocking read sleeps, so the
+ * wakeup is skipped (bridge/binderd spins the same way); bounded, so an idle thread costs nothing */
+static void spin_for_reply(int sock)
+{
+    struct pollfd p = {.fd = sock, .events = POLLIN};
+    struct timespec t0, t;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    do {
+        if (poll(&p, 1, 0) != 0) return;
+        clock_gettime(CLOCK_MONOTONIC, &t);
+    } while ((t.tv_sec - t0.tv_sec) * 1000000L + (t.tv_nsec - t0.tv_nsec) / 1000 < BD_SPIN_US);
+}
+
 static int route_write_read(struct conn *c, struct tstate *t, struct tslot *s, struct binder_write_read *bwr)
 {
     struct wbuf *w = &t->w;
@@ -300,6 +316,7 @@ static int route_write_read(struct conn *c, struct tstate *t, struct tslot *s, s
     struct bd_rep h;
     const uint8_t *payload;
     r = request(s->sock, BD_IOCTL, BINDER_WRITE_READ, rsize, flags, w->len, NULL, 0, w->fds, w->nfds);
+    if (!r && w->len && !c->nonblock) spin_for_reply(s->sock);
     if (!r) r = reply(t, s->sock, &h, &payload);
     if (r) return r;
     drain(c, h.ndrain);
