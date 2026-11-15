@@ -5,10 +5,10 @@ D=${1:-.}
 mcetool --unblank-screen
 dbus-send --system --type=method_call --dest=com.nokia.mce /com/nokia/mce/request com.nokia.mce.request.req_tklock_mode_change string:unlocked
 read -r code
-acts=""
+acts="tap:540,900 wait:600"  # a harmless first tap: the panel drops the first touch after idle (the 4-dots-of-5 failure)
 for i in $(seq 1 ${#code}); do
   d=$(echo "$code" | cut -c$i)
   case $d in 1) p=324,1684;; 2) p=540,1684;; 3) p=756,1684;; 4) p=324,1850;; 5) p=540,1850;; 6) p=756,1850;; 7) p=324,2016;; 8) p=540,2016;; 9) p=756,2016;; 0) p=540,2180;; esac
   acts="$acts tap:$p wait:400"
 done
-python3 "$D/touch.py" $acts
+python3 "$D/touch.py" $acts tap:756,2184 wait:1500  # the check key accepts the code

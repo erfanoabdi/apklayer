@@ -61,6 +61,7 @@ find "$cache/prebuilts" -name '*.part000' | while read -r first; do b="${first%.
 git archive --prefix="apklayer-$version/" -o "$cache/apklayer-$version.tar.gz" HEAD
 # the Java libraries this machine already fetched (fetch-dep.py looks in ~/.cache/apklayer/deps): no second download from Maven
 deps="$HOME/.cache/apklayer/deps"; mkdir -p "$deps"
-docker run --rm --platform linux/arm64 -v "$src:/work:ro" -v "$deps:/root/.cache/apklayer/deps:ro" -v "$cache:/cache" -v "$out:/out" "$image" sh /work/tools/release/sailfish-rpm.sh --in-root "$version"
+bt=""; [ -z "${APKLAYER_BIONIC_TRANSLATION:-}" ] || bt="-v $APKLAYER_BIONIC_TRANSLATION:/bt:ro -e APKLAYER_BIONIC_TRANSLATION=/bt"  # a local checkout: no network
+docker run --rm --platform linux/arm64 $bt -v "$src:/work:ro" -v "$deps:/root/.cache/apklayer/deps:ro" -v "$cache:/cache" -v "$out:/out" "$image" sh /work/tools/release/sailfish-rpm.sh --in-root "$version"
 rm -f "$cache/apklayer-$version.tar.gz"
 ls -l "$out"/*.rpm

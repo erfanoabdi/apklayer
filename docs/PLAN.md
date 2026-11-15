@@ -50,7 +50,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - SettingsProvider throws "Ssaid settings not accessible" for an isolated process (android:isolatedProcess, uid 99000) of an app whose SSAID already exists: the lookup is keyed by the caller's uid, the insert by the app's, so it regenerates the same value and `insertSettingLocked` returns false (frameworks/base/packages/SettingsProvider, `getSsaidSettingLocked`/`generateSsaidLocked`: key the lookup by `callingPkg.applicationInfo.uid`; an apklayer patch of the settings APK). Group `sandbox` alone failed every second run in a slot before `tests/vm/sandbox.sh` deleted the table first.
 
 ## Packaging and releases
-- Sailfish RPM: the `jni_guest_surface.c` change now logs `[runtime] jni_guest_surface active: ...` once per app JVM; needs an RPM of this tree installed on the Quintus and one app run to see it there.
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: `apklayer open` under the sandbox is tested only for a fresh launch, not the running app's `onNewIntent`; the install preview resolves plain-string labels and PNG icons only (no adaptive/vector icon, no sparse/16-bit arsc types: package name fallback); Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
@@ -59,7 +58,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Hardware
 - NFC (`docs/NFC.md`, group `nfc`, mock tags): the PC/SC source against a real reader (UID, Type 4 NDEF read, direct transmit) is unrun; a neard backend (D-Bus, PN533/ST21NFC without PC/SC); the NFC permission check, `ACTION_ADAPTER_STATE_CHANGED`, `ignore()`/tag removal callbacks, a chooser for several matching apps; HCE and a phone's own NFC HAL are not planned.
-- Sailfish phone: needs a person for the Maliit-hide check, a finger on the keypad and the lock code; Maliit's sideways keyboard in a landscape app; the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client); sensorfw rotation by physically turning the phone; Bluetooth, scoped storage not run.
+- Sailfish phone: Maliit's sideways keyboard in a landscape app; the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client); Bluetooth, scoped storage not run.
 - Sailfish location: needs `/var/lib/location/location.conf` enabled and connman's gps `Powered=true` (off by default); a real fix outdoors unchecked; sensorfw stops sensors with the screen off (the app reads zeros): documented, not changed.
 - VPN for apps (host-wide, `docs/VPN.md`, group `vpn`): built through NetworkManager (user-owned TUN, `apklayer vpn-guard`, `/1` default route, pkexec helper fallback); open: drive WireGuard and OpenVPN for Android to an established TUN (WireGuard needs a tunnel made in its UI, OpenVPN a profile and a server); a person's check of the pkexec dialog on a real desktop and the notification's Disconnect button; the pkexec path end to end through the hub; the per-app sandbox; Sailfish via connman; several instances with VPNs (they share the `/1` routes); no kill switch, `setMtu` ignored on the NM path.
 - USB: the sandbox path (`tests/vm/usb.py` with `USB_SANDBOX=1`, group `usb-sandbox`, optional) is unrun: the UTM VM lacks `tools/host-setup/sandbox.sh` (machine-wide AppArmor change); the hub opens the node and hands the descriptor over (the same path as without the sandbox, which `usb` runs).
@@ -70,9 +69,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Needs hardware or a person
 - Tester PC: run `kde-window.py` once at 150% on its KWin (the prebuilts there are current; the new deb is built, not installed).
-- Needs the Quintus lock code (not in `local.conf`): re-run `phone-test.sh sfos` groups with the current RPM.
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
-- Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
+- Sailfish: a finger on the host dialog (Open Camera with CAMERA revoked was denied at once, no prompt seen: needs a look), a real pointer over the navigation bar (a uinput mouse shows Lipstick's cursor but it stays at 0,0: nothing verified), a geoclue fix outdoors.
 - Ubuntu Touch: manager on screen, navigation bar under the panel, drawer tap, shell window, maximize, turning by hand.
 - Bluetooth PIN dialog on a legacy device. A real USB serial adapter.
 - Push: a real Telegram/WhatsApp message with microG; the unit starting the stack at login.
