@@ -63,7 +63,7 @@ try:
     pending, outside = b'', None
     with open(instance.OUT / 'bottom-sheet.log', 'wb') as log:
         while True:
-            assert selector.select(5) and time.monotonic() < end, 'bottom sheet test stalled'
+            assert selector.select(15) and time.monotonic() < end, 'bottom sheet test stalled'  # a cold hub boots for ~10 s over a data dir with 146 packages
             data = os.read(app.stdout.fileno(), 65536)
             if not data: break
             log.write(data)
