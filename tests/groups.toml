@@ -529,3 +529,8 @@ run = ["python3 -u tests/vm/art-maps.py"]
 [spawn]  # a program started from the app JVM (ProcessBuilder) takes no second: exec_preload, jspawnhelper and the path layer
 apps = ["hello-spawn"]
 run = ["tests/vm/spawn.sh"]
+
+[acediff]
+# the arm64 translator against real arm64: tests/apps/hello-acediff prints one line per instruction family / signal behaviour; real-arm64.txt is the output of the same code on real hardware
+apps = ["hello-acediff"]
+run = ["tests/vm/acediff.sh"]

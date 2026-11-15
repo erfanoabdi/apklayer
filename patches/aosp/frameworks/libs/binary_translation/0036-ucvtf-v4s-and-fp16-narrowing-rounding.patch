@@ -1,0 +1,86 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: UCVTF .4S and interpreted FP16 narrowing round like hardware
+
+UCVTF V.4S (u32 -> f32) converted as signed and added 2^32: two roundings, wrong in the last bit for some inputs; it is now hi16*65536 + lo16 (exact parts, one rounding).
+The heavy translator bails to the lite one for it. The interpreter narrowed FP32 to FP16 by truncation (SCVTF .8H s16 -> f16, FSQRT .8H, ...): it rounds to nearest even now.
+Module libberberis_arm64.
+
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -11405,6 +11411,8 @@ void HeavyOptimizerFrontend::AdvSimdTwoRegMisc(const Decoder::AdvSimdTwoRegMiscA
+       }
+       const bool is_unsigned =
+           (args.opcode == Decoder::AdvSimdTwoRegMiscOpcode::kUcvtfV);
++      // apklayer patch (0036): UCVTF V rounds once only in lite's hi16/lo16 form; the 2^32 addend below double-rounds.
++      if (is_unsigned) { UndefinedReturningVoid(); return; }
+       FpRegister xn = AllocTempSimdReg();
+       builder_.GenGetSimd<16>(xn.machine_reg(), vn_off);
+       if (!is_unsigned) {
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -10205,32 +10153,9 @@ class Interpreter {
+   //
+ 
+   // Half-precision float conversion helpers (IEEE 754 binary16).
+-  static uint16_t FpSingleToHalf(float f) {
+-    uint32_t fbits;
+-    memcpy(&fbits, &f, 4);
+-    uint16_t sign = (fbits >> 16) & 0x8000;
+-    int32_t exp = ((fbits >> 23) & 0xFF) - 127;
+-    uint32_t frac = fbits & 0x7FFFFF;
+-
+-    if (exp == 128) {
+-      // Inf or NaN.
+-      return sign | 0x7C00 | (frac ? (frac >> 13) | 1 : 0);
+-    }
+-    if (exp > 15) {
+-      // Overflow -> infinity.
+-      return sign | 0x7C00;
+-    }
+-    if (exp < -24) {
+-      // Underflow -> zero.
+-      return sign;
+-    }
+-    if (exp < -14) {
+-      // Denormalized half-precision.
+-      frac = (frac | 0x800000) >> (-exp - 14 + 13);
+-      return sign | static_cast<uint16_t>(frac);
+-    }
+-    return sign | static_cast<uint16_t>((exp + 15) << 10) | static_cast<uint16_t>(frac >> 13);
+-  }
++  // apklayer patch (0036): FP32 -> FP16 round-to-nearest-even (the default FPCR rounding), as hardware does. It truncated before, so every interpreted FP16
++  // result (SCVTF .8H, FSQRT .8H, ...) was one unit low for inexact values.
++  static uint16_t FpSingleToHalf(float f) { return FpSingleToHalfRN(f); }
+ 
+   // FP32 -> FP16 round-to-nearest-even. Distinct from FpSingleToHalf above,
+   // which truncates (round-toward-zero). This matches x86 VCVTPS2PH imm=0 and
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc
+@@ -2488,14 +2490,19 @@
+             gp_tmp == no_register) {
+           success_ = false; return;
+         }
++        // apklayer patch (0036): hi16 * 65536 + lo16, both parts exact in FP32, so the one addition rounds once (the 2^32 addend above
++        // rounded the negative signed conversion first and then the sum: wrong in the last bit for some inputs).
+         as_.Movdqa(msb, xn);
+-        as_.Psrad(msb, int8_t{31});               // 0 or all-1s per lane
+-        as_.Cvtdq2ps(xn, xn);                      // signed convert
+-        as_.Movl(gp_tmp, int32_t{0x4F800000});      // 2^32 (FP32 bits)
++        as_.Psrld(msb, int8_t{16});                // hi16
++        as_.Pslld(xn, int8_t{16});
++        as_.Psrld(xn, int8_t{16});                 // lo16
++        as_.Cvtdq2ps(msb, msb);
++        as_.Cvtdq2ps(xn, xn);
++        as_.Movl(gp_tmp, int32_t{0x47800000});      // 65536.0f
+         as_.Movd(addend, gp_tmp);
+         as_.Pshufd(addend, addend, int8_t{0x00});
+-        as_.Pand(addend, msb);                      // 2^32 where MSB set
+-        as_.Addps(xn, addend);
++        as_.Mulps(msb, addend);
++        as_.Addps(xn, msb);
+         if (!args.q) MaskLow64(xn);
+         as_.Movdqu({.base = Assembler::rbp, .disp = vd_off}, xn);
+         return;

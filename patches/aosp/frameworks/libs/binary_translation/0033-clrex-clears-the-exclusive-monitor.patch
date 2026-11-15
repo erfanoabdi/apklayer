@@ -1,0 +1,109 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: CLREX clears the exclusive reservation
+
+The decoder treated CLREX as a NOP ("the monitor is modeled as cmpxchg"), so ldxr; clrex; stxr succeeded, where hardware fails the store. A new consumer call
+ClearExclusive() (semantics player, interpreter, lite and heavy translators) sets cpu.reservation_address = 0, which STXR/STXP compare against. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/decoder/arm64_test/decoder_test.cc b/cpu_emulation/decoder/arm64_test/decoder_test.cc
+--- a/cpu_emulation/decoder/arm64_test/decoder_test.cc
++++ b/cpu_emulation/decoder/arm64_test/decoder_test.cc
+@@ -280,6 +280,7 @@ class Recorder {
+   void DataProc2Src(const Decoder::DataProc2SrcArgs&) { name = "DataProc2Src"; }
+   void DataProc3Src(const Decoder::DataProc3SrcArgs&) { name = "DataProc3Src"; }
+   void Nop() { name = "Nop"; }
++  void ClearExclusive() { name = "ClearExclusive"; }  // apklayer patch (0033)
+   void DataMemoryBarrier() { name = "DataMemoryBarrier"; }
+   void IcIvau(uint8_t) { name = "IcIvau"; }
+   void MteDataProc(const Decoder::MteDataProcArgs&) { name = "MteDataProc"; }
+diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+--- a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
++++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+@@ -2433,6 +2434,9 @@ class Decoder {
+         const uint8_t barrier_type = crm & 0b11;  // 11=full, 00=reserved(full), 10=ST, 01=LD
+         if ((is_dmb || is_dsb) && (barrier_type == 0b11 || barrier_type == 0b00)) {
+           insn_consumer_->DataMemoryBarrier();
++        } else if (op2 == 0b010) {
++          // apklayer patch (0033): CLREX drops the exclusive reservation (a following STXR fails, as on hardware).
++          insn_consumer_->ClearExclusive();
+         } else {
+           insn_consumer_->Nop();
+         }
+diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h
+--- a/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h
++++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h
+@@ -332,6 +332,9 @@ class SemanticsPlayer {
+ 
+   void Nop() { listener_->Nop(); }
+ 
++  // apklayer patch (0033): CLREX.
++  void ClearExclusive() { listener_->ClearExclusive(); }
++
+   // DMB/DSB full barrier (SY/ISH/...): a StoreLoad fence the host must honor.
+   void DataMemoryBarrier() { listener_->DataMemoryBarrier(); }
+ 
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -2606,6 +2606,12 @@ void HeavyOptimizerFrontend::LoadStoreExclusive(const Decoder::LoadStoreExclusiv
+   }
+ }
+ 
++// apklayer patch (0033): CLREX: reservation_address = 0 (STXR then compares it with its base and fails).
++void HeavyOptimizerFrontend::ClearExclusive() {
++  GenRaw<x86_64::MovqOpReg>(
++      {.base = x86_64::kMachineRegRBP, .disp = static_cast<int32_t>(offsetof(ThreadState, cpu.reservation_address))}, GetImm(0));
++}
++
+ void HeavyOptimizerFrontend::DataMemoryBarrier() {
+   // Full DMB/DSB -> MFENCE: recover the StoreLoad ordering x86 TSO omits.
+   GenRaw<x86_64::Mfence>();
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.h b/cpu_emulation/heavy_optimizer/arm64/frontend.h
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.h
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.h
+@@ -192,6 +192,7 @@ class HeavyOptimizerFrontend {
+ 
+   void Undefined(BailReason reason = BailReason::kUnimplemented);
+   void Nop() {}
++  void ClearExclusive();  // apklayer patch (0033)
+ 
+   // DMB/DSB full barrier: lowers to MFENCE (x86 TSO lacks StoreLoad ordering).
+   // The store-only/load-only barrier variants are NOPed in the decoder.
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -3353,6 +3357,9 @@ class Interpreter {
+ 
+   void Nop() {}
+ 
++  // apklayer patch (0033): CLREX: no reservation, so a following STXR fails.
++  void ClearExclusive() { state_->cpu.reservation_address = 0; }
++
+   // DMB/DSB full barrier: a full memory fence. x86 TSO lacks StoreLoad ordering,
+   // so a seq-cst thread fence (MFENCE on x86) is required to honor a guest full
+   // barrier; otherwise sequentially consistent guest code races.
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/decoder_objdump_diff_test.cc b/cpu_emulation/lite_translator/arm64_to_x86_64/decoder_objdump_diff_test.cc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/decoder_objdump_diff_test.cc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/decoder_objdump_diff_test.cc
+@@ -187,6 +187,7 @@ class Recorder {
+   void DataProc2Src(const Decoder::DataProc2SrcArgs&) { h = "DataProc2Src"; }
+   void DataProc3Src(const Decoder::DataProc3SrcArgs&) { h = "DataProc3Src"; }
+   void Nop() { h = "Nop"; }
++  void ClearExclusive() { h = "Nop"; }  // apklayer patch (0033)
+   void DataMemoryBarrier() { h = "DataMemoryBarrier"; }
+   void IcIvau(uint8_t) { h = "IcIvau"; }
+   void MteDataProc(const Decoder::MteDataProcArgs&) { h = "MteDataProc"; }
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+@@ -1299,6 +1299,11 @@
+ 
+   void Nop() {}
+ 
++  // apklayer patch (0033): CLREX: reservation_address = 0.
++  void ClearExclusive() {
++    as_.Movq({.base = Assembler::rbp, .disp = static_cast<int32_t>(offsetof(ThreadState, cpu.reservation_address))}, static_cast<int32_t>(0));
++  }
++
+   // DMB/DSB full barrier: x86 TSO lacks StoreLoad ordering, so a full guest
+   // barrier must lower to MFENCE (the store-only/load-only variants are NOPed
+   // upstream in the decoder).
