@@ -4,6 +4,16 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: Play services no longer ends its own process at module init (exit 137 loop)
+- Cause: Play services' intent operations (module init) hit system services that behave differently here from Android, and an uncaught exception in any of them runs Google's crash handler, which calls Process.killProcess(myPid): the hub restarted the process again and again and Play Store's binds to it timed out. Found with a temporary default uncaught-exception handler that printed each exception (not kept); each fix showed the next one:
+  1. `WebView.getCurrentWebViewPackage` threw "WebView not supported by device" (no webviewupdate service): ShadowHostRealWebView answers the provider's PackageInfo from the package manager.
+  2. `SliceManager.grantSlicePermission` threw for a package that is not installed (Files by Google): ShadowHostSystemGaps.SliceManager.
+  3. `StatsManager.setBroadcastSubscriber` threw an NPE (no StatsServiceManager): ShadowHostStatsManager now throws StatsUnavailableException, as without statsd.
+  4. `getSystemService(AppFunctionManager.class)` was null (the service is behind a flag): ShadowHostContextImpl gives a manager over a no-op service.
+  5. `TelephonyManager.createForSubscriptionId` returned null: ShadowHostSystemGaps.TelephonyManager returns the manager itself.
+  6. `DomainVerificationManager.queryValidVerificationPackageNames` returned null: ShadowHostServiceManager answers an empty list.
+- Checked on the owner's PC in a private runtime copy (removed after): two cold starts in the default instance, no exit 137, no uncaught exception in Play services, Play Store's Games page loads, no "Timeout waiting for ServiceConnection". Not run: the test groups (no VM config on this PC); Play services may have more such operations behind the ones that ran in these minutes.
+
 ## 2026-11-15: Play Store stuck on its splash / "locale changed" screen: the hub reads the host settings before READY
 - Owner's default instance (deb 0.4.19): Play Store never left the splash. Play services also died again and again (exit 137, its crash handler's Process.killProcess) while Play Store's binds to it timed out.
 - Cause found for the Play Store half: HubHost started the host-settings thread (HubHostSettings.watch) after READY, so an app that registered in that gap got an empty settings bundle (`host settings []`), started as en-US, then got nl-NL; Play Store logged "Inconsistent Persistent Cache" and sat in LocaleChangedModeActivity ("Start de app opnieuw op"). HubHost now creates and starts it before READY (HubHostSettings.current() already waits up to 3 s for the first read).

@@ -44,9 +44,26 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         while (base instanceof android.content.ContextWrapper) base = ((android.content.ContextWrapper) base).getBaseContext();
         if (name != null && SHADOW_STATE_SERVICES.contains(name) && base != null && base != real) return base.getSystemService(name);
         Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
+        if (service == null && Context.APP_FUNCTION_SERVICE.equals(name)) service = appFunctionManager(real);
         if (service == null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] no system service " + name + " for " + real.getPackageName());
         if (name != null && fakeChecked.add(name)) reportFake(name, service);
         return service;
+    }
+    /** AppFunctionManager is registered only behind a flag that is off here: the class has no service name, and Play services' AppFunctionsInitIntentOperation took the null for a manager. */
+    @Implementation protected String getSystemServiceName(Class<?> serviceClass) {
+        String name = Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemServiceName", ClassParameter.from(Class.class, serviceClass));
+        return name == null && serviceClass == android.app.appfunctions.AppFunctionManager.class ? Context.APP_FUNCTION_SERVICE : name;
+    }
+    private static android.app.appfunctions.AppFunctionManager appFunctions;
+    /** A manager over a service that has no app functions (its calls answer with defaults); one per process, as the service is. */
+    private static synchronized android.app.appfunctions.AppFunctionManager appFunctionManager(Context context) {
+        if (appFunctions == null) {
+            android.app.appfunctions.IAppFunctionManager none = (android.app.appfunctions.IAppFunctionManager) java.lang.reflect.Proxy.newProxyInstance(
+                    android.app.appfunctions.IAppFunctionManager.class.getClassLoader(), new Class<?>[] {android.app.appfunctions.IAppFunctionManager.class},
+                    (proxy, method, args) -> method.getReturnType() == boolean.class ? Boolean.FALSE : method.getReturnType().isPrimitive() ? (Object) 0 : method.getName().equals("asBinder") ? null : null);
+            appFunctions = new android.app.appfunctions.AppFunctionManager(none, context.getApplicationContext() != null ? context.getApplicationContext() : context);
+        }
+        return appFunctions;
     }
     private static final java.util.Set<String> SHADOW_STATE_SERVICES = java.util.Set.of(Context.LOCATION_SERVICE, Context.BATTERY_SERVICE, Context.POWER_SERVICE,
             Context.ROLE_SERVICE, Context.STORAGE_SERVICE, Context.CONNECTIVITY_SERVICE, Context.WIFI_SERVICE, Context.UI_MODE_SERVICE, Context.CLIPBOARD_SERVICE);
