@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: manager `ui.sh` passes on the UTM VM with the refresh-count fix
+- `manager/tests/ui.sh` end to end (the "new instance is not listed" step included): PASS, with the manager built from this tree (`--wait-refresh N` counting only refreshes begun after the input). Run with the shared tree's CLI build and native runtime (`APKLAYER_BUILD`, `APKLAYER_NATIVE`), a private `XDG_DATA_HOME`, instance `uifix`, test app UiBench. Once only: the race is intermittent, so one pass is evidence, not proof. `ui-updater.sh` skipped (no `APKLAYER_CLI`).
+- Removed after: `~/apklayer-uifix` (tree, manager build, data, state, shots), `/tmp/uifix-shots`, instance `uifix` state, local copies of the VM config.
+
 ## 2026-11-15: manager `ui-updater.sh` end to end with an installed deb; screenshot mode's refresh count
 - Ran on the UTM VM (deb built there: `build-deb.sh resolute 0.4.98`, `-d` for the missing libpulse-dev; `dpkg -i`, `APKLAYER_CLI=/usr/bin/apklayer`, bundle from `runtime-bundle.sh`): PASS (first run, runtime update r1 -> r2, wrong-SHA bundle refused, stale-app banner; the F-Droid add-on part not run, no store APK given).
 - The "unpack never ran" bug was the test's fixture: its fake bundle (runtime.json and system-apps only) fails `runtimeProblem` (no android-root/system, android-libs, aosp/android-all), and an installed CLI then runs `setup-runtime.sh` on the unpacked runtime, which a fake cannot pass. `ui-updater.sh` now builds r1/r2 from a real bundle (`APKLAYER_TEST_BUNDLE=<runtime-bundle.sh's tar.zst>`, else it skips) with the test APK added to `system-apps`; r3 (wrong hash) is a copy of r2.
