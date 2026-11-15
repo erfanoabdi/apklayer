@@ -79,7 +79,9 @@ static const struct zwp_text_input_v3_listener ti_listener = {
     .delete_surrounding_text = ti_delete, .done = ti_done };
 
 /* No enter key hint: text-input-v3 (content_type) has only hint and purpose; the Enter key's label or icon is the on-screen keyboard's own (GNOME's
- * OSK derives it from purpose and hints). The EditorInfo's imeOptions action reaches only Maliit (maliit.c actionKey), as words. */
+ * OSK derives it from purpose and hints). What the protocol can say of the EditorInfo's imeOptions action: MULTILINE (Enter is a newline) only where
+ * Enter does not run the action, so a keyboard shows its action/send key for a single-line or an action field. The action's words reach only Maliit
+ * (maliit.c actionKey). */
 /* Android's EditorInfo.inputType (class, variation, flags: android.text.InputType) as text-input-v3's content hint and purpose. */
 void text_input_kind(const struct window *w, uint32_t *hint, uint32_t *purpose)
 {
@@ -104,14 +106,15 @@ void text_input_kind(const struct window *w, uint32_t *hint, uint32_t *purpose)
         if (t & 0x1000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_UPPERCASE;  /* CAP_CHARACTERS */
         else if (t & 0x2000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_TITLECASE;  /* CAP_WORDS */
         else if (t & 0x4000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_AUTO_CAPITALIZATION;  /* CAP_SENTENCES */
-        if (t & 0x20000) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_MULTILINE;
+        int action = w->ime_options & 0xff;
+        if (t & 0x20000 && (w->ime_options & 0x40000000 || action <= 1)) *hint |= ZWP_TEXT_INPUT_V3_CONTENT_HINT_MULTILINE;  /* IME_FLAG_NO_ENTER_ACTION, or no action */
     }
 }
 
 static void apply_enabled(void)
 {
     if (!text_input) return;
-    int enable = entered_window && entered_window->text_input_enabled;
+    int enable = entered_window && entered_window->text_input_enabled && !entered_window->ime_hidden;
     ime_window = enable ? entered_window : NULL;
     uint32_t hint = 0, purpose = 0;
     if (enable) {
@@ -151,15 +154,18 @@ void text_input_enable(struct window *w, int enable)
                          * shortcut: text-input-v3 has no show request (compositors show theirs on enable); re-enable if a touch desktop needs it */
         if (debug_input) fprintf(stderr, "[shell] text input show request%s\n", w->text_input_enabled ? "" : " without a field");
         if (!text_mgr && w->text_input_enabled) maliit_enable(w, 2);
+        if (text_mgr && w->ime_hidden) { w->ime_hidden = 0; if (entered_window == w) apply_enabled(); }  /* the enable brings the compositor's keyboard back */
         return;
     }
     if (enable == 4) {  /* hideSoftInputFromWindow: the keyboard goes, the field keeps focus (a later showSoftInput brings it back).
-                         * text-input-v3 has no hide request and a disable would also end a desktop input method's composing: a no-op there */
+                         * text-input-v3 has no hide request: a disable (compositors hide their keyboard on it; it also ends a desktop input method's composing) until a show or a new field */
         if (debug_input) fprintf(stderr, "[shell] text input hide request%s\n", w->text_input_enabled ? "" : " without a field");
         if (!text_mgr && w->text_input_enabled) maliit_enable(w, 4);
+        if (text_mgr && w->text_input_enabled && !w->ime_hidden) { w->ime_hidden = 1; if (entered_window == w) apply_enabled(); }
         return;
     }
     w->text_input_enabled = enable;
+    w->ime_hidden = 0;
     if (!text_mgr) { maliit_enable(w, enable); return; }
     if (!seat) return;
     if (!text_input) {

@@ -33,10 +33,10 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Halium camera: preview rotation needs a human check (preview and still agree on both phones; whether the picture is upright was not judged). `camera`/`media = device` work (libhidl 0005, `tools/halium/hidl-list.sh`). NewPipe playback with `media = device` is blocked by YouTube extraction ("Could not parse website") on the phones' network, not by the stack. The X23 `hello.camera` large still is cut by the landscape-to-portrait activity recreation (test-app race).
 
 ## Input / IME
-- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): pixel-check the light scheme; `haptic_feedback_enabled` is not modelled by the hub's vibrator.
-- Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); stylus slider and tool wheel are not delivered; AXIS_TILT/ORIENTATION follow a remembered InputReader formula, not a checked source.
-- Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
-- text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
+- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): pixel-check the light scheme.
+- Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) are delivered through the test input only (AXIS choice is ours: Android has no stylus-specific ones).
+- Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `getUnicodeChar()` of a non-Latin key is the shell's character with no meta variants (no per-layout .kcm: dead keys, Shift/AltGr levels through `getUnicodeChar(meta)`).
+- text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own): hide = disable until show/new field and MULTILINE only without an action are sent, never run against a real compositor (GNOME/KWin/Phosh OSK); a desktop input method (fcitx) stops composing while hidden. Fn keys (F1-F12) have no Android keycode in `keysym_to_android`.
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 
 ## Permissions and Android rules

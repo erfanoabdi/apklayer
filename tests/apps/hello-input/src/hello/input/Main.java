@@ -58,6 +58,20 @@ public class Main extends Activity {
         else super.onBackPressed();
     }
 
+    /** tests/vm/input-lang.py: a key that reaches the app (no text field has focus) with the character of its layout. */
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent e) {
+        if (e.getAction() == android.view.KeyEvent.ACTION_DOWN && e.getKeyCode() == android.view.KeyEvent.KEYCODE_PAGE_UP && System.getProperty("hello.backlog") != null) {
+            // tests/vm/navbar-haptic.py: Page Up flips Settings.System haptic_feedback_enabled (Touch feedback)
+            android.content.ContentResolver cr = getContentResolver();
+            int on = android.provider.Settings.System.getInt(cr, android.provider.Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 0 ? 1 : 0;
+            System.out.println("[hello-input] haptic setting " + on + " put=" + android.provider.Settings.System.putInt(cr, android.provider.Settings.System.HAPTIC_FEEDBACK_ENABLED, on));
+            return true;
+        }
+        if (e.getAction() == android.view.KeyEvent.ACTION_DOWN && e.getUnicodeChar() >= 128)
+            System.out.println("[hello-input] key code=" + e.getKeyCode() + " unicode=" + e.getUnicodeChar());
+        return super.dispatchKeyEvent(e);
+    }
+
     /** A stylus event's axes (tests/vm/input-wheel-pen.py). */
     private static void logPen(android.view.MotionEvent e) {
         int tool = e.getToolType(0);
@@ -65,6 +79,7 @@ public class Main extends Activity {
         System.out.println("[hello-input] pen " + android.view.MotionEvent.actionToString(e.getActionMasked()) + " tool=" + tool + " x=" + e.getX() + " y=" + e.getY()
                 + " pressure=" + e.getPressure() + " tilt=" + e.getAxisValue(android.view.MotionEvent.AXIS_TILT) + " orientation=" + e.getOrientation()
                 + " distance=" + e.getAxisValue(android.view.MotionEvent.AXIS_DISTANCE) + " rotation=" + e.getAxisValue(android.view.MotionEvent.AXIS_GENERIC_1)
+                + " slider=" + e.getAxisValue(android.view.MotionEvent.AXIS_WHEEL) + " wheel=" + e.getAxisValue(android.view.MotionEvent.AXIS_SCROLL)
                 + " buttons=" + e.getButtonState() + " source=0x" + Integer.toHexString(e.getSource()));
     }
     @Override public boolean dispatchGenericMotionEvent(android.view.MotionEvent e) { logPen(e); return super.dispatchGenericMotionEvent(e); }
@@ -132,6 +147,13 @@ public class Main extends Activity {
         hide.setOnClickListener(v -> System.out.println("[hello-input] hide=" + getSystemService(android.view.inputmethod.InputMethodManager.class)
                 .hideSoftInputFromWindow(v.getWindowToken(), 0)));
         layout.addView(hide, new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
+        Button plain = new Button(this);  // no field with focus: keys reach the app as key events (tests/vm/input-lang.py)
+        plain.setText("Plain keys");
+        plain.setOnClickListener(v -> {
+            for (int i = 0; i < layout.getChildCount(); i++) if (layout.getChildAt(i) instanceof EditText) layout.getChildAt(i).setEnabled(false);
+            System.out.println("[hello-input] fields off");
+        });
+        layout.addView(plain, new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
         clipboard.addPrimaryClipChangedListener(() -> {
             ClipData clip = clipboard.getPrimaryClip();
             if (clip != null && clip.getItemCount() > 0) {

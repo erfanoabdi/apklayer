@@ -185,6 +185,7 @@ final class HubVibrator extends IVibratorManagerService.Stub {
 
     @Override public void performHapticFeedback(int uid, int deviceId, String opPkg, int constant, int usage, String reason, int flags, int privFlags) {
         if (!holds.test(uid, android.Manifest.permission.VIBRATE) || constant == HapticFeedbackConstants.NO_HAPTICS) return;
+        if ((flags & HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING) == 0 && !hapticFeedbackEnabled()) return;  // Settings > Sound > Touch feedback, as VibratorManagerService
         // the effects of system_server's HapticFeedbackVibrationProvider.getVibration (the HAL's own effects; no per-device or setting overrides)
         int effect = switch (constant) {
             case HapticFeedbackConstants.CONTEXT_CLICK, HapticFeedbackConstants.GESTURE_END, HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE,
@@ -201,6 +202,14 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         };
         System.out.println("[apklayer-hub] vibrator: haptic feedback " + constant + " -> effect " + effect);
         vibrate(uid, deviceId, opPkg, CombinedVibration.createParallel(VibrationEffect.get(effect)), null, reason, null);
+    }
+
+    /** Settings.System.HAPTIC_FEEDBACK_ENABLED (default on); unreadable (no settings provider yet): on. */
+    private static boolean hapticFeedbackEnabled() {
+        try {
+            return android.provider.Settings.System.getInt(org.robolectric.RuntimeEnvironment.getApplication().getContentResolver(),
+                    android.provider.Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0;
+        } catch (RuntimeException e) { return true; }
     }
 
     @Override public void performHapticFeedbackForInputDevice(int uid, int deviceId, String opPkg, int constant, int inputDeviceId, int inputSource,
