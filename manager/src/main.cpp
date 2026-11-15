@@ -156,6 +156,9 @@ public:
         std::string windowMode;
         for (const auto& r : s.settings) if (field(r, 0) == "window-mode") windowMode = field(r, 1);
         b.set_window_mode_setting(slint::SharedString(windowMode));
+        std::string navbar;
+        for (const auto& r : s.settings) if (field(r, 0) == "navbar") navbar = field(r, 1);
+        b.set_navbar_setting(slint::SharedString(navbar));
         appModes_.clear();  // the apps' own overrides: window-mode.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("window-mode.", 0) == 0) appModes_[field(r, 0).substr(12)] = field(r, 1);
         b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));

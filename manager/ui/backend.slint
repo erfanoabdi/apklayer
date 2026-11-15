@@ -109,6 +109,7 @@ export global Backend {
     callback unset-prop(string);
     in property <string> night-setting;    // the instance's colour scheme override (`apklayer settings`): "" follows the desktop, "yes" dark, "no" light
     in property <string> window-mode-setting;  // the instance's window style (`apklayer settings`): "" automatic (mobile on a phone or in a mobile shell), "mobile", "desktop"
+    in property <string> navbar-setting;  // the navigation bar on desktop windows (`apklayer settings` navbar): "" automatic (where the compositor draws the title bar), "on", "off"
     in property <string> app-window-mode-setting;  // the selected app's window style override (window-mode.<package>): "" follows the instance, "mobile", "desktop"
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
     in property <[ConfigEntry]> config;         // the Settings page

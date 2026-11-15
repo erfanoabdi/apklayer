@@ -159,8 +159,27 @@ final class HostInput {
     /** Commits text into the focused text field (the IME path); false when no field has focus. */
     java.util.function.Predicate<String> textCommit;
 
+    /** MSG_KEY meta bit of the shell (bridge/shell/shell.h KEYMETA_NAVBAR): the Back key came from a navigation bar press. */
+    static final int NAVBAR_KEY = 0x40000000;
+
+    /** SystemUI's navigation bar haptic: VIRTUAL_KEY (the click effect) asked of the hub's vibrator as the system (the app needs no VIBRATE for the system's own bar),
+     *  off the main thread so the key is not held; no vibrator in the instance (no service): nothing. */
+    private static void navbarClick() {
+        new Thread(() -> {
+            try {
+                android.os.IBinder vibrator = android.os.ServiceManager.getService("vibrator_manager");
+                if (vibrator != null) android.os.IVibratorManagerService.Stub.asInterface(vibrator).performHapticFeedback(android.os.Process.SYSTEM_UID, 0, "android",
+                        android.view.HapticFeedbackConstants.VIRTUAL_KEY, 0, "navigation bar", 0, 0);
+            } catch (Exception e) { /* a tick lost */ }
+        }, "navbar-haptic").start();
+    }
+
     /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */
     void hostKey(long now, int action, int code, int unicode, int meta) {
+        if ((meta & NAVBAR_KEY) != 0) {  // the shell's navigation bar pressed (not Esc, Alt+Left or the mouse's back button): Android's light click, fire and forget
+            meta &= ~NAVBAR_KEY;
+            if (action == 0) navbarClick();
+        }
         if (Boolean.getBoolean("apklayer.debugkeys"))
             System.out.println("[apklayer] key action=" + action + " code=" + code + " uni=" + unicode + " meta=" + meta);
         int act = action == 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;

@@ -409,7 +409,7 @@ public final class AppHost implements Runnable {
         AppHost host = running;
         if (host == null) return;  // before the first launch: the activities start with it
         if (host.shell != null && HostConfiguration.night() != null) host.shell.sendDecorDark(HostConfiguration.night());
-        if (host.shell != null) host.shell.sendWindowMode(HostConfiguration.windowMode());  // live: the shell restyles the window (bridge/shell/mobile.c)
+        if (host.shell != null) host.shell.sendWindowMode(HostConfiguration.windowMode(), HostConfiguration.navbar());  // live: the shell restyles the window (bridge/shell/mobile.c)
         host.dispatchConfiguration(changes);
     }
 

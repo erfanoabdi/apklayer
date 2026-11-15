@@ -237,6 +237,8 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 else if (line.compare(0, eq, "window-mode." + package) == 0) specific = line.substr(eq + 1);
             }
             if (!specific.empty() || !general.empty()) ne.env["APKLAYER_WINDOW_MODE"] = nj.env["APKLAYER_WINDOW_MODE"] = specific.empty() ? general : specific;
+            for (const std::string& line : split(readFile(join(inst.root, "settings")).value_or(""), '\n'))  // the navigation bar on desktop windows (navbar auto|on|off)
+                if (line.compare(0, 7, "navbar=") == 0) ne.env["APKLAYER_NAVBAR"] = nj.env["APKLAYER_NAVBAR"] = line.substr(7);
         }
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};

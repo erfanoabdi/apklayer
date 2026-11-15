@@ -57,6 +57,26 @@ export component PropsPage {
                         padding: MaterialStyleMetrics.padding_16;
                         spacing: MaterialStyleMetrics.spacing_12;
                         MaterialText {
+                            text: "Navigation bar (Back) on desktop windows of instance " + Backend.instance + ": automatic is on where the desktop draws the window's title bar (KDE, sway), off where apklayer's own title bar has Back (GNOME); applied at once.";
+                            style: MaterialTypography.body_medium;
+                            color: MaterialPalette.on_surface;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: MaterialStyleMetrics.spacing_8;
+                            for choice in [{ label: "Automatic", value: "" }, { label: "On", value: "on" }, { label: "Off", value: "off" }] : HorizontalLayout {
+                                if Backend.navbar-setting == choice.value : FilledButton { text: choice.label; }
+                                if Backend.navbar-setting != choice.value : TonalButton { text: choice.label; clicked => { Backend.set-setting("navbar", choice.value); } }
+                            }
+                        }
+                    }
+                }
+                FilledCard {
+                    VerticalLayout {
+                        padding: MaterialStyleMetrics.padding_16;
+                        spacing: MaterialStyleMetrics.spacing_12;
+                        MaterialText {
                             text: "Window style of instance " + Backend.instance + ": mobile (maximized, a navigation bar with Back and Home, no title bar) or desktop (floating windows). Automatic is mobile on a phone or in a mobile shell; applied at once. A single app: apklayer settings set window-mode.<package> ...";
                             style: MaterialTypography.body_medium;
                             color: MaterialPalette.on_surface;

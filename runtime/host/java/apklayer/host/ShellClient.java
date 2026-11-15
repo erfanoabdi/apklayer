@@ -102,9 +102,10 @@ final class ShellClient {
     }
 
     /** The window style (HostConfiguration.windowMode of this app: auto, desktop or mobile): the shell lays the window out in it, live. */
-    void sendWindowMode(String mode) {
+    void sendWindowMode(String mode, String navbar) {
         try {
-            send(WINDOW_MODE, buf(8).putInt(WINDOW_ID).putInt(mode.equals("mobile") ? 2 : mode.equals("desktop") ? 1 : 0));
+            send(WINDOW_MODE, buf(12).putInt(WINDOW_ID).putInt(mode.equals("mobile") ? 2 : mode.equals("desktop") ? 1 : 0)
+                    .putInt(navbar.equals("on") ? 1 : navbar.equals("off") ? 2 : 0));
         } catch (IOException e) {
             // shell gone: the read loop notices
         }
