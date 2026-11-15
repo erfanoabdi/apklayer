@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 16 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: res_init
+
+apklayer patch (docs/PATCHES.md). bionic's libc exports res_init; glibc exports only __res_init (<resolv.h> makes res_init a macro for it), so the
+bionic linker could not link OpenVPN for Android's libopenvpn.so ("cannot locate symbol res_init") and its process exited with 1 at start.
+
+--- a/libc/libc-misc.c
++++ b/libc/libc-misc.c
+@@ -69,3 +69,12 @@
+ {
+ 	return 36;
+ }
++
++/* apklayer patch: bionic's res_init; glibc has __res_init only (OpenVPN for Android's libopenvpn.so). */
++#ifdef __GLIBC__
++extern int __res_init(void);
++int bionic_res_init(void)
++{
++	return __res_init();
++}
++#endif
