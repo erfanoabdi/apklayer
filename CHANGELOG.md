@@ -3,6 +3,14 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: input leftovers (stylus axes, getUnicodeChar, haptic setting, text-input-v3 hints)
+- AXIS_TILT/AXIS_ORIENTATION checked against LineageOS 24 `TouchInputMapper::cookPointerData` (`atan2f(-sin tiltX, sin tiltY)`, `acosf(cos tiltX cos tiltY)`): identical, no change (only the no-tilt orientation = barrel rotation is ours).
+- Stylus slider -> AXIS_WHEEL (-1..1), tool wheel clicks per frame -> AXIS_SCROLL (MSG_TABLET grew to 13 ints; `pen:` test input takes slider and wheel). `input-wheel-pen` passes.
+- `KeyEvent.getUnicodeChar()` of a non-Latin key with no text field focused: the physical keycode with the layout's character (`CharKeyEvent`, no meta variants); `input-lang` checks Cyrillic (needs hello-input's "Plain keys" button). Its layout-switch assert moved by one (extra `ru` at the end). `input-lang` is flaky in step "delete 1/2" (2 of 5 runs; field text lagging the 2-byte delete), not touched by this change.
+- `haptic_feedback_enabled` (Settings.System, default on) honoured by the hub's `performHapticFeedback` unless FLAG_IGNORE_GLOBAL_SETTING; `navbar-haptic` flips it from the app (Page Up) and expects no click. hello-input got WRITE_SETTINGS.
+- text-input-v3: MULTILINE hint only where Enter does not run the IME action; hideSoftInput = disable (until show or a new field), showSoftInput re-enables. Not run against a real compositor.
+- Tested on UTM in `~/apklayer-input-ime` (groups input-lang, input-wheel-pen, navbar-haptic); tree, state and instance dirs removed after.
+
 ## 2026-11-15: manager `ui.sh` passes on the UTM VM with the refresh-count fix
 - `manager/tests/ui.sh` end to end (the "new instance is not listed" step included): PASS, with the manager built from this tree (`--wait-refresh N` counting only refreshes begun after the input). Run with the shared tree's CLI build and native runtime (`APKLAYER_BUILD`, `APKLAYER_NATIVE`), a private `XDG_DATA_HOME`, instance `uifix`, test app UiBench. Once only: the race is intermittent, so one pass is evidence, not proof. `ui-updater.sh` skipped (no `APKLAYER_CLI`).
 - Removed after: `~/apklayer-uifix` (tree, manager build, data, state, shots), `/tmp/uifix-shots`, instance `uifix` state, local copies of the VM config.

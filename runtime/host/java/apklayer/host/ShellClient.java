@@ -196,10 +196,10 @@ final class ShellClient {
                     input.add(new int[] {13, body.getInt(4), body.getInt(8), body.getInt(12),
                             body.getInt(16), len >= 24 ? body.getInt(20) : 0});
                 } else if (type == TABLET) {
-                    // {17, action, x, y, tool, buttons, pressure*10000, distance*10000, tilt x deg*100, tilt y deg*100, rotation deg*100, slider*10000}
-                    int[] ev = new int[12];
+                    // {17, action, x, y, tool, buttons, pressure*10000, distance*10000, tilt x deg*100, tilt y deg*100, rotation deg*100, slider*10000, tool wheel clicks}
+                    int[] ev = new int[13];
                     ev[0] = 17;
-                    for (int i = 1; i < 12; i++) ev[i] = body.getInt(4 * i);
+                    for (int i = 1; i < 13; i++) ev[i] = body.getInt(4 * i);
                     input.add(ev);
                 } else if (type == CONFIGURE) {
                     // {14, w, h, scale*100, density dpi (0: 160 x scale), navigation bar px (0: none), output w, h px (0: unknown),

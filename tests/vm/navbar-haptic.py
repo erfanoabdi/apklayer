@@ -77,9 +77,24 @@ def desktop_bar():
     assert apklayer('settings', 'set', 'navbar', 'on').returncode == 0
 
 
+def haptic_off():
+    mark()
+    instance.inject(PKG, 'key:104')  # Page Up: the app turns Settings.System haptic_feedback_enabled off
+
+
+def check_bar_silent():
+    case('haptic_feedback_enabled off: Back reaches the app, no click', backs[0] == state['backs'] + 1 and clicks() == state['clicks'],
+         'Back count %d -> %d, HAL calls %d -> %d' % (state['backs'], backs[0], state['clicks'], clicks()))
+
+
+def haptic_on():
+    instance.inject(PKG, 'key:104')  # and on again
+
+
 SEQUENCE = [
     ('', bar_press), ('', lambda: check_bar_press('mobile style')),
     ('', keyboard_back), ('', check_keyboard_back),
+    ('', haptic_off), ('', bar_press), ('', check_bar_silent), ('', haptic_on),
     ('desktop', lambda: None), ('', bar_press), ('', lambda: check_bar_press('desktop window, navbar on')),
 ]
 ticks = [(6000 + TICK * i, 'hover:%d,0' % (i + 1)) for i in range(len(SEQUENCE) + 1)]
@@ -104,6 +119,7 @@ try:
             for raw in lines:
                 line = raw.decode(errors='replace')
                 if '[hello-input] back pressed' in line: backs[0] += 1
+                if '[hello-input] haptic setting' in line: print(line, flush=True)
                 m = re.search(r'script: hover:(\d+),0', line)
                 if not m: continue
                 step = int(m[1])
@@ -113,7 +129,7 @@ try:
                 if step - 1 < len(SEQUENCE) and SEQUENCE[step - 1][0] == 'desktop':
                     try: desktop_bar()
                     except Exception as e: case('desktop style, navbar on', False, 'error: %r' % (e,))
-    ok = results and all(results) and len(results) >= 5
+    ok = results and all(results) and len(results) >= 6
     print('%s navigation bar haptics: %d cases' % ('PASS' if ok else 'FAIL', len(results)), flush=True)
     sys.exit(0 if ok else 1)
 finally:

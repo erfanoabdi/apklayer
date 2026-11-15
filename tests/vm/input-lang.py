@@ -41,7 +41,9 @@ STEPS = [
     ('delete 3', 'a😀', ['delete:4'], None, 2),  # four bytes: the pair of units
     ('alt+shift', 'a', ['layout:us,ru:,:grp:alt_shift_toggle', 'combo:alt+42', 'key:34'], None, 0),  # the group switches: g is п
     ('super+space', 'aп', ['layout:us,ara:,:grp:win_space_toggle', 'combo:super+57', 'key:16'], None, 0),  # q is ض
-    ('end', 'aпض', [], None, 0),
+    ('end', 'aпض', ['tap:240,520'], None, 0),  # the "Plain keys" button: the fields are off, keys reach the app as key events
+    ('keys', 'aпض', ['layout:ru'] + KEYS(34, 35), None, 2),  # п р: getUnicodeChar gives the layout's character, not the US key's
+    ('done', 'aпض', [], None, 2),
 ]
 # Ctrl+A is queued on the app's main thread: the typing after it waits two ticks (as input-inject.py)
 STEPS = [part for name, want, steps, shot, delay in STEPS for part in (
@@ -104,8 +106,10 @@ try:
     compare('ru1', 'ru2', 'Cyrillic'); compare('ara1', 'ara2', 'Arabic'); compare('deva1', 'deva2', 'Devanagari')
     langs = [line.split('input layout: ')[1] for line in seen if 'input layout: ' in line]  # the input method subtype the host got from the xkb group
     for want in ('ru', 'ar', 'fa'): assert want in langs, 'no input method subtype %s (got %s)' % (want, langs)
-    assert langs[-3:] == ['ru', 'en', 'ar'], 'the layout hotkeys did not switch the xkb group: %s' % langs
-    print('PASS Cyrillic, Arabic, Persian, dead keys, harakat, Devanagari, CJK and astral text, byte-counted deletion and glyphs through the shell test input', flush=True)
+    assert langs[-4:-1] == ['ru', 'en', 'ar'], 'the layout hotkeys did not switch the xkb group: %s' % langs
+    keys = [l for l in seen if '[hello-input] key code=' in l]
+    assert any('code=35 unicode=%d' % ord('п') in l for l in keys) and any('unicode=%d' % ord('р') in l for l in keys), 'getUnicodeChar of a Cyrillic key: %s' % keys
+    print('PASS Cyrillic, Arabic, Persian, dead keys, harakat, Devanagari, CJK and astral text, byte-counted deletion, KeyEvent.getUnicodeChar of a Cyrillic key and glyphs through the shell test input', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)
