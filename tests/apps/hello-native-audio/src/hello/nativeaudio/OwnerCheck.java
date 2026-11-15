@@ -6,8 +6,9 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 
-/** Two processes of the app request MODE_IN_COMMUNICATION (two requesters, as two apps are): the one with a player started owns the mode, the newest
- *  of those when both play (HubCallAudio.owner). The hub logs each owner by pid; tests/vm/native-audio.py reads the order: main, listener, main. */
+/** Two processes of the app request MODE_IN_COMMUNICATION (two requesters, as two apps are): the one with a player started or a new one (its first 6 s,
+ *  AudioService's grace) owns the mode, the newest of those when several are (HubCallAudio.owner). The hub logs each owner by pid;
+ *  tests/vm/native-audio.py reads the order: main, listener, main (after the listener's grace). */
 final class OwnerCheck {
     static AudioTrack track() {
         return new AudioTrack.Builder()
@@ -21,9 +22,10 @@ final class OwnerCheck {
         try {
             audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
             mine.play();  // this process plays: it owns the mode
-            Listener.command(context, "comm");  // a later requester that plays nothing: no change
-            Listener.command(context, "play");  // it plays too, and is newer: it owns the mode
-            Listener.command(context, "stop");  // only this process plays again
+            Listener.command(context, "comm");  // a later requester that plays nothing: owns the mode for its 6 s grace
+            Listener.command(context, "play");  // it plays too, and is newer: it still owns the mode
+            Listener.command(context, "stop");  // only this process plays again, once the listener's grace is over
+            Thread.sleep(6500);
             System.out.println("[hello-native-audio] OWNER PASS pids main=" + android.os.Process.myPid() + " listener=" + Listener.pid(context));
         } finally {
             mine.stop();

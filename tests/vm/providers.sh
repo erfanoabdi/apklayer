@@ -51,9 +51,12 @@ grep -a '\[hw\]\|\[runtime\] registering\|no registration function' $out
 grep -a "location \[" $APKLY_STATE/hub.log
 grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
-# the waveform's two steps, the click (the example HAL's 100 ms effect), the composition's two primitives (CLICK at 0.5, THUD at 1.0: Vibrator.compose through the HAL) and the CONFIRM haptic feedback through SystemVibrator (a click: the example HAL has CLICK and TICK only), in this order
-[ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -6 | tr '\n' ' ')" = \
-  "vibrator: on 100 ms amplitude 1.00 vibrator: on 200 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 1.00 vibrator: on 100 ms amplitude 1.00 " ] || fail "the app's waveform and click did not reach the vibrator backend"
+# the waveform's two steps, the click (the example HAL's 100 ms effect), the composition's two primitives (CLICK at 0.5, THUD at 1.0: Vibrator.compose through the HAL) and the CONFIRM haptic feedback through SystemVibrator and through View.performHapticFeedback (a click each: the example HAL has CLICK and TICK only), in this order
+[ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -9 | head -6 | tr '\n' ' ')" = \
+  "vibrator: on 200 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 1.00 vibrator: on 100 ms amplitude 1.00 vibrator: on 100 ms amplitude 1.00 " ] || fail "the app's waveform and click did not reach the vibrator backend"
+[ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -3 | tr '\n' ' ')" = \
+  "vibrator: on 20 ms amplitude 0.17 vibrator: on 20 ms amplitude 0.50 vibrator: on 20 ms amplitude 0.83 " ] || fail "the app's ramp (PWLE) segment did not reach the vibrator backend as steps"
+grep -aq '^\[hw\] view haptic feedback true' $out || fail "View.performHapticFeedback did not reach the vibrator"
 grep -aq '^\[hw\] gps fix 48.85840 2.29450 accuracy 3.0' $out || fail "the app's gps fix is not the configured one"
 # SensorManager over SensorService: 50 Hz for 2 s (about 100 events), the configured value
 events=$(grep -a -o '^\[hw\] accelerometer [0-9]* events' $out | grep -o '[0-9][0-9]*')
