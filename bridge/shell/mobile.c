@@ -93,23 +93,26 @@ static void metrics(struct window *w)
     int s = window_scale(w);
     w->dpi = display_density(s);
     int px = (48 * w->dpi + 80) / 160;
-    w->nav_h = w->mobile && (w->nav.surface || w->nav.remote) ? (px * 100 + s / 2) / s : 0;
+    w->nav_h = W_NAVBAR(w) && (w->nav.surface || w->nav.remote) ? (px * 100 + s / 2) / s : 0;
 }
 
 void window_set_mode(struct window *w, int mode)
 {
     w->mode = mode;
     int mobile = mode == WM_MOBILE || (mode == WM_AUTO && display_mobile()), bar = !mobile && !w->ssd, was_mobile = w->mobile;
+    /* the navigation bar on a desktop window: where the compositor draws the title bar (it has no Back button), or when asked for */
+    int deskbar = !mobile && w->toplevel && (w->navbar_pref == NB_ON || (w->navbar_pref == NB_AUTO && w->ssd));
     int created = w->styled;
-    if (created && mobile == w->mobile && bar == !!w->decor.surface) { window_display_changed(w); return; }
+    if (created && mobile == w->mobile && bar == !!w->decor.surface && deskbar == w->deskbar) { window_display_changed(w); return; }
     pointer_forget_window(w);
     if (created) fprintf(stderr, "[shell] %s: %s style%s\n", w->title, mobile ? "mobile" : "desktop", bar || mobile ? "" : ", the compositor's title bar");
     if (mobile) {
         decor_destroy(&w->decor);
-        navbar_create(&w->nav, w->surface);
+        if (!w->nav.surface && !w->nav.remote) navbar_create(&w->nav, w->surface);
         if (w->nav_layer) navbar_set_remote(&w->nav, nav_send, w);
     } else {
-        navbar_destroy(&w->nav);
+        if (deskbar && !w->nav.surface) navbar_create(&w->nav, w->surface);
+        else if (!deskbar) navbar_destroy(&w->nav);
         if (!bar) decor_destroy(&w->decor);
         else if (!w->decor.surface) {
             decor_create(&w->decor, w->surface);
@@ -118,7 +121,9 @@ void window_set_mode(struct window *w, int mode)
         }
     }
     w->mobile = mobile;
+    w->deskbar = deskbar;
     w->styled = 1;
+    if (created) fprintf(stderr, "[shell] %s: navigation bar %s\n", w->title, W_NAVBAR(w) ? "on" : "off");
     metrics(w);
     if (w->toplevel) {
         xdg_toplevel_set_min_size(w->toplevel, 160, 160 + W_BAR(w));
@@ -137,7 +142,7 @@ void window_display_changed(struct window *w)
     metrics(w);
     int opw, oph, os;
     window_output(w, &opw, &oph, &os);  /* a hotplug or a mode change reaches the app now (its display's size), not at its next configure */
-    if (!w->configured || (w->told_dpi == w->dpi && w->told_nav == w->nav_h && w->told_scale == window_scale(w) && w->told_px_w == opw && w->told_px_h == oph)) return;
+    if (!w->configured || (w->told_dpi == w->dpi && w->told_nav == window_nav(w) && w->told_scale == window_scale(w) && w->told_px_w == opw && w->told_px_h == oph)) return;
     window_layout(w);
     wl_surface_commit(w->surface);
     window_send_configure(w);
@@ -148,7 +153,7 @@ void window_nav_visible(struct window *w, int visible)
     if (w->nav_hidden == !visible) return;
     w->nav_hidden = !visible;
     fprintf(stderr, "[shell] %s: navigation bar %s\n", w->title, visible ? "shown" : "hidden");
-    if (!w->configured || !w->mobile) return;
+    if (!w->configured || !W_NAVBAR(w)) return;
     window_layout(w);
     wl_surface_commit(w->surface);
     if (w->turn) window_send_configure(w);  /* turned, the bar is beside the app's content (geometry.c): its width changes */
@@ -184,7 +189,7 @@ void window_nav_layer(struct window *w)
 void window_nav_action(struct window *w, int button)
 {
     if (debug_input) fprintf(stderr, "[shell] navigation bar %s\n", button == NAV_BACK ? "back" : "bar");
-    if (button == NAV_BACK) window_send_back(w);
+    if (button == NAV_BACK) window_send_back(w, 1);
 }
 
 /* --display-info: what apps get on this display, for the stack's ro.sf.lcd_density (cli/stack.cpp). */

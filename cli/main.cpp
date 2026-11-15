@@ -61,7 +61,7 @@ int usage() {
           "                         manager's Settings page; list rows: key kind default value choices title help per-app own\n"
           "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24,\n"
-          "                         window-mode[.<package>] auto|mobile|desktop); live in a running instance\n"
+          "                         window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off); live in a running instance\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
           "  logs [<package> [--previous]]  the app's log of its last launch (its output and android.util.Log; --previous: the launch before);\n"
           "                         without a package: the instance's log files\n"

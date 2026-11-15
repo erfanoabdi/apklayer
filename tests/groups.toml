@@ -596,3 +596,14 @@ run = ["python3 -u tests/vm/resize-frame.py"]
 [input-wheel-pen]  # the wheel's notches and fractions (AXIS_VSCROLL/HSCROLL) and a stylus's axes through the shell's test input
 apps = ["hello-input"]
 run = ["python3 -u tests/vm/input-wheel-pen.py"]
+
+[kde-navbar]
+# KDE's server-side title bar has no Back button: the shell gives the window the mobile navigation bar (inset, click, maximize/tile/fullscreen, scales, setting navbar), under a KWin of its own
+apps = ["hello-input"]
+optional = true
+run = ["python3 -u tests/vm/kde-navbar.py"]
+
+[navbar-haptic]
+# Back on the navigation bar gives Android's light click (View.performHapticFeedback VIRTUAL_KEY) through the hub's vibrator to the vibrator HAL (the fake backend's log); Esc, Alt+Left, the mouse's back button do not
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/navbar-haptic.py"]

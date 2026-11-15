@@ -103,13 +103,15 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
 #define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
 #define MSG_DECOR_DARK 13    /* app -> shell: {own window id, 1 light | 2 dark}: the instance's colour scheme (its host settings), for the title bar */
-#define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*} (mobile.c) */
+#define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*[, NB_*]} (mobile.c) */
 #define MSG_NAVBAR 16        /* app -> shell: {own window id, visible}: the app's navigation bar visibility (immersive mode) */
 #define MSG_FULLSCREEN 18    /* app -> shell: {own window id, on}: the app went fullscreen or left it (mobile.c) */
 #define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
 #define MSG_TABLET 117        /* shell -> app: a pen's event (tablet.c) */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
+enum { NB_AUTO = 0, NB_ON = 1, NB_OFF = 2 };  /* the navbar setting: a desktop window gets the navigation bar when the compositor draws its title bar (auto), always, never */
+#define KEYMETA_NAVBAR 0x40000000  /* MSG_KEY meta bit: the Back key is a navigation bar press (the host gives a haptic tick) */
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
@@ -137,6 +139,7 @@ struct client {
     int attach_id;
     int dark;                  /* MSG_DECOR_DARK: 0 not said (the bar keeps the desktop's), 1 light, 2 dark */
     int window_mode;           /* MSG_WINDOW_MODE before its window exists: WM_* + 1 of the windows it creates or takes over, 0 = not said */
+    int navbar_pref;           /* MSG_WINDOW_MODE: the instance's navbar setting for a desktop window (NB_*) */
 };
 struct window {
     struct client *client;
@@ -170,6 +173,8 @@ struct window {
     int mode;                   /* WM_* asked for (WM_AUTO: by the session and the output, mobile.c) */
     int mobile;                 /* mobile style: maximized, no title bar, a navigation bar over the content's bottom (navbar.c) */
     struct navbar nav;
+    int deskbar;                /* a floating (desktop style) window has the navigation bar too (mobile.c: server-side decorations, setting navbar) */
+    int navbar_pref;            /* NB_AUTO, NB_ON, NB_OFF */
     int nav_hidden;             /* the app hid the navigation bar (immersive) */
     int nav_h;                  /* logical height of the navigation bar, 0 without one */
     int nav_layer;              /* the window's owner composes the bar (MSG_NAVBAR_LAYER): used without subsurfaces */
@@ -202,6 +207,8 @@ struct window {
 #define W_TARGET(w) ((w)->proxy ? (w)->proxy : (w)->client)
 #define W_ID(w) ((w)->proxy ? (w)->proxy_id : (w)->id)
 /* logical height of our title bar above the content: none in mobile style or under the compositor's (server-side) bar */
+/* the window has the navigation bar: mobile style, or a desktop window under the compositor's title bar (deskbar) */
+#define W_NAVBAR(w) ((w)->mobile || (w)->deskbar)
 #define W_BAR(w) ((w)->mobile || (w)->ssd || (w)->fullscreen ? 0 : DECOR_H)
 
 /* ---- state shared between the modules (defined in main.c) ---- */
@@ -339,7 +346,8 @@ void window_nav_visible(struct window *w, int visible);  /* MSG_NAVBAR */
 void window_nav_layer(struct window *w);  /* MSG_NAVBAR_LAYER */
 void window_set_fullscreen(struct window *w, int on);  /* MSG_FULLSCREEN */
 void window_nav_action(struct window *w, int button);    /* a navigation bar button (NAV_*) was pressed */
-void window_send_back(struct window *w);         /* pointer.c: KEYCODE_BACK down and up */
+void window_send_back(struct window *w, int from_navbar); /* pointer.c: KEYCODE_BACK down and up (from_navbar: KEYMETA_NAVBAR) */
+int window_nav(const struct window *w);  /* geometry.c: the navigation bar inset in effect (logical) */
 void window_minimize(struct window *w);          /* pointer.c: the app stops, then the compositor minimizes */
 int print_display_info(void);                    /* --display-info (cli/stack.cpp: ro.sf.lcd_density) */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */

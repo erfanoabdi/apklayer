@@ -48,7 +48,7 @@ static void t_up(void *d, struct wl_touch *t, uint32_t serial, uint32_t time, in
         struct window *w = nav_window;
         int held = w->nav.pressed;
         nav_window = NULL;
-        if (!w->client || !w->mobile) return;  /* the window went away or changed style meanwhile */
+        if (!w->client || !W_NAVBAR(w)) return;  /* the window went away or changed style meanwhile */
         w->nav.pressed = NAV_NONE;
         window_layout(w);
         wl_surface_commit(w->surface);
@@ -64,7 +64,7 @@ static void t_frame(void *d, struct wl_touch *t) { (void)d; (void)t; }
 static void t_cancel(void *d, struct wl_touch *t)
 {
     (void)d; (void)t;
-    if (nav_window && nav_window->client && nav_window->mobile) { nav_window->nav.pressed = NAV_NONE; window_layout(nav_window); wl_surface_commit(nav_window->surface); }
+    if (nav_window && nav_window->client && W_NAVBAR(nav_window)) { nav_window->nav.pressed = NAV_NONE; window_layout(nav_window); wl_surface_commit(nav_window->surface); }
     nav_window = NULL;
     send_touch(3, 0, 0, 0);
     touch_window = NULL;
@@ -83,7 +83,7 @@ const struct wl_touch_listener touch_listener = {
  * action 0 down, 1 up, 2 move, 3 cancel. */
 void touch_inject(struct window *w, int action, int x, int y)
 {
-    int nav = w->mobile && w->nav.shown && !w->nav.remote && y >= w->cfg_h - w->nav_h;  /* a remote bar is on w->surface itself */
+    int nav = W_NAVBAR(w) && w->nav.shown && !w->nav.remote && y >= w->cfg_h - w->nav_h;  /* a remote bar is on w->surface itself */
     wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(nav ? y - (w->cfg_h - w->nav_h) : y);
     if (action == 0) t_down(NULL, NULL, last_input_serial, 0, nav ? w->nav.surface : w->surface, 0, fx, fy);
     else if (action == 1) t_up(NULL, NULL, last_input_serial, 0, 0);

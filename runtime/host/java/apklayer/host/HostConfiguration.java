@@ -32,6 +32,9 @@ final class HostConfiguration {
         return own != null ? own : settings.getString("windowMode", "auto");
     }
 
+    /** The navigation bar on desktop windows (`apklayer settings set navbar auto|on|off`): auto = where the compositor draws the title bar. */
+    static String navbar() { return settings.getString("navbar", "auto"); }
+
     /** The hub's settings (HubClient at registration, HubEndpoint on a change), on the main thread: the configuration bits that changed. */
     static int update(Bundle next) {
         try { return apply(next); }

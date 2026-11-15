@@ -22,7 +22,7 @@ import java.util.Map;
  */
 final class HubHostSettings {
     /** The override keys (`apklayer settings set <key> <value>`) and their values. */
-    static final String KEYS = "night yes|no, accent #rrggbb, contrast high|normal, animations on|off, font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop";
+    static final String KEYS = "night yes|no, accent #rrggbb, contrast high|normal, animations on|off, font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off";
     private final Context context;
     private final HubDirectory directory;
     private final Map<String, String> host = new HashMap<>();
@@ -104,6 +104,7 @@ final class HubHostSettings {
         if (host.containsKey("locked-hint")) b.putBoolean("locked", "true".equals(host.get("locked-hint")));  // the desktop session is locked (HubLockScreen, KeyguardManager)
         for (Map.Entry<String, String> e : o.entrySet())  // the window style: the instance's, and an app's own (window-mode.<package>); the shell applies it
             if (e.getKey().equals("window-mode") || e.getKey().startsWith("window-mode.")) b.putString("windowMode" + e.getKey().substring(11), e.getValue());
+        if (o.containsKey("navbar")) b.putString("navbar", o.get("navbar"));
         return b;
     }
 

@@ -46,6 +46,12 @@ static int want_turn(const struct window *w)
 }
 static int turned_nav(const struct window *w) { return w->turn && !w->nav_hidden && w->nav_h > 0 ? w->nav_h : 0; }
 
+/* The navigation bar's inset in effect: a mobile window's bar, a desktop window's too except fullscreen (the compositor's whole output, no bar). */
+int window_nav(const struct window *w)
+{
+    return W_NAVBAR(w) && !(w->deskbar && w->fullscreen) ? w->nav_h : 0;
+}
+
 void window_app_size(const struct window *w, int *aw, int *ah)
 {
     if (w->turn) { *aw = w->cfg_h - turned_nav(w); *ah = w->cfg_w; }
@@ -64,13 +70,13 @@ void window_to_app(const struct window *w, int *x, int *y)
  * window's, with the turn it composes the app at. */
 void window_send_configure(struct window *w)
 {
-    int s = window_scale(w), nav = w->mobile && !w->turn ? (w->nav_h * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
+    int s = window_scale(w), nav = !w->turn ? (window_nav(w) * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
     int aw, ah, ime = w->turn ? 0 : w->ime_px, opw, oph, os;
     window_output(w, &opw, &oph, &os);  /* shortcut: turned, the keyboard is beside the content and gets no inset */
     window_app_size(w, &aw, &ah);
     w->told_scale = s;
     w->told_dpi = w->dpi;
-    w->told_nav = w->nav_h;
+    w->told_nav = window_nav(w);
     w->told_px_w = opw; w->told_px_h = oph;
     /* the output's pixels: the app's screen (Display.getRealSize, WindowManager.getMaximumWindowMetrics), not its window */
     send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, w->dpi, nav, w->mobile, opw, oph, ime }, 10);
@@ -92,8 +98,8 @@ void window_layout(struct window *w)
     w->scale = w->w * 100 / lw;
     lh += turned_nav(w);
     if (!w->mobile) { if (w->fullscreen) decor_hide(&w->decor); else decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated); }
-    else if (w->nav_hidden || w->nav_h <= 0) navbar_hide(&w->nav);  /* fullscreen too: the bar follows the app's (Lomiri kept a stale one) */
-    else navbar_update(&w->nav, lh - w->nav_h, lw, w->nav_h, window_scale(w), w->dark, w->nav.pressed);
+    if (W_NAVBAR(w) && (w->nav_hidden || window_nav(w) <= 0)) navbar_hide(&w->nav);  /* fullscreen too: the bar follows the app's (Lomiri kept a stale one) */
+    else if (W_NAVBAR(w)) navbar_update(&w->nav, lh - w->nav_h, lw, w->nav_h, window_scale(w), w->dark, w->nav.pressed);
     if (w->xdg_surface) xdg_surface_set_window_geometry(w->xdg_surface, 0, -W_BAR(w), lw, lh + W_BAR(w));
 }
 
@@ -112,7 +118,7 @@ static void apply_configure(struct window *w)
     } else if (w->resized || w->state_changed) {
         window_layout(w);
         wl_surface_commit(w->surface);  /* the current frame at the new size until the app's arrives */
-        if (w->resized) window_send_configure(w);
+        if (w->resized || w->told_nav != window_nav(w)) window_send_configure(w);
     }
     w->resized = w->state_changed = 0;
 }
