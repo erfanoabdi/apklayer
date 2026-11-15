@@ -20,7 +20,7 @@ import org.robolectric.util.ReflectionHelpers;
  * android.os.SharedMemory over a real memfd (libcutils' ashmem on memfd): Robolectric's keeps a temp file per create and maps only its own, so a
  * SharedMemory from another process failed ("Cannot find the backing file"). libcore's DirectByteBuffer(int,long,FileDescriptor,Runnable,boolean) that the
  * real map() builds does not exist on HotSpot, so map() is the JDK's mapped buffer: FileChannel.map of the descriptor reopened through /proc/self/fd
- * (a MAP_SHARED mapping of the same memory), unmapped by its cleaner or unmap().
+ * (a MAP_SHARED mapping of the same memory), unmapped by its cleaner or unmap(); PROT_EXEC and PROT_NONE through NativeLoader.mprotect.
  */
 @Implements(className = "android.os.SharedMemory", isInAndroidSdk = false)
 public class ShadowHostSharedMemory {
@@ -52,7 +52,6 @@ public class ShadowHostSharedMemory {
         try { return (Os.fcntlInt(fd, F_GET_SEALS, 0) & (F_SEAL_WRITE | F_SEAL_FUTURE_WRITE)) != 0; } catch (ErrnoException e) { return false; }
     }
 
-    // shortcut: PROT_EXEC is not mapped executable and PROT_NONE maps read-only (FileChannel has no such modes); upgrade when an app needs either
     @Implementation protected ByteBuffer map(int prot, int offset, int length) throws ErrnoException {
         ReflectionHelpers.callInstanceMethod(real, "checkOpen");
         if (offset < 0) throw new IllegalArgumentException("Offset must be >= 0");
@@ -61,7 +60,13 @@ public class ShadowHostSharedMemory {
         boolean write = (prot & OsConstants.PROT_WRITE) != 0;
         int fd = ReflectionHelpers.getField(ReflectionHelpers.getField(real, "mFileDescriptor"), "fd");
         try (RandomAccessFile file = new RandomAccessFile("/proc/self/fd/" + fd, write ? "rw" : "r")) {
-            return file.getChannel().map(write ? MapMode.READ_WRITE : MapMode.READ_ONLY, offset, length);
+            ByteBuffer buffer = file.getChannel().map(write ? MapMode.READ_WRITE : MapMode.READ_ONLY, offset, length);
+            // FileChannel maps read-only or read-write: PROT_EXEC and PROT_NONE are set on the mapping afterwards
+            if ((prot & OsConstants.PROT_EXEC) != 0 || (prot & OsConstants.PROT_READ) == 0) {
+                int error = NativeLoader.mprotect(buffer, prot);
+                if (error != 0) { unmap(buffer); throw new ErrnoException("mprotect", error); }
+            }
+            return buffer;
         } catch (IOException e) {  // a sealed region (setProtect(PROT_READ)) refuses a writable mapping, as mmap does on Android
             throw new ErrnoException("mmap", OsConstants.EPERM, e);
         }

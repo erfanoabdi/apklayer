@@ -245,7 +245,21 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
     }
 
+    /** libcore's sun.misc.Cleaner (the JDK has none): apklayer.loader.ApklayerCleaner under that name. */
+    private static byte[] cleaner() throws java.io.IOException {
+        try (java.io.InputStream in = AppClassLoader.class.getResourceAsStream("/apklayer/loader/ApklayerCleaner.class")) {
+            org.objectweb.asm.ClassWriter out = new org.objectweb.asm.ClassWriter(0);
+            new org.objectweb.asm.ClassReader(in).accept(new org.objectweb.asm.commons.ClassRemapper(out,
+                    new org.objectweb.asm.commons.SimpleRemapper("apklayer/loader/ApklayerCleaner", "sun/misc/Cleaner")), 0);
+            return out.toByteArray();
+        }
+    }
+
     private Class<?> defineOwnClass(String name) throws ClassNotFoundException {
+        if (name.equals("sun.misc.Cleaner")) {
+            try { byte[] bytes = cleaner(); return (Class<?>) DEFINE.invoke(definingLoader, name, bytes, 0, bytes.length); }
+            catch (ReflectiveOperationException | java.io.IOException failure) { throw new ClassNotFoundException(name, failure); }
+        }
         URL source = super.findResource(name.replace('.', '/') + ".class");
         if (source == null) throw new ClassNotFoundException(name);
         try (java.io.InputStream input = source.openStream()) {

@@ -167,7 +167,7 @@ run = ["python3 tests/vm/host-binder.py"]
 apps = ["hello-files"]
 needs = ["com.android.externalstorage", "com.android.providers.media.module"]  # the storage provider it queries; VOLUMES=1 reads MediaStore
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
-run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh", "SCOPED=1 tests/vm/files.sh"]
+run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh", "SCOPED=1 tests/vm/files.sh", "LIBCORE=1 tests/vm/files.sh"]
 
 [volumes]  # a vfat loop image mounted at /media/<user>/<label> and removed while hello-files runs (root: sudo -n, or sudo -A with SUDO_ASKPASS)
 apps = ["hello-files"]
@@ -547,3 +547,10 @@ run = ["tests/vm/spawn.sh"]
 # the arm64 translator against real arm64: tests/apps/hello-acediff prints one line per instruction family / signal behaviour; real-arm64.txt is the output of the same code on real hardware
 apps = ["hello-acediff"]
 run = ["tests/vm/acediff.sh"]
+
+[termux-sandbox]
+# real Termux (a user-supplied APK) in the per-app sandbox: its first launch bootstraps /data/data/com.termux/files (an own uid, a mount view of its own), then the
+# corpus probes: owner names and getprop, hardware punctuation, exec failures, the environment of children. Needs tools/host-setup/sandbox.sh once
+optional = true
+needs = ["com.termux"]
+run = ["export APKLAYER_SANDBOX=1; APKLAYER_JOPTS=-Dapklayer.runms=45000 bin/apklayer run com.termux >$APKLY_STATE/termux-boot.out 2>&1; bin/apklayer stop >/dev/null 2>&1; python3 -u tests/corpus/termux-sys.py && python3 -u tests/corpus/termux-exec.py && python3 -u tests/corpus/termux-env.py"]

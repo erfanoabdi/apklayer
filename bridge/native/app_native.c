@@ -3,8 +3,11 @@
  * libapklayer_native.so, where HotSpot finds them by name; here they are bound with RegisterNatives from the runtime shim). */
 #include <jni.h>
 #include <jvmti.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <string.h>
 
 extern void Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *, jclass, jstring, jstring);
@@ -52,6 +55,17 @@ static jobjectArray loaded_classes(JNIEnv *env, jclass cls)
     return out;
 }
 
+/* SharedMemory.map with PROT_EXEC or PROT_NONE: the JDK maps a FileChannel read-only or read-write only, so the mapping's protection is changed afterwards (0 or errno). */
+static jint buffer_mprotect(JNIEnv *env, jclass cls, jobject buffer, jint prot)
+{
+    (void)cls;
+    uintptr_t page = (uintptr_t)sysconf(_SC_PAGESIZE), addr = (uintptr_t)(*env)->GetDirectBufferAddress(env, buffer);
+    jlong length = (*env)->GetDirectBufferCapacity(env, buffer);
+    if (!addr || length < 0) return EINVAL;
+    uintptr_t start = addr & ~(page - 1);
+    return mprotect((void *)start, (size_t)(addr + (uintptr_t)length - start), prot) == 0 ? 0 : errno;
+}
+
 int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
 {
     JNINativeMethod methods[] = {
@@ -66,6 +80,7 @@ int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
         {"setProcessName", "(Ljava/lang/String;)V", (void *)Java_apklayer_host_NativeLoader_setProcessName},
         {"receiveTarget", "(I)Ljava/lang/String;", (void *)Java_apklayer_host_NativeLoader_receiveTarget},
         {"mapOwnData", "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V", (void *)map_own_data},
+        {"mprotect", "(Ljava/nio/ByteBuffer;I)I", (void *)buffer_mprotect},
         {"loadedClasses", "()[Ljava/lang/Class;", (void *)loaded_classes},
     };
     if ((*env)->RegisterNatives(env, loader, methods, sizeof methods / sizeof *methods) != 0) {

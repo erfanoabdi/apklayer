@@ -15,8 +15,9 @@ out = Path(sys.argv[1]) if len(sys.argv) > 1 else instance.OUT
 out.mkdir(parents=True, exist_ok=True)
 info = subprocess.check_output(['bin/apklayer', 'info', PKG], env=instance.ENV, text=True)
 data = Path(dict(line.split('\t', 1) for line in info.splitlines() if '\t' in line)['dataDir'])
-home = data / 'app/files/home'
-assert (data / 'app/files/usr/bin/bash').exists(), 'Termux is not bootstrapped in ' + str(data)
+home, P = instance.probe_dir(data)  # the folder shared with the shell, and its name there
+sandboxed = instance.ENV.get('APKLAYER_SANDBOX') == '1'  # the app's data is then its own uid's: the group boots Termux once, and the probes go through shared storage
+assert sandboxed or (data / 'app/files/usr/bin/bash').exists(), 'Termux is not bootstrapped in ' + str(data)
 probe, result, keyed = home / 'sysprobe.sh', home / 'sysprobe.txt', home / 'keys.txt'
 result.unlink(missing_ok=True)
 keyed.unlink(missing_ok=True)
@@ -25,12 +26,12 @@ echo "id: $(id)"; echo "uname: $(id -un)"; echo "gname: $(id -gn)"; echo "ls: $(
 echo "sysgetprop: $(/system/bin/getprop ro.build.version.release)"; echo "getprop: $(getprop ro.build.version.release 2>&1)"
 echo "dump: $(/system/bin/getprop | head -3)"; echo "toolbox: $(/system/bin/toolbox getprop ro.build.version.sdk 2>&1; echo rc=$?)"
 echo "syssh: $(/system/bin/sh -c 'echo ok')"; echo "sh: $(sh -c 'echo ok')"
-} > ~/sysprobe.txt 2>&1; echo SYS_DONE >> ~/sysprobe.txt
-''')
+} > %s/sysprobe.txt 2>&1; echo SYS_DONE >> %s/sysprobe.txt
+''' % (P, P))
 # evdev codes (US layout) of `echo a.b-c/d:e | tee ~/keys.txt`, one key each (':' is Shift+';', '|' Shift+'\')
-CODE = {'a': 30, 'b': 48, 'c': 46, 'd': 32, 'e': 18, 'h': 35, 'o': 24, 't': 20, 'k': 37, 's': 31, 'y': 21, 'x': 45,' ': 57, '.': 52, '-': 12, '/': 53,
+CODE = {'a': 30, 'b': 48, 'c': 46, 'd': 32, 'e': 18, 'h': 35, 'o': 24, 't': 20, 'k': 37, 's': 31, 'y': 21, 'x': 45, 'l': 38, 'p': 25, 'r': 19, ' ': 57, '.': 52, '-': 12, '/': 53,
         '~': 'combo:shift+41', ':': 'combo:shift+39', '|': 'combo:shift+43'}
-TYPED = 'echo a.b-c/d:e | tee ~/keys.txt'
+TYPED = 'echo a.b-c/d:e | tee %s/keys.txt' % P  # the sandbox's folder name has letters of its own
 steps = [CODE[c] if isinstance(CODE[c], str) else 'key:%d' % CODE[c] for c in TYPED] + ['key:28']
 env = dict(instance.ENV, APKLAYER_JOPTS='-Dapklayer.runms=90000')
 shell = instance.STATE / 'shell.log'
@@ -41,7 +42,7 @@ try:
     with open(out / 'termux-sys.log', 'w') as log:
         process = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=log, stderr=subprocess.STDOUT)
         subprocess.run(['python3', 'tests/corpus/first-frame.py', str(shell), '0', '60', '1', '2'], check=True)
-        instance.inject(PKG, 'focus', 'text:. ~/sysprobe.sh', 'key:28')
+        instance.inject(PKG, 'focus', 'text:. %s/sysprobe.sh' % P, 'key:28')
         text = instance.wait_file(result, 'SYS_DONE', 60)
         instance.inject(PKG, 'focus', *steps)
         try: typed = instance.wait_file(keyed, 'd:e', 30)
