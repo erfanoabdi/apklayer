@@ -46,6 +46,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
 
 ## Startup and memory
+- A meson-installed dev tree's CLI that runs without `APKLAYER_NATIVE` relinks the shared `~/.local/share/apklayer/runtime/<ver>` to itself (`setUpBundle` / `setup-runtime.sh` use `ln -sfn`); deleting that tree breaks the owner's runtime (this broke the tester PC on 2026-11-15). Make it refuse, copy, or give dev trees their own runtime dir.
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
 - Composer GL context ~80 MB: measure on a phone while an app draws.
