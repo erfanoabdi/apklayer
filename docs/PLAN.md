@@ -41,8 +41,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Permissions and Android rules
 - HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
-- Storage: `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by); scoped storage does not see symlinks an app makes itself or `/proc/self/cwd`-relative opens.
-- Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
+- Storage: `UNMOUNTABLE` is decided not to be sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by; a drive nobody can mount stays unlisted, as a drive the desktop does not mount). Scoped storage follows symlinks only in a process that made one itself (or its children) and cwd-relative paths only when the cwd is under the instance's Android/ directory; a link made by an earlier process and `openat(dirfd, ...)` into another package's directory are not seen (needs a fd-based check).
+- Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide). Not doable from apklayer's side: the stock libaudiopolicyservice has no per-uid/per-client activity query (the per-client configs live in AudioService's PlaybackActivityMonitor, which apklayer does not run); it needs a patch in frameworks/av's policy service (an `isActiveForUid`-like call) built in los24.
 
 ## Startup and memory
 - Measured on the X23: JVM max heap 1.39 GB (25% of RAM; the API says 256 MB), 700 MB live heap fine, instance PSS 605 MB with NewPipe idle, composer 24 MB, SurfaceFlinger 37 MB; first `apklayer setup` 63 s. After a runtime change `setup` says Installed but 9 apps stay marked stale (converter ABI) until launched or converted from the manager banner.
@@ -50,7 +50,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
 - Composer GL context ~80 MB: measure on a phone while an app draws.
-- A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap.
+- A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap: the HAL's Stream calls the one backend library the stack was started with (APKLAYER_HOST_LIBS); a swap means dlopen of the other `libapklayer-audio-*.so` from the HAL process and a per-stream function table (Stream.cpp, ~12 call sites), to be built and checked in los24.
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
