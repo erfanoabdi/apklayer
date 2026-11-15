@@ -30,7 +30,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Present fences signal at hand-over, not at the real present.
 - Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
 - Vulkan presentation untested on AMD.
-- Play feature list lacks sensors (no host provider yet).
 - GPU per instance: VA plugin device, LINEAR on Intel.
 - OTR2 on the PC runs ~30 fps at 2448x1374.
 - Windows: smaller second output, output hotplug, no Back button under server-side decorations, KDE.
@@ -109,6 +108,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Hardware
 - Vibrator effects. x86_64 `libapklayer_gnss`.
+- iio-sensor-proxy gives only derived values: no accelerometer or compass type. On Parallels a source-tree CLI needs `--no-daemon` plus `APKLAYER_NATIVE`/`APKLAYER_BT`/`APKLAYER_BINDER=userspace` (the old 0.3.4 daemon takes over).
 - USB: attach with no hub, interface filters, one chooser for several apps, sandbox node access.
 - Bluetooth: pairing paths, Sailfish agent, several clients per server socket, PendingIntent scans.
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
