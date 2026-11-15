@@ -108,8 +108,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish has no bash (busybox): phone tests must be POSIX sh or Python.
 - Share / Open with on the X23 is not driven through the UI by `phone-test.sh`.
 - Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
-- Manager UI test (`manager/tests/ui.sh`) on the UTM VM: step "the new instance is not listed" fails (`--wait-refresh 1` returns on a refresh before the instance exists; same race kind as the first-run one), so the Properties navbar step after it is only checked on its own; `ui-updater.sh` needs an installed package's CLI (`APKLAYER_CLI`), none is on the VM: never run there end to end.
+- Manager `ui.sh` on the UTM VM: re-run once with the screenshot mode's refresh-generation fix (CHANGELOG 2026-11-15, "ui-updater end to end"); the "new instance is not listed" race could not be reproduced by hand there, so it is unconfirmed.
 
-- Manager `ui.sh` on the UTM VM fails at "the new instance is not listed" (`--wait-refresh 1` returns before the instance exists).
-- `manager/tests/ui-updater.sh` needs an installed package's CLI (`APKLAYER_CLI`); never run end to end: run once on the tester PC or a VM with the deb.
 - `kde-window` cannot run on the UTM VM (no KWin; `tests/lib/kwin.py` journalctl cursor parse fails): run it on the KDE PC to cover the SSD first-window size.

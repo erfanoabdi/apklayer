@@ -3,12 +3,15 @@
 # URLs: releases.json, runtime bundles whose system-apps/ holds the test APK, an F-Droid index) in a private data home, in the instance
 # $APKLAYER_INSTANCE (never the default one). Each step ends on its own event (the work's closing refresh); the files then show the result.
 # Usage: manager/tests/ui-updater.sh <manager build dir> <app.apk> <package> <screenshot dir> [<store.apk> <its package>] (also run by ui.sh;
-# the F-Droid fixture offers store.apk, else app.apk again). Needs APKLAYER_CLI=<an installed package's apklayer>, else it skips.
+# the F-Droid fixture offers store.apk, else app.apk again). Needs APKLAYER_CLI=<an installed package's apklayer> and APKLAYER_TEST_BUNDLE=<a real runtime bundle>, else it skips.
 set -euo pipefail
 b=$1 apk=$2 pkg=$3 shots=$4 store=${5:-$2} storepkg=${6:-}
 [ -n "${APKLAYER_INSTANCE:-}" ] && [ "$APKLAYER_INSTANCE" != default ] || { echo "run in an instance of your own (APKLAYER_INSTANCE)" >&2; exit 2; }
 # `apklayer setup` (the manager's Set up, Update) refuses a source tree's CLI: this test needs an installed package's (APKLAYER_CLI)
 [ -n "${APKLAYER_CLI:-}" ] || { echo "SKIP manager updater UI: set APKLAYER_CLI to an installed package's apklayer"; exit 0; }
+# the bundles are made from a real one (tools/release/runtime-bundle.sh): the CLI sets up an unpacked runtime on first use, which a fake one cannot pass
+real=${APKLAYER_TEST_BUNDLE:-}
+[ -f "$real" ] || { echo "SKIP manager updater UI: set APKLAYER_TEST_BUNDLE to an apklayer-runtime-<cpu>-<version>.tar.zst (runtime-bundle.sh)"; exit 0; }
 cli=$APKLAYER_CLI
 m="$b/apklayer-manager"
 apk=$(realpath "$apk")
@@ -20,10 +23,11 @@ trap '"$cli" stop >/dev/null 2>&1 || true; rm -rf "$f"' EXIT
 export XDG_DATA_HOME=$f/data XDG_CACHE_HOME=$f/cache APKLAYER_RELEASES_URL=file://$f/releases.json APKLAYER_FDROID_INDEX=file://$f/fdroid.json
 rt=$XDG_DATA_HOME/apklayer/runtime info=$XDG_DATA_HOME/apklayer/apps/$pkg/info.properties
 version=$("$cli" --version | awk -F'\t' '$1 == "version" { print $2 }') cpu=$(dpkg --print-architecture)
-bundle() {  # runtime <version> -> rt-<version>.tar.zst
+bundle() {  # runtime <version> -> rt-<version>.tar.zst: the real bundle (the installed CLI sets it up for real: framework jars, JDK image) with the test APK as a system app
     local d=$f/src-$1/apklayer-runtime-$cpu-$1
-    mkdir -p "$d/system-apps" && cp "$apk" "$d/system-apps/" && echo "{\"version\": \"$1\"}" > "$d/runtime.json"
-    tar --zstd -cf "$f/rt-$1.tar.zst" -C "$f/src-$1" .
+    mkdir -p "$d" && tar --zstd -xf "$real" -C "$d" && mkdir -p "$d/system-apps" && cp "$apk" "$d/system-apps/"
+    sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$1\"/" "$d/runtime.json"
+    tar --zstd -cf "$f/rt-$1.tar.zst" -C "$f/src-$1" . && rm -rf "$f/src-$1"
 }
 releases() {  # releases.json naming runtime <version> with <sha256> (this apklayer's own version: no deb update)
     printf '{"latest": "%s", "releases": [{"version": "%s", "date": "2026-11-04", "notes_url": "https://example.org/notes", "converter_abi": 1, "data_format": 1,
@@ -31,7 +35,8 @@ releases() {  # releases.json naming runtime <version> with <sha256> (this apkla
         "$version" "$version" "$1" "$cpu" "$f" "$1" "$2" > "$f/releases.json"
 }
 sha() { sha256sum "$1" | cut -c1-64; }
-for v in r1 r2 r3; do bundle $v; done
+for v in r1 r2; do bundle $v; done
+cp "$f/rt-r2.tar.zst" "$f/rt-r3.tar.zst"  # refused for its SHA256 before any unpacking
 cp "$store" "$f/client.apk"
 printf '{"repo": {"address": "file://%s"}, "apps": [{"packageName": "org.fdroid.fdroid", "suggestedVersionCode": "1"}],
   "packages": {"org.fdroid.fdroid": [{"versionCode": 1, "apkName": "client.apk", "hash": "%s", "hashType": "sha256"}]}}\n' "$f" "$(sha "$f/client.apk")" > "$f/fdroid.json"

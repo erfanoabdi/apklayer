@@ -197,14 +197,14 @@ public:
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
         else if (s.detail && !s.detail->error.empty()) message(s.detail->error);
-        if (applied) applied();
     }
 
     std::map<std::string, std::string> appModes_;
-    std::function<void()> applied;  // the screenshot mode's event: a refresh reached the window
+    std::function<void()> applied;  // the screenshot mode's event: a refresh begun after the scripted input reached the window
+    int started = 0, floor = 0;  // refreshes begun; those begun before the input (floor) are not the input's result (a load still running at start came back first)
 
     void refresh() {
-        later([cli = cli_, current = current_] { return load(cli, current); }, [this](const Snapshot& s) { apply(s); });
+        later([cli = cli_, current = current_] { return load(cli, current); }, [this, n = ++started](const Snapshot& s) { apply(s); if (applied && n > floor) applied(); });
     }
     void refreshNow() { apply(load(cli_, current_)); }  // the screenshot mode: everything in place before the first frame
     void select(const std::string& pkg) {
@@ -582,6 +582,7 @@ int main(int argc, char** argv) {
     slint::Timer::single_shot(std::chrono::milliseconds(100), [&] {
         // the theme once the window has its own (the system's) scheme, which it would otherwise replace
         if (dark >= 0 && dark != ui->get_is_dark()) ui->invoke_toggle_theme();
+        m.floor = m.started;
         // scripted input: each label's control as a screen reader would press it (the last one: dialogs come after the pages)
         for (std::string label : input) {
             size_t eq = label.find('=');  // LABEL=TEXT types into a text field
