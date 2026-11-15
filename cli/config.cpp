@@ -40,6 +40,8 @@ const Setting kSettings[] = {
     {"drive-scan", "APKLAYER_DRIVE_SCAN", "choice", "on", "on,off", "", "Desktop drives",
      "on: the desktop's mounted drives (/media/<user>) are volumes of this instance and MediaProvider scans them; off: this instance ignores them", false},
     {"audio-output", "APKLAYER_AUDIO_TARGET", "text", "", "", "", "Audio output", "The PipeWire or PulseAudio sink apps play to (empty: the default one)", false},
+    {"keystore-pam-service", "APKLAYER_PAM_SERVICE", "text", "", "", "", "Lock screen PAM service",
+     "The PAM service (/etc/pam.d) that checks the password the lock screen asks for (empty: login); any PAM stack works: sssd, LDAP, FreeIPA", false},
     {"audio-input", "APKLAYER_AUDIO_TARGET_IN", "text", "", "", "", "Audio input", "The source apps record from (empty: the default one)", false},
 };
 

@@ -27,6 +27,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 | `webview-provider` | `APKLAYER_WEBVIEW_PROVIDER` | Chromium when installed | none, or the package of a provider | yes |
 | `camera-mount` | `APKLAYER_CAMERA_MOUNT` | none | `[NAME:]DEGREES` the PipeWire cameras are turned on the display (portrait monitor: 90); the provider option `mount=` wins | |
 | `audio-output` | `APKLAYER_AUDIO_TARGET` | the default sink | the PipeWire/PulseAudio sink apps play to | |
+| `keystore-pam-service` | `APKLAYER_PAM_SERVICE` | login | the PAM service (/etc/pam.d) that checks the lock screen's password; any stack works (sssd, LDAP, FreeIPA); `apklayer-pamcheck` | |
 | `audio-input` | `APKLAYER_AUDIO_TARGET_IN` | the default source | the source apps record from | |
 
 Not here on purpose: the window style, colour scheme and the other host settings are `apklayer settings` (live in a running instance, also in the

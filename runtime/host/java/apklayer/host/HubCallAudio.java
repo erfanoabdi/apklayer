@@ -24,7 +24,8 @@ final class HubCallAudio {
     private final HubPackages packages;
     private final HubDirectory directory;
     private final ExecutorService pushes = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "hub-call-audio"); t.setDaemon(true); return t; });  // in order, off the caller's lock
-    private int appliedMode = AudioSystem.MODE_NORMAL;
+    private final java.util.Set<Integer> playing = new java.util.HashSet<>();  // pids of the processes with a player or recorder started
+    private int appliedMode = AudioSystem.MODE_NORMAL, appliedOwner = -1;  // the owner's pid
     private AudioDeviceAttributes appliedDevice;
     private int strategy = -1;
 
@@ -70,26 +71,32 @@ final class HubCallAudio {
         return now;
     }
 
+    /** The caller's process has a player or recorder started, or none (PlayerBase/AudioRecord, ShadowHostPlayerBase): who owns the mode may change. */
+    synchronized void activity(HubDirectory.Peer peer, boolean on) {
+        if (on ? playing.add(peer.pid()) : playing.remove(peer.pid())) apply(null);
+    }
+
     synchronized void died(HubDirectory.Peer peer) {
+        playing.remove(peer.pid());
         if (modes.removeIf(request -> request.peer().pid() == peer.pid()) | routes.removeIf(request -> request.peer().pid() == peer.pid())) apply(null);
     }
 
     /**
      * AudioService.getAudioModeOwnerHandler over the requests. Its activity (SetModeDeathHandler.isActive): privileged requesters, MODE_RINGTONE and
-     * MODE_CALL_SCREENING always; MODE_IN_COMMUNICATION while the requester plays or records voice communication, which AudioService only checks 6 s
-     * after the request. shortcut: apklayer tracks no per-app playback, so the oldest MODE_IN_COMMUNICATION requester counts as the active one (the
-     * app in a call keeps the mode until it releases it or dies; a later one only takes over then); upgrade with the apps' player reports.
+     * MODE_CALL_SCREENING always; MODE_IN_COMMUNICATION while the requester plays or records, and the newest such requester wins. AudioService counts a
+     * new requester active for its first 6 s; here only the processes' reports count (activity).
+     * shortcut: native (AAudio/OpenSL) streams send no report, so with no reporting requester the oldest MODE_IN_COMMUNICATION one stays the owner
+     * (a lone native call app keeps its mode); upgrade with the policy's active tracks.
      */
     private Request owner() {
-        Request privileged = null, active = null, assistant = null;
-        boolean communication = false;
+        Request privileged = null, active = null, oldestCommunication = null, assistant = null;
         for (Request request : modes) {  // oldest first: a later one replaces an earlier one
             if (request.privileged() && request.mode() != AudioSystem.MODE_ASSISTANT_CONVERSATION) privileged = request;
-            else if (request.mode() == AudioSystem.MODE_IN_COMMUNICATION) { if (!communication) active = request; communication = true; }
+            else if (request.mode() == AudioSystem.MODE_IN_COMMUNICATION) { if (oldestCommunication == null) oldestCommunication = request; if (playing.contains(request.peer().pid())) active = request; }
             else if (request.mode() == AudioSystem.MODE_RINGTONE || request.mode() == AudioSystem.MODE_CALL_SCREENING) active = request;
             else if (request.mode() == AudioSystem.MODE_ASSISTANT_CONVERSATION) assistant = request;
         }
-        return privileged != null ? privileged : active != null ? active : assistant;
+        return privileged != null ? privileged : active != null ? active : oldestCommunication != null ? oldestCommunication : assistant;
     }
 
     /** Sets what the requests ask on the policy; a change goes to every app but {@code requester} (its own listeners run in its process). */
@@ -97,10 +104,12 @@ final class HubCallAudio {
         Request owner = owner();
         int mode = owner == null ? AudioSystem.MODE_NORMAL : owner.mode();
         boolean changed = false;
-        if (mode != appliedMode) {
-            int status = AudioSystem.setPhoneState(mode, owner == null ? android.os.Process.SYSTEM_UID : owner.peer().appUid());
-            System.out.println("[apklayer-hub] audio mode " + mode + (owner == null ? "" : " of " + owner.peer().name()) + (status == AudioSystem.SUCCESS ? "" : " refused by the policy: " + status));
-            if (status == AudioSystem.SUCCESS) { appliedMode = mode; changed = true; }
+        int uid = owner == null ? android.os.Process.SYSTEM_UID : owner.peer().appUid();
+        int pid = owner == null ? -1 : owner.peer().pid();
+        if (mode != appliedMode || pid != appliedOwner) {  // another owner of the same mode: the policy hears its uid
+            int status = AudioSystem.setPhoneState(mode, uid);
+            System.out.println("[apklayer-hub] audio mode " + mode + (owner == null ? "" : " of " + owner.peer().name() + " pid " + owner.peer().pid()) + (status == AudioSystem.SUCCESS ? "" : " refused by the policy: " + status));
+            if (status == AudioSystem.SUCCESS) { changed = mode != appliedMode; appliedMode = mode; appliedOwner = pid; }
         }
         AudioDeviceAttributes device = routes.isEmpty() ? null : routes.get(routes.size() - 1).device();
         if (!java.util.Objects.equals(device, appliedDevice) && strategy() >= 0) {

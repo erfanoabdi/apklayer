@@ -32,6 +32,8 @@ if gles_filter_glesv2.found()
     name_prefix: 'lib', c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)
 endif
 executable('aprop', ['aprop.c', 'properties.c'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
+# the lock screen's password check: any PAM stack (HubDesktopPassword)
+executable('apklayer-pamcheck', 'pamcheck.c', dependencies: dependency('dl'), c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
 install_data('getprop', install_dir: native_dir / 'bin', install_mode: 'rwxr-xr-x')  # Android's getprop for the apps that run it
 
 # bionic_translation's libraries: <pkg_lib>/bionic_translation/b (the CLI's APKLAYER_BT), and the native dir's names for them (its

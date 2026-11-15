@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.os.IBinder;
 import java.io.File;
 import java.io.FileWriter;
@@ -30,6 +31,23 @@ public final class Listener extends Service {
             @Override public void onReceive(Context context, Intent intent) { note("mute " + getSystemService(AudioManager.class).isMicrophoneMute()); }
         }, new IntentFilter(AudioManager.ACTION_MICROPHONE_MUTE_CHANGED), RECEIVER_EXPORTED);
         note("ready");
+        note("pid " + android.os.Process.myPid());
+    }
+
+    private AudioTrack track;
+    /** OwnerCheck's commands: comm (request MODE_IN_COMMUNICATION), play (a voice communication player starts), stop, normal (MODE_NORMAL). */
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        String command = intent == null ? null : intent.getStringExtra("command");
+        if (command == null) return START_NOT_STICKY;
+        AudioManager audio = getSystemService(AudioManager.class);
+        switch (command) {
+            case "comm" -> audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            case "play" -> { track = OwnerCheck.track(); track.play(); }
+            case "stop" -> { track.stop(); track.release(); track = null; }
+            case "normal" -> audio.setMode(AudioManager.MODE_NORMAL);
+        }
+        note("done " + command);
+        return START_NOT_STICKY;
     }
     @Override public IBinder onBind(Intent intent) { return null; }
 
@@ -38,6 +56,17 @@ public final class Listener extends Service {
         log(context).delete();
         context.startService(new Intent(context, Listener.class));
         await(context, "ready");
+    }
+
+    /** Asks the listener process to do {@code command} and waits until it has. */
+    static void command(Context context, String command) throws Exception {
+        context.startService(new Intent(context, Listener.class).putExtra("command", command));
+        await(context, "done " + command);
+    }
+
+    static int pid(Context context) throws Exception {
+        for (String line : Files.readAllLines(log(context).toPath())) if (line.startsWith("pid ")) return Integer.parseInt(line.substring(4));
+        throw new AssertionError("the listener wrote no pid");
     }
 
     /** Until the listener has heard {@code line}, at most 15 s. */
