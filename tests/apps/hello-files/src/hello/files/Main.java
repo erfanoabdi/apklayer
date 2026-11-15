@@ -26,6 +26,21 @@ public final class Main extends Activity {
                     System.out.println("[files] owndata java=" + viaJava + " os=" + os + " nio=" + java.nio.file.Files.isDirectory(java.nio.file.Path.of("/data/user/0/" + pkg + "/files")) + " other=" + other + " filesDir=" + getFilesDir());
                     System.out.println("[files] DONE"); finish(); return;
                 }
+                if (System.getProperty("hello.scoped") != null) {  // scoped storage: another package's Android/data and Android/obb are not reachable (the runner made hello.scoped.other's files), the app's own are
+                    getExternalFilesDir(null).mkdirs();
+                    java.io.File mine = new java.io.File(getExternalFilesDir(null), "mine");
+                    try (java.io.FileOutputStream out = new java.io.FileOutputStream(mine)) { out.write("mine".getBytes()); }
+                    String other = System.getProperty("hello.scoped.other");
+                    boolean own = new String(java.nio.file.Files.readAllBytes(mine.toPath())).equals("mine");
+                    boolean dataHidden = true, obbHidden = true;
+                    for (String root : new String[] {"/storage/emulated/0", "/sdcard"}) {
+                        dataHidden &= !new java.io.File(root + "/Android/data/" + other + "/files/secret").exists() && !new java.io.File(root + "/Android/data/" + other).exists();
+                        obbHidden &= !new java.io.File(root + "/Android/obb/" + other + "/secret").exists();
+                        try { new java.io.FileInputStream(root + "/Android/data/" + other + "/files/secret").close(); dataHidden = false; } catch (java.io.IOException denied) { /* expected */ }
+                    }
+                    System.out.println("[files] scoped own=" + own + " dataHidden=" + dataHidden + " obbHidden=" + obbHidden);
+                    System.out.println("[files] DONE"); finish(); return;
+                }
                 if (System.getProperty("hello.volumes") != null) { Volumes.print(this); finish(); return; }
                 if (System.getProperty("hello.hotplug") != null) { Hotplug.start(this); return; }
                 if (System.getProperty("hello.uri") != null) {

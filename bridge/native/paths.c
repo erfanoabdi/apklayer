@@ -494,6 +494,27 @@ static int other_package_path(const char *path)
     return 0;
 }
 
+/* apklayer patch (scoped storage, Android 11+): <external>/Android/data/<other> and Android/obb/<other> are the owning package's alone (the FUSE daemon answers
+ * ENOENT for the others), also for an app with MANAGE_EXTERNAL_STORAGE. The system's (no own package), MediaProvider and the storage provider see them (they
+ * serve the files). shortcut: only the spellings /storage/emulated/0, /sdcard and /data/media/0 and no "..", the paths an app writes; upgrade with a fd-based check. */
+static int other_scoped_path(const char *path)
+{
+    static const char *const roots[] = { "/storage/emulated/0/Android/", "/sdcard/Android/", "/data/media/0/Android/", NULL };
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!data_filter_active() || !strcmp(o->pkg, "com.android.providers.media.module") || !strcmp(o->pkg, "com.android.providers.media")
+        || !strcmp(o->pkg, "com.android.externalstorage")) return 0;
+    for (int i = 0; roots[i]; i++) {
+        size_t n = strlen(roots[i]);
+        if (strncmp(path, roots[i], n)) continue;
+        const char *rest = path + n;
+        if (!strncmp(rest, "data/", 5)) rest += 5; else if (!strncmp(rest, "obb/", 4)) rest += 4; else return 0;
+        size_t k = strlen(o->pkg);
+        if (!*rest) return 0;
+        return !(!strncmp(rest, o->pkg, k) && (!rest[k] || rest[k] == '/'));
+    }
+    return 0;
+}
+
 /* The desktop's terminals: /dev/pts/<n> are the user's shells and terminal tabs. An app on Android has none of them in its /dev/pts; ACE (PGR) probes
  * /dev/pts/0..7, which on Android tells a debugger or `adb shell` session from a plain start. ENOENT for an app process (own data set) under any path that
  * names one by number; /dev/pts itself and /dev/pts/ptmx stay (Termux opens a pty of its own: its new terminals are numbered ones too, so APKLAYER_PTS_VIEW=host
@@ -656,7 +677,7 @@ static bool mapped_path(char **path)
 
 bool apklayer_apply_path_overrides(char **path)
 {
-    if (apklayer_proc_hidden(*path) || other_package_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
+    if (apklayer_proc_hidden(*path) || other_package_path(*path) || other_scoped_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
         char *gone = strdup("/proc/.apklayer-hidden");
         if (gone) { *path = gone; return true; }
     }
