@@ -4,6 +4,9 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: Platform Class.getClassLoader/getResource (converter ABI 10)
+- An app's `String.class.getClassLoader()` / `Activity.class.getClassLoader()` is `java.lang.BootClassLoader` and `Object.class.getResource(..)` is null, as on Android (DenyInstrument -> `GuestLoaders`). identity-matrix and files pass on UTM. Not done: ArrayStoreException text, StackOverflow depth, main thread id 2 (JVM/ART limits, docs/ART-DEFERRED.md); direct-buffer `array()` write-back (docs/PATCHES.md says why).
+
 ## 2026-11-15: Startup and memory measured (UTM VM, uibench, 148 packages)
 - Hub start: the hub's own registration waited for a whole audio-permission feed (`HubAudioPermissions.registered`: build 150 ms + audioserver `onServiceStart` 350 ms, started by the first registering app and serialized by its lock). The hub's own pid plays no track: it skips the check. Quiet VM, 4 cold runs each: hub ready 2.35 s -> 2.03 s, first frame 3.17 s -> 3.0 s; warm unchanged (0.99 s).
 - Marks: the hub JVM now gets `-Dapklayer.perf*` from APKLAYER_JOPTS; `startup-timeline.py` reads its `hub:` lines; new marks "hub: system package installed", "hub: attached", "hub registered (REGISTER done)", "remote providers registered". Hub boot cold: JVM main -> Robolectric ready 0.8 s, REGISTER 0.43 s (was the feed), settings provider's providers 0.34 s.
