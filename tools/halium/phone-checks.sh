@@ -49,6 +49,21 @@ for g in "$@"; do
         n=$(sed -n 's/^\[hw\] sensors \([0-9]*\).*/\1/p' "$R/sensors.out" | head -1)
         loc=$(grep -a '^\[hw\] location' "$R/sensors.out" | head -1)
         [ "${n:-0}" -gt 0 ]; report $? sensors "$n sensors, $loc" ;;
+    fullscreen)  # UiBench hides the system bars (script step) and shows them again: the navigation bar inset 84 -> 0 -> 84, the window whole screen and back
+        run_app com.android.test.uibench fullscreen 24000 "-Dapklayer.debugkeys=true -Dapklayer.script=7000:navinset+8000:fullscreen:1+12000:navinset+13000:fullscreen:0+18000:navinset+19000:navinset"
+        ins=$(sed -n 's/^\[apklayer\] navinset \(-\?[0-9]*\)$/\1/p' "$R/fullscreen.out" | tr '\n' ' ')
+        grep -a -q 'fullscreen on' "$state/shell.log" && grep -a -q 'fullscreen off' "$state/shell.log" && case "$ins" in "84 0 84 84 ") true ;; *) false ;; esac
+        report $? fullscreen "navigation bar insets: $ins" ;;
+    navbar)  # ut: a touch on the shell's navigation bar (Back, 180,1536 on the X23) reaches the app and gives the haptic click at the vibrator
+        [ "$os" = ut ] || { echo "SKIP navbar: Lomiri touch only"; continue; }
+        h0=$(cat "$state/hub.log" 2>/dev/null | grep -a -c 'haptic feedback')
+        # timers, the app's start takes 20-30 s; the first Back hides the keyboard of the focused field (Android: the IME takes it), the second reaches the app
+        ( sleep 34; python3 "$R/ut-uitap.py" 180 1536; sleep 4; python3 "$R/ut-uitap.py" 180 1536 ) >/dev/null 2>&1 &
+        run_app hello.input navbar 50000 -Dhello.backlog=1
+        wait
+        b=$(grep -a -c 'back pressed' "$R/navbar.out"); h=$(cat "$state/hub.log" 2>/dev/null | grep -a -c 'haptic feedback')
+        bar=$(grep -a -o 'content [0-9x]* .*navigation bar [0-9]* logical' "$state/shell.log" | tail -1 | sed 's/ @.*navigation/ ... navigation/')
+        [ "$b" -ge 1 ] && [ "$h" -gt "$h0" ]; report $? navbar "backs $b, haptic lines $h0 -> $h, $bar" ;;
     race)
         APKLAYER=$A python3 "$R/spare-race.py" hello.input 6 > "$R/race.out" 2>&1; r=$?; report $r race "$(tail -1 "$R/race.out" | cut -c1-200)" ;;
     rotate)

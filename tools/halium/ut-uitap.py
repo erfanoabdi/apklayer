@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ut-uitap.py (X Y | X1,Y1,X2,Y2)...: taps and swipes at screen pixels (720x1560) through a temporary uinput touchscreen (root)."""
+"""ut-uitap.py (X Y | X1,Y1,X2,Y2 | wait:MS)...: taps and swipes at screen pixels (720x1560) through a temporary uinput touchscreen (root)."""
 import fcntl, os, struct, sys, time
 W, H = 720, 1560
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045565, 0x40045567, 0x4004556e
@@ -28,6 +28,7 @@ def up():
 args, n = sys.argv[1:], 0
 while args:
     n += 1
+    if args[0].startswith('wait:'): time.sleep(int(args.pop(0)[5:]) / 1000); continue
     if ',' in args[0]:  # a swipe X1,Y1,X2,Y2: 10 steps in 0.4 s
         x1, y1, x2, y2 = [int(v) for v in args.pop(0).split(',')]
         touch(x1, y1, n, True)
