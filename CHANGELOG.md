@@ -4,6 +4,11 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: test tooling: ssh retry, incremental push, fractional-scale tolerance
+- `tests/lib/vm.py`: `ssh` repeats a call (up to 5 times) while ssh itself exits 255 (password hosts refuse about every other connection); `copy` and the push repeat the whole tar pipeline the same way (`tar_to`). A call with a stream on stdin is not repeated.
+- `vm.push` sends only files that differ from the manifest of the last push (`<ROOT>/.pushed`: mtime ns, size, name; kept only for the same source checkout, else a full push as before). tar unlinks before it writes, so a mapped library keeps its old inode. Deleted files stay on the VM as before.
+- `kde-window.py`: sizes compare within 1 logical pixel (KWin's fractional geometry at 150%). `fullscreen.py` needed no change: it compares the shell's integer configure and picture sizes (already +-1). 
+- Checked: UTM VM, tree `~/apklayer-testtools` (deleted): `tests/run fullscreen` PASS, a second push 2 s, one new file pushed alone. Not run: `kde-window` (no KWin on the UTM VM; the tester PC has no KDE session in a plain ssh, not touched).
 ## 2026-11-15: a dev tree's CLI no longer relinks an installed runtime
 - A meson-installed dev tree's CLI without `APKLAYER_NATIVE` ran `setup-runtime.sh` on the shared `~/.local/share/apklayer/runtime/<ver>` and relinked it into the dev tree; deleting the tree left the tester PC's runtime dangling. `tools/release/setup-runtime.sh` now refuses (exit 1, says so and names `APKLAYER_NATIVE`) when the runtime's `native-runtime.jar` link resolves into a different package half; a dangling owner is repaired as before, an update of the same package (same half path) is unchanged. Group `setup-runtime-foreign` (tests/vm/setup-runtime-foreign.sh). docs/RELEASES.md.
 - Checked: the group's script on the UTM VM (PASS). Not run: a full CLI run from a dev tree on a real installed runtime.

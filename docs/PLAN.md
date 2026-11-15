@@ -88,9 +88,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 ## Tests and tooling
 - Tester PC: its `~/apklayer-build/prebuilts` is stale (~25 libraries behind); its address is in no config here, so it needs the owner's host (rsync from the Mac). The rebuilt x86_64 hidlbase/hidltool (`manifest`) are untested on a device.
 - Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
-- Password-ssh hosts (UTM VM, tester PC) intermittently refuse auth ("Permission denied" about every other connection): `tests/run` needs a retry in `vm.ssh`/`vm.copy`.
-- `fullscreen.py` and `kde-window.py` compare integer sizes against KWin's fractional geometry (fail at 150% scale on the tester PC, also on main).
-- `tests/run` pushes the whole tree each time (4-8 min over the tester PC's link): push changed files only.
+- `kde-window.py` fractional-scale tolerance (1 px) is unverified at 150% on a real KWin: run it once on the tester PC.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person

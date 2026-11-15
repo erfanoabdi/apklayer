@@ -36,8 +36,13 @@ def window():
     return kwin.info(PKG, instance.OUT)
 
 
+def close(a, b):
+    """KWin's geometry is fractional at a fractional scale (150%: 1280.67 for the shell's 1281): within one logical pixel."""
+    return all(abs(x - y) <= 1 for x, y in zip(a, b))
+
+
 def same_size(info, c):
-    return info['client'][2:] == [c[0], c[1]]
+    return close(info['client'][2:], c[:2])
 
 
 def at_start():
@@ -62,7 +67,7 @@ def check_restored():
 def check_fullscreen():
     info, c = window(), configure()
     out = info['outputGeometry']
-    case('fullscreen: the whole output, no bar', info['fullScreen'] and [c[0], c[1]] == out[2:] and c[3] == 0, 'KWin client %s output %s, shell %s' % (info['client'], out, c))
+    case('fullscreen: the whole output, no bar', info['fullScreen'] and close(c[:2], out[2:]) and c[3] == 0, 'KWin client %s output %s, shell %s' % (info['client'], out, c))
 
 
 def check_unfullscreen():
@@ -84,7 +89,7 @@ def check_untiled():
 
 def check_resized():
     info, c = window(), configure()
-    case('frame set by a script: the app takes the new size', same_size(info, c) and c[:2] != steps['float'][:2] and info['client'][2] == 700, 'KWin client %s frame %s, shell %s (asked: frame 700x560)' % (info['client'], info['frame'], c))
+    case('frame set by a script: the app takes the new size', same_size(info, c) and c[:2] != steps['float'][:2] and abs(info['client'][2] - 700) <= 1, 'KWin client %s frame %s, shell %s (asked: frame 700x560)' % (info['client'], info['frame'], c))
     steps['resized'] = c
 
 
