@@ -36,6 +36,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
+- Non-Latin input (group `input-lang` passes): map the xkb layout to the app's `LocaleList` and IME subtypes; RTL cursor, selection and bidi in an EditText; layout-switch hotkeys (Alt+Shift, Super+Space); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
 - text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 - Lomiri greeter: only the first uinput tap registers.
