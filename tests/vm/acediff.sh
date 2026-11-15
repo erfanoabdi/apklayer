@@ -7,8 +7,8 @@ trap 'rm -f "$out"; bin/apklayer stop >/dev/null 2>&1 || true' EXIT
 APKLAYER_JOPTS=-Dapklayer.runms=60000 bin/apklayer run hello.acediff > "$out" 2>&1 || true
 grep -q '\[acediff\] DONE' "$out"
 sed -n 's/^.*\[acediff\] //p' "$out" | grep -v -e '^info' -e '^DONE' > "$out.x86"
-# the differences still known, not fixed (known-diffs.txt: SHA512/SM4 are not in the emulated HWCAP; default NaN sign and FPCR.DN, fused FRECPS/FRSQRTS,
-# NaN operands of fmax/fmin/fmls, kill(getpid()) timing (the signal is taken by another thread: "pending has usr1"), prctl, ID and PMU registers): a new difference fails the group
+# the differences still known, not fixed (known-diffs.txt: SHA512/SM4 are not in the emulated HWCAP; the negative default NaN of an invalid operation and FPCR.DN in
+# translated (not interpreted) code, kill(getpid()) timing (the signal is taken by another thread: "pending has usr1"), prctl, ID and PMU registers): a new difference fails the group
 f=tests/apps/hello-acediff/known-diffs.txt
 grep -v -f "$f" tests/apps/hello-acediff/real-arm64.txt > "$out.real"
 grep -v -f "$f" "$out.x86" > "$out.x86f"

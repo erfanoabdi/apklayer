@@ -2,6 +2,7 @@
  * detaching and exiting guest threads from other threads, in racing order, with signals/getattr/setname on threads that are exiting, TLS destructors that
  * allocate and free, and fork() in the middle. The result lines depend on nothing but the code (no timing): the translator must print the same as real arm64. */
 #define _GNU_SOURCE
+#include <android/api-level.h>
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
@@ -165,6 +166,29 @@ static void phase_self(int n)
         check(pthread_join(s.h, NULL) == 0, "join of pthread_self()");
     }
     say("self %d\n", n);
+}
+
+/* operations on a thread that was joined: bionic answers ESRCH for an app that targets an SDK below 26 (from 26 on it aborts: "invalid pthread_t"); the
+ * translator has no target SDK of its own to look at and always answers ESRCH, so the test sets 25 */
+extern void android_set_application_target_sdk_version(int) __attribute__((weak));  /* private: not in the NDK stubs, a weak reference so the library still loads without it */
+static void phase_stale(int n)
+{
+    int cnt = n < 200 ? n : 200, ok = 0;
+    int sdk = android_get_application_target_sdk_version();
+    if (android_set_application_target_sdk_version) android_set_application_target_sdk_version(25);
+    for (int i = 0; i < cnt; i++) {
+        pthread_t t;
+        void *r = 0;
+        struct sched_param sp = {0};
+        int pol = 0;
+        pthread_create(&t, NULL, quick, (void *)(uintptr_t)i);
+        check(pthread_join(t, &r) == 0, "join before stale");
+        int j = pthread_join(t, &r), d = pthread_detach(t), k = pthread_kill(t, 0), g = pthread_getschedparam(t, &pol, &sp), s = pthread_setschedparam(t, SCHED_OTHER, &sp);
+        check(j == ESRCH && d == ESRCH && k == ESRCH && g == ESRCH && s == ESRCH, "ESRCH of a joined thread");
+        ok += j == ESRCH && d == ESRCH && k == ESRCH && g == ESRCH && s == ESRCH;
+    }
+    if (android_set_application_target_sdk_version) android_set_application_target_sdk_version(sdk);
+    say("stale %d\n", ok);
 }
 
 /* a process-directed signal while the caller blocks it: pending for the process, or taken by another thread (which one) */
@@ -359,6 +383,7 @@ const char *thread_stress(int n)
     phase_detach(n);
     phase_exit(n);
     phase_self(n);
+    phase_stale(n);
     phase_observe(n);
     phase_tls(n);
     phase_fork(n / 100 > 0 ? n / 100 : 1);

@@ -1,0 +1,1041 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: Arm NaN rules and FPCR.DN in the interpreter, FMAX/FMIN NaN results, FMLS/FRECPS/FRSQRTS to the interpreter
+
+The differences hello-acediff found against real arm64 in the NaN a floating-point instruction returns ("nan rules" lines, acediff_nan.c: 200 NaN-rich operand sets per
+instruction, scalar and vector, single and double; real arm64's lines in real-arm64.txt).
+New interpreter/arm64/arm_nan.h (ARM ARM FPProcessNaNs/FPProcessNaNs3, FPMax/FPMaxNum, FPMulAdd, FPRecipStepFused/FPRSqrtStepFused "fully fused", FPDefaultNaN; checked
+against real arm64 over every pair/triple of 32 float values, DN on and off, 190000 results): the first signalling NaN, else the first quiet NaN, quieted; the POSITIVE
+default NaN for an invalid operation (x86: 0xFFC00000); the default NaN for any NaN with FPCR.DN; FMLS/FMSUB/FNMADD/FNMSUB negate the NaN operand first; FMAXNM/FMINNM return
+the number for a quiet NaN only. The interpreter uses it for FADD/FSUB/FMUL/FDIV/FSQRT/FABD/FMULX/FMLA/FMLS/FMADD family/FNMUL/FMAX*/FMIN*/FRECPS/FRSQRTS (scalar, vector,
+by element, pairwise, FP16 through float); FMLA/FMLS by element (scalar form) are now fused (the product was rounded before the add).
+Translators: EmitArmFpMinMax (lite and heavy, shared by every FMAX/FMIN/FMAXNM/FMINNM form) returns the Arm NaN for a NaN lane (it ORed the NaN bits of both operands);
+FMLS (vector), FRECPS and FRSQRTS (vector and scalar) bail to the interpreter (a NaN operand's sign, and FRSQRTS rounds (3 + a*b)/2 once, which the translated sequence did not).
+Not done (shortcut, acediff known-diffs "inv ", "dn ", "nn ", default-NaN, vsqrtq_f): translated FADD/FSUB/FMUL/FDIV/FSQRT/FMADD/FMLA of an invalid operation still returns x86's
+NEGATIVE default NaN; translated code ignores FPCR.DN (only the interpreter honours it, and the translators translate almost everything); two NaN operands of different kinds
+(quiet first, signalling second) give x86's first operand; translated FMSUB/FNMADD/FNMSUB/FMLS-by-element keep a NaN operand's sign. Upgrade: a fix-up after each such
+operation (about 5 instructions) or a bail while FPCR.DN is set. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/interpreter/arm64/arm_nan.h b/cpu_emulation/interpreter/arm64/arm_nan.h
+new file mode 100644
+--- /dev/null
++++ b/cpu_emulation/interpreter/arm64/arm_nan.h
+@@ -0,0 +1,154 @@
++// apklayer patch (0041): NaN results of Arm floating-point operations (ARM ARM FPProcessNaNs / FPProcessNaNs3, FPMax / FPMaxNum, FPDefaultNaN).
++// x86 returns the first NaN operand (any order, quieted) and a NEGATIVE default NaN (0xFFC00000) for an invalid operation; Arm picks the first
++// signalling NaN, else the first quiet NaN, in a fixed operand order, produces the POSITIVE default NaN (0x7FC00000) and returns the default NaN for
++// any NaN when FPCR.DN is set. These helpers recompute a NaN result from the operands; a non-NaN result is returned as it is.
++#pragma once
++
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++
++namespace berberis {
++
++template <typename T>
++struct ArmFp;
++template <>
++struct ArmFp<float> {
++  using U = uint32_t;
++  static constexpr U kQuiet = 0x00400000u;
++  static constexpr U kDefault = 0x7fc00000u;
++};
++template <>
++struct ArmFp<double> {
++  using U = uint64_t;
++  static constexpr U kQuiet = 0x0008000000000000ull;
++  static constexpr U kDefault = 0x7ff8000000000000ull;
++};
++
++template <typename T>
++inline typename ArmFp<T>::U ArmBits(T v) {
++  typename ArmFp<T>::U u;
++  memcpy(&u, &v, sizeof(u));
++  return u;
++}
++template <typename T>
++inline T ArmFromBits(typename ArmFp<T>::U u) {
++  T v;
++  memcpy(&v, &u, sizeof(v));
++  return v;
++}
++template <typename T>
++inline bool ArmIsNaN(T v) {
++  return v != v;
++}
++template <typename T>
++inline bool ArmIsSNaN(T v) {
++  return v != v && (ArmBits(v) & ArmFp<T>::kQuiet) == 0;
++}
++template <typename T>
++inline T ArmDefaultNaN() {
++  return ArmFromBits<T>(ArmFp<T>::kDefault);
++}
++// The NaN an operation returns for the operand `v` it propagates.
++template <typename T>
++inline T ArmPropagate(bool dn, T v) {
++  return dn ? ArmDefaultNaN<T>() : ArmFromBits<T>(ArmBits(v) | ArmFp<T>::kQuiet);
++}
++
++// FPProcessNaNs(op1, op2): true and *out set when an operand is a NaN.
++template <typename T>
++inline bool ArmProcessNaNs(bool dn, T a, T b, T* out) {
++  if (ArmIsSNaN(a)) { *out = ArmPropagate(dn, a); return true; }
++  if (ArmIsSNaN(b)) { *out = ArmPropagate(dn, b); return true; }
++  if (ArmIsNaN(a)) { *out = ArmPropagate(dn, a); return true; }
++  if (ArmIsNaN(b)) { *out = ArmPropagate(dn, b); return true; }
++  return false;
++}
++template <typename T>
++inline bool ArmProcessNaNs3(bool dn, T a, T b, T c, T* out) {
++  if (ArmIsSNaN(a)) { *out = ArmPropagate(dn, a); return true; }
++  if (ArmIsSNaN(b)) { *out = ArmPropagate(dn, b); return true; }
++  if (ArmIsSNaN(c)) { *out = ArmPropagate(dn, c); return true; }
++  if (ArmIsNaN(a)) { *out = ArmPropagate(dn, a); return true; }
++  if (ArmIsNaN(b)) { *out = ArmPropagate(dn, b); return true; }
++  if (ArmIsNaN(c)) { *out = ArmPropagate(dn, c); return true; }
++  return false;
++}
++
++// A one- or two-operand arithmetic result r (FADD, FSUB, FMUL, FDIV, FSQRT, FMULX...) of the operands: the Arm NaN when r is one.
++template <typename T>
++inline T ArmFixNaN(bool dn, T r, T a, T b) {
++  if (r == r) return r;
++  T out;
++  return ArmProcessNaNs(dn, a, b, &out) ? out : ArmDefaultNaN<T>();
++}
++template <typename T>
++inline T ArmFixNaN(bool dn, T r, T a) {
++  return ArmFixNaN(dn, r, a, a);
++}
++
++// FPMulAdd(addend, op1, op2) = addend + op1 * op2, fused. NaN order: addend, op1, op2; a quiet NaN addend with 0 * infinity is the default NaN.
++template <typename T>
++inline T ArmFma(bool dn, T op1, T op2, T addend) {
++  T r = std::fma(op1, op2, addend);
++  if (r == r) return r;
++  if (ArmIsNaN(addend) && !ArmIsSNaN(addend) && ((op1 == T(0) && __builtin_isinf(op2)) || (__builtin_isinf(op1) && op2 == T(0)))) {
++    return ArmDefaultNaN<T>();
++  }
++  T out;
++  return ArmProcessNaNs3(dn, addend, op1, op2, &out) ? out : ArmDefaultNaN<T>();
++}
++
++// FPMax / FPMin: a NaN operand is processed; +0 beats -0 for max, -0 beats +0 for min.
++template <typename T>
++inline T ArmMax(bool dn, T a, T b) {
++  T out;
++  if (ArmProcessNaNs(dn, a, b, &out)) return out;
++  if (a == T(0) && b == T(0)) return __builtin_signbit(a) ? b : a;
++  return a > b ? a : b;
++}
++template <typename T>
++inline T ArmMin(bool dn, T a, T b) {
++  T out;
++  if (ArmProcessNaNs(dn, a, b, &out)) return out;
++  if (a == T(0) && b == T(0)) return __builtin_signbit(a) ? a : b;
++  return a < b ? a : b;
++}
++// FPMaxNum / FPMinNum: a quiet NaN against anything but a quiet NaN is replaced by -infinity (the other operand wins); signalling NaNs and
++// two quiet NaNs go through FPMax / FPMin.
++template <typename T>
++inline T ArmMaxNum(bool dn, T a, T b) {
++  const bool qa = ArmIsNaN(a) && !ArmIsSNaN(a), qb = ArmIsNaN(b) && !ArmIsSNaN(b);
++  if (qa && !qb) a = -T(__builtin_inf());
++  else if (!qa && qb) b = -T(__builtin_inf());
++  return ArmMax(dn, a, b);
++}
++template <typename T>
++inline T ArmMinNum(bool dn, T a, T b) {
++  const bool qa = ArmIsNaN(a) && !ArmIsSNaN(a), qb = ArmIsNaN(b) && !ArmIsSNaN(b);
++  if (qa && !qb) a = T(__builtin_inf());
++  else if (!qa && qb) b = T(__builtin_inf());
++  return ArmMin(dn, a, b);
++}
++
++// FRECPS / FRSQRTS step (FPRecipStepFused / FPRSqrtStepFused): op1 is negated first (also a NaN's sign); 0 * infinity gives 2.0 / 1.5.
++template <typename T>
++inline T ArmRecipStep(bool dn, T a, T b) {
++  a = -a;
++  T out;
++  if (ArmProcessNaNs(dn, a, b, &out)) return out;
++  if ((a == T(0) && __builtin_isinf(b)) || (__builtin_isinf(a) && b == T(0))) return T(2);
++  return std::fma(a, b, T(2));
++}
++template <typename T>
++inline T ArmRsqrtStep(bool dn, T a, T b) {
++  a = -a;
++  T out;
++  if (ArmProcessNaNs(dn, a, b, &out)) return out;
++  if ((a == T(0) && __builtin_isinf(b)) || (__builtin_isinf(a) && b == T(0))) return T(1.5);
++  // (3 + a * b) / 2 rounded once ("fully fused"): halving the larger operand first is exact and cannot overflow where the product would.
++  if (std::fabs(a) >= std::fabs(b)) a *= T(0.5); else b *= T(0.5);
++  return std::fma(a, b, T(1.5));
++}
++
++}  // namespace berberis
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -28,6 +28,7 @@
+ 
+ #include "../faulty_memory_accesses.h"
+ #include "fp_estimate.h"  // apklayer patch (0035)
++#include "arm_nan.h"  // apklayer patch (0041)
+ 
+ #include "berberis/base/bit_util.h"
+ #include "berberis/base/checks.h"
+@@ -3619,16 +3620,16 @@
+       float result;
+       if (!o1 && !o0) {
+         // FMADD: Rd = Ra + (Rn * Rm)
+-        result = fmaf(fn, fm, fa);
++        result = ArmFma(Dn(), fn, fm, fa);
+       } else if (!o1 && o0) {
+         // FMSUB: Rd = Ra - (Rn * Rm) = -(Rn*Rm) + Ra = fma(-Rn, Rm, Ra)
+-        result = fmaf(-fn, fm, fa);
++        result = ArmFma(Dn(), -fn, fm, fa);
+       } else if (o1 && !o0) {
+         // FNMADD: Rd = -(Ra + Rn * Rm) = fma(-Rn, Rm, -Ra) = -fma(Rn, Rm, Ra)
+-        result = -fmaf(fn, fm, fa);
++        result = ArmFma(Dn(), -fn, fm, -fa);
+       } else {
+         // FNMSUB: Rd = Rn * Rm - Ra = fma(Rn, Rm, -Ra)
+-        result = fmaf(fn, fm, -fa);
++        result = ArmFma(Dn(), fn, fm, -fa);
+       }
+       state_->cpu.v[rd] = 0;
+       memcpy(&state_->cpu.v[rd], &result, 4);
+@@ -3640,13 +3641,13 @@
+       memcpy(&fa, &state_->cpu.v[ra], 8);
+       double result;
+       if (!o1 && !o0) {
+-        result = fma(fn, fm, fa);
++        result = ArmFma(Dn(), fn, fm, fa);
+       } else if (!o1 && o0) {
+-        result = fma(-fn, fm, fa);
++        result = ArmFma(Dn(), -fn, fm, fa);
+       } else if (o1 && !o0) {
+-        result = -fma(fn, fm, fa);
++        result = ArmFma(Dn(), -fn, fm, -fa);
+       } else {
+-        result = fma(fn, fm, -fa);
++        result = ArmFma(Dn(), fn, fm, -fa);
+       }
+       state_->cpu.v[rd] = 0;
+       memcpy(&state_->cpu.v[rd], &result, 8);
+@@ -3660,20 +3661,20 @@
+       memcpy(&bn, &state_->cpu.v[rn], 2);
+       memcpy(&bm, &state_->cpu.v[rm], 2);
+       memcpy(&ba, &state_->cpu.v[ra], 2);
+-      double fn = static_cast<double>(FpHalfToSingle(bn));
+-      double fm = static_cast<double>(FpHalfToSingle(bm));
+-      double fa = static_cast<double>(FpHalfToSingle(ba));
+-      double result;
++      float fn = FpHalfToSingle(bn);
++      float fm = FpHalfToSingle(bm);
++      float fa = FpHalfToSingle(ba);
++      float result;
+       if (!o1 && !o0) {
+-        result = fma(fn, fm, fa);
++        result = FmaHalf(fn, fm, fa);
+       } else if (!o1 && o0) {
+-        result = fma(-fn, fm, fa);
++        result = FmaHalf(-fn, fm, fa);
+       } else if (o1 && !o0) {
+-        result = -fma(fn, fm, fa);
++        result = FmaHalf(-fn, fm, -fa);
+       } else {
+-        result = fma(fn, fm, -fa);
++        result = FmaHalf(fn, fm, -fa);
+       }
+-      uint16_t result_bits = FpSingleToHalf(static_cast<float>(result));
++      uint16_t result_bits = FpSingleToHalf(result);
+       state_->cpu.v[rd] = 0;
+       memcpy(&state_->cpu.v[rd], &result_bits, 2);
+     } else {
+@@ -5135,7 +5136,7 @@
+       case Decoder::AdvSimdThreeSameOpcode::kFminnmpV: {
+         auto reduce_f = [&](float a, float b) -> float {
+           switch (args.opcode) {
+-            case Decoder::AdvSimdThreeSameOpcode::kFaddpV:   return a + b;
++            case Decoder::AdvSimdThreeSameOpcode::kFaddpV:   return Fx(a + b, a, b);
+             case Decoder::AdvSimdThreeSameOpcode::kFmaxpV:   return FmaxScalar<float>(a, b);
+             case Decoder::AdvSimdThreeSameOpcode::kFminpV:   return FminScalar<float>(a, b);
+             case Decoder::AdvSimdThreeSameOpcode::kFmaxnmpV: return FmaxnmScalar<float>(a, b);
+@@ -5144,7 +5145,7 @@
+         };
+         auto reduce_d = [&](double a, double b) -> double {
+           switch (args.opcode) {
+-            case Decoder::AdvSimdThreeSameOpcode::kFaddpV:   return a + b;
++            case Decoder::AdvSimdThreeSameOpcode::kFaddpV:   return Fx(a + b, a, b);
+             case Decoder::AdvSimdThreeSameOpcode::kFmaxpV:   return FmaxScalar<double>(a, b);
+             case Decoder::AdvSimdThreeSameOpcode::kFminpV:   return FminScalar<double>(a, b);
+             case Decoder::AdvSimdThreeSameOpcode::kFmaxnmpV: return FmaxnmScalar<double>(a, b);
+@@ -5237,28 +5238,24 @@
+             uint16_t rh;
+             switch (args.opcode) {
+               case Decoder::AdvSimdThreeSameOpcode::kFaddV:
+-                rh = FpSingleToHalf(a + b); break;
++                rh = FpSingleToHalf(Fx(a + b, a, b)); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFsubV:
+-                rh = FpSingleToHalf(a - b); break;
++                rh = FpSingleToHalf(Fx(a - b, a, b)); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFmulV:
+-                rh = FpSingleToHalf(a * b); break;
++                rh = FpSingleToHalf(Fx(a * b, a, b)); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFmulxV:
+                 rh = FpSingleToHalf(FmulxScalar<float>(a, b)); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFdivV:
+-                rh = FpSingleToHalf(a / b); break;
++                rh = FpSingleToHalf(Fx(a / b, a, b)); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFmlaV: {
+                 // FMLA: Vd[i] = Vd[i] + Vn[i] * Vm[i].  Use binary64 fma() so
+                 // the multiply-add has no intermediate rounding before the
+                 // single narrow back to half.
+-                double r64 = std::fma(static_cast<double>(a), static_cast<double>(b),
+-                                      static_cast<double>(d));
+-                rh = FpSingleToHalf(static_cast<float>(r64));
++                rh = FpSingleToHalf(FmaHalf(a, b, d));
+                 break;
+               }
+               case Decoder::AdvSimdThreeSameOpcode::kFmlsV: {
+-                double r64 = std::fma(static_cast<double>(-a), static_cast<double>(b),
+-                                      static_cast<double>(d));
+-                rh = FpSingleToHalf(static_cast<float>(r64));
++                rh = FpSingleToHalf(FmaHalf(-a, b, d));
+                 break;
+               }
+               case Decoder::AdvSimdThreeSameOpcode::kFmaxV:
+@@ -5285,7 +5282,7 @@
+                 rh = (std::fabs(a) > std::fabs(b)) ? uint16_t{0xFFFF} : uint16_t{0};
+                 break;
+               case Decoder::AdvSimdThreeSameOpcode::kFabdV:
+-                rh = FpSingleToHalf(std::fabs(a - b)); break;
++                rh = FpSingleToHalf(std::fabs(Fx(a - b, a, b))); break;
+               // FP16 vector FRECPS / FRSQRTS via FP32.
+               case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
+                 rh = FpSingleToHalf(FrecpsScalar<float>(a, b)); break;
+@@ -5307,16 +5304,16 @@
+             memcpy(&b, reinterpret_cast<const uint8_t*>(&src_m) + i * 8, 8);
+             memcpy(&d, reinterpret_cast<const uint8_t*>(&dst) + i * 8, 8);
+             switch (args.opcode) {
+-              case Decoder::AdvSimdThreeSameOpcode::kFaddV: r = a + b; break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFsubV: r = a - b; break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFmulV: r = a * b; break;
++              case Decoder::AdvSimdThreeSameOpcode::kFaddV: r = Fx(a + b, a, b); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFsubV: r = Fx(a - b, a, b); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFmulV: r = Fx(a * b, a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFmulxV:
+                 r = FmulxScalar<double>(a, b); break;
+               // FMLA/FMLS are FUSED multiply-add (single rounding) per the ARM
+               // ARM; `d + a*b` would round twice. Use std::fma so coordinate
+               // transforms (matrix*vector via FMLA) match hardware exactly.
+-              case Decoder::AdvSimdThreeSameOpcode::kFmlaV: r = std::fma(a, b, d); break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFmlsV: r = std::fma(-a, b, d); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFmlaV: r = ArmFma(Dn(), a, b, d); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFmlsV: r = ArmFma(Dn(), -a, b, d); break;
+               // FMAX/FMIN/FMAXNM/FMINNM: see FmaxScalar/FminScalar helpers for
+               // NaN propagation and +0/-0 sign disambiguation.
+               case Decoder::AdvSimdThreeSameOpcode::kFmaxV:
+@@ -5327,7 +5324,7 @@
+                 r = FmaxnmScalar<double>(a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFminnmV:
+                 r = FminnmScalar<double>(a, b); break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFdivV: r = a / b; break;
++              case Decoder::AdvSimdThreeSameOpcode::kFdivV: r = Fx(a / b, a, b); break;
+               // FP compare: result is all-ones (bit pattern) on TRUE, zero on FALSE.
+               case Decoder::AdvSimdThreeSameOpcode::kFcmeqV: {
+                 uint64_t bits = (a == b) ? ~uint64_t{0} : 0;
+@@ -5350,7 +5347,7 @@
+                 memcpy(&r, &bits, 8); break;
+               }
+               case Decoder::AdvSimdThreeSameOpcode::kFabdV:
+-                r = std::fabs(a - b); break;
++                r = std::fabs(Fx(a - b, a, b)); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
+                 r = FrecpsScalar<double>(a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV:
+@@ -5364,15 +5361,15 @@
+             memcpy(&b, reinterpret_cast<const uint8_t*>(&src_m) + i * 4, 4);
+             memcpy(&d, reinterpret_cast<const uint8_t*>(&dst) + i * 4, 4);
+             switch (args.opcode) {
+-              case Decoder::AdvSimdThreeSameOpcode::kFaddV: r = a + b; break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFsubV: r = a - b; break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFmulV: r = a * b; break;
++              case Decoder::AdvSimdThreeSameOpcode::kFaddV: r = Fx(a + b, a, b); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFsubV: r = Fx(a - b, a, b); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFmulV: r = Fx(a * b, a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFmulxV:
+                 r = FmulxScalar<float>(a, b); break;
+               // FUSED multiply-add (single rounding) per the ARM ARM — std::fma,
+               // not `d + a*b` (which rounds twice).
+-              case Decoder::AdvSimdThreeSameOpcode::kFmlaV: r = std::fma(a, b, d); break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFmlsV: r = std::fma(-a, b, d); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFmlaV: r = ArmFma(Dn(), a, b, d); break;
++              case Decoder::AdvSimdThreeSameOpcode::kFmlsV: r = ArmFma(Dn(), -a, b, d); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFmaxV:
+                 r = FmaxScalar<float>(a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFminV:
+@@ -5381,7 +5378,7 @@
+                 r = FmaxnmScalar<float>(a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFminnmV:
+                 r = FminnmScalar<float>(a, b); break;
+-              case Decoder::AdvSimdThreeSameOpcode::kFdivV: r = a / b; break;
++              case Decoder::AdvSimdThreeSameOpcode::kFdivV: r = Fx(a / b, a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFcmeqV: {
+                 uint32_t bits = (a == b) ? 0xFFFFFFFFu : 0;
+                 memcpy(&r, &bits, 4); break;
+@@ -5403,7 +5400,7 @@
+                 memcpy(&r, &bits, 4); break;
+               }
+               case Decoder::AdvSimdThreeSameOpcode::kFabdV:
+-                r = std::fabs(a - b); break;
++                r = std::fabs(Fx(a - b, a, b)); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
+                 r = FrecpsScalar<float>(a, b); break;
+               case Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV:
+@@ -5472,7 +5469,7 @@
+           result = -src;
+           break;
+         case 0b000011:  // FSQRT
+-          result = std::sqrt(src);
++          result = Fx(std::sqrt(src), src);
+           break;
+         case 0b000101: {  // FCVT Dd, Sn (single -> double)
+           double d = static_cast<double>(src);
+@@ -5543,7 +5540,7 @@
+           result = -src;
+           break;
+         case 0b000011:  // FSQRT
+-          result = std::sqrt(src);
++          result = Fx(std::sqrt(src), src);
+           break;
+         case 0b000100: {  // FCVT Sd, Dn (double -> single)
+           float f = static_cast<float>(src);
+@@ -5641,7 +5638,7 @@
+           break;
+         case 0b000011: {  // FSQRT Hd, Hn
+           float f = FpHalfToSingle(bits);
+-          result_bits = FpSingleToHalf(std::sqrt(f));
++          result_bits = FpSingleToHalf(Fx(std::sqrt(f), f));
+           break;
+         }
+         case 0b001000: {  // FRINTN
+@@ -5706,10 +5703,10 @@
+       float result;
+ 
+       switch (opcode) {
+-        case 0b0000: result = src_n * src_m; break;       // FMUL
+-        case 0b0001: result = src_n / src_m; break;       // FDIV
+-        case 0b0010: result = src_n + src_m; break;       // FADD
+-        case 0b0011: result = src_n - src_m; break;       // FSUB
++        case 0b0000: result = Fx(src_n * src_m, src_n, src_m); break;       // FMUL
++        case 0b0001: result = Fx(src_n / src_m, src_n, src_m); break;       // FDIV
++        case 0b0010: result = Fx(src_n + src_m, src_n, src_m); break;       // FADD
++        case 0b0011: result = Fx(src_n - src_m, src_n, src_m); break;       // FSUB
+         // ARM FMAX differs from libm fmax in NaN handling
+         // (any-NaN -> default NaN, not other-operand) and in +0/-0
+         // disambiguation. See FmaxScalar/FminScalar/etc.
+@@ -5717,7 +5714,7 @@
+         case 0b0101: result = FminScalar<float>(src_n, src_m); break;    // FMIN
+         case 0b0110: result = FmaxnmScalar<float>(src_n, src_m); break;  // FMAXNM
+         case 0b0111: result = FminnmScalar<float>(src_n, src_m); break;  // FMINNM
+-        case 0b1000: result = -(src_n * src_m); break;    // FNMUL
++        case 0b1000: result = -Fx(src_n * src_m, src_n, src_m); break;    // FNMUL
+         default: Undefined(); return;
+       }
+ 
+@@ -5731,16 +5728,16 @@
+       double result;
+ 
+       switch (opcode) {
+-        case 0b0000: result = src_n * src_m; break;       // FMUL
+-        case 0b0001: result = src_n / src_m; break;       // FDIV
+-        case 0b0010: result = src_n + src_m; break;       // FADD
+-        case 0b0011: result = src_n - src_m; break;       // FSUB
++        case 0b0000: result = Fx(src_n * src_m, src_n, src_m); break;       // FMUL
++        case 0b0001: result = Fx(src_n / src_m, src_n, src_m); break;       // FDIV
++        case 0b0010: result = Fx(src_n + src_m, src_n, src_m); break;       // FADD
++        case 0b0011: result = Fx(src_n - src_m, src_n, src_m); break;       // FSUB
+         // see comment above (single-precision arm).
+         case 0b0100: result = FmaxScalar<double>(src_n, src_m); break;    // FMAX
+         case 0b0101: result = FminScalar<double>(src_n, src_m); break;    // FMIN
+         case 0b0110: result = FmaxnmScalar<double>(src_n, src_m); break;  // FMAXNM
+         case 0b0111: result = FminnmScalar<double>(src_n, src_m); break;  // FMINNM
+-        case 0b1000: result = -(src_n * src_m); break;    // FNMUL
++        case 0b1000: result = -Fx(src_n * src_m, src_n, src_m); break;    // FNMUL
+         default: Undefined(); return;
+       }
+ 
+@@ -5759,16 +5756,16 @@
+       float result;
+ 
+       switch (opcode) {
+-        case 0b0000: result = src_n * src_m; break;       // FMUL
+-        case 0b0001: result = src_n / src_m; break;       // FDIV
+-        case 0b0010: result = src_n + src_m; break;       // FADD
+-        case 0b0011: result = src_n - src_m; break;       // FSUB
++        case 0b0000: result = Fx(src_n * src_m, src_n, src_m); break;       // FMUL
++        case 0b0001: result = Fx(src_n / src_m, src_n, src_m); break;       // FDIV
++        case 0b0010: result = Fx(src_n + src_m, src_n, src_m); break;       // FADD
++        case 0b0011: result = Fx(src_n - src_m, src_n, src_m); break;       // FSUB
+         // FP16 round-trip through float; helpers handle NaN + +0/-0 corner.
+         case 0b0100: result = FmaxScalar<float>(src_n, src_m); break;    // FMAX
+         case 0b0101: result = FminScalar<float>(src_n, src_m); break;    // FMIN
+         case 0b0110: result = FmaxnmScalar<float>(src_n, src_m); break;  // FMAXNM
+         case 0b0111: result = FminnmScalar<float>(src_n, src_m); break;  // FMINNM
+-        case 0b1000: result = -(src_n * src_m); break;    // FNMUL
++        case 0b1000: result = -Fx(src_n * src_m, src_n, src_m); break;    // FNMUL
+         default: Undefined(); return;
+       }
+ 
+@@ -6272,7 +6269,7 @@
+               break;
+             }
+             case Decoder::AdvSimdScalarThreeSameOpcode::kFabd:
+-              r16 = FpSingleToHalf(std::fabs(a - b));
++              r16 = FpSingleToHalf(std::fabs(Fx(a - b, a, b)));
+               break;
+             case Decoder::AdvSimdScalarThreeSameOpcode::kFcmeq:
+               r16 = (a == b) ? uint16_t{0xFFFF} : uint16_t{0};
+@@ -6315,7 +6312,7 @@
+           uint64_t r64;
+           switch (args.opcode) {
+             case Decoder::AdvSimdScalarThreeSameOpcode::kFabd: {
+-              double d = std::fabs(a - b);
++              double d = std::fabs(Fx(a - b, a, b));
+               memcpy(&r64, &d, sizeof(r64));
+               break;
+             }
+@@ -6354,7 +6351,7 @@
+           uint32_t r32;
+           switch (args.opcode) {
+             case Decoder::AdvSimdScalarThreeSameOpcode::kFabd: {
+-              float f = std::fabs(a - b);
++              float f = std::fabs(Fx(a - b, a, b));
+               memcpy(&r32, &f, sizeof(r32));
+               break;
+             }
+@@ -6800,7 +6797,7 @@
+           float f;
+           switch (args.opcode) {
+             case Decoder::AdvSimdScalarPairwiseOpcode::kFaddpScalar:
+-              f = a + b;
++              f = Fx(a + b, a, b);
+               break;
+             case Decoder::AdvSimdScalarPairwiseOpcode::kFmaxpScalar:
+               f = FmaxScalar<float>(a, b); break;
+@@ -6824,7 +6821,7 @@
+           memcpy(&b, &hi, 8);
+           switch (args.opcode) {
+             case Decoder::AdvSimdScalarPairwiseOpcode::kFaddpScalar:
+-              d = a + b;
++              d = Fx(a + b, a, b);
+               break;
+             case Decoder::AdvSimdScalarPairwiseOpcode::kFmaxpScalar:
+               d = FmaxScalar<double>(a, b); break;
+@@ -6847,7 +6844,7 @@
+           memcpy(&b, &b_bits, 4);
+           switch (args.opcode) {
+             case Decoder::AdvSimdScalarPairwiseOpcode::kFaddpScalar:
+-              f = a + b;
++              f = Fx(a + b, a, b);
+               break;
+             case Decoder::AdvSimdScalarPairwiseOpcode::kFmaxpScalar:
+               f = FmaxScalar<float>(a, b); break;
+@@ -7671,7 +7668,8 @@
+           for (uint8_t i = 0; i < fp_count; i++) {
+             uint16_t h;
+             memcpy(&h, reinterpret_cast<const uint8_t*>(&src) + i * 2, 2);
+-            uint16_t rh = FpSingleToHalf(__builtin_sqrtf(FpHalfToSingle(h)));
++            float hf = FpHalfToSingle(h);
++            uint16_t rh = FpSingleToHalf(Fx(__builtin_sqrtf(hf), hf));
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 2, &rh, 2);
+           }
+           break;
+@@ -7682,12 +7680,12 @@
+           if (fp_esize == 4) {
+             float f;
+             memcpy(&f, reinterpret_cast<const uint8_t*>(&src) + i * 4, 4);
+-            float r = __builtin_sqrtf(f);
++            float r = Fx(__builtin_sqrtf(f), f);
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 4, &r, 4);
+           } else {
+             double d;
+             memcpy(&d, reinterpret_cast<const uint8_t*>(&src) + i * 8, 8);
+-            double r = __builtin_sqrt(d);
++            double r = Fx(__builtin_sqrt(d), d);
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 8, &r, 8);
+           }
+         }
+@@ -8564,21 +8562,15 @@
+         float r;
+         switch (args.opcode) {
+           case Decoder::AdvSimdVecXIdxOpcode::kFmla: {
+-            double r_d = std::fma(static_cast<double>(n),
+-                                  static_cast<double>(m_indexed),
+-                                  static_cast<double>(d));
+-            r = static_cast<float>(r_d);
++            r = FmaHalf(n, m_indexed, d);
+             break;
+           }
+           case Decoder::AdvSimdVecXIdxOpcode::kFmls: {
+-            double r_d = std::fma(static_cast<double>(-n),
+-                                  static_cast<double>(m_indexed),
+-                                  static_cast<double>(d));
+-            r = static_cast<float>(r_d);
++            r = FmaHalf(-n, m_indexed, d);
+             break;
+           }
+           case Decoder::AdvSimdVecXIdxOpcode::kFmul:
+-            r = n * m_indexed;
++            r = Fx(n * m_indexed, n, m_indexed);
+             break;
+           case Decoder::AdvSimdVecXIdxOpcode::kFmulx:
+             r = FmulxScalar<float>(n, m_indexed);
+@@ -8606,19 +8598,19 @@
+           case Decoder::AdvSimdVecXIdxOpcode::kFmla: {
+             float dst;
+             memcpy(&dst, reinterpret_cast<uint8_t*>(&result) + i * 4, 4);
+-            float r = std::fma(src, indexed, dst);  // FUSED (single rounding)
++            float r = ArmFma(Dn(), src, indexed, dst);  // FUSED (single rounding)
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 4, &r, 4);
+             break;
+           }
+           case Decoder::AdvSimdVecXIdxOpcode::kFmls: {
+             float dst;
+             memcpy(&dst, reinterpret_cast<uint8_t*>(&result) + i * 4, 4);
+-            float r = std::fma(-src, indexed, dst);  // FUSED
++            float r = ArmFma(Dn(), -src, indexed, dst);  // FUSED
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 4, &r, 4);
+             break;
+           }
+           case Decoder::AdvSimdVecXIdxOpcode::kFmul: {
+-            float r = src * indexed;
++            float r = Fx(src * indexed, src, indexed);
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 4, &r, 4);
+             break;
+           }
+@@ -8646,19 +8638,19 @@
+           case Decoder::AdvSimdVecXIdxOpcode::kFmla: {
+             double dst;
+             memcpy(&dst, reinterpret_cast<uint8_t*>(&result) + i * 8, 8);
+-            double r = std::fma(src, indexed, dst);  // FUSED (single rounding)
++            double r = ArmFma(Dn(), src, indexed, dst);  // FUSED (single rounding)
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 8, &r, 8);
+             break;
+           }
+           case Decoder::AdvSimdVecXIdxOpcode::kFmls: {
+             double dst;
+             memcpy(&dst, reinterpret_cast<uint8_t*>(&result) + i * 8, 8);
+-            double r = std::fma(-src, indexed, dst);  // FUSED
++            double r = ArmFma(Dn(), -src, indexed, dst);  // FUSED
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 8, &r, 8);
+             break;
+           }
+           case Decoder::AdvSimdVecXIdxOpcode::kFmul: {
+-            double r = src * indexed;
++            double r = Fx(src * indexed, src, indexed);
+             memcpy(reinterpret_cast<uint8_t*>(&result) + i * 8, &r, 8);
+             break;
+           }
+@@ -8847,20 +8839,14 @@
+           rh = FpSingleToHalf(FmulxScalar<float>(a, b));
+           break;
+         case Op::kFmul:
+-          rh = FpSingleToHalf(a * b);
++          rh = FpSingleToHalf(Fx(a * b, a, b));
+           break;
+         case Op::kFmla: {
+-          double r64 = std::fma(static_cast<double>(a),
+-                                static_cast<double>(b),
+-                                static_cast<double>(d));
+-          rh = FpSingleToHalf(static_cast<float>(r64));
++          rh = FpSingleToHalf(FmaHalf(a, b, d));
+           break;
+         }
+         case Op::kFmls: {
+-          double r64 = std::fma(static_cast<double>(-a),
+-                                static_cast<double>(b),
+-                                static_cast<double>(d));
+-          rh = FpSingleToHalf(static_cast<float>(r64));
++          rh = FpSingleToHalf(FmaHalf(-a, b, d));
+           break;
+         }
+         default:
+@@ -8885,13 +8871,13 @@
+           r = FmulxScalar<double>(n_lane, m_lane);
+           break;
+         case Op::kFmul:
+-          r = n_lane * m_lane;
++          r = Fx(n_lane * m_lane, n_lane, m_lane);
+           break;
+         case Op::kFmla:
+-          r = d_lane + n_lane * m_lane;
++          r = ArmFma(Dn(), n_lane, m_lane, d_lane);
+           break;
+         case Op::kFmls:
+-          r = d_lane - n_lane * m_lane;
++          r = ArmFma(Dn(), -n_lane, m_lane, d_lane);
+           break;
+         default:
+           Undefined();
+@@ -8911,13 +8897,13 @@
+           r = FmulxScalar<float>(n_lane, m_lane);
+           break;
+         case Op::kFmul:
+-          r = n_lane * m_lane;
++          r = Fx(n_lane * m_lane, n_lane, m_lane);
+           break;
+         case Op::kFmla:
+-          r = d_lane + n_lane * m_lane;
++          r = ArmFma(Dn(), n_lane, m_lane, d_lane);
+           break;
+         case Op::kFmls:
+-          r = d_lane - n_lane * m_lane;
++          r = ArmFma(Dn(), -n_lane, m_lane, d_lane);
+           break;
+         default:
+           Undefined();
+@@ -10205,14 +10191,30 @@
+   // the (zero * infinity) saturation case is replaced by ±2.0 (sign = sign of
+   // a XOR sign of b), per ARM ARM C7.2.149 FMULX.  Standard FP NaN
+   // propagation otherwise.
++  // apklayer patch (0041): FPCR.DN and the Arm NaN rules (arm_nan.h) for the arithmetic below.
++  bool Dn() const { return (state_->cpu.cached_fpcr >> 25) & 1; }
+   template <typename FpType>
+-  static FpType FmulxScalar(FpType a, FpType b) {
++  FpType Fx(FpType r, FpType a, FpType b) const {
++    return ArmFixNaN(Dn(), r, a, b);
++  }
++  template <typename FpType>
++  FpType Fx(FpType r, FpType a) const {
++    return ArmFixNaN(Dn(), r, a);
++  }
++  // FMLA/FMLS/FMADD... of FP16 operands (held as float): fused through double, NaN rules in float.
++  float FmaHalf(float a, float b, float c) const {
++    if (a != a || b != b || c != c) return ArmFma(Dn(), a, b, c);
++    double r = std::fma(static_cast<double>(a), static_cast<double>(b), static_cast<double>(c));
++    return r != r ? ArmFma(Dn(), a, b, c) : static_cast<float>(r);
++  }
++  template <typename FpType>
++  FpType FmulxScalar(FpType a, FpType b) const {
+     if ((a == FpType{0} && std::isinf(b)) ||
+         (std::isinf(a) && b == FpType{0})) {
+       bool neg = std::signbit(a) ^ std::signbit(b);
+       return neg ? FpType{-2} : FpType{2};
+     }
+-    return a * b;
++    return Fx(a * b, a, b);
+   }
+ 
+   // FRECPS scalar semantics: (2.0 - a*b), used as a Newton-Raphson refinement
+@@ -10222,15 +10224,8 @@
+   //     (unsigned — unlike FMULX which preserves XOR sign)
+   //   - otherwise: FPRecipStepFused = FMA(-a, b, 2.0)  (single rounding)
+   template <typename FpType>
+-  static FpType FrecpsScalar(FpType a, FpType b) {
+-    if (std::isnan(a) || std::isnan(b)) {
+-      return std::numeric_limits<FpType>::quiet_NaN();
+-    }
+-    if ((a == FpType{0} && std::isinf(b)) ||
+-        (std::isinf(a) && b == FpType{0})) {
+-      return FpType{2};
+-    }
+-    return std::fma(-a, b, FpType{2});
++  FpType FrecpsScalar(FpType a, FpType b) const {
++    return ArmRecipStep(Dn(), a, b);  // apklayer patch (0041)
+   }
+ 
+   // FRSQRTS scalar semantics: (3.0 - a*b)/2, used as a Newton-Raphson
+@@ -10242,15 +10237,8 @@
+   //     non-denormals; for denormals the divide-by-two is also exact in IEEE
+   //     binary FP)
+   template <typename FpType>
+-  static FpType FrsqrtsScalar(FpType a, FpType b) {
+-    if (std::isnan(a) || std::isnan(b)) {
+-      return std::numeric_limits<FpType>::quiet_NaN();
+-    }
+-    if ((a == FpType{0} && std::isinf(b)) ||
+-        (std::isinf(a) && b == FpType{0})) {
+-      return FpType{1.5};
+-    }
+-    return std::fma(-a, b, FpType{3}) / FpType{2};
++  FpType FrsqrtsScalar(FpType a, FpType b) const {
++    return ArmRsqrtStep(Dn(), a, b);  // apklayer patch (0041)
+   }
+ 
+   // FMAX / FMIN / FMAXNM / FMINNM scalar semantics, parameterized by FP type.
+@@ -10268,53 +10256,23 @@
+   //                    both-NaN input -> default NaN.
+   // The +0/-0 disambiguation is the same in both families.
+   template <typename FpType>
+-  static FpType FmaxScalar(FpType a, FpType b) {
+-    if (std::isnan(a) || std::isnan(b)) {
+-      return std::numeric_limits<FpType>::quiet_NaN();
+-    }
+-    if (a == FpType{0} && b == FpType{0}) {
+-      return std::signbit(a) ? b : a;
+-    }
+-    return a > b ? a : b;
++  FpType FmaxScalar(FpType a, FpType b) const {
++    return ArmMax(Dn(), a, b);  // apklayer patch (0041): a NaN operand is propagated (or the default NaN with FPCR.DN), as hardware does
+   }
+ 
+   template <typename FpType>
+-  static FpType FminScalar(FpType a, FpType b) {
+-    if (std::isnan(a) || std::isnan(b)) {
+-      return std::numeric_limits<FpType>::quiet_NaN();
+-    }
+-    if (a == FpType{0} && b == FpType{0}) {
+-      return std::signbit(a) ? a : b;
+-    }
+-    return a < b ? a : b;
++  FpType FminScalar(FpType a, FpType b) const {
++    return ArmMin(Dn(), a, b);
+   }
+ 
+   template <typename FpType>
+-  static FpType FmaxnmScalar(FpType a, FpType b) {
+-    if (std::isnan(a)) {
+-      return std::isnan(b) ? std::numeric_limits<FpType>::quiet_NaN() : b;
+-    }
+-    if (std::isnan(b)) {
+-      return a;
+-    }
+-    if (a == FpType{0} && b == FpType{0}) {
+-      return std::signbit(a) ? b : a;
+-    }
+-    return a > b ? a : b;
++  FpType FmaxnmScalar(FpType a, FpType b) const {
++    return ArmMaxNum(Dn(), a, b);
+   }
+ 
+   template <typename FpType>
+-  static FpType FminnmScalar(FpType a, FpType b) {
+-    if (std::isnan(a)) {
+-      return std::isnan(b) ? std::numeric_limits<FpType>::quiet_NaN() : b;
+-    }
+-    if (std::isnan(b)) {
+-      return a;
+-    }
+-    if (a == FpType{0} && b == FpType{0}) {
+-      return std::signbit(a) ? a : b;
+-    }
+-    return a < b ? a : b;
++  FpType FminnmScalar(FpType a, FpType b) const {
++    return ArmMinNum(Dn(), a, b);
+   }
+ 
+   static float FpHalfToSingle(uint16_t h) {
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -6511,6 +6511,54 @@
+                                                                            bool is_max,
+                                                                            bool is_nm,
+                                                                            bool is_double) {
++  // apklayer patch (0041): the Arm NaN result (see lite_translator_fp_dataproc.inc EmitArmFpMinMax): m_a = the NaN to return, sel = the lanes it replaces.
++  FpRegister m_a = AllocTempSimdReg();
++  FpRegister m_b = AllocTempSimdReg();
++  FpRegister q = AllocZeroedSimdReg();
++  FpRegister s1 = AllocTempSimdReg();
++  FpRegister s2 = AllocTempSimdReg();
++  FpRegister sel = AllocTempSimdReg();
++  auto mv = [&](FpRegister d, FpRegister s) { GenRaw<x86_64::MovdqaXRegXReg>(d.machine_reg(), s.machine_reg()); };
++  auto unord = [&](FpRegister d, FpRegister s) {
++    if (is_double) GenRaw<x86_64::CmpunordpdXRegXReg>(d.machine_reg(), s.machine_reg());
++    else GenRaw<x86_64::CmpunordpsXRegXReg>(d.machine_reg(), s.machine_reg());
++  };
++  GenRaw<x86_64::PcmpeqdXRegXReg>(q.machine_reg(), q.machine_reg());  // the quiet bit: 0x00400000 / 0x0008000000000000
++  if (is_double) {
++    GenRaw<x86_64::PsllqXRegImm>(q.machine_reg(), int8_t{63});
++    GenRaw<x86_64::PsrlqXRegImm>(q.machine_reg(), int8_t{12});
++  } else {
++    GenRaw<x86_64::PslldXRegImm>(q.machine_reg(), int8_t{31});
++    GenRaw<x86_64::PsrldXRegImm>(q.machine_reg(), int8_t{9});
++  }
++  mv(m_a, n); unord(m_a, m_a);  // a is NaN
++  mv(m_b, m); unord(m_b, m_b);  // b is NaN
++  auto snan = [&](FpRegister s, FpRegister v, FpRegister nan_mask) {  // NaN with the quiet bit clear
++    mv(s, v);
++    GenRaw<x86_64::PandXRegXReg>(s.machine_reg(), q.machine_reg());
++    GenRaw<x86_64::PcmpeqdXRegXReg>(s.machine_reg(), q.machine_reg());
++    if (is_double) GenRaw<x86_64::PshufdXRegXRegImm>(s.machine_reg(), s.machine_reg(), int8_t{static_cast<int8_t>(0xF5)});
++    GenRaw<x86_64::PandnXRegXReg>(s.machine_reg(), nan_mask.machine_reg());
++  };
++  snan(s1, n, m_a);
++  snan(s2, m, m_b);
++  if (!is_nm) {
++    mv(sel, m_a);
++    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_b.machine_reg());
++  } else {
++    mv(sel, s1);
++    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), s2.machine_reg());
++    GenRaw<x86_64::PandXRegXReg>(m_b.machine_reg(), m_a.machine_reg());
++    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_b.machine_reg());  // a signalling NaN, or both NaN
++  }
++  mv(m_b, s2);
++  GenRaw<x86_64::PandnXRegXReg>(m_b.machine_reg(), m_a.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(s1.machine_reg(), m_b.machine_reg());  // s1: a is the NaN to return
++  mv(m_a, s1);
++  GenRaw<x86_64::PandXRegXReg>(m_a.machine_reg(), n.machine_reg());
++  GenRaw<x86_64::PandnXRegXReg>(s1.machine_reg(), m.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(m_a.machine_reg(), s1.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(m_a.machine_reg(), q.machine_reg());  // quieted
+   // FMAX: negate both inputs so the shared FMIN lowering computes it; the
+   // per-lane sign mask (all-ones << 31/63) is XORed in now and, after the
+   // MIN, XORed back out of the result.
+@@ -6583,7 +6631,10 @@
+   if (is_max) {
+     GenRaw<x86_64::PxorXRegXReg>(result.machine_reg(), sign_mask.machine_reg());
+   }
+-  return result;
++  GenRaw<x86_64::PandXRegXReg>(m_a.machine_reg(), sel.machine_reg());  // the Arm NaN where there is one
++  GenRaw<x86_64::PandnXRegXReg>(sel.machine_reg(), result.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_a.machine_reg());
++  return sel;
+ }
+ 
+ // AdvSIMD three-same INTEGER ops that lower to a single packed SSE2/SSE4.1
+@@ -7069,6 +7120,8 @@
+   // .2S/.4S/.2D reach here. Requires host FMA — bail if absent.
+   if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlaV ||
+       args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) {
++    // apklayer patch (0041): FMLS: Arm negates a NaN operand before the fused multiply-add; the interpreter has that (interpreter/arm64/arm_nan.h).
++    if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) { UndefinedReturningVoid(); return; }
+     if (!host_platform::kHasFMA) {
+       UndefinedReturningVoid();
+       return;
+@@ -7573,6 +7626,8 @@
+   // the decoder rejects the reserved sz=1&&!Q (.1D) shape.
+   if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFrecpsV ||
+       args.opcode == Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV) {
++    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
++    if (true) { UndefinedReturningVoid(); return; }
+     if (args.is_fp16 || !host_platform::kHasFMA) {
+       UndefinedReturningVoid();
+       return;
+@@ -13001,6 +13056,8 @@
+   // (is_fp16) bails to lite (owned by the FP16 slice; matches AdvSimdScalarPairwise).
+   if (args.opcode == ScOp::kFabd || args.opcode == ScOp::kFmulx ||
+       args.opcode == ScOp::kFrecps || args.opcode == ScOp::kFrsqrts) {
++    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
++    if (args.opcode == ScOp::kFrecps || args.opcode == ScOp::kFrsqrts) { UndefinedReturningVoid(); return; }
+     if (args.is_fp16) {
+       // FP16 scalar: only FMULX is covered here via the F16C round-trip (widen
+       // Vn.h[0]/Vm.h[0] to FP32 lane 0 with upper lanes +0.0, apply the packed
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
+@@ -490,6 +490,38 @@
+                        bool is_max,
+                        bool is_nm,
+                        bool is_double) {
++    // apklayer patch (0041): the Arm NaN result (ARM ARM FPProcessNaNs): the first signalling NaN, else the first quiet NaN, quieted. x86 forwards or
++    // ORs the bits of whichever operand it likes. FMAXNM/FMINNM change only where a signalling NaN is involved or both are NaN. FPCR.DN is not honoured
++    // in translated code (the interpreter does). The blend sits at the end; m_a = the NaN to return, sel = the lanes it replaces.
++    SimdRegister m_a = AllocTempSimdReg();
++    SimdRegister m_b = AllocTempSimdReg();
++    SimdRegister q = AllocTempSimdReg();
++    SimdRegister s1 = AllocTempSimdReg();
++    SimdRegister s2 = AllocTempSimdReg();
++    SimdRegister sel = AllocTempSimdReg();
++    if (!success()) { return false; }
++    as_.Pcmpeqd(q, q);  // the quiet bit: 0x00400000 / 0x0008000000000000
++    if (is_double) { as_.Psllq(q, static_cast<int8_t>(63)); as_.Psrlq(q, static_cast<int8_t>(12)); }
++    else { as_.Pslld(q, static_cast<int8_t>(31)); as_.Psrld(q, static_cast<int8_t>(9)); }
++    auto unord = [&](SimdRegister dst, SimdRegister src) {
++      if (is_double) as_.Cmpunordpd(dst, src); else as_.Cmpunordps(dst, src);
++    };
++    as_.Movdqa(m_a, xn); unord(m_a, m_a);  // a is NaN
++    as_.Movdqa(m_b, xm); unord(m_b, m_b);  // b is NaN
++    auto snan = [&](SimdRegister s, SimdRegister v, SimdRegister nan_mask) {  // NaN with the quiet bit clear
++      as_.Movdqa(s, v); as_.Pand(s, q); as_.Pcmpeqd(s, q);
++      if (is_double) as_.Pshufd(s, s, static_cast<int8_t>(0xF5));
++      as_.Pandn(s, nan_mask);
++    };
++    snan(s1, xn, m_a);
++    snan(s2, xm, m_b);
++    if (!is_nm) {
++      as_.Movdqa(sel, m_a); as_.Por(sel, m_b);
++    } else {
++      as_.Movdqa(sel, s1); as_.Por(sel, s2); as_.Pand(m_b, m_a); as_.Por(sel, m_b);  // a signalling NaN, or both NaN
++    }
++    as_.Movdqa(m_b, s2); as_.Pandn(m_b, m_a); as_.Por(s1, m_b);  // s1: a is the NaN to return (a signalling, or a NaN and b not signalling)
++    as_.Movdqa(m_a, s1); as_.Pand(m_a, xn); as_.Pandn(s1, xm); as_.Por(m_a, s1); as_.Por(m_a, q);  // quieted
+     // ARM FMAX/FMAXNM are computed as -FMIN(-a,-b). x86 MAXPS/MINPS return
+     // the SECOND source on a +-0 tie (OR-of-signs), which is correct only
+     // for FMIN (most-negative). Negating inputs+output makes FMAX reuse the
+@@ -515,20 +547,18 @@
+     };
+     if (!is_nm) {
+       // FMAX / FMIN — NaN-propagating: minab|minba|OR.
+-      SimdRegister tmp = AllocTempSimdReg();
+-      if (!success()) { return false; }
++      SimdRegister tmp = s1;
+       as_.Movdqa(tmp, xm);
+       minmax(tmp, xn);
+       minmax(xn, xm);
+       as_.Por(xn, tmp);
+     } else {
+       // FMAXNM / FMINNM — substitute NaN-lanes with the other operand,
+-      // then min/max.
+-      SimdRegister t_mask_a = AllocTempSimdReg();
+-      SimdRegister t_mask_b = AllocTempSimdReg();
+-      SimdRegister t_an_sub = AllocTempSimdReg();
+-      SimdRegister t_bn_sub = AllocTempSimdReg();
+-      if (!success()) { return false; }
++      // then min/max. (The NaN block's dead temps are reused.)
++      SimdRegister t_mask_a = m_b;
++      SimdRegister t_mask_b = q;
++      SimdRegister t_an_sub = s1;
++      SimdRegister t_bn_sub = s2;
+       as_.Movdqa(t_mask_a, xn);
+       cmpunord(t_mask_a, t_mask_a);   // 1s where a is NaN
+       as_.Movdqa(t_mask_b, xm);
+@@ -554,6 +584,10 @@
+     }
+     // Negate the FMIN result back to obtain FMAX = -FMIN(-a,-b).
+     if (is_max) as_.Pxor(xn, sign_mask);
++    as_.Pand(m_a, sel);   // the Arm NaN where there is one
++    as_.Pandn(sel, xn);
++    as_.Por(sel, m_a);
++    as_.Movdqa(xn, sel);
+     return true;
+   }
+ 
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
+@@ -2213,6 +2213,8 @@
+       // F16C bail on the FP16 path.
+       case Decoder::AdvSimdThreeSameOpcode::kFmlaV:
+       case Decoder::AdvSimdThreeSameOpcode::kFmlsV: {
++        // apklayer patch (0041): FMLS: Arm negates a NaN operand before the fused multiply-add; the interpreter has that (interpreter/arm64/arm_nan.h).
++        if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) { success_ = false; return; }
+         if (args.is_fp16) {
+           if (!host_platform::kHasFMA) { success_ = false; return; }
+           if (!host_platform::kHasF16C) { success_ = false; return; }
+@@ -2377,6 +2379,8 @@
+       // fused semantics).  Reserved .1D shape (size=01 && q=0) bails.
+       case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
+       case Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV: {
++        // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
++        if (true) { success_ = false; return; }
+         // FP16 vector FRECPS / FRSQRTS .4H / .8H via
+         // F16C round-trip.  The interpreter computes FP16 lanes as
+         // FpSingleToHalf(FrecpsScalar<float>(a, b)) — i.e. the whole
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
+@@ -96,6 +96,8 @@
+     const bool is_fmulx = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFmulx);
+     const bool is_frecps = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrecps);
+     const bool is_frsqrts = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrsqrts);
++    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
++    if (is_frecps || is_frsqrts) { success_ = false; return; }
+     const bool is_fabd = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFabd);
+     const bool is_fcmeq = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmeq);
+     const bool is_fcmge = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmge);

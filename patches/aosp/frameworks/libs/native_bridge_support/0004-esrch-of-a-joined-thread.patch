@@ -1,0 +1,58 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: the pthread proxies answer ESRCH for a thread that is gone
+
+pthread_join, pthread_detach, pthread_kill, pthread_sigqueue, pthread_getattr_np, pthread_getschedparam, pthread_setschedparam, pthread_setschedprio,
+pthread_getcpuclockid, pthread_setname_np and pthread_getname_np of a pthread_t that is no thread (a joined one) return ESRCH (pthread_gettid_np -1) instead of
+handing the record to the host; a successful pthread_join tells the translator (binary_translation 0042, GuestPthreadIsStale/GuestPthreadJoined). Module libberberis_proxy_libc.
+
+diff --git a/android_api/libc/proxy/pthread_translation.cc b/android_api/libc/proxy/pthread_translation.cc
+--- a/android_api/libc/proxy/pthread_translation.cc
++++ b/android_api/libc/proxy/pthread_translation.cc
+@@ -87,10 +87,15 @@
+   void DoCustomTrampoline_##name(HostCode /* callee */, ProcessState* state) { \
+     auto [__VA_ARGS__] = GuestParamsValues<decltype(name)>(state);             \
+     auto&& [ret] = GuestReturnReference<decltype(name)>(state);              \
+-    ret = call;                                                                \
++    ret = GuestPthreadIsStale(t) ? ESRCH : (call); /* apklayer patch (0041) */ \
+   }
+ APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_detach, pthread_detach(GuestPthreadToHost(t)), t)
+-APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_gettid_np, pthread_gettid_np(GuestPthreadToHost(t)), t)
++// bionic's pthread_gettid_np of no thread is -1 (not an errno): no stale check.
++void DoCustomTrampoline_pthread_gettid_np(HostCode /* callee */, ProcessState* state) {
++  auto [t] = GuestParamsValues<decltype(pthread_gettid_np)>(state);
++  auto&& [ret] = GuestReturnReference<decltype(pthread_gettid_np)>(state);
++  ret = GuestPthreadIsStale(t) ? -1 : pthread_gettid_np(GuestPthreadToHost(t));
++}
+ APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_getcpuclockid, pthread_getcpuclockid(GuestPthreadToHost(t), a), t, a)
+ APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_kill, pthread_kill(GuestPthreadToHost(t), a), t, a)
+ APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_setname_np, pthread_setname_np(GuestPthreadToHost(t), a), t, a)
+@@ -106,7 +111,7 @@
+   auto&& [ret] = GuestReturnReference<ApklayerSigqueueGuest>(state);
+   union sigval sv;
+   sv.sival_ptr = value;
+-  ret = pthread_sigqueue(GuestPthreadToHost(t), sig, sv);
++  ret = GuestPthreadIsStale(t) ? ESRCH : pthread_sigqueue(GuestPthreadToHost(t), sig, sv);  // apklayer patch (0041)
+ }
+ 
+ // int pthread_join(pthread_t thread, void **retval);
+@@ -117,7 +122,8 @@
+ 
+   ScopedPendingSignalsDisabler scoped_pending_signals_disabler(state->thread);
+   auto&& [ret] = GuestReturnReference<decltype(pthread_join)>(state);
+-  ret = pthread_join(GuestPthreadToHost(guest_thread), retval);  // apklayer patch
++  ret = GuestPthreadIsStale(guest_thread) ? ESRCH : pthread_join(GuestPthreadToHost(guest_thread), retval);  // apklayer patch (0041): ESRCH as bionic's
++  if (ret == 0) GuestPthreadJoined(guest_thread);  // the record is no thread from here on
+ }
+ 
+ // int pthread_getattr_np(pthread_t thread, pthread_attr_t *attr);
+@@ -129,6 +135,10 @@
+   // Query host attr.
+   auto&& [ret] = GuestReturnReference<decltype(pthread_getattr_np)>(state);
+   pthread_t host_thread = GuestPthreadToHost(guest_thread);  // apklayer patch: the host thread, also for the tid below
++  if (GuestPthreadIsStale(guest_thread)) {  // apklayer patch (0041)
++    ret = ESRCH;
++    return;
++  }
+   ret = pthread_getattr_np(host_thread, guest_attr);
+   if (ret != 0) {
+     return;

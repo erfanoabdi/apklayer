@@ -157,6 +157,256 @@ float any bits               cfab8955785b32f6
   fpsr QC after sat add 0000000000000000
   sat add result 00007f000000d7cd
 fpcr/fpsr                    0000000000000000
+  s fmax 18fb3e18e9845a38
+  s fmin 9cf8f02a8fff6dd0
+  s fmaxnm 49c62b6c758221de
+  s fminnm bb0b8e6fbf2c5c76
+  s frecps 35a1754728ae3bcc
+  s frsqrts 44e314b13e8e7bb4
+  d fmax 62427f42f01ff84a
+  d fmin d3171cfed6414214
+  d fmaxnm 9fd8d6b3d83222d4
+  d fminnm 3f56698a53af4aa6
+  d frecps 09c708c02550263c
+  d frsqrts 7e6f660d7a28073c
+  s fadd f99fe43b3b1f56e8
+  s fsub e16f186120de6930
+  s fmul 11d9130a1858b7c0
+  s fdiv b7cbfbcacff99bd8
+  s fnmul 2b47d6641858b7c0
+  s fabd 8d4ac68120de6930
+  s fmulx 11d9130a1858b7c0
+  s fsqrt e998069511ff1bc4
+  s fmadd e64ac0cc034d0d2e
+  d fadd 513b86d1f53f8932
+  d fsub 4469c8931b326225
+  d fmul 5e9a9ad35b87faed
+  d fdiv f756a6c8ab5c8470
+  d fnmul 649aaa3bf12cf2f5
+  d fsqrt d4e9318632a57578
+  d fmadd fcdb83446737905f
+  4s fmax e1fe2f051b4adde6
+  4s fmin 5eb6de7a7a7d80b6
+  4s fmaxnm 50b7845826cc2c9b
+  4s fminnm e331f0b66623f1af
+  4s frecps ba843979a458cdec
+  4s frsqrts 97688a9d7aabcbcb
+  4s fmls 478f6187e6777d10
+  4s fmaxp 7d0f764b7f547db5
+  4s fmaxnmp 09c67e184c1e3098
+  2d fmax 0b5e08ca253c86f6
+  2d fmin 35a6efed483b365f
+  2d fmaxnm ba8a79ca2dc9e7f5
+  2d fminnm 9374416e482fa398
+  2d frecps 075ce81f710239e9
+  2d frsqrts 4aa56ac2684ab3e0
+  2d fmls add03f45e389d936
+  4s fadd 64af0488e80bd969
+  4s fsub 1ac3b441a777604a
+  4s fmul 1c2c6d916bd136bb
+  4s fdiv 56cab4c415cc07fb
+  4s fabd 15205116019a266e
+  4s fmulx 1c2c6d916bd136bb
+  4s fsqrt 59ae2dc3ac3add8a
+  4s fmla d2d5f2d19ee6de23
+  2d fadd 4e65969ab6f2c90f
+  2d fmul 9c32d80af4db3546
+  2d fdiv ce4007e36aa2de84
+  2d fsqrt 7af60952f803981c
+  2d fmla 35c51b58f5f9680d
+nan rules                    0000000000000000
+  inv s fmax 200d6558afe7a384
+  inv s fmin 1301e6229d0a924c
+  inv s fmaxnm bfd1b52b89823082
+  inv s fminnm 11c393bf1cce8eda
+  inv s frecps 4b6dc46c9dbcf8c6
+  inv s frsqrts 329e4175fe9fe8be
+  inv d fmax 101f93b4362159fa
+  inv d fmin 1d9a28ec9465f899
+  inv d fmaxnm 0bf3c9804cebb586
+  inv d fminnm 47eed8c76f8b7aed
+  inv d frecps 48729cbfd9f68676
+  inv d frsqrts ed9b24bead4f64cb
+  inv s fadd 743f2debfd19a97a
+  inv s fsub 957b1ebe8ee26902
+  inv s fmul 087a32e44f606e76
+  inv s fdiv ed33ee81c1258d42
+  inv s fnmul 558ce0e84f606e76
+  inv s fabd 6b331d6c8ee26902
+  inv s fmulx 5d519c4712606e76
+  inv s fsqrt 039ed06bcd1f1b64
+  inv s fmadd 2804fedd95ad1f6c
+  inv s fmsub d88ba928e7ad1f6c
+  inv s fnmadd eeb1d2e295ad1f6c
+  inv s fnmsub 81ea3928e7ad1f6c
+  inv d fadd b80bb5b4536f9a97
+  inv d fsub e833d10f06b8de65
+  inv d fmul 4aefc11e3b4dae2a
+  inv d fdiv f1cb9448f0dd3623
+  inv d fnmul 4ebd65cfd8f8d962
+  inv d fsqrt 6cd3ce93963492c5
+  inv d fmadd 463446e4017f0442
+  inv d fmsub 09e5f5f318288af8
+  inv d fnmadd 761a8bcc225504f7
+  inv d fnmsub 2978c7cb415f2044
+  inv 4s fmax 57db30e1d7997ed4
+  inv 4s fmin 290750585297f77f
+  inv 4s fmaxnm 4e7cfcd6f3d49c0a
+  inv 4s fminnm 0fd036a4fc63cd95
+  inv 4s frecps 442b7c3241a5b195
+  inv 4s frsqrts a0b356ba5b2f61a1
+  inv 4s fmls 09276d1572e7c5dd
+  inv 4s fmaxp c586595a309c7475
+  inv 4s fmaxnmp 131c9febf0125088
+  inv 2d fmax 1e67976ea192fd58
+  inv 2d fmin 6a7474932c1c0366
+  inv 2d fmaxnm 22323df406e7af8c
+  inv 2d fminnm 37cc9bb9b6a137ce
+  inv 2d frecps 11e10bb5654cff3d
+  inv 2d frsqrts b6964dbbdbb12a66
+  inv 2d fmls 98fe26763c78f50a
+  inv 4s fadd 98f2abea1b5acc9c
+  inv 4s fsub a13d053d0aa36a8b
+  inv 4s fmul ba7e96af6553107f
+  inv 4s fdiv b59be5733d0ff292
+  inv 4s fabd e4156a7854c32948
+  inv 4s fmulx 8756cc655e522ce2
+  inv 4s faddp 94682c1d005a1c1a
+  inv 4s fsqrt 2d497d69cccb72ee
+  inv 4s fmla ee6e3dbfdf309824
+  inv 4s fmla idx da90f33e090652a4
+  inv 4s fmls idx 22a784fe99de972f
+  inv 2d fadd 26c28d36a092feae
+  inv 2d fmul 562a7fba947d671b
+  inv 2d fdiv e21e8a194746ee1a
+  inv 2d fsqrt 11fb01425446f7dd
+  inv 2d fmla 4de5b603e84d02b4
+nan rules invalid operations 0000000000000000
+  dn s fmax 7c907c916f1521e0
+  dn s fmin 3f9c97bd264efffe
+  dn s fmaxnm 0f75a0c1e410b7fe
+  dn s fminnm 6c63c0428ca018f0
+  dn s frecps 354734f4e2acd3f6
+  dn s frsqrts c2c0ae26eca19814
+  dn d fmax ab01e38bce879d6c
+  dn d fmin 14e729a92faae7bb
+  dn d fmaxnm ca06e5e9b5e45f6d
+  dn d fminnm a46f6a9603b1fb66
+  dn d frecps 418595eec124fa02
+  dn d frsqrts 60e198dbf77e1c1e
+  dn s fadd 13579b7cf78d4424
+  dn s fsub 840651d43895394e
+  dn s fmul a70dc28896fd3d0a
+  dn s fdiv 212f5e5419e9ebc4
+  dn s fnmul e5abd2e696fd3d0a
+  dn s fabd 9db29c353895394e
+  dn s fmulx a70dc28896fd3d0a
+  dn s fsqrt 3910850cc46886de
+  dn s fmadd f8524547a98a4dca
+  dn d fadd c85df4f24501e9b7
+  dn d fsub 825ea3ab307749a9
+  dn d fmul cfb3d284b819f771
+  dn d fdiv 5fbebb80d0851886
+  dn d fnmul 5fe95c58c906dcf9
+  dn d fsqrt 367372d36e805238
+  dn d fmadd 69c06a3687eabda3
+  dn 4s fmax 11afce2cb30ceb3d
+  dn 4s fmin cdb0a3816d2c0588
+  dn 4s fmaxnm 08ddfb289b80a52f
+  dn 4s fminnm 666848ef47916626
+  dn 4s frecps 3351c0eb7c49375c
+  dn 4s frsqrts bd0bc59ab67bf3d4
+  dn 4s fmls a53dddf65c185e0b
+  dn 4s fmaxp f2a91ccc1477f551
+  dn 4s fmaxnmp 79199d1927acd780
+  dn 2d fmax a05f0539f6f8e77e
+  dn 2d fmin 17af18c5eddf4e2e
+  dn 2d fmaxnm dbb8e7c3d6f8892e
+  dn 2d fminnm ac0ad6c089a7b272
+  dn 2d frecps 4ef05a40b474e0bd
+  dn 2d frsqrts 62473b4ce9745ac8
+  dn 2d fmls 30773f1a9e6fb42f
+  dn 4s fadd d3cd6fcc90d655b7
+  dn 4s fsub ac7bec6625679d9f
+  dn 4s fmul 435b93b60a02434f
+  dn 4s fdiv bee8772a98e6e725
+  dn 4s fabd 7ec428147d812d1e
+  dn 4s fmulx 435b93b60a02434f
+  dn 4s fsqrt 5bc7909905b3777c
+  dn 4s fmla c23b114434bcd997
+  dn 2d fadd 2bfb185e39a62674
+  dn 2d fmul b5fe4afc1329b086
+  dn 2d fdiv 17a1abc83cb7888d
+  dn 2d fsqrt 3b1042f1e29f6abe
+  dn 2d fmla a848dfd153c16e53
+nan rules FPCR.DN            0000000000000000
+  nn s fmax 1e247dfe31f2224e
+  nn s fmin e6dfe0c2e8ffdc78
+  nn s fmaxnm 0336488d6215b9be
+  nn s fminnm 5aeaa92065dc1378
+  nn s frecps 1be16ab0e6f5c34a
+  nn s frsqrts e95af053fcd46554
+  nn d fmax d2be86b2b683cda3
+  nn d fmin c92c1e428ecd462e
+  nn d fmaxnm 082ae0edd7afce1a
+  nn d fminnm 2c68c123adfab837
+  nn d frecps 5ece4b782a5c65c6
+  nn d frsqrts 949df0654860c24d
+  nn s fadd 1d292ca4f78eea6a
+  nn s fsub 3ef29ac391d32426
+  nn s fmul eb42ece63e3f20a8
+  nn s fdiv d629277bfcef16ba
+  nn s fnmul 4028cdae3e3f20a8
+  nn s fabd c10a82cf91d32426
+  nn s fmulx eb42ece63e3f20a8
+  nn s fsqrt 4ded729f24caa610
+  nn s fmadd cba2f70d822deb62
+  nn s fmsub 1e2a1e1f06575bd4
+  nn s fnmadd 050addf9822deb62
+  nn s fnmsub ef07b50a06575bd4
+  nn d fadd 5e17871a79cd5882
+  nn d fsub b907db9dd7d2c4a2
+  nn d fmul b253e13776842cb9
+  nn d fdiv 02cda17bee30bfdd
+  nn d fnmul 8a55ec759c96c005
+  nn d fsqrt 0d3feb692b51a09a
+  nn d fmadd 5c1a4c33c761f580
+  nn d fmsub 13ab8cca3a6e3f2c
+  nn d fnmadd c4131823b4c4dd69
+  nn d fnmsub 881f2e08089e4063
+  nn 4s fmax a935e730980a6dfd
+  nn 4s fmin cf08a1692bd6bec8
+  nn 4s fmaxnm 70f1150c903f88cc
+  nn 4s fminnm e155d966db51e47d
+  nn 4s frecps 8e5c2d5fb5251770
+  nn 4s frsqrts 87ef3fd472385717
+  nn 4s fmls ff300e511f5557be
+  nn 4s fmaxp 4d8aa7a58557e865
+  nn 4s fmaxnmp 35efb507e2b69439
+  nn 2d fmax 12c45674288c5f17
+  nn 2d fmin 61942b25d9327e72
+  nn 2d fmaxnm 55164d1f49b95a2d
+  nn 2d fminnm 0f531b1271607574
+  nn 2d frecps 0f8565438f8601d5
+  nn 2d frsqrts faa247ba2ff2d740
+  nn 2d fmls f0f3c77f47793370
+  nn 4s fadd 2210b67ab606a675
+  nn 4s fsub accc6136be8108c1
+  nn 4s fmul e7fa8ef287cfeb64
+  nn 4s fdiv 441dda3c4f4ef6f4
+  nn 4s fabd 4e3a45cdc6beb5ca
+  nn 4s fmulx e7fa8ef287cfeb64
+  nn 4s faddp 0c689479b3cf3132
+  nn 4s fsqrt 59f728ed51f3175a
+  nn 4s fmla 4630e24b4f54393e
+  nn 4s fmla idx 08dca2d2a1d41c36
+  nn 4s fmls idx 613414bfdf33ad1d
+  nn 2d fadd f4b4d21c21eb3439
+  nn 2d fmul bd4e3b4a661ec48e
+  nn 2d fdiv c470f710b2107613
+  nn 2d fsqrt 9d95a4f1ec0424ec
+  nn 2d fmla 33a82a377b3b4b29
+nan rules two NaN operands   0000000000000000
 scalar int/flags             857c6a37fd06d68a
 lse atomics                  2a8dd5d5bffb278f
   ldaxr/stlxr value 9479a610fa155896

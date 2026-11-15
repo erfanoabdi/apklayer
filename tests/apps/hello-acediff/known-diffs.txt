@@ -1,15 +1,11 @@
 ^sha512
 ^sm4
 vsha512
- vsqrtq_f
- vfmsq_f32
- vmaxq_f32
- vminq_f32
- vmaxnmq_f32
- vminnmq_f32
- vrecpsq_f32
- vrsqrtsq_f32
- default-NaN
+^  inv 
+^  dn 
+^  nn 
+^  default-NaN
+^  vsqrtq_f
  raw handler ran
  blocked: no delivery
  unblock delivers
