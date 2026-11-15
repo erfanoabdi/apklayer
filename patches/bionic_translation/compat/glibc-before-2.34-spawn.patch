@@ -1,0 +1,22 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer compat: posix_spawn_file_actions_addclosefrom_np for glibc before 2.34
+
+glibc before 2.34 (Sailfish OS 5.0: 2.30) has no closefrom file action. The fds above the highest inherited one are closed one by one up to
+1024 (a close of an fd that is not open is ignored by glibc's spawn). shortcut: fds above 1024 stay open in a guest child there. Applied by
+meson.build only when spawn.h lacks the function.
+---
+diff --git a/libc/libc-spawn.cpp b/libc/libc-spawn.cpp
+--- a/libc/libc-spawn.cpp
++++ b/libc/libc-spawn.cpp
+@@ -159,5 +159,10 @@
+   for (int fd = 3; !e && fd <= top; ++fd)
+     if (!action_target(b, fd)) e = posix_spawn_file_actions_addclose(h, fd);
+-  return e ? e : posix_spawn_file_actions_addclosefrom_np(h, top + 1);
++#if !__GLIBC_PREREQ(2, 34)
++  for (int fd = top + 1; !e && fd < 1024; ++fd) e = posix_spawn_file_actions_addclose(h, fd);
++  return e;
++#else
++  return e ? e : posix_spawn_file_actions_addclosefrom_np(h, top + 1);
++#endif
+ }
+ 

@@ -237,5 +237,12 @@ int apklayer_jni_guest_surface(JNIEnv *env, JavaVM *vm, jvmtiEnv *jvmti, jniNati
 
     bind_invocation(vm);
     apklayer_art_load(vm, table, &invoke);  /* last: the thunks wrap the entries above */
+#if defined(__aarch64__)
+    if (!apklayer_art_jni_table && art_of) {  /* no libart.so: nothing swaps the synthetic ids back, and the JVM's own callers (libjava's NewObject) would get them */
+        table->GetMethodID = next.GetMethodID;
+        table->GetStaticMethodID = next.GetStaticMethodID;
+        table->FromReflectedMethod = next.FromReflectedMethod;
+    }
+#endif
     return 0;
 }
