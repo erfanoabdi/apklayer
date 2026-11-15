@@ -28,6 +28,14 @@ final class HostPlainShadows {
     /** The framework's vibrator over the instance's (absent) vibrator_manager service: hasVibrator() is false on a desktop, where Robolectric's said true. */
     @Implements(className = "android.os.Vibrator", isInAndroidSdk = false) public static final class Vibrator {}
     @Implements(className = "android.os.SystemVibrator", isInAndroidSdk = false) public static final class SystemVibrator {}
+    /** HIDL's Java side (docs/HIDL.md): libandroid_runtime's HwBinder/HwParcel/HwBlob natives (registered by bridge/native/binder_runtime.c) instead of Robolectric's no-ops. */
+    @Implements(className = "android.os.HwBinder", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class HwBinder {}
+    @Implements(className = "android.os.HwRemoteBinder", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class HwRemoteBinder {}
+    @Implements(className = "android.os.HwParcel", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class HwParcel {}
+    @Implements(className = "android.os.HwBlob", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class HwBlob {}
+    @Implements(className = "android.os.HidlSupport", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class HidlSupport {}
+    @Implements(className = "android.os.HidlMemory", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class HidlMemory {}
+    @Implements(className = "android.os.NativeHandle", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class NativeHandle {}
     /** libandroid_runtime's USB natives over libusbhost (usbdevfs ioctls on the node ShadowHostUsbManager.openDevice opens), not Robolectric's piped fakes. */
     @Implements(className = "android.hardware.usb.UsbDevice", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class UsbDevice {}
     @Implements(className = "android.hardware.usb.UsbDeviceConnection", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class UsbDeviceConnection {}

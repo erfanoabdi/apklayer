@@ -88,6 +88,27 @@ int apklayer_register_binder(JNIEnv *env, void *runtime)
         return -1;
     }
     fprintf(stderr, "[runtime] real android.os.Binder natives registered\n");
+    /* HwBinder, HwParcel and the rest of HIDL's Java side (old system apps call android.hardware.* HAL proxies; docs/HIDL.md): the framework's own
+     * registrations in AndroidRuntime's order. Optional: a runtime without them leaves HwBinder natives unlinked and nothing else changes. */
+    static const char *const hidl[] = {
+        "_ZN7android30register_android_os_HidlMemoryEP7_JNIEnv", "_ZN7android31register_android_os_HidlSupportEP7_JNIEnv",
+        "_ZN7android28register_android_os_HwBinderEP7_JNIEnv", "_ZN7android26register_android_os_HwBlobEP7_JNIEnv",
+        "_ZN7android28register_android_os_HwParcelEP7_JNIEnv", "_ZN7android34register_android_os_HwRemoteBinderEP7_JNIEnv",
+        "_ZN7android32register_android_os_NativeHandleEP7_JNIEnv"};
+    for (size_t i = 0; i < sizeof hidl / sizeof *hidl; i++) {
+        int (*hreg)(JNIEnv *) = bionic_dlsym(runtime, hidl[i]);
+        if (hreg && (hreg(env) < 0 || (*env)->ExceptionCheck(env))) {
+            fprintf(stderr, "[runtime] cannot register %s\n", hidl[i]);
+            if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        }
+    }
+    {   /* libandroid_runtime's `LOG(INFO) << ...` crashes in an app JVM (JHwBinder_native_getService's "Starting thread pool": the call into its inline
+         * std::__put_character_sequence jumps into libc++'s rodata, SEGV_ACCERR; the same LogMessage works in the stack's processes; cause not found,
+         * docs/HIDL.md). Android-base's minimum severity WARNING keeps the INFO streams from being built. */
+        void *base = bionic_dlopen("libbase.so", 2);
+        void (*set)(int) = base ? bionic_dlsym(base, "_ZN7android4base21SetMinimumLogSeverityENS0_11LogSeverityE") : NULL;
+        if (set) set(3);
+    }
     return 0;
 }
 

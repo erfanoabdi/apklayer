@@ -1,0 +1,36 @@
+From: apklayer
+Subject: [PATCH] apklayer: hwservicemanager as a shared library
+
+Appends libapklayer_hwservicemanager: the binary's own sources (service.cpp with its main, ServiceManager, HidlService, Vintf, TokenManager) as a
+shared library exporting main, because bionic_translation loads libraries, not executables (as frameworks/native 0004 does for servicemanager).
+The SELinux access policy (AccessControl.cpp) is replaced by vendor/apklayer's allow-all one (aosp/hals/hwservicemanager). Rebuild:
+`m libapklayer_hwservicemanager`. docs/HIDL.md.
+Against system/hwservicemanager 60271965cf6b (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/Android.bp b/Android.bp
+--- a/Android.bp
++++ b/Android.bp
+@@ -138,3 +138,23 @@ cc_test {
+     ],
+     test_suites: ["device-tests"],
+ }
++
++// apklayer: the HIDL service manager as a library (its main() is exported) so a launcher on bionic_translation can run it.
++cc_library_shared {
++    name: "libapklayer_hwservicemanager",
++    defaults: [
++        "hwservicemanager_defaults",
++        "libhwservicemanager_shared_libs",
++        "libtokenmanager_shared_libs",
++    ],
++    srcs: [
++        "HidlService.cpp",
++        "ServiceManager.cpp",
++        "Vintf.cpp",
++        "TokenManager.cpp",
++        "service.cpp",
++        ":apklayer_hwservicemanager_access",
++    ],
++    shared_libs: ["libcutils"],
++    compile_multilib: "64",
++}

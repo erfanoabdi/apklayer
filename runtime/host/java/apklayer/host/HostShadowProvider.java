@@ -121,6 +121,13 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.hardware.usb.UsbDeviceConnection", HostPlainShadows.UsbDeviceConnection.class.getName()),
                 Map.entry("android.hardware.usb.UsbRequest", HostPlainShadows.UsbRequest.class.getName()),
                 Map.entry("android.os.SystemProperties", ShadowHostSystemProperties.class.getName()),
+                Map.entry("android.os.HwBinder", HostPlainShadows.HwBinder.class.getName()),  // HIDL's Java side over the real HwBinder JNI (docs/HIDL.md)
+                Map.entry("android.os.HwRemoteBinder", HostPlainShadows.HwRemoteBinder.class.getName()),
+                Map.entry("android.os.HwParcel", HostPlainShadows.HwParcel.class.getName()),
+                Map.entry("android.os.HwBlob", HostPlainShadows.HwBlob.class.getName()),
+                Map.entry("android.os.HidlSupport", HostPlainShadows.HidlSupport.class.getName()),
+                Map.entry("android.os.HidlMemory", HostPlainShadows.HidlMemory.class.getName()),
+                Map.entry("android.os.NativeHandle", HostPlainShadows.NativeHandle.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
                 Map.entry("android.util.Xml", ShadowHostXml.class.getName()),
