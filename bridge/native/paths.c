@@ -758,6 +758,23 @@ static bool mapped_path(char **path)
     return binder_device(path) || android_stub_path(path) || storage_path(path) || own_data_path(path) || own_apk_path(path) || data_path(path) || linker_path(path);
 }
 
+/* Android 10+ (untrusted_app) answers EACCES for /proc/net/unix (also /proc/self/net, /proc/<own pid>/net, /proc/thread-self/net); the x86 guest gets it from
+ * binary_translation 0018. App processes only (own data set); APKLAYER_PROC_VIEW=host turns it off. The path becomes one the kernel itself refuses
+ * (/root: mode 0700, not searchable for an app uid), so every wrapper and bionic's libc fail with EACCES without a separate errno channel. */
+static int proc_net_unix_denied(const char *path)
+{
+    if (strncmp(path, "/proc/", 6) || !__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
+    char own[32];
+    snprintf(own, sizeof own, "%ld/", (long)getpid());
+    const char *r = path + 6;
+    if (!strncmp(r, "self/", 5)) r += 5;
+    else if (!strncmp(r, "thread-self/", 12)) r += 12;
+    else if (!strncmp(r, own, strlen(own))) r += strlen(own);
+    if (strcmp(r, "net/unix")) return 0;
+    const char *v = getenv("APKLAYER_PROC_VIEW");
+    return !(v && !strcmp(v, "host"));
+}
+
 bool apklayer_apply_path_overrides(char **path)
 {
     char *flat = collapsed(*path);
@@ -770,6 +787,10 @@ bool apklayer_apply_path_overrides(char **path)
     if (apklayer_proc_hidden(*path) || other_package_path(*path) || other_scoped_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
         char *gone = strdup("/proc/.apklayer-hidden");
         if (gone) { *path = gone; return true; }
+    }
+    if (proc_net_unix_denied(*path)) {
+        char *denied = strdup("/root/.apklayer-denied");
+        if (denied) { *path = denied; return true; }
     }
     if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
     const char *below = proc_root_rest(*path);

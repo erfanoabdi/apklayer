@@ -48,6 +48,8 @@ try:
         assert probes.get('art.msg.listIoobe') == 'Index: 5, Size: 0', probes.get('art.msg.listIoobe')
         for key in ('art.msg.aioobe', 'art.msg.sioobe'):
             assert not probes.get(key, '').startswith('Index: '), (key, probes.get(key))
+        # Android 10+ refuses /proc/net/unix to an app (untrusted_app), on both CPUs
+        assert 'Permission denied' in probes.get('native.proc.net.unix.head', ''), probes.get('native.proc.net.unix.head')
         print('PASS identity probes: %d lines' % count, flush=True)
 finally:
     instance.stop()
