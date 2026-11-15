@@ -3,6 +3,13 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: the NDK camera is Android's own libcamera2ndk (bridge/ndk/libcamera2ndk.c, the all-error stub, is gone)
+- The real library (frameworks/av/camera/ndk, `out/target/product/generic_arm64/system/lib64/libcamera2ndk.so` sha256 ae4092fb..., x86_64 fc2b471c...,
+  unpatched) talks to the same cameraserver (`media.camera`) as camera2; its dependencies were staged already. Lock rows and deps/android-libs.list added.
+- Test: tests/apps/hello-camera-ndk + `tests/run camera-ndk` (fake provider; arm64-only app): id list (back, front), LENS_FACING 1/0, SENSOR_ORIENTATION 90/270,
+  openCamera, a repeating YUV request into an AImageReader (640x480 frame, y[0]=235 = the white bar). Parallels (own tree): PASS.
+- Found: the first lookup starts cameraserver lazily and the list is empty for ~200 ms (the app polls for it; a native app that asks once at startup can see none).
+
 ## 2026-11-15: UTM cold-start stall (`input`, `identity-matrix`) was the execvpe crash, fixed by 7b8c421d
 - The integration runs that failed 3 of 3 (also at 52787c75) ran a tree without 7b8c421d. Cause: `HostLocation.follow` starts `setpriv ... python3 geoclue.py` (HostProcess.dying) synchronously on the startup thread; in the app JVM the JDK's `jspawnhelper` crashed in the preload's `execvpe` (no arena) and the parent waited for apport's core dump (`journalctl -k`: `jspawnhelper ... core_pipe_limit`, 491 lines since 11-14). The gap sits right before the `HostLocation` mark, with idle CPU (the instance's own processes sleep in the vfork wait).
 - Measured on UTM, own tree, `-Dapklayer.perf`, default (shared, 148 app ids) data dir, cold `hello.identity`: old preload `HostLocation` +3117 ms, first frame 13876 ms; with the fix +56 ms, 6749 ms. Revert experiment: `meson test exec-vp` FAIL 1.08 s -> OK 0.00 s. With a fresh small data dir both are ~2.3 s and show no gap (the core dump was then fast).

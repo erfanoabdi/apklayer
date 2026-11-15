@@ -66,7 +66,13 @@ JNIEXPORT jstring JNICALL Java_hello_cameranative_Main_run(JNIEnv *env, jclass c
     ACameraManager *manager = ACameraManager_create();
     ACameraIdList *list = 0;
     if (!manager) err = "ACameraManager_create";
-    else err = check(buf, "getCameraIdList", ACameraManager_getCameraIdList(manager, &list));
+    for (int i = 0; manager && i < 100; i++) {  // cameraserver starts on the first lookup and tells its cameras by callback: the first lists can be empty
+        if (list) ACameraManager_deleteCameraIdList(list);
+        list = 0;
+        err = check(buf, "getCameraIdList", ACameraManager_getCameraIdList(manager, &list));
+        if (err || list->numCameras > 0) { printf("[ndkcam] list after %d ms\n", i * 100); break; }
+        usleep(100000);
+    }
     if (!err && list->numCameras < 1) err = "empty camera list";
     for (int i = 0; !err && i < list->numCameras; i++) {
         const char *id = list->cameraIds[i];
