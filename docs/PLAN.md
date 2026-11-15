@@ -60,9 +60,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
-## Userspace binder
-- Fewer hops per call: a busy-poll window in the route (bridge/native/binder_route.c), futex doorbells, no second wakeup. Measure SurfaceFlinger per frame and audio.
-
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
 - Fennec on x86: a guest `libmegazord` double free is quarantined (not a crash). A crash seen once at libxul+0x3e88716 in another PC tree did not reproduce on main (6 of 6 pass).
