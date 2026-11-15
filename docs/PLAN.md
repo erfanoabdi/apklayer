@@ -1,7 +1,7 @@
 # apklayer: open work
 
 Only what is still to do. Only the lead edits this file (agents report PLAN changes in their reports); done items are deleted when their branch is merged.
-History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `docs/ART-DEFERRED.md`. Rules: `CLAUDE.md`.
+History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `docs/NOTPLAN.md`. Closed ART work: `docs/ART-DEFERRED.md`. Rules: `CLAUDE.md`.
 
 ## Ground rules
 - GitHub releases only (debs, Sailfish RPM, Ubuntu Touch click, Flatpak bundles).
@@ -18,11 +18,9 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
 - PGR (Tencent ACE) died at 105-144 s on half the runs: cause found, ACE's `/proc/self/root` virtual-app probe (fixed in `bridge/native/paths.c`; 31.7 min idle soak on the tester PC). Open: ship the rebuilt `libapklayer-preload.so` in the deb/bundle; run meson `path-layer` and `tests/run files`; play PGR into a gameplay scene on the tester PC (needs a test-input shell or an unlocked desktop).
-- Translator, translated code only (acediff known-diffs `inv `, `dn `, `nn `, `default-NaN`, `vsqrtq_f`): the negative default NaN of an invalid FADD/FSUB/FMUL/FDIV/FSQRT/FMLA/FMADD, FPCR.DN ignored, two NaN operands of different kinds, NaN sign of FMSUB/FNMADD/FNMSUB. A fix-up after each operation, or a bail while DN is set, would close them at a speed cost. None explains ACE. A guest fault without a guest handler still goes to HotSpot's handler.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
 
 ## Graphics
-- Present fences signal at hand-over, not the real present: that needs an unsignaled kernel fence, and syncobj export and TRANSFER of an unsubmitted point fail (PC, Intel, 2026-11-15); remaining options are vgem or blocking `presentDisplay` until the frame callback (stalls SurfaceFlinger's HWC thread).
 - Host ES1 path untested (needs NVIDIA or Mesa with `-Dgles1=enabled`).
 - Vulkan presentation untested on AMD.
 - OTR2 on the PC runs ~30 fps at 2448x1374.
@@ -43,23 +41,19 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
-- Shared libraries: a native library's path in the app's linker namespace (`<uses-native-library>` itself works).
 - HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
 - Storage: scoped storage hides other packages' `Android/data` and `Android/obb` only for the `/storage/emulated/0`, `/sdcard` and `/data/media/0` spellings; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
 - Call audio: the 6 s new-requester grace and reports from native AAudio/OpenSL streams (the policy's active tracks).
-- Direct buffer `array()` writes are lost: documented limit (a copy-back would overwrite newer buffer contents; only array pinning would fix it, see `docs/PATCHES.md`).
 
 ## Startup and memory
 - Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
 - ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
-- Hub ready is ~2.0 s with 148 packages; left: JVM main to Robolectric ready 0.8 s and the settings provider's `installProviders` 0.34 s.
 - Composer GL context ~80 MB: measure on a phone while an app draws.
 - A sound server started later is used only from the next stack start.
 - Owner to decide: should Lomiri suspend an unfocused apklayer window?
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
-- No translation cache across starts.
 - Telegram has no x86_64 FOSS APK to test.
 - Unity: `hpatchz`.
 
@@ -67,7 +61,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - The NVIDIA tester's box with the INSTALL.md checklist (the broker now runs `nvidia-modprobe` for missing nodes; only the argument mapping is tested).
 - UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
 - A release-candidate deb with the sandbox on for a day.
-- Isolated processes (uid 99000+) hold no permissions and see only the hub. `useAppZygote` runs as a plain isolated process (no app zygote, no `ZygotePreload`); `externalService` (`BIND_EXTERNAL_SERVICE`) is not implemented; an isolated service of the hub's own package cannot be hosted.
 
 ## Packaging and releases
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
@@ -76,13 +69,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
 - First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
-- Sailfish: libhybris in every Android process, a Chum/OBS repository, no text input in the manager.
 - Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
 
 ## Manager
 - Apps installed before 2026-11-04 need a reinstall for permissions.
 - `manager/tests/ui.sh` permission step is written but never run. Hardware page: no live GNSS/camera test.
-- Binder devices of a removed instance stay until reboot.
 
 ## Hardware
 - Vibrator: `View.performHapticFeedback(int)` is swallowed by Robolectric's `ShadowView` (haptic constants only reach the HAL for the hidden `Vibrator.performHapticFeedback`); ramp/PWLE segments of app effects are skipped in the hub's vibrator_manager.
