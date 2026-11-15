@@ -4,6 +4,11 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: Sandbox: component hosts take the package's spare
+- `cli/run.cpp`: under `APKLAYER_SANDBOX=1` a component host (cold before) takes, or starts for the next, the spare of its own package like an app window (the spare is already that app's uid and view, `cli/spare.cpp`); still cold: an intent file too large for the environment, an isolated process (uid 99000+; the spare has the app's uid). The hub's own unsandboxed idle spare is only the JDK 25 CDS trainer (no app ever takes it: its key lacks the package).
+- UTM own tree: `tests/run sandbox services activities providers` with `APKLAYER_SANDBOX=1` pass, hosts of ExitService/OtherPidService took spares (6-7 launches each). Found: a second sandboxed `services` run on the same instance data fails (the isolated service's `Settings.Secure` call: "Ssaid settings not accessible"), also without this change; a fresh instance data passes.
+- Isolated: `useAppZygote` runs as a plain isolated process (no app zygote, no `ZygotePreload`); `externalService` (BIND_EXTERNAL_SERVICE flag) is not implemented in any mode; an isolated service of the hub's own package (system uid) cannot be hosted (`HubDirectory.launch`).
+
 ## 2026-11-15: Startup and memory measured (UTM VM, uibench, 148 packages)
 - Hub start: the hub's own registration waited for a whole audio-permission feed (`HubAudioPermissions.registered`: build 150 ms + audioserver `onServiceStart` 350 ms, started by the first registering app and serialized by its lock). The hub's own pid plays no track: it skips the check. Quiet VM, 4 cold runs each: hub ready 2.35 s -> 2.03 s, first frame 3.17 s -> 3.0 s; warm unchanged (0.99 s).
 - Marks: the hub JVM now gets `-Dapklayer.perf*` from APKLAYER_JOPTS; `startup-timeline.py` reads its `hub:` lines; new marks "hub: system package installed", "hub: attached", "hub registered (REGISTER done)", "remote providers registered". Hub boot cold: JVM main -> Robolectric ready 0.8 s, REGISTER 0.43 s (was the feed), settings provider's providers 0.34 s.
