@@ -68,8 +68,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - The NVIDIA tester's box with the INSTALL.md checklist (the broker now runs `nvidia-modprobe` for missing nodes; only the argument mapping is tested).
 - UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
 - A release-candidate deb with the sandbox on for a day.
-- Shared spare, cold component hosts.
-- Isolated processes (uid 99000+) hold no permissions and see only the hub; not covered: isolated processes of system-uid apps, `externalService`, `useAppZygote`.
+- Isolated processes (uid 99000+) hold no permissions and see only the hub. `useAppZygote` runs as a plain isolated process (no app zygote, no `ZygotePreload`); `externalService` (`BIND_EXTERNAL_SERVICE`) is not implemented; an isolated service of the hub's own package cannot be hosted.
 
 ## Packaging and releases
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
@@ -94,6 +93,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
+- A second sandboxed `services` run on the same instance data fails in the isolated service (`Settings.Secure`: Ssaid settings not accessible); fresh data passes.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person

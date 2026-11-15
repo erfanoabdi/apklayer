@@ -216,8 +216,9 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
             unlink(intentFile.c_str());
         }
     // under the sandbox a spare is one app's process from its start (cli/spare.cpp): an app window's launch takes the spare of its own package, or
-    // starts it for the next; component hosts and launches with a large intent file start cold
-    bool spare = !sandboxOn() || (mode == RunMode::App && !nj.env.count("APKLAYER_INTENT_FILE"));
+    // starts it for the next; so does a component host (the spare is the package's whatever the launch's kind); a launch with a large intent
+    // file and an isolated process (its own uid, 99000 and up: the spare has the app's) start cold
+    bool spare = !sandboxOn() || (!nj.env.count("APKLAYER_INTENT_FILE") && getenvOr("APKLAYER_ISOLATED_UID", "").empty());
     std::string sandboxPackage = sandboxOn() ? package : "";
     std::string spareKey = appSpareKey(l, inst, jvm, nj.env, sandboxPackage);
     int vdisplay = 0;
