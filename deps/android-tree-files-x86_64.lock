@@ -430,7 +430,7 @@ e7cb30dbf6cc80fb3da36e3fdce4d3e74c087480c402edd719a11b6bd61051f2 371872 x86_64/a
 d149faca4d521830ba13b5a19f12c204745b4e3ef0259b9b9696f10a7cade82e 560576 x86_64/android-libs/lib64/libopus.so out/target/product/generic_x86_64/apex/com.android.media.swcodec/lib64/libopus.so same
 b75fa997c91e31a1c75540a7611e1dcec42f6a68d04f55195070bd095c188d5d 51480 x86_64/android-libs/lib64/libpackagelistparser.so out/target/product/generic_x86_64/system/lib64/libpackagelistparser.so same
 f3ae07f418b06218bf5118e39748647fcc72f2408fc817e2ba3c8b4d6719cafc 445488 x86_64/android-libs/lib64/libpcre2.so out/target/product/generic_x86_64/system/lib64/libpcre2.so same
-6d0ae6881492b4f70cf4bb1dd92dbacde61a7abd755f3b1c00dfd5660c7d3b7d 5097936 x86_64/android-libs/lib64/libpdfium.so out/target/product/generic_x86_64/system/lib64/libpdfium.so same
+abde66942877565f85eaab02d6b52a46cecbf551583b6da2a94c3c283f151651 4673472 x86_64/android-libs/lib64/libpdfium.so out/target/product/generic_x86_64/system/lib64/libpdfium.so apklayer
 3d36185043a4edaaebe576133068709d14877051f349085d2389cb2f77f0bdee 1031848 x86_64/android-libs/lib64/libperfetto_c.so out/target/product/generic_x86_64/system/lib64/libperfetto_c.so same
 58be6c46b0235b9e0ddb52bb297d550b281984220510df926c6b0fd48a153647 53552 x86_64/android-libs/lib64/libperfetto_framework_jni.so out/target/product/generic_x86_64/system/lib64/libperfetto_framework_jni.so same
 7cd8f98146043cbbe5e3e1980d92c535b185259bb0d76440d6599dc048dcc1df 85432 x86_64/android-libs/lib64/libpermission.so out/target/product/generic_x86_64/system/lib64/libpermission.so same

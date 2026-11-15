@@ -102,13 +102,6 @@ int apklayer_register_binder(JNIEnv *env, void *runtime)
             if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
         }
     }
-    {   /* libandroid_runtime's `LOG(INFO) << ...` crashes in an app JVM (JHwBinder_native_getService's "Starting thread pool": the call into its inline
-         * std::__put_character_sequence jumps into libc++'s rodata, SEGV_ACCERR; the same LogMessage works in the stack's processes; cause not found,
-         * docs/HIDL.md). Android-base's minimum severity WARNING keeps the INFO streams from being built. */
-        void *base = bionic_dlopen("libbase.so", 2);
-        void (*set)(int) = base ? bionic_dlsym(base, "_ZN7android4base21SetMinimumLogSeverityENS0_11LogSeverityE") : NULL;
-        if (set) set(3);
-    }
     return 0;
 }
 

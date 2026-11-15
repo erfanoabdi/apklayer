@@ -1,0 +1,22 @@
+From: apklayer
+Subject: [PATCH] libpdfium: do not export the statically linked libc++
+
+libpdfium links libc++ statically and exported 699 std::__1 symbols (locale::use_facet, ctype<char>::id, basic_ostream sentry...). libandroid_runtime
+lists libpdfium.so (NEEDED 77) before libc++.so (101), so its inline `os << "text"` (every LOG(INFO) <<) bound locale::id objects and use_facet to
+pdfium's copy while the stream's locale came from libc++.so: use_facet returned the wrong facet (a collate<char> for ctype<char>) and the virtual
+widen() jumped into libc++'s rodata, SEGV_ACCERR. docs/HIDL.md. Against external/pdfium aac15c2e18a7 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/Android.bp b/Android.bp
+--- a/Android.bp
++++ b/Android.bp
+@@ -170,6 +170,10 @@ cc_library_shared {
+
+     ldflags: [
+         "-Wl,-icf=all",
++        // libpdfium links libc++ statically; its exported std::__1 copy would win the symbol lookup of libraries that list libpdfium before libc++ (apklayer: docs/HIDL.md)
++        "-Wl,--exclude-libs,libc++_static.a",
++        "-Wl,--exclude-libs,libc++abi.a",
++        "-Wl,--exclude-libs,libunwind.a",
+     ],
+
+     export_include_dirs: ["public"],
