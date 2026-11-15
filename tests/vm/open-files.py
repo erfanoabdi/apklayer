@@ -70,6 +70,7 @@ try:
     check('application/x-openvpn-profile' in types, 'MimeType has the declared type')
     check('image/png' in types and 'image/jpeg' in types, 'MimeType has the image/* family as concrete types')
     check('*/*' not in types and 'application/x-web-only' not in types and not any('*' in t for t in types), 'no */*, no wildcard, no https-only type')
+    check(all(t.split('/')[0] in ('application', 'audio', 'font', 'image', 'inode', 'message', 'model', 'multipart', 'text', 'video') for t in types if t), 'every MimeType has a registered top-level (no vnd.android.document/*)')
     check(re.search(r'^Exec=.* open %s %%f$' % re.escape(PKG), text, re.M) is not None, 'Exec opens the file: `open <package> %f`')
     xml = package_xml.read_text() if package_xml.exists() else ''
     print(xml)

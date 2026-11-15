@@ -43,6 +43,13 @@ std::string typeOfExtension(const std::string& ext) {
     return "";
 }
 
+// Android-internal types (vnd.android.document/root, DocumentsUI's) have no registered top-level: update-desktop-database rejects the entry's line
+bool validTop(const std::string& mime) {
+    static const char* tops[] = {"application", "audio", "font", "image", "inode", "message", "model", "multipart", "text", "video"};
+    std::string top = mime.substr(0, mime.find('/'));
+    return std::find_if(std::begin(tops), std::end(tops), [&](const char* t) { return top == t; }) != std::end(tops);
+}
+
 std::string escape(const std::string& s) {
     std::string out;
     for (char c : s) out += c == '&' ? "&amp;" : c == '<' ? "&lt;" : c == '>' ? "&gt;" : c == '"' ? "&quot;" : std::string(1, c);
@@ -64,7 +71,7 @@ FileTypes fileTypes(const std::string& info, const std::string& package, const s
             if (m.empty() || m == "*/*" || m == "*") continue;  // every file: an app that claims all of them is a viewer of none
             bool family = false;
             for (const auto& [wild, members] : kFamilies) if (m == wild) { family = true; for (const std::string& t : members) add(out.mimes, t); }
-            if (family || m.find('*') != std::string::npos || m.find('/') == std::string::npos) continue;
+            if (family || m.find('*') != std::string::npos || m.find('/') == std::string::npos || !validTop(m)) continue;
             add(out.mimes, m);
             if (concrete.empty()) concrete = m;
         }
