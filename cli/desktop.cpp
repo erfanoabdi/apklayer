@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "apps.h"
+#include "filetypes.h"
 #include "flatpak.h"
 
 namespace apklayer {
@@ -24,6 +25,31 @@ bool hasEntry(const std::string& info) { return !property(info, "launcher").empt
 // unless the person gave the Flatpak the host's menu folder (`flatpak override --filesystem=xdg-data/applications:create`, docs/INSTALL.md
 // "Flatpak": where the portal cannot check icons, Ubuntu 24.04): then the files as the deb writes them
 bool viaPortal() { return inFlatpak() && access(join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications").c_str(), W_OK) != 0; }
+
+// the app's file types (cli/filetypes.cpp): MimeType= and `open <package> %f` (the file as the intent's data, cli/open.cpp) in place of `run <package>`
+std::string mimeLine(const FileTypes& ft) {
+    std::string line;
+    for (const std::string& m : ft.mimes) line += m + ";";
+    return line.empty() ? "" : "MimeType=" + line + "\n";
+}
+
+// the shared-mime-info package defining the extensions of the app's own ("" removes it); the database is made again when it changed. The Flatpak has no
+// update-mime-database (the host's database follows at its next update: docs/FILE-ASSOCIATIONS.md); through the portal there is no file to write
+void writeMime(const std::string& pkg, const std::string& xml) {
+    if (viaPortal()) return;
+    std::string mime = join(hostXdg("XDG_DATA_HOME", ".local/share"), "mime"), file = join(mime, "packages/apklayer-" + pkg + ".xml");
+    if (readFile(file).value_or("") == xml) return;
+    if (xml.empty()) unlink(file.c_str());
+    else { makeDirs(join(mime, "packages")); writeFile(file, xml); }
+    if (!inFlatpak()) sh({"update-mime-database", mime});
+}
+
+// the manager's own entry (the deb's, the Flatpak's), which carries the .apk MimeType= and the install dialog
+bool managerEntry() {
+    for (const std::string& d : split(getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share") + ":" + hostXdg("XDG_DATA_HOME", ".local/share"), ':'))
+        if (exists(join(d, "applications/apklayer-manager.desktop")) || exists(join(d, "applications/io.github.erfanoabdi.Apklayer.desktop"))) return true;
+    return false;
+}
 
 int launcherPortal(const Layout& l, std::vector<std::string> args) {
     args.insert(args.begin(), {"python3", join(l.root, "bridge/portal/launcher.py")});
@@ -74,35 +100,42 @@ bool inDrawer(const std::string& info) {
 
 void writeDesktop(const Layout& l, const std::string& pkg) {
     std::string info = infoFile(l, pkg);
+    FileTypes ft = fileTypes(info, pkg, property(info, "label"));
+    std::string exec = ft.mimes.empty() ? " run " + pkg : " open " + pkg + " %f";
     if (viaPortal()) {  // a hidden one is removed: the portal asks the person on each install, never on a rewrite of the same entry
         if (!inDrawer(info)) { removeDesktop(l, pkg); return; }
         // the portal sets Name and Icon from these and rewrites Exec to `flatpak run --command=apklayer <app id> run <package>`
         launcherPortal(l, {"install", launcherPrefix() + pkg + ".desktop", property(info, "label"), appDir(l, pkg) + "/icon.png",
-                           "[Desktop Entry]\nType=Application\nComment=Android app (" + pkg + ") via apklayer\nExec=apklayer run " + pkg + "\nStartupWMClass=" + pkg +
-                               "\nCategories=X-Apklayer-App;\n"});
+                           "[Desktop Entry]\nType=Application\nComment=Android app (" + pkg + ") via apklayer\nExec=apklayer" + exec + "\nStartupWMClass=" + pkg +
+                               "\nCategories=X-Apklayer-App;\n" + mimeLine(ft)});
         return;
     }
+    writeMime(pkg, hasEntry(info) ? ft.xml : "");
     writeMenu(l);
     std::string apps = join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications"), entry = join(apps, launcherPrefix() + pkg + ".desktop");
     makeDirs(apps);
     std::string cli = hostCli(l.cliBinary());
     if (hasEntry(info))
-        writeFile(entry, "[Desktop Entry]\nType=Application\nName=" + property(info, "label") + "\nComment=Android app (" + pkg + ") via apklayer\nExec=" + cli + " run " + pkg +
-                             "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=X-Apklayer-App;\nX-Lomiri-Touch=true\n"
+        writeFile(entry, "[Desktop Entry]\nType=Application\nName=" + property(info, "label") + "\nComment=Android app (" + pkg + ") via apklayer\nExec=" + cli + exec +
+                             "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=X-Apklayer-App;\n" + mimeLine(ft) + "X-Lomiri-Touch=true\n"
                              // Lipstick's invoker --single-instance locks by the Exec binary: every app is this CLI, so a second app only raised the first
                              "X-Nemo-Single-Instance=no\n"
                              // Lipstick's switcher ties a window to its entry by this key and the window's wl_shell class (the shell sets the package):
                              // every apklayer window is one client's (the shell's pid), so its pid matched no entry (no cover icon, a cover per launch)
                              "X-apkd-packageName=" + pkg + "\n" + (inDrawer(info) ? "" : "NoDisplay=true\n"));
     else unlink(entry.c_str());
-    writeFile(join(apps, launcherPrefix() + "open-apk.desktop"),
-              "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");
+    // the manager's entry handles .apk files where it is installed (MimeType=, a dialog to install: the person's default stays theirs); else `run <file>`
+    bool manager = managerEntry();
+    if (!manager)
+        writeFile(join(apps, launcherPrefix() + "open-apk.desktop"),
+                  "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");
     if (inFlatpak()) return;  // the Platform has neither tool: the host's menu reads the entries as they are
     sh({"update-desktop-database", apps});
-    sh({"xdg-mime", "default", launcherPrefix() + "open-apk.desktop", "application/vnd.android.package-archive"});
+    if (!manager) sh({"xdg-mime", "default", launcherPrefix() + "open-apk.desktop", "application/vnd.android.package-archive"});
 }
 
 void removeDesktop(const Layout& l, const std::string& pkg) {
+    writeMime(pkg, "");
     if (viaPortal()) launcherPortal(l, {"uninstall", launcherPrefix() + pkg + ".desktop"});
     else unlink(join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications/" + launcherPrefix() + pkg + ".desktop").c_str());
 }

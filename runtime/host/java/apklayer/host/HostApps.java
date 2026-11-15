@@ -128,8 +128,10 @@ final class HostApps {
 
     private static Intent fromProperties(Properties p) {
         Intent intent = new Intent(p.getProperty("action"));
-        if (p.getProperty("type") != null) intent.setType(p.getProperty("type"));
-        if (p.getProperty("data") != null) intent.setData(Uri.parse(p.getProperty("data")));
+        // setData clears the type: both in one call (a VIEW of a content Uri with its MIME type)
+        if (p.getProperty("data") != null) intent.setDataAndType(Uri.parse(p.getProperty("data")), p.getProperty("type"));
+        else if (p.getProperty("type") != null) intent.setType(p.getProperty("type"));
+        if (p.getProperty("flags") != null) intent.addFlags(Integer.parseInt(p.getProperty("flags")));  // `apklayer open`: FLAG_GRANT_READ_URI_PERMISSION
         Map<String, String> extras = new TreeMap<>();
         for (String k : p.stringPropertyNames()) if (k.startsWith("extra.")) extras.put(k.substring(6), p.getProperty(k));
         extras.forEach(intent::putExtra);

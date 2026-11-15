@@ -343,6 +343,7 @@ final class AppEnvironment {
         // activity's android:process (HostProcessName.windowProcess)
         String process = System.getProperty("apklayer.isolated") == null ? HostProcessName.windowProcess() : System.getProperty("apklayer.processname", "");
         try {
+            if (!HostProcessName.isolated) HostOpenedFiles.register(app);  // the host files opened with this app (`apklayer open`)
             android.content.pm.ProviderInfo[] providers = app.getPackageManager()
                     .getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PROVIDERS).providers;
             if (providers == null || HostProcessName.isolated) return;

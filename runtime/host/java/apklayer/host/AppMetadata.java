@@ -58,6 +58,8 @@ final class AppMetadata {
             info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
             List<ManifestFilters.Filter> filters = ManifestFilters.read(app);
             for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN archive P6)
+            List<String> opens = ManifestFilters.fileTypes(app);
+            for (int i = 0; i < opens.size(); i++) info.setProperty("open." + i, opens.get(i));  // the desktop's file associations (cli/filetypes.cpp)
             android.content.pm.ProviderInfo[] providers = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PROVIDERS).providers;
             info.setProperty("authorities", providers == null ? "" : String.join(";", java.util.Arrays.stream(providers).map(p -> p.authority).filter(java.util.Objects::nonNull).toList()));  // read at launch before the manifest is parsed (AppEnvironment)
             String[] requested = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;

@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Files an app declares in its manifest open with it from the desktop (docs/FILE-ASSOCIATIONS.md). hello.openfile (VIEW of .ovpn, application/x-openvpn-profile,
+image/*; a bare */* and an https-only filter) is installed into a data home of the test's own (nothing of the VM user's menu changes): its .desktop entry
+has MimeType= and `open <package> %f`, the extension without a system type gets a shared-mime-info package, `gio open sample.ovpn` starts the app with
+an ACTION_VIEW (a content Uri, the type, the display name, the content), a second file reaches the running app in onNewIntent, and an uninstall takes
+the entry and the package away. Last the .apk handler: the data/ files pass desktop-file-validate and the mime package defines .apks/.xapk/.apkm."""
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+from instance import ENV, LOGDIR, OUT, wait_file  # noqa: E402
+
+PKG = 'hello.openfile'
+data = OUT / 'open-files-data'
+shutil.rmtree(data, ignore_errors=True)
+data.mkdir(parents=True)
+env = dict(ENV, XDG_DATA_HOME=str(data), APKLAYER_JOPTS='-Dapklayer.runms=90000', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400')
+entry = data / ('applications/apklayer-%s.desktop' % PKG)
+package_xml = data / ('mime/packages/apklayer-%s.xml' % PKG)
+app_log = Path(LOGDIR) / ('app-%s.log' % PKG)
+failures = []
+
+
+def run(*argv, **kw):
+    return subprocess.run(argv, env=env, capture_output=True, text=True, **kw)
+
+
+def gio_open(path):
+    """`gio open`: the handler (and the app it starts) keeps the pipes, so they are not captured; returns gio's exit status."""
+    return subprocess.run(['gio', 'open', str(path)], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+
+
+def check(ok, what):
+    print(('ok   ' if ok else 'FAIL ') + what, flush=True)
+    if not ok: failures.append(what)
+
+
+def seen(needle, seconds):
+    """The app log's last line with needle (the log is waited on with inotify), None on a timeout."""
+    try: text = wait_file(app_log, needle, seconds)
+    except AssertionError as late: print(late); return None
+    return [l for l in text.splitlines() if needle in l][-1]
+
+
+def finish():
+    instance.stop()
+    shutil.rmtree(data, ignore_errors=True)
+    for name in ('sample.ovpn', 'second.ovpn'):
+        (OUT / name).unlink(missing_ok=True)
+    if failures:
+        print('FAILED: ' + '; '.join(failures))
+        sys.exit(1)
+    print('open-files: all passed')
+    sys.exit(0)
+
+
+try:
+    out = run('bin/apklayer', 'install', '.tests/apks/hello-openfile.apk')
+    check('installed ' + PKG in out.stdout, 'install ' + PKG + ' ' + (out.stderr or out.stdout)[-200:])
+    text = entry.read_text() if entry.exists() else ''
+    mimes = re.search(r'^MimeType=(.*)$', text, re.M)
+    types = (mimes.group(1).split(';') if mimes else [])
+    print(text)
+    check(entry.exists() and run('desktop-file-validate', str(entry)).returncode == 0, 'the entry validates')
+    check('application/x-openvpn-profile' in types, 'MimeType has the declared type')
+    check('image/png' in types and 'image/jpeg' in types, 'MimeType has the image/* family as concrete types')
+    check('*/*' not in types and 'application/x-web-only' not in types and not any('*' in t for t in types), 'no */*, no wildcard, no https-only type')
+    check(re.search(r'^Exec=.* open %s %%f$' % re.escape(PKG), text, re.M) is not None, 'Exec opens the file: `open <package> %f`')
+    xml = package_xml.read_text() if package_xml.exists() else ''
+    print(xml)
+    check('*.ovpn' in xml or run('xdg-mime', 'query', 'filetype', '/etc/hostname').returncode == 0, 'the .ovpn extension is defined by a mime package (or the system knows it)')
+    sample = OUT / 'sample.ovpn'
+    sample.write_text('client\nremote vpn.example.org 1194\n')
+    kind = run('xdg-mime', 'query', 'filetype', str(sample)).stdout.strip()
+    check(kind in types, 'xdg-mime knows sample.ovpn as %r, one of the entry\'s types' % kind)
+    check(entry.name in run('gio', 'mime', kind).stdout, 'gio mime %s lists the entry' % kind)
+    check(run('gio', 'mime', kind).stdout.count('apklayer-') >= 1, 'gio lists apklayer entries for the type')
+    # opening: the entry is the only handler of the type in this data home
+    check(gio_open(sample) == 0, 'gio open sample.ovpn')
+    line = seen('[hello-openfile] onCreate', 120)
+    print(line)
+    check(line is not None and 'action=android.intent.action.VIEW' in line, 'the app got ACTION_VIEW in onCreate')
+    check(line is not None and 'uri=content://apklayer.opened/' in line, 'the data is a content Uri')
+    check(line is not None and 'type=' + kind in line and 'resolvedType=' + kind in line, 'the intent type and the provider\'s type are %s' % kind)
+    check(line is not None and 'name=sample.ovpn' in line and 'size=%d' % sample.stat().st_size in line, 'OpenableColumns: the name and the size')
+    check(line is not None and 'grant=true' in line and 'content=client|remote vpn.example.org 1194|' in line, 'read grant flag and the file content')
+    # the running app: another file arrives in onNewIntent
+    second = OUT / 'second.ovpn'
+    second.write_text('client\nremote two.example.org 443\n')
+    gio_open(second)
+    line = seen('[hello-openfile] onNewIntent action=android.intent.action.VIEW', 60)
+    print(line)
+    check(line is not None and 'name=second.ovpn' in line and 'remote two.example.org 443' in line, 'a second file reaches the running app in onNewIntent')
+    instance.stop()
+    # removal: uninstall and update take the associations away
+    run('bin/apklayer', 'uninstall', PKG)
+    check(not entry.exists() and not package_xml.exists(), 'uninstall removes the entry and the mime package')
+    # the .apk handler of the packages: data/ files
+    for f in ('data/apklayer-manager.desktop', 'data/apklayer-share.desktop'):
+        check(run('desktop-file-validate', f).returncode == 0, f + ' validates')
+    mimes = Path('data/apklayer-mime.xml').read_text()
+    check(all(g in mimes for g in ('*.apks', '*.xapk', '*.apkm')), 'data/apklayer-mime.xml defines .apks, .xapk and .apkm')
+    check('application/vnd.android.package-archive' in Path('data/apklayer-manager.desktop').read_text(), 'the manager entry handles .apk')
+finally:
+    finish()
