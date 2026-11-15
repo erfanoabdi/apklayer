@@ -500,3 +500,27 @@ CameraControllerException; the preview was dark, the phone lying on the desk: no
 
 ## A compositor that stops repainting (weston's VNC output, 2026-11-14)
 weston's VNC backend stops repainting (no frame callbacks, no buffer releases) while no VNC client is connected. The shell then gets no `wl_buffer.release`, SurfaceFlinger's queue runs dry and the app's `dequeueBuffer` times out (-110); the app is not broken, it resumes when a viewer connects (or with another output/compositor). The shell has no timeout-driven release of its own: releasing a buffer the compositor may still read would tear, so this is documented, not worked around. Test on weston with a VNC client attached.
+
+## The phone route (2026-11-15): packages and quick checks from the Mac
+`tests/run` has no phone route; the phones have scripts in `tools/halium` (key auth to both, `UBPORTS`/`SAILFISH` in the untracked `tests/vm/local.conf`):
+- Packages. The click on Parallels (noble arm64, own tree, prebuilts without `x86_64` copied from the Mac, `git archive HEAD` of the repo, bionic_translation
+  from a local checkout, nothing downloaded: Parallels has the Slint and Java caches): `sh tools/release/click.sh <version> ../prebuilts ../out` and
+  `sh tools/release/runtime-bundle.sh ../prebuilts arm64 ../out`. The Sailfish RPM on the Mac (OrbStack, the image `apklayer-sailfish-build:5.0.0.62` and the
+  caches in `~/.cache/apklayer/sailfish` exist; only Jolla's repositories are fetched, `releases.jolla.com` drops connections, rerun):
+  `sh tools/release/sailfish-rpm.sh <version> <prebuilts> <out>` (no extra dev headers were needed: wayland, cairo, xkbcommon come from the target's repositories).
+  A build that ends "Installed (but unpackaged) file(s) found" lacks a file in `rpm/apklayer.spec` (the VPN policy was).
+- `tools/halium/phone-install.sh <ut|sfos> <dir>`: copies the click or RPMs and the bundle over the LAN, installs (click: `gdbus ... com.lomiri.click.Install`,
+  Quintus: `rpm -Uvh --replacepkgs` as root), runs `apklayer setup --bundle`, removes its copies.
+- `tools/halium/phone-test.sh <ut|sfos> <group>...`: runs `phone-checks.sh` on the phone in an instance of its own (`ptest`) and prints PASS/FAIL per group:
+  `hello` (hello.input, SurfaceFlinger's picture), `providers` (graphics, camera, media, vibrator are `device` by default), `hidl` (`hidl-list.sh`),
+  `camera` (hello.camera lists cameras, none is FAIL), `sensors` (hello.hardware), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's
+  orientation lock turns the shell's display; the lock is put back). It copies what it needs, removes it and the instance, and on the X23 wakes the phone
+  with the PIN (`ut-unlock.sh on`: apps are stopped while it is locked; the sudo password is the PIN) and locks it again. The Quintus has to be unlocked
+  by hand (its lock code is not in `local.conf`; a wrong code shows "Incorrect security code", try nothing blindly). On the Quintus the instance gets
+  `ro.hardware.egl mali` (libGLES_meow crashes SurfaceFlinger, above); a fresh instance without it fails with "the Android services did not come up".
+- Race `stop <package>` (CHANGELOG 2026-11-15): a launch that took the instance's spare was unknown to `stop <package>`, `info` and relaunch until its JVM
+  renamed itself (seconds on a loaded phone); the run record names the process now. Group `spare-race` (UTM) holds the window with a stopped spare.
+- A keyboard inset for a turned window is not possible through the insets: Android's `InsetsSource.calculateArbitraryInsets` treats a non-floating IME
+  source as a bottom inset whatever its frame ("TODO: non-floating IME always intersects at bottom"). A frame along the content's side made the app see the
+  keyboard over the whole content (bottom inset = the content's height; tried on a simulated phone, turned 270). A side inset needs a framework patch
+  (a new android-all); the shell keeps `ime = turn ? 0`.

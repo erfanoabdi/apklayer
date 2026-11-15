@@ -590,6 +590,10 @@ run = ["python3 -u tests/vm/otr2-input.py aspect"]
 apps = ["hello-arm64"]
 run = ["python3 -u tests/vm/art-maps.py"]
 
+[spare-race]  # rapid run / stop <pkg> cycles: no run blocked in the spare socket, no spare holder piled up
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/spare-race.py"]
+
 [spawn]  # a program started from the app JVM (ProcessBuilder) takes no second: exec_preload, jspawnhelper and the path layer
 apps = ["hello-spawn"]
 run = ["tests/vm/spawn.sh"]
@@ -638,3 +642,7 @@ run = ["python3 -u tests/vm/heap.py"]
 # `apklayer setup` after a runtime update installs only the changed system APKs and keeps data (cli/setup.cpp system-apps step); the APKs are the runner's installed test apps
 apps = ["hello-payload", "hello-payload2", "hello-heap"]
 run = ["tests/vm/sysapps-update.sh"]
+
+[setup-runtime-foreign]
+# a dev tree CLI must not relink a runtime another build owns (setup-runtime.sh refuses)
+run = ["tests/vm/setup-runtime-foreign.sh"]
