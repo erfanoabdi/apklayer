@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "binder.h"
+#include "run.h"
 #include "stack.h"
 #include "unit.h"
 
@@ -21,9 +22,10 @@ void haliumEnvDefaults(Env& env, const Layout& layout) {
     if (exists(socket)) env["PULSE_SERVER"] = "unix:" + socket;
 }
 
-void startLomiriAppShell(const Layout& l, const std::string& id) {
+void startLomiriAppShell(const Layout& l, const std::string& id, const std::string& package) {
     if (getenvOr("APP_ID", "").empty() || !getenvOr("APKLAYER_APP_SHELL", "").empty() || currentUnit().rfind("lomiri-app-launch--", 0) != 0) return;
     Instance inst = Instance::open(l, id);
+    if (!package.empty() && !windowLaunch(l, inst, package).empty()) return;  // a running app: `run` hands the launch to it (cli/run.cpp relaunch), a new shell would only idle
     std::string socket = join(l.runtimeHome, "apklayer/shell-" + std::to_string(getpid()) + ".sock");  // the pid stays through enterOwnUnit
     makeDirs(dirName(socket));
     Spawn shell;

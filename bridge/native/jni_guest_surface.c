@@ -21,6 +21,7 @@ extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 int apklayer_jni_guest_caller(JNIEnv *env, const void *pc);  /* jni_system_route.c */
 void apklayer_art_load(JavaVM *vm, void *jni_table, void *invoke_table);  /* jni_art.c */
+int apklayer_art_file(char *path, size_t size);  /* jni_art.c */
 unsigned long apklayer_art_arena;  /* base of the 256 MB synthetic-ArtMethod arena (0: none), read by jni_art.c */
 #define ART_ARENA_SIZE (1UL << 28)  /* libart_jni.c's range check shifts by 28 */
 
@@ -210,7 +211,9 @@ int apklayer_jni_guest_surface(JNIEnv *env, JavaVM *vm, jvmtiEnv *jvmti, jniNati
     thread_name = next.GetMethodID(env, thread, "getName", "()Ljava/lang/String;");
     if (!current_thread || !thread_name) return -1;
 #if defined(__aarch64__)  /* x86_64: the guest's table is the translator's */
-    void *arena = mmap(NULL, ART_ARENA_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    char art_path[4096];
+    /* without libart.so there are no thunks to swap the ids back (jni_art.c): the JVM's own ids stay, or libjava's NewObjectV gets a synthetic one and crashes */
+    void *arena = !apklayer_art_file(art_path, sizeof art_path) ? MAP_FAILED : mmap(NULL, ART_ARENA_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     jclass system = next.FindClass(env, "java/lang/System"), art = next.FindClass(env, "java/lang/reflect/ApklayerArt");
     jmethodID set_property = system ? next.GetStaticMethodID(env, system, "setProperty", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;") : NULL;
     if (art) { art_class = next.NewGlobalRef(env, art); art_of = next.GetStaticMethodID(env, art, "of", "(Ljava/lang/reflect/Executable;)J"); }  /* JdkIdentityPatch adds it */

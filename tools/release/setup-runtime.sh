@@ -16,6 +16,8 @@ for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an upd
     [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"
 done
 tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
+art=apex/com.android.art/lib64/libart.so  # meson installs it into the package's native dir on aarch64 only, the bundle has none: jni_art.c loads it from the Android root
+[ ! -f "$half/android-root/$art" ] || { mkdir -p "$native/android-root/${art%/*}" && ln -sfn "$half/android-root/$art" "$native/android-root/$art"; }
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
 echo "apklayer: 1/3 patching the framework jars" >&2
 patch_jar() {

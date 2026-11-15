@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
                      || (args[0] == "hub" && currentUnit().rfind("apklayer-instance@", 0) == 0);  // the always-on unit's hub is its main process, not apklayerd's child
     static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup", "config"};
     bool opens = args[0] == "open" && (args.size() == 2 || args.size() == 3);  // run with a host file as the intent's data (cli/open.cpp)
-    if ((opens || (args[0] == "run" && args.size() == 2)) && !inDaemon) startLomiriAppShell(layout, id);  // in the drawer launch's unit, before it is left
+    if ((opens || (args[0] == "run" && args.size() == 2)) && !inDaemon) startLomiriAppShell(layout, id, args[0] == "run" ? args[1] : "");  // in the drawer launch's unit, before it is left
     bool local = kLocal.count(args[0]) && !(inFlatpak() && args[0] == "setup");  // the Flatpak's setup starts a stack: the daemon's, as every command's
     if (int status = 0; !inDaemon && !autostart && !local && forwardToDaemon(layout, full, &status)) return status;
     if (args[0] == "config") return configCommand(std::vector<std::string>(args.begin() + 1, args.end()));

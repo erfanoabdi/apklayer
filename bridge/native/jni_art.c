@@ -23,19 +23,29 @@ static void JNICALL thread_start(jvmtiEnv *ti, JNIEnv *env, jthread thread)
     *(void **)env = apklayer_art_jni_table;
 }
 
+/* The libart.so the guest loads: the first Android root that has it (APKLAYER_ANDROID_ROOT, the native dir's). jni_guest_surface.c hands out the synthetic
+ * jmethodIDs only where this file's thunks swap them back: without it the JVM's own tables, with its own ids, stay. */
+int apklayer_art_file(char *path, size_t size)
+{
+    static const char suffix[] = "/apex/com.android.art/lib64/libart.so";
+    const char *roots[2] = { getenv("APKLAYER_ANDROID_ROOT"), NULL };
+    const char *native = getenv("APKLAYER_NATIVE");
+    char fallback[PATH_MAX];
+    if (native) { snprintf(fallback, sizeof fallback, "%s/android-root", native); roots[1] = fallback; }
+    for (int i = 0; i < 2; i++)
+        if (roots[i] && snprintf(path, size, "%s%s", roots[i], suffix) < (int)size && !access(path, R_OK)) return 1;
+    return 0;
+}
+
 void apklayer_art_load(JavaVM *vm, void *jni_table, void *invoke_table)
 {
 #if !defined(__aarch64__)
     (void)vm; (void)jni_table; (void)invoke_table;  /* x86_64: the guest is translated arm64 code with the translator's own tables; libart.so there is an aarch64 file the host cannot load */
     return;
 #endif
-    static const char suffix[] = "/apex/com.android.art/lib64/libart.so";
-    const char *roots[2] = { getenv("APKLAYER_ANDROID_ROOT"), NULL };
-    const char *native = getenv("APKLAYER_NATIVE");
-    char fallback[PATH_MAX], path[PATH_MAX];
-    if (native) { snprintf(fallback, sizeof fallback, "%s/android-root", native); roots[1] = fallback; }
-    for (int i = 0; i < 2; i++) {
-        if (!roots[i] || snprintf(path, sizeof path, "%s%s", roots[i], suffix) >= (int)sizeof path || access(path, R_OK)) continue;
+    char path[PATH_MAX];
+    {
+        if (!apklayer_art_file(path, sizeof path)) return;
         struct art_tables tables = { vm, jni_table, invoke_table, sizeof(jniNativeInterface) / sizeof(void *), NULL, NULL, apklayer_art_arena };
         char address[32];
         snprintf(address, sizeof address, "%lx", (unsigned long)&tables);
