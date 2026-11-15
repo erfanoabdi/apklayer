@@ -26,7 +26,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Vulkan presentation untested on AMD.
 - KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
 - Lipstick: a mouse over the navigation-bar strip (pointer.c `in_remote_strip`) is the bar's since 2026-11-15; needs a human check (no pointer device on the phone to try it).
-- Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
 - Fossify Camera on Parallels is unchecked (no APK locally); Open Camera works on the MacBook camera.
@@ -45,12 +44,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide). Not doable from apklayer's side: the stock libaudiopolicyservice has no per-uid/per-client activity query (the per-client configs live in AudioService's PlaybackActivityMonitor, which apklayer does not run); it needs a patch in frameworks/av's policy service (an `isActiveForUid`-like call) built in los24.
 - A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap: the HAL's Stream calls the one backend library the stack was started with (APKLAYER_HOST_LIBS); a swap means dlopen of the other `libapklayer-audio-*.so` from the HAL process and a per-stream function table (Stream.cpp, ~12 call sites), to be built and checked in los24.
 
-## Native bridge (x86_64)
-- Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
-
 ## Sandbox (before it can be the default)
 - NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes run only on a real Debian-style NVIDIA box (code read and the node-to-arguments table tested with a Debian node list; nodes are 0666 on the tester PC, no `nvidia-modprobe`).
-- Each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once (idempotent; the deb's postinst does it for the packaged binary).
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
@@ -61,24 +56,19 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Release: the first real tag run, the GitHub runners (the fetch steps, `actions/checkout` of the `prebuilts-v<version>` tag, upload/download of `~` file names) are unrun here; the guard, SHA256SUMS rename and `releases-json.py` ran locally with a fake tag (2026-11-16); PackageKit/pkexec install untested; the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 
-## Manager
-
 ## Hardware
 - Sailfish phone: needs a person for the Maliit-hide check, a finger on the keypad and the lock code; Maliit's sideways keyboard in a landscape app; the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client); sensorfw rotation by physically turning the phone; Bluetooth, scoped storage not run.
 - Sailfish location: needs `/var/lib/location/location.conf` enabled and connman's gps `Powered=true` (off by default); a real fix outdoors unchecked; sensorfw stops sensors with the screen off (the app reads zeros): documented, not changed.
 - VPN for apps (host-wide, `docs/VPN.md`, group `vpn`): built through NetworkManager (user-owned TUN, `apklayer vpn-guard`, `/1` default route, pkexec helper fallback); open: drive WireGuard and OpenVPN for Android to an established TUN (WireGuard needs a tunnel made in its UI, OpenVPN a profile and a server); a person's check of the pkexec dialog on a real desktop and the notification's Disconnect button; the pkexec path end to end through the hub; the per-app sandbox; Sailfish via connman; several instances with VPNs (they share the `/1` routes); no kill switch, `setMtu` ignored on the NM path.
 - Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
-- iio-sensor-proxy gives only derived values: no accelerometer or compass type. On Parallels a source-tree CLI needs `--no-daemon` plus `APKLAYER_NATIVE`/`APKLAYER_BT`/`APKLAYER_BINDER=userspace` (the old 0.3.4 daemon takes over).
 - USB: one chooser for several apps; sandbox node access.
 - Bluetooth: pairing paths, Sailfish agent, truly simultaneous connects to one server socket (the mock keeps one client profile per UUID).
 - Push: a real WorkManager app, constraints, resume after suspend, microG 0.3.x.
 
 ## Tests and tooling
-- Click: "Choose file…" picker lists the Content Hub peers but picking a file end to end, and the manager's Update button, are not driven.
-- UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
-- Needs the tester PC login (it takes a password; my key is refused; host `wesley-a520mhdv`): refresh its stale `~/apklayer-build/prebuilts` by rsync from the Mac; run `kde-window.py` once at 150% on its KWin.
+- Tester PC: run `kde-window.py` once at 150% on its KWin (the prebuilts there are current; the new deb is built, not installed).
 - Needs the Quintus lock code (not in `local.conf`): re-run `phone-test.sh sfos` groups with the current RPM.
 - AMD: Vulkan presentation and host ES1 untested.
 - Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
@@ -94,10 +84,5 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - NFC, biometrics, game controllers, ModemManager telephony, screen capture portal.
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
 - Several phone instances as a product; a JRE for the Ubuntu Touch deb.
+- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
 
-- Sailfish has no bash (busybox): phone tests must be POSIX sh or Python.
-- Share / Open with on the X23 is not driven through the UI by `phone-test.sh`.
-- Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
-
-- `kde-window` cannot run on the UTM VM (no KWin; `tests/lib/kwin.py` journalctl cursor parse fails): run it on the KDE PC to cover the SSD first-window size.
-- `fullscreen` and `spare-race` failed once each in the lead's shared tree and pass alone and together in a fresh tree (CHANGELOG 2026-11-16): if either fails again, look at that tree's leftover state first (stale files, foreign-owned sandbox data), then the load.
