@@ -17,6 +17,7 @@ from instance import ENV, LOGDIR, OUT, wait_file  # noqa: E402
 
 PKG = 'hello.openfile'
 data = OUT / 'open-files-data'
+instance.reclaim(data)  # a sandboxed run's files of an earlier run
 shutil.rmtree(data, ignore_errors=True)
 data.mkdir(parents=True)
 env = dict(ENV, XDG_DATA_HOME=str(data), APKLAYER_JOPTS='-Dapklayer.runms=90000', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400')
@@ -49,6 +50,7 @@ def seen(needle, seconds):
 
 def finish():
     instance.stop()
+    instance.reclaim(data)  # the sandboxed app's uid owns files in it
     shutil.rmtree(data, ignore_errors=True)
     for name in ('sample.ovpn', 'second.ovpn'):
         (OUT / name).unlink(missing_ok=True)
