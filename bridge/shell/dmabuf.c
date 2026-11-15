@@ -64,6 +64,16 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
 
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage)
 {
+    if (!w->framed && !getenv("APKLAYER_WINDOW_ALPHA")) {
+        /* apklayer patch: an Android window is opaque (SurfaceFlinger's layer of an opaque window ignores the app's alpha, which games leave anywhere
+         * below 1.0: Unity's post effects), but the display buffer is RGBA and the compositor blends it with the desktop where alpha < 1: dark,
+         * washed colours (PGR's 3D scenes). The opaque region makes the compositor ignore the alpha channel. */
+        struct wl_region *r = wl_compositor_create_region(compositor);
+        wl_region_add(r, 0, 0, 1 << 15, 1 << 15);
+        wl_surface_set_opaque_region(w->surface, r);
+        wl_region_destroy(r);
+        fprintf(stderr, "[shell] window %d: opaque region set (the compositor ignores the frames' alpha)\n", w->id);
+    }
     w->framed = 1;
     wl_surface_attach(w->surface, w->dbufs[buf], 0, 0);
     surface_damage(w->surface, damage[0], damage[1], damage[2], damage[3]);
