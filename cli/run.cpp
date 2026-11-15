@@ -100,16 +100,27 @@ bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const 
 std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, const std::string& package) {
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
-    if (isStale(join(dir, "info.properties"))) fprintf(stderr, "apklayer: %s was converted by an older converter ABI; run `apklayer reconvert %s` (its data stays) for the current runtime identity\n", package.c_str(), package.c_str());
+    if (isStale(join(dir, "info.properties"))) {
+        // converted by an older converter ABI: convert it again once (in a child: a failing install die()s), then go on; a failure keeps the old install and says so
+        fprintf(stderr, "apklayer: %s was converted by an older converter ABI: converting it again\n", package.c_str());
+        fflush(stdout);
+        pid_t child = fork();
+        if (child == 0) { reconvert(l, inst, package); fflush(stdout); _exit(0); }
+        int st = -1;
+        if (child < 0 || waitpid(child, &st, 0) != child || !WIFEXITED(st) || WEXITSTATUS(st) != 0)
+            fprintf(stderr, "apklayer: could not convert %s again; run `apklayer reconvert %s` (its data stays) for the current runtime identity\n", package.c_str(), package.c_str());
+    }
     ensureUid(l, dir);
     std::string data = appDataDir(l, inst, package);
-    if (!sandboxOn()) reclaim(data);  // the sandbox ran it as the app's own uid; without it the app runs as the user
+    if (!sandboxOn()) { reclaim(data); reclaim(join(inst.dataDir, "system/users")); }  // the sandbox ran it as the app's own uid; without it the app runs as the user
     std::vector<std::string> a = {"-Dapklayer.data=" + data, "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                   "-Dapklayer.libdir=" + join(dir, "lib")};
     if (property(join(dir, "info.properties"), "system") == "true") a.push_back("-Dapklayer.system=true");  // ApplicationInfo.FLAG_SYSTEM of its own package
     if (std::string route = property(join(dir, "info.properties"), "nativeRoute"); route.rfind("bridge-", 0) == 0)
         a.push_back("-Dapklayer.nativebridge=" + route.substr(7));  // its libraries load through the native bridge (NativeLoader)
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) a.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
+    // an android:isolatedProcess service's process runs as the uid the hub gave it (99000 and up, cli/sandbox.cpp): Process.myUid() says so
+    if (sandboxOn() && !getenvOr("APKLAYER_ISOLATED_UID", "").empty()) a.push_back("-Dapklayer.uid=" + getenvOr("APKLAYER_ISOLATED_UID", ""));
     // a window process the hub starts for an activity of another android:process ("<package>:jvm"): its name (HostProcessName.windowProcess)
     if (!getenvOr("APKLAYER_PROCESS", "").empty()) a.push_back("-Dapklayer.processname=" + getenvOr("APKLAYER_PROCESS", ""));
     a.push_back(join(dir, "base.apk"));
@@ -192,6 +203,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         ne32.env["APKLAYER_ARM32_PRELOAD"] = ne32.env["LD_PRELOAD"];
         ne32.env.erase("LD_PRELOAD");
     }
+    nj.env["APKLAYER_CWD"] = dir;  // a spare-born process changes to it (spare_target.c); a cold JVM starts there (app.cwd)
     if (mode == RunMode::Component) nj.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
     // under the sandbox a launch's intent file goes with it as text (its place is not in the app's view, and the app could not delete it there):
     // one line, newlines as \x1f (spare.cpp hands launch variables over as lines; Properties.store never writes control characters raw)
@@ -204,8 +216,9 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
             unlink(intentFile.c_str());
         }
     // under the sandbox a spare is one app's process from its start (cli/spare.cpp): an app window's launch takes the spare of its own package, or
-    // starts it for the next; component hosts and launches with a large intent file start cold
-    bool spare = !sandboxOn() || (mode == RunMode::App && !nj.env.count("APKLAYER_INTENT_FILE"));
+    // starts it for the next; so does a component host (the spare is the package's whatever the launch's kind); a launch with a large intent
+    // file and an isolated process (its own uid, 99000 and up: the spare has the app's) start cold
+    bool spare = !sandboxOn() || (!nj.env.count("APKLAYER_INTENT_FILE") && getenvOr("APKLAYER_ISOLATED_UID", "").empty());
     std::string sandboxPackage = sandboxOn() ? package : "";
     std::string spareKey = appSpareKey(l, inst, jvm, nj.env, sandboxPackage);
     int vdisplay = 0;
@@ -270,7 +283,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
     int status = 0;
-    // shortcut: SIGKILL to this waiter (the hub's stuck-host path) leaves a spare-born JVM to `apklayer stop` (its record); upgrade when the hub tracks JVM pids
+    // SIGKILL to this waiter closes its socket: the spare's holder ends the JVM (runAppSpare)
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
     else {
         passSignalsTo(jvmPid);
@@ -333,6 +346,7 @@ int runHub(const Layout& l, const Instance& inst) {
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     // uid 1000: the hub is the instance's system_server, also as the uid its oneway calls carry (HubProviders.check)
     jvm.insert(jvm.end(), {"-Dapklayer.uid=1000", "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()});
+    for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (o.rfind("-Dapklayer.perf", 0) == 0) jvm.push_back(o);  // the hub's own start-up marks (startup-timeline.py)
     // SettingsProvider is system_server's own (android:process="system"): it runs in the hub's JVM, as on a device, not in a JVM of its own (docs/history/PLAN-2026-11-10.md
     // "app start speed on phones" 8). Its data and package as for its own process, the hub's uid. Under the sandbox it keeps its own host (its app uid's files).
     std::vector<std::string> system;

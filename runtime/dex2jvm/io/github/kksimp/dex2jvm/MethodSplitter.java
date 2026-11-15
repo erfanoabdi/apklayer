@@ -156,20 +156,9 @@ final class MethodSplitter {
      *
      * Unset normally, when the only trigger is a real overflow.
      */
-    private static final int FORCE = intEnv("DEX2JVM_SPLIT_FORCE");
+    private static final int FORCE = -1;
 
-    private static final boolean DEBUG = System.getenv("DEX2JVM_SPLIT_DEBUG") != null;
-
-    private static int intEnv(String name) {
-        String v = System.getenv(name);
-        if (v == null || v.isEmpty()) return -1;
-        try {
-            int n = Integer.parseInt(v.trim());
-            return n > 0 ? n : -1;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-    }
+    private static final boolean DEBUG = false;
 
     static boolean debug() { return DEBUG; }
 
@@ -246,7 +235,7 @@ final class MethodSplitter {
     /** Escape hatch: pass everything DEFINED rather than everything LIVE. See
      *  the header -- this is here so a suspected liveness bug can be A/B'd. */
     private static final boolean NO_LIVENESS =
-            System.getenv("DEX2JVM_SPLIT_NO_LIVENESS") != null;
+            false;
 
     /**
      * DEX2JVM_CLINIT_SPILL (default ON; =0 restores the argument-slot
@@ -258,7 +247,7 @@ final class MethodSplitter {
      * ARGUMENT-SLOT WALL AND THE &lt;clinit&gt; SPILL" below.
      */
     static final boolean CLINIT_SPILL =
-            !"0".equals(System.getenv("DEX2JVM_CLINIT_SPILL"));
+            true;
 
     // THE ARGUMENT-SLOT WALL AND THE <clinit> SPILL
     //
@@ -379,7 +368,7 @@ final class MethodSplitter {
      * is produced unchanged.
      */
     static final boolean CLONE_HANDLERS =
-            !"0".equals(System.getenv("DEX2JVM_SPLIT_CLONE_HANDLERS"));
+            true;
 
     /** Longest handler block, in instructions, worth copying into a part. */
     private static final int MAX_CLONE_INSNS = 8;

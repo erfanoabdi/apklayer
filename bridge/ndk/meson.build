@@ -1,6 +1,5 @@
 # Our own versions of device libraries that need a service the desktop does not have: the source's functions, plus (ndk_libs) weak
 # do-nothing stubs for every other export of the real staged library. Mapped by bridge/native/bionic_translation.cfg.
-shared_module('camera2ndk', 'libcamera2ndk.c', c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)  # no camera HAL: the camera NDK reports errors
 ndk_libs = {'selinux': 'apklayer_selinux'}  # still needed by the libraries that link it (the service manager no longer uses it)
 foreach real, ours : ndk_libs
   lib = android_libs / 'lib' + real + '.so'

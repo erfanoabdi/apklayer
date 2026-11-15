@@ -29,6 +29,15 @@ public final class Main extends Activity {
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(w)) { out.write(1); wrote = true; } catch (Exception e) { wrote = false; }
             log("change mkdir=" + made.mkdir() + " write=" + wrote + " rename=" + w.renameTo(r) + " delete=" + r.delete() + " rmdir=" + made.delete()
                 + " access=" + new File(privdir, "p.txt").canRead());
+            String more;  // chmod, symlink and link too
+            try {
+                java.nio.file.Path p = new File(privdir, "p.txt").toPath(), sym = new File(privdir, "sym").toPath(), hard = new File(privdir, "hard").toPath();
+                Files.setPosixFilePermissions(p, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+                Files.createSymbolicLink(sym, p); Files.createLink(hard, p);
+                more = "chmod=ok symlink=" + Files.isSymbolicLink(sym) + " link=" + Files.exists(hard);
+                Files.delete(sym); Files.delete(hard);
+            } catch (Exception e) { more = "failed " + e; }
+            log("change2 " + more);
         }
         try {
             Files.writeString(new File(System.getProperty("hello.write", "/nonexistent/x")).toPath(), "written");
@@ -46,7 +55,36 @@ public final class Main extends Activity {
     @Override protected void onActivityResult(int code, int result, Intent data) {
         log("picked " + (data == null || data.getData() == null ? "none" : probe(data.getData().getPath())));
         log("notpicked " + probe(System.getProperty("hello.notpicked")));
-        log("DONE");
+        isolated();
+    }
+
+    /** An android:isolatedProcess service: its uid, what it sees of this app's data and of another app's, and who this app's own service saw calling it. */
+    private void isolated() {
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable finish = () -> { if (done.compareAndSet(false, true)) log("DONE"); };
+        main.postDelayed(() -> { log("iso timeout"); finish.run(); }, 40000);
+        bindService(new Intent(this, IsolatedService.class), new android.content.ServiceConnection() {
+            @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder binder) {
+                android.os.Messenger reply = new android.os.Messenger(new android.os.Handler(android.os.Looper.getMainLooper(), message -> {
+                    android.os.Bundle in = message.getData();
+                    log("iso uid=" + in.getInt("uid") + " isolated=" + in.getBoolean("isolated") + " os=" + in.getString("os"));
+                    log("iso data " + in.getString("data"));
+                    log("iso other " + in.getString("other"));
+                    log("iso back " + in.getString("back"));
+                    finish.run();
+                    return true;
+                }));
+                android.os.Message m = android.os.Message.obtain();
+                android.os.Bundle out = new android.os.Bundle();
+                out.putString("data", new File(getFilesDir(), "own.txt").getPath());
+                out.putString("other", System.getProperty("hello.other") == null ? null : System.getProperty("hello.other") + "/secret.txt");
+                m.setData(out);
+                m.replyTo = reply;
+                try { new android.os.Messenger(binder).send(m); } catch (Exception e) { log("iso send failed " + e); finish.run(); }
+            }
+            @Override public void onServiceDisconnected(android.content.ComponentName name) {}
+        }, BIND_AUTO_CREATE);
     }
 
     private static String probe(String path) {

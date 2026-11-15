@@ -29,12 +29,14 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.view.Display", ShadowHostDisplay.class.getName()),
                 Map.entry("android.view.ViewConfiguration", ShadowHostDisplay.ViewConfigurationShadow.class.getName()),
                 Map.entry("android.app.ActivityManager", ShadowHostActivityManager.class.getName()),
+                Map.entry("android.app.KeyguardManager", ShadowHostKeyguardManager.class.getName()),
                 Map.entry("android.accounts.AccountManager", HostPlainShadows.AccountManager.class.getName()),
                 Map.entry("android.app.UiModeManager.Globals", HostConfiguration.ShadowGlobals.class.getName()),
                 // real Binder, Parcel and the instance hub: system services across apps are processes behind real binder
                 Map.entry("android.os.Parcel", ShadowHostRealParcel.class.getName()),
                 Map.entry("android.os.Binder", ShadowHostRealBinder.class.getName()),
                 Map.entry("libcore.io.Linux", ShadowHostRealLinux.class.getName()),
+                Map.entry("libcore.io.BlockGuardOs", ShadowHostRealBlockGuardOs.class.getName()),
                 Map.entry("android.os.BinderProxy", ShadowHostRealBinderProxy.class.getName()),
                 Map.entry("com.android.internal.os.BinderInternal", ShadowHostRealBinderInternal.class.getName()),
                 Map.entry("android.os.Process", ShadowHostProcess.class.getName()),
@@ -76,7 +78,8 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.media.AudioTrack", ShadowHostNativeAudioTrack.class.getName()),
                 Map.entry("android.media.AudioSystem", ShadowHostNativeAudioSystem.class.getName()),
                 Map.entry("android.media.audiopolicy.AudioProductStrategy", ShadowHostNativeAudioSystem.ProductStrategy.class.getName()),
-                Map.entry("android.media.AudioRecord", ShadowHostNativeAudioRecord.class.getName()),
+                Map.entry("android.media.PlayerBase", ShadowHostPlayerBase.class.getName()),  // players report started/stopped to the hub (call mode owner)
+                Map.entry("android.media.AudioRecord",ShadowHostNativeAudioRecord.class.getName()),
                 Map.entry("android.media.MediaRecorder", ShadowHostNativeMediaRecorder.class.getName()),
                 Map.entry("android.media.AudioManager", ShadowHostNativeAudioManager.class.getName()),
                 Map.entry("android.hardware.biometrics.BiometricPrompt", ShadowHostBiometricPrompt.class.getName()),  // the device credential through the hub
@@ -105,6 +108,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.opengl.GLES32", HostGLShadows.GLES32.class.getName()),
                 Map.entry("android.media.MediaMetadataRetriever", HostMediaShadows.MediaMetadataRetriever.class.getName()),
                 Map.entry("android.media.MediaMuxer", HostMediaShadows.MediaMuxer.class.getName()),
+                Map.entry("android.app.AppOpsManager", ShadowHostAppOpsManager.class.getName()),  // checkPackage of an isolated process names its owner's package
                 Map.entry("android.app.usage.StorageStatsManager", ShadowHostStorageStatsManager.class.getName()),
                 Map.entry("android.content.om.OverlayManager", ShadowHostOverlayManager.class.getName()),  // no overlays: empty lists, not null
                 Map.entry("android.os.Vibrator", HostPlainShadows.Vibrator.class.getName()),
@@ -117,10 +121,19 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.hardware.usb.UsbDeviceConnection", HostPlainShadows.UsbDeviceConnection.class.getName()),
                 Map.entry("android.hardware.usb.UsbRequest", HostPlainShadows.UsbRequest.class.getName()),
                 Map.entry("android.os.SystemProperties", ShadowHostSystemProperties.class.getName()),
+                Map.entry("android.os.HwBinder", HostPlainShadows.HwBinder.class.getName()),  // HIDL's Java side over the real HwBinder JNI (docs/HIDL.md)
+                Map.entry("android.os.HwRemoteBinder", HostPlainShadows.HwRemoteBinder.class.getName()),
+                Map.entry("android.os.HwParcel", HostPlainShadows.HwParcel.class.getName()),
+                Map.entry("android.os.HwBlob", HostPlainShadows.HwBlob.class.getName()),
+                Map.entry("android.os.HidlSupport", HostPlainShadows.HidlSupport.class.getName()),
+                Map.entry("android.os.HidlMemory", HostPlainShadows.HidlMemory.class.getName()),
+                Map.entry("android.os.NativeHandle", HostPlainShadows.NativeHandle.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
                 Map.entry("android.util.Xml", ShadowHostXml.class.getName()),
                 Map.entry("dalvik.system.VMRuntime", ShadowHostVMRuntime.class.getName()),
+                Map.entry("dalvik.system.VMStack", ShadowHostVMStack.class.getName()),  // the calling classes (Flogger's logger names, Play services)
+                Map.entry("dalvik.system.DexFile", ShadowHostDexFile.class.getName()),  // dexopt status as ART reports it (Play Store asks isOptimized)
                 Map.entry("dalvik.system.BaseDexClassLoader", ShadowHostBaseDexClassLoader.class.getName())));
         if (HostCameraShadows.declared()) entries.addAll(HostCameraShadows.entries());  // the stack runs cameraserver over the camera HAL
         if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK)
@@ -155,6 +168,7 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public Map<String, String> getShadowPickerMap() {
         return Map.of("android.content.res.ApkAssets", ShadowHostApkAssets.Picker.class.getName(),
                 "android.os.MessageQueue", ShadowHostMessageQueue.Picker.class.getName(),
+                "android.os.SystemClock", ShadowHostSystemClock.Picker.class.getName(),
                 "android.database.CursorWindow", ShadowHostRealCursorWindow.Picker.class.getName(),
                 "android.graphics.HardwareRenderer", ShadowHostHardwareRenderer.Picker.class.getName());
     }

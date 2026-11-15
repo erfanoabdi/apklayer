@@ -19,6 +19,19 @@ public final class GuestLoaders {
         } catch (NumberFormatException bad) { return host; }
     }
 
+    /** Class.getClassLoader as ART answers it: java.* and framework classes belong to the BootClassLoader (the app loader's parent), not null or the sandbox. */
+    public static ClassLoader getClassLoader(Class<?> c) {
+        ClassLoader l = c.getClassLoader(), app = AppClassLoader.app;
+        if (app != null && (l == null || l.getClass().getName().endsWith("SdkSandboxClassLoader"))) return app.getParent();
+        return l;
+    }
+
+    /** Class.getResource: a platform class has none on a device (the JDK's would be a jrt: URL). */
+    public static java.net.URL getResource(Class<?> c, String name) {
+        ClassLoader l = c.getClassLoader();
+        return l == null || l.getClass().getName().endsWith("SdkSandboxClassLoader") ? null : c.getResource(name);
+    }
+
     public static ClassLoader getSystemClassLoader() {
         ClassLoader app = AppClassLoader.app;
         return app != null ? app : ClassLoader.getSystemClassLoader();

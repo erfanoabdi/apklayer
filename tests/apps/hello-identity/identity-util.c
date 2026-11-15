@@ -12,7 +12,7 @@
 
 void put(struct buf *b, const char *key, const char *fmt, ...)
 {
-    char value[16384];
+    char value[32768];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(value, sizeof value, fmt, ap);

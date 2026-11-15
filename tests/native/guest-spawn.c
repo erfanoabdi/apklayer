@@ -208,6 +208,10 @@ static void script_series(void) {
         CHECK(pid > 0 && EXITED(wait_child(pid), 0));
         CHECK(b_spawn(&pid, "/system/bin/spawn-adapt", NULL, NULL, argv, environ) == 0 && EXITED(wait_child(pid), 0));
     }
+    char *with_e[] = {"spawn-e", "x", "z", NULL}, *with_abs[] = {"spawn-abs", "abs", NULL};  /* "#!/bin/sh -e" and "#!/system/bin/sh" */
+    pid_t pid;
+    CHECK(b_spawn(&pid, "/system/bin/spawn-e", NULL, NULL, with_e, environ) == 0 && EXITED(wait_child(pid), 0));
+    CHECK(b_spawn(&pid, "/system/bin/spawn-abs", NULL, NULL, with_abs, environ) == 0 && EXITED(wait_child(pid), 0));
 }
 
 int main(int argc, char **argv)
@@ -228,10 +232,14 @@ int main(int argc, char **argv)
         CHECK(!mkdir(strcat(strcpy(exe, root), "/data"), 0755));
         char shell[PATH_MAX + 160];  /* Android's shell sees the instance's /system: a script it runs by name, there */
         snprintf(shell, sizeof shell, "#!/bin/sh\nANDROID_SH=1; export ANDROID_SH\n"
-                 "case \"$1\" in /system/*) f=\"$1\"; shift; exec /bin/sh \"%s$f\" \"$@\";; esac\nexec /bin/sh \"$@\"\n", root);
+                 "case \"$1\" in -e) o=-e; shift;; esac\n"
+                 "case \"$1\" in /system/*) f=\"$1\"; shift; exec /bin/sh $o \"%s$f\" \"$@\";; esac\nexec /bin/sh $o \"$@\"\n", root);
         write_file("system/bin/sh", shell, 0755);
         write_file("system/bin/spawn-adapt", "#!/bin/sh\ntest \"$ANDROID_SH\" = 1\n", 0755);
         write_file("system/bin/spawn-script", "exit 9\n", 0755);
+        /* shebang forms (script_argv): the interpreter's one argument, Android's own path, and the arguments after the script */
+        write_file("system/bin/spawn-e", "#!/bin/sh -e\ntest \"$ANDROID_SH\" = 1 && case $- in *e*) test \"$1|$2\" = \"x|z\";; *) false;; esac\n", 0755);
+        write_file("system/bin/spawn-abs", "#!/system/bin/sh\ntest \"$ANDROID_SH|$1\" = \"1|abs\"\n", 0755);
         write_file("data/spawn-out", "", 0644);
         ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1); CHECK(n > 0); exe[n] = 0;
         char tool[PATH_MAX]; snprintf(tool, sizeof tool, "%s/system/bin/spawn-tool", root); CHECK(!symlink(exe, tool));

@@ -1,0 +1,151 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: GuestPthreadIsStale / GuestPthreadJoined: a joined thread is no thread
+
+bionic answers ESRCH for a pthread_t that is no thread (for an app targeting an SDK below 26; from 26 on it aborts "invalid pthread_t"). The proxies passed a joined
+thread's id (its record from pthread_self(), or the host pthread_t pthread_create returned) to the host's pthread_*, which is undefined for a thread that is gone.
+GuestThreadIdIsJoined / GuestThreadIdJoined (glibc host only): pthread_join puts both ids of the thread, before it joins (a new thread may take the freed stack at once; forgotten again when the join fails), (found through the records' table) into a ring of
+the newest 1024 joined ids; a new thread's record and host id leave it (GlibcHostRecords), so a reused address is not stale; GuestPthreadIsStale / GuestPthreadJoined
+are the proxies' view of it (native_bridge_support 0004). The translator never sees the app's target SDK: it always answers ESRCH. Test: tests/apps/hello-arm64/threads.c
+phase_stale (sets SDK 25 for real arm64). Module libberberis_arm64.
+
+diff --git a/guest_os_primitives/guest_thread.cc b/guest_os_primitives/guest_thread.cc
+--- a/guest_os_primitives/guest_thread.cc
++++ b/guest_os_primitives/guest_thread.cc
+@@ -80,6 +80,7 @@
+ constexpr size_t kKeptExitedRecords = 512;
+ constexpr size_t kRecordSlotBits = 14;  // 16384 slots: the live threads' records and the kept ones; a full table registers nothing
+ constexpr size_t kRecordSlots = size_t{1} << kRecordSlotBits;
++constexpr size_t kJoinedIds = 1024;
+ struct RecordSlot {
+   const void* record;  // nullptr: free
+   pthread_t host;
+@@ -90,6 +91,8 @@
+   void* order[kKeptExitedRecords];    // ring of the exited records, oldest first
+   size_t order_head = 0;
+   size_t order_count = 0;
++  uintptr_t joined[kJoinedIds];       // apklayer patch (0042): the ids of the newest joined threads (0 = free), a ring
++  size_t joined_next = 0;
+ };
+ ExitedRecords g_exited_records;
+ ExitedRecords* GetExitedRecords() { return &g_exited_records; }
+@@ -116,6 +119,20 @@
+   }
+ }
+ 
++void AddJoinedLocked(ExitedRecords* kept, uintptr_t id) {
++  if (id == 0) return;
++  for (size_t i = 0; i < kJoinedIds; i++) {
++    if (kept->joined[i] == id) return;
++  }
++  kept->joined[kept->joined_next++ % kJoinedIds] = id;
++}
++
++void ForgetJoinedLocked(ExitedRecords* kept, uintptr_t id) {
++  for (size_t i = 0; i < kJoinedIds; i++) {
++    if (kept->joined[i] == id) kept->joined[i] = 0;
++  }
++}
++
+ void EraseRecordLocked(ExitedRecords* kept, const void* record) {
+   RecordSlot* found = FindRecordLocked(kept, record);
+   if (found == nullptr) return;
+@@ -510,6 +527,38 @@
+ #endif
+ }
+ 
++bool GuestThreadIdIsJoined([[maybe_unused]] const void* id) {
++#if defined(__BIONIC__)
++  ExitedRecords* kept = GetExitedRecords();
++  std::lock_guard<std::mutex> lock(kept->mutex);
++  for (size_t i = 0; i < kJoinedIds; i++) {
++    if (kept->joined[i] == reinterpret_cast<uintptr_t>(id)) return true;
++  }
++#endif
++  return false;
++}
++
++void GuestThreadIdJoined([[maybe_unused]] const void* id, [[maybe_unused]] bool joined) {
++#if defined(__BIONIC__)
++  // The thread is known under two ids (its record, from pthread_self(), and the host pthread_t pthread_create returned): both are gone. The
++  // record stays mapped until the ring drops it, so its address names no new thread meanwhile.
++  ExitedRecords* kept = GetExitedRecords();
++  std::lock_guard<std::mutex> lock(kept->mutex);
++  auto mark = joined ? AddJoinedLocked : ForgetJoinedLocked;
++  mark(kept, reinterpret_cast<uintptr_t>(id));
++  if (RecordSlot* slot = FindRecordLocked(kept, id)) {
++    mark(kept, static_cast<uintptr_t>(slot->host));
++  } else {
++    for (size_t i = 0; i < kRecordSlots; i++) {
++      if (kept->slots[i].record != nullptr && static_cast<uintptr_t>(kept->slots[i].host) == reinterpret_cast<uintptr_t>(id)) {
++        mark(kept, reinterpret_cast<uintptr_t>(kept->slots[i].record));
++        break;
++      }
++    }
++  }
++#endif
++}
++
+ void GuestRecordsResetAfterFork() {
+ #if defined(__BIONIC__)
+   // The thread that held the lock may be another one: it does not exist in the child.
+@@ -535,6 +584,9 @@
+       ExitedRecords* kept = GetExitedRecords();
+       std::lock_guard<std::mutex> lock(kept->mutex);
+       PutRecordLocked(kept, glibc_host_records_, host_pthread_);
++      // a new thread: its record and host id may be those of a thread joined before (the address of a freed record or stack, reused)
++      ForgetJoinedLocked(kept, reinterpret_cast<uintptr_t>(glibc_host_records_));
++      ForgetJoinedLocked(kept, static_cast<uintptr_t>(host_pthread_));
+     }
+     auto* thread = static_cast<pthread_internal_t*>(glibc_host_records_);
+     thread->tid = GettidSyscall();
+diff --git a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
+--- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
++++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
+@@ -61,6 +61,9 @@
+ 
+ // apklayer patch: the host pthread_t of a record that belonged to a thread that has exited (its records are kept for a while).
+ bool GuestExitedRecordToHost(const void* record, pthread_t* host);
++// apklayer patch (0042): a pthread_t (a thread's record, or the host pthread_t pthread_create gave) of a thread the guest has joined is no thread.
++bool GuestThreadIdIsJoined(const void* id);
++void GuestThreadIdJoined(const void* id, bool joined);
+ // apklayer patch (0039): in the child of a fork (a lock the records' table had when another thread forked stays locked for ever).
+ void GuestRecordsResetAfterFork();
+ 
+diff --git a/guest_os_primitives/guest_thread_manager.cc b/guest_os_primitives/guest_thread_manager.cc
+--- a/guest_os_primitives/guest_thread_manager.cc
++++ b/guest_os_primitives/guest_thread_manager.cc
+@@ -143,6 +143,20 @@
+   return thread;
+ }
+ 
++bool GuestPthreadIsStale([[maybe_unused]] pthread_t thread) {
++#if defined(__BIONIC__)
++  return IsConfigFlagSet(kGlibcHostThreadIdHandoff) && GuestThreadIdIsJoined(reinterpret_cast<const void*>(thread));
++#else
++  return false;
++#endif
++}
++
++void GuestPthreadJoined([[maybe_unused]] pthread_t thread, [[maybe_unused]] bool joined) {
++#if defined(__BIONIC__)
++  if (IsConfigFlagSet(kGlibcHostThreadIdHandoff)) GuestThreadIdJoined(reinterpret_cast<const void*>(thread), joined);
++#endif
++}
++
+ void ExitCurrentThread(int status) {
+   pid_t tid = GettidSyscall();
+ 
+diff --git a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread_manager.h b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread_manager.h
+--- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread_manager.h
++++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread_manager.h
+@@ -38,6 +38,10 @@
+ // apklayer patch: on a glibc host (glibc-host-thread-id-handoff) a guest thread's pthread_self() is its own bionic record, not a
+ // host pthread_t: the proxies that take a pthread_t pass it through this. Anything else is returned as it is.
+ pthread_t GuestPthreadToHost(pthread_t thread);
++// apklayer patch (0042): bionic answers ESRCH for a pthread_t that is no thread (an app targeting an SDK below 26; later versions abort). True here
++// for a thread the guest has joined (a glibc host); GuestPthreadJoined(t, true) is called before pthread_join (after it the thread's stack may be a new thread's), (t, false) when the join failed.
++bool GuestPthreadIsStale(pthread_t thread);
++void GuestPthreadJoined(pthread_t thread, bool joined);
+ 
+ // Ensure guest threads don't run obsolete code.
+ void FlushGuestCodeCache();

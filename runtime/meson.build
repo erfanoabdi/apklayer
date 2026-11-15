@@ -1,6 +1,7 @@
 # The runtime's Java side against the prebuilts' Robolectric and framework (common/ of the prebuilts branch), into the native dir:
 # host classes, the Robolectric overlay with the JNI shim (native-runtime.jar), the java.base patch; with android_runtime also the Android half
 # (android-all/: the framework jar with the shim, android-all-instrumented/: the same instrumented once, android-root/, the Robolectric jars).
+run_command(python, files('../tools/check-hub-protocol.py'), check: true)  # parallel branches gave two HubProtocol codes the same number twice
 pc = prebuilts / 'common'
 robolectric = pc / 'Robolectric_all.jar'
 sim_classes = pc / 'sim-classes'
@@ -40,6 +41,9 @@ overlay_jar = custom_target('overlay.jar', input: overlay_sources, depend_files:
 custom_target('jdk-patch', input: host_jar, output: 'jdk-patch',
   command: ['sh', '-c', 'rm -rf "$1" && exec "$2" -cp "$3" apklayer.host.JdkPatch "$1"', 'sh', '@OUTPUT@', java, host_cp],
   install: true, install_dir: native_dir)
+# an install adds and replaces, it never removes: classes no longer built would stay in the installed jdk-patch (and in the JDK image made from it)
+meson.add_install_script('sh', '-c', 'd="$MESON_INSTALL_DESTDIR_PREFIX/$1/jdk-patch"; cd "$d" 2>/dev/null && find . -type f | while read -r f; do [ -e "$2/jdk-patch/$f" ] || rm -f "$f"; done; exit 0',
+  'sh', fs.relative_to(native_dir, get_option('prefix')), meson.current_build_dir())
 
 # @CriticalNative methods (apklayer.host.CriticalNatives) of the framework's javac output (the prebuilts' javac-shards), plus the ones of classes
 # the shards lack (bridge/native/critical-natives-extra.txt)

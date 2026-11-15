@@ -140,8 +140,8 @@ bin/apklayer instance remove work         # deletes its data
 ### Notifications while apps are closed
 
 Messengers (Telegram, WhatsApp, Signal with Play services...) get their messages through Google's cloud messaging, which on apklayer is microG
-(`apklayer setup --microg`: Services and Companion). microG keeps one connection to Google for every app, so the instance has to run while the apps
-are closed: installing microG Services turns the instance's always-on mode on (`apklayer instance autostart <id> on|off`, the switch on the manager's
+(`apklayer setup --microg`: Services and Companion) or Google's own Play services (`apklayer setup --gapps`). Either keeps one connection to Google for every app, so the instance has to run while the apps
+are closed: installing Play services (microG's or Google's) turns the instance's always-on mode on (`apklayer instance autostart <id> on|off`, the switch on the manager's
 Instances page): a systemd user unit starts its services at login and keeps them up, and a message wakes the closed app, whose notification appears on
 the desktop. In microG's settings (the microG Settings app in the instance) "Google device registration" and "Cloud Messaging" are on by default
 (apklayer's `/system/etc/microg.xml`); a Google account is not needed for push, an app that signs in with Google needs one.
@@ -198,7 +198,8 @@ permissions close to others.
   3. The app's renderer: `APKLAYER_LOGCAT=1 apklayer run <package> 2>&1 | grep -m1 "GL version"`, once with `APKLAYER_SANDBOX=1` and once with 0.
      `llvmpipe` only sandboxed means NVIDIA's EGL did not start in the app's view and glvnd fell back to Mesa.
   4. `ls /dev/nvidia-modeset /dev/nvidia-uvm`: a node that does not exist yet is made by the setuid `nvidia-modprobe`, which the sandbox cannot run
-     (no new privileges); opening any GL app outside the sandbox once makes it.
+     (no new privileges): apklayerd's broker runs it for an app that asks for the missing node (`nvidia-modprobe` must be installed;
+     `grep broker apklayerd.log`); if it is not, opening any GL app outside the sandbox once makes the nodes.
   5. `env | grep -E "__EGL|VK_|LIBGL|GBM"` and `ls ~/.local/share/glvnd ~/.local/share/vulkan 2>/dev/null`: driver files in your home are bound into
      the app's view from these; a path elsewhere that is hidden (/tmp) is not.
 - Wrong paths: the CLI reads `~/.config/apklayer/env` for every variable not set in the environment; `bin/apklayer env` prints what it uses.
@@ -232,6 +233,11 @@ from the release (`--bundle <file>` for an offline copy), installs the system ap
 microG (Services and Companion, for apps that need Google's services) and the F-Droid client are optional: `apklayer setup --microg --fdroid`, the
 first-run screen's checkboxes, or at any time the "Add-ons" section at the end of the Apps page's list, which shows whether each is
 installed and offers Install, Update (nothing is downloaded beyond the repository index when the installed version is current) and Remove.
+In place of microG, `apklayer setup --gapps` (the "Google Play" tile) installs Google's own apps from the LiteGapps "lite" zip for the runtime's SDK
+(~250 MB from SourceForge, sha256-pinned in cli/gapps.cpp; `APKLAYER_GAPPS_URL`/`APKLAYER_GAPPS_SHA256` for another copy, `file://` works): the Services
+Framework, Play services, Play Store and the contacts/calendar sync adapters as system apps, with Google's privileged-permission and sysconfig XMLs
+(kept in `~/.local/share/apklayer/google-apps/etc`, copied into the runtime's android-root again after a runtime update). microG is removed first;
+the two cannot be installed together.
 Space: the runtime takes ~1.6 GB unpacked per version and an update unpacks the new one beside the current one (the one before stays; older
 ones go), with the bundle (~0.5 GB) downloaded beside them. Setup checks the free space of `~/.local/share/apklayer` before it downloads or unpacks
 and fails early with what is needed, what is free and where; when only removing the runtimes other than the current one makes room it removes
@@ -286,7 +292,7 @@ claim. NVIDIA: Flatpak needs the `org.freedesktop.Platform.GL.nvidia-<version>` 
 when Flathub has that version); other GPUs use Mesa from `org.freedesktop.Platform.GL.default`.
 
 Build it: `sh flatpak/build.sh <prebuilts checkout> <out dir> [version]` (needs flatpak and flatpak-builder; it joins split prebuilts and installs the
-SDK and openjdk21 extension from Flathub). The build has no network: the bionic_translation wrap, `deps.lock`'s artifacts and Slint are pinned
+SDK and openjdk25 extension from Flathub). The build has no network: the bionic_translation wrap, `deps.lock`'s artifacts and Slint are pinned
 sources in the manifest; after a change to `deps/deps.lock` run `tools/gen/flatpak-sources.py` (it writes `flatpak/deps-sources.json`), after a new
 bionic_translation revision or Slint version change the manifest beside the wrap or `manager/fetch-slint.sh`.
 

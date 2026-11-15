@@ -16,6 +16,15 @@ public final class Main extends Activity {
         String tag = "[gps] " + getPackageName();
         LocationManager lm = getSystemService(LocationManager.class);
         System.out.println(tag + " gps=" + lm.isProviderEnabled(LocationManager.GPS_PROVIDER));
+        // a ParcelFileDescriptor opened and closed leaves no descriptor behind (the first round loads its classes: not counted)
+        int leaked = 0;
+        for (int round = 0; round < 3; round++) {
+            int before = new java.io.File("/proc/self/fd").list().length;
+            try { android.os.ParcelFileDescriptor.open(new java.io.File("/dev/null"), android.os.ParcelFileDescriptor.MODE_READ_ONLY).close(); }
+            catch (java.io.IOException e) { System.out.println(tag + " pfd " + e); }
+            if (round > 0) leaked += new java.io.File("/proc/self/fd").list().length - before;
+        }
+        System.out.println(tag + (leaked == 0 ? " PFD close PASS" : " PFD close FAIL " + leaked + " fds left"));
         CountDownLatch fixes = new CountDownLatch(5);
         HandlerThread thread = new HandlerThread("gps");
         thread.start();

@@ -1,8 +1,7 @@
 # Halium devices: survey and the host binder context
 
-Plan: `docs/history/PLAN-2026-11-10.md` "Plan: hardware providers" (steps d and e). Owner's rule (2026-11-04): through the host context only the
-vibrator, camera and media (codecs) HALs; never the sensors or GNSS HAL (one client each, held by sensorfw and the OS's location
-service; on Halium those come through the OS services). Listing services (lshal, service list) is fine.
+Plan: `docs/history/PLAN-2026-11-10.md` "Plan: hardware providers" (steps d and e). On Halium the sensors come through sensorfw and location through GeoClue (Sailfish) or Lomiri's location service; the host binder context carries the vibrator,
+camera and media (codecs) HALs. Listing services (lshal, service list) is fine.
 
 ## The owner's phones (surveyed 2026-11-04 and 2026-11-07, read only)
 | | Ubuntu Touch 24.04 (`phablet@192.168.41.61`) | Sailfish OS 5.1.0.43 (`defaultuser@192.168.41.62`, retired 2026-11-07) | Sailfish OS 5.0.0.62 (`defaultuser@192.168.41.153`, surveyed 2026-11-07) |
@@ -122,7 +121,7 @@ Never the GNSS HAL (its one client is the OS's location service): a GNSS backend
   on the system bus (lomiri-location-serviced, dbus-cpp). The `lomiri` backend (probe 10) gets real fixes there as an unconfined client:
   CreateSessionForCriteria -> `/sessions/0`, StartPositionUpdates, then the service calls UpdatePosition (`ddbdbdbx`: altitude and horizontal
   accuracy present, vertical absent), UpdateVelocity and UpdateHeading (`dx`) about once a second; first fix ~10 s, 6.5-10 m. Checked with
-  `tests/hals/gnss-backend-fixes` (built on Parallels) and dbus-monitor, in `~/apklayer-loc` (removed afterwards).
+  `tests/hals/gnss-backend-fixes.c` (built on Parallels) and dbus-monitor, in `~/apklayer-loc` (removed afterwards).
 - Sailfish OS (read only): GeoClue 1 (geoclue 0.12) `org.freedesktop.Geoclue.Master` on the session bus, activatable, with the hybris and
   MLS providers; no GeoClue 2. The `geoclue1` backend's names and GetPosition signature come from the binaries' dbus-glib data
   (MasterClient.SetRequirements(iibi), PositionStart; Position.GetPosition -> `(iiddd(idd))`); tested only against a stand-in
@@ -496,3 +495,6 @@ The four libraries newer than the prebuilts (below) were again copied from the t
 Earlier results (sysroot tarball, instance `ut`; `~/apklayer-sfos/sf-shots.sh <pkg> <secs>` on the phone: run, both screenshots, stop): UiBench draws (device gralloc buffers to
 Lipstick); NewPipe draws its UI (Trending stayed empty); Open Camera opens the device's camera 0 through cameraserver over the HIDL provider (`ID:0`, no
 CameraControllerException; the preview was dark, the phone lying on the desk: not judged). Not run on this phone: audio, sensors, GNSS, vibrator, media.
+
+## A compositor that stops repainting (weston's VNC output, 2026-11-14)
+weston's VNC backend stops repainting (no frame callbacks, no buffer releases) while no VNC client is connected. The shell then gets no `wl_buffer.release`, SurfaceFlinger's queue runs dry and the app's `dequeueBuffer` times out (-110); the app is not broken, it resumes when a viewer connects (or with another output/compositor). The shell has no timeout-driven release of its own: releasing a buffer the compositor may still read would tear, so this is documented, not worked around. Test on weston with a VNC client attached.

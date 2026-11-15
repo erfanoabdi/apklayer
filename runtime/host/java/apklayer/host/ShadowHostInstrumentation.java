@@ -20,7 +20,10 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
         // as Android's bindApplication: the system's and other apps' providers (Settings among them) answer from Application.onCreate on
         // the hub's own package (HubHost) attaches and creates its providers once the hub is published
         if (HubHost.booting) { Shadow.directlyOn(real, "android.app.Instrumentation", "callApplicationOnCreate", org.robolectric.util.ReflectionHelpers.ClassParameter.from(Application.class, app)); return; }
-        if (System.getProperty("apklayer.package") != null && !AppEnvironment.installing) HubClient.attach(app);
+        if (System.getProperty("apklayer.package") != null && !AppEnvironment.installing) {
+            HubClient.attach(app);
+            HubClient.applySettingsBeforeOnCreate();  // the desktop's locale and night mode before the app's onCreate, as bindApplication's configuration
+        }
         // before the app's own code in every process, component hosts included (Build: AppEnvironment.setUpApplication): the storage volumes (MediaProvider's
         // onCreate attaches the primary volume it finds)
         if (System.getProperty("apklayer.package") != null) HostStorage.install(app);

@@ -108,7 +108,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         struct window *w = len >= 8 ? window_find_input(c, v[0]) : NULL;
         if (w && v[1] == 1) { w->input_type = len >= 16 ? v[2] : 0x20001; w->ime_options = len >= 16 ? v[3] : 0; }  /* older hosts: multi-line text */
         if (w && v[1] == 3) {  /* the field's text around the cursor: {id, 3, cursor, anchor} utf8 */
-            if (len >= 16 && !text_mgr) maliit_surrounding(w, v[2], v[3], (const char *)p + 16, len - 16);
+            if (len >= 16) (text_mgr ? text_input_surrounding : maliit_surrounding)(w, v[2], v[3], (const char *)p + 16, len - 16);
         } else if (w) text_input_enable(w, v[1]);
         break;
     }

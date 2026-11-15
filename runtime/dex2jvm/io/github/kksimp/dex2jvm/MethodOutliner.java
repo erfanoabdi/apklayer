@@ -138,19 +138,9 @@ final class MethodOutliner {
      *
      * Unset normally, when the only trigger is a real overflow.
      */
-    private static final int FORCE = forceLimit();
+    private static final int FORCE = -1;
 
-    private static int forceLimit() {
-        String v = System.getenv("DEX2JVM_OUTLINE_FORCE");
-        if (v == null || v.isEmpty()) return -1;
-        try {
-            int n = Integer.parseInt(v.trim());
-            return n > 0 ? n : -1;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-    }
-
+    
     /** True when the test knob is on, which makes DexConverter arm outlining for
      *  every class rather than only for one that already overflowed. */
     static boolean forced() { return FORCE > 0; }
@@ -183,7 +173,7 @@ final class MethodOutliner {
      * the only way to tell "no region qualified" from "the region was rejected
      * for one specific reason" is a debugger. Off by default; costs nothing.
      */
-    private static final boolean DEBUG = System.getenv("DEX2JVM_OUTLINE_DEBUG") != null;
+    private static final boolean DEBUG = false;
 
     private static Plan refuse(String why, Object... args) {
         if (DEBUG) System.err.println("[dex-outline] refused: " + String.format(why, args));

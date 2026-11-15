@@ -1,0 +1,258 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: FRECPE/FRSQRTE return the architectural 8-bit estimate
+
+The interpreter computed the exact 1/x and 1/sqrt(x) (the lite and heavy translators likewise), hardware returns the estimate of the ARM ARM FPRecipEstimate /
+FPRSqrtEstimate (9-bit table index, 8 fraction bits). New interpreter/arm64/fp_estimate.h computes them bit-exactly (f16, f32, f64, scalar and vector); the lite and
+heavy translators now bail to the interpreter for these instructions. DN/FZ/RMode of the estimate are not honoured. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -11922,6 +11930,8 @@ void HeavyOptimizerFrontend::AdvSimdTwoRegMisc(const Decoder::AdvSimdTwoRegMiscA
+     // Mirrors lite's kFrecpeV/kFrsqrteV.
+     case Decoder::AdvSimdTwoRegMiscOpcode::kFrecpeV:
+     case Decoder::AdvSimdTwoRegMiscOpcode::kFrsqrteV: {
++      // apklayer patch (0035): bail (lite, then the interpreter) for the architectural 8-bit estimate (interpreter/arm64/fp_estimate.h).
++      if (true) { UndefinedReturningVoid(); return; }
+       if (args.is_fp16) { UndefinedReturningVoid(); return; }
+       if (args.size != 0b10 && args.size != 0b11) { UndefinedReturningVoid(); return; }
+       const bool is_double = (args.size & 1);
+diff --git a/cpu_emulation/interpreter/arm64/fp_estimate.h b/cpu_emulation/interpreter/arm64/fp_estimate.h
+new file mode 100644
+--- /dev/null
++++ b/cpu_emulation/interpreter/arm64/fp_estimate.h
+@@ -0,0 +1,78 @@
++// apklayer patch (0035): the architectural FRECPE / FRSQRTE estimates (ARM ARM FPRecipEstimate / FPRSqrtEstimate: 8 fraction bits from a
++// 9-bit table index), bit-exact with hardware; the exact 1/x the interpreter computed before differs in every bit below the eighth.
++// E = exponent bits (5, 8, 11), F = fraction bits (10, 23, 52); `bits` is the raw element. NaN: quieted; DN and FZ are not honoured
++// (shortcut: FPCR.DN/FZ/RMode of an estimate; upgrade if a program sets them and looks at the result).
++#pragma once
++
++#include <cstdint>
++
++namespace berberis {
++
++inline uint64_t ArmFpRecipEstimate(uint64_t bits, int e, int f) {
++  const uint64_t frac_mask = (uint64_t{1} << f) - 1;
++  const uint64_t exp_mask = (uint64_t{1} << e) - 1;
++  uint64_t sign = (bits >> (e + f)) & 1;
++  int64_t exp = static_cast<int64_t>((bits >> f) & exp_mask);
++  uint64_t frac = bits & frac_mask;
++  uint64_t signed_zero = sign << (e + f);
++  uint64_t signed_inf = signed_zero | (exp_mask << f);
++  if (exp == static_cast<int64_t>(exp_mask)) {
++    return frac ? (bits | (uint64_t{1} << (f - 1))) : signed_zero;  // NaN (quieted) / infinity -> 0
++  }
++  if (exp == 0 && frac == 0) return signed_inf;  // zero -> infinity
++  if (exp == 0) {
++    if ((frac >> (f - 2)) == 0) return signed_inf;  // |x| < 2^-(2^(e-1)): overflows to infinity
++    if ((frac >> (f - 1)) == 0) {
++      exp = -1;
++      frac = (frac << 2) & frac_mask;
++    } else {
++      frac = (frac << 1) & frac_mask;
++    }
++  }
++  int scaled = 256 + static_cast<int>(frac >> (f - 8));  // '1' : fraction<F-1:F-8>
++  int a = scaled * 2 + 1;
++  int estimate = ((1 << 19) / a + 1) / 2;  // [256, 511]
++  int64_t result_exp = static_cast<int64_t>(exp_mask) - 2 - exp;
++  uint64_t fraction = static_cast<uint64_t>(estimate & 0xff) << (f - 8);
++  if (result_exp == 0) {
++    fraction = (uint64_t{1} << (f - 1)) | (fraction >> 1);
++  } else if (result_exp == -1) {
++    fraction = (uint64_t{1} << (f - 2)) | (fraction >> 2);
++    result_exp = 0;
++  }
++  return signed_zero | (static_cast<uint64_t>(result_exp) << f) | fraction;
++}
++
++inline uint64_t ArmFpRSqrtEstimate(uint64_t bits, int e, int f) {
++  const uint64_t frac_mask = (uint64_t{1} << f) - 1;
++  const uint64_t exp_mask = (uint64_t{1} << e) - 1;
++  uint64_t sign = (bits >> (e + f)) & 1;
++  int64_t exp = static_cast<int64_t>((bits >> f) & exp_mask);
++  uint64_t frac = bits & frac_mask;
++  if (exp == static_cast<int64_t>(exp_mask) && frac) return bits | (uint64_t{1} << (f - 1));  // NaN, quieted
++  if (exp == 0 && frac == 0) return (sign << (e + f)) | (exp_mask << f);                       // +-0 -> +-infinity
++  if (sign) return (exp_mask << f) | (uint64_t{1} << (f - 1));                                 // negative: the (positive) default NaN
++  if (exp == static_cast<int64_t>(exp_mask)) return 0;                                         // +infinity -> +0
++  if (exp == 0) {
++    while (((frac >> (f - 1)) & 1) == 0) {
++      frac = (frac << 1) & frac_mask;
++      exp -= 1;
++    }
++    frac = (frac << 1) & frac_mask;
++  }
++  int scaled = (exp & 1) ? 128 + static_cast<int>(frac >> (f - 7))  // '01' : fraction<F-1:F-7>
++                         : 256 + static_cast<int>(frac >> (f - 8));  // '1' : fraction<F-1:F-8>
++  int a;
++  if (scaled < 256) {
++    a = scaled * 2 + 1;
++  } else {
++    a = (((scaled >> 1) << 1) + 1) * 2;
++  }
++  int b = 512;
++  while (static_cast<int64_t>(a) * (b + 1) * (b + 1) < (int64_t{1} << 28)) b++;
++  int estimate = (b + 1) / 2;  // [256, 511]
++  int64_t result_exp = (3 * (int64_t{1} << (e - 1)) - 4 - exp) / 2;
++  return (static_cast<uint64_t>(result_exp) << f) | (static_cast<uint64_t>(estimate & 0xff) << (f - 8));
++}
++
++}  // namespace berberis
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -27,6 +27,7 @@
+ #include <type_traits>
+ 
+ #include "../faulty_memory_accesses.h"
++#include "fp_estimate.h"  // apklayer patch (0035)
+ 
+ #include "berberis/base/bit_util.h"
+ #include "berberis/base/checks.h"
+@@ -6206,36 +6213,16 @@ class Interpreter {
+         break;
+       }
+       // scalar FRECPE / FRSQRTE.
+-      // ARM spec only requires ~8 bits of mantissa precision; computing the
+-      // exact 1/x or 1/sqrt(x) is well within bound. Mirrors the vector
+-      // kFrecpeV/kFrsqrteV implementation. args.size bit 1 is pinned to 1
+-      // by the decoder; sz=args.size&1 selects single (0) vs double (1).
++      // args.size bit 1 is pinned to 1 by the decoder; sz=args.size&1 selects single (0) vs double (1).
+       case Decoder::AdvSimdScalarTwoRegMiscOpcode::kFrecpe:
+       case Decoder::AdvSimdScalarTwoRegMiscOpcode::kFrsqrte: {
++        // apklayer patch (0035): the architectural estimate (fp_estimate.h), not the exact value.
+         bool is_rsqrt =
+             (args.opcode == Decoder::AdvSimdScalarTwoRegMiscOpcode::kFrsqrte);
+         if ((args.size & 1) == 0) {
+-          float f;
+-          memcpy(&f, &src, sizeof(f));
+-          float r;
+-          if (is_rsqrt) {
+-            r = (f <= 0.0f || f != f) ? __builtin_nanf("")
+-                                      : 1.0f / __builtin_sqrtf(f);
+-          } else {
+-            r = (f == 0.0f) ? __builtin_inff() * (1.0f / f) : 1.0f / f;
+-          }
+-          memcpy(&result, &r, sizeof(r));
++          result = (is_rsqrt ? ArmFpRSqrtEstimate : ArmFpRecipEstimate)(static_cast<uint32_t>(src), 8, 23);
+         } else {
+-          double d;
+-          memcpy(&d, &src, sizeof(d));
+-          double r;
+-          if (is_rsqrt) {
+-            r = (d <= 0.0 || d != d) ? __builtin_nan("")
+-                                     : 1.0 / __builtin_sqrt(d);
+-          } else {
+-            r = (d == 0.0) ? __builtin_inf() * (1.0 / d) : 1.0 / d;
+-          }
+-          memcpy(&result, &r, sizeof(r));
++          result = (is_rsqrt ? ArmFpRSqrtEstimate : ArmFpRecipEstimate)(static_cast<uint64_t>(src), 11, 52);
+         }
+         break;
+       }
+@@ -7676,11 +7663,6 @@ class Interpreter {
+         break;
+       }
+ 
+-      // FRECPE / FRSQRTE (vector): per-lane reciprocal /
+-      // reciprocal-square-root estimate. The ARM spec only requires ~8 bits
+-      // of mantissa precision; computing 1/x and 1/sqrt(x) in full precision
+-      // is well within that bound, so callers that need the estimate as a
+-      // Newton-Raphson seed will converge identically.
+       // FSQRT (vector): per-lane square root.
+       case Decoder::AdvSimdTwoRegMiscOpcode::kFsqrtV: {
+         // Armv8.2-FP16 vector FSQRT.
+@@ -7833,51 +7815,17 @@ class Interpreter {
+ 
+       case Decoder::AdvSimdTwoRegMiscOpcode::kFrecpeV:
+       case Decoder::AdvSimdTwoRegMiscOpcode::kFrsqrteV: {
++        // apklayer patch (0035): the architectural estimate (fp_estimate.h), not the exact value.
+         bool is_rsqrt =
+             (args.opcode == Decoder::AdvSimdTwoRegMiscOpcode::kFrsqrteV);
+-        // FP16 form (FRECPE/FRSQRTE v.4h, v.4h).
+-        if (args.is_fp16) {
+-          uint8_t fp_count = args.q ? 8 : 4;
+-          for (uint8_t i = 0; i < fp_count; i++) {
+-            uint16_t h;
+-            memcpy(&h, reinterpret_cast<const uint8_t*>(&src) + i * 2, 2);
+-            float f = FpHalfToSingle(h);
+-            float r;
+-            if (is_rsqrt) {
+-              r = (f <= 0.0f || f != f) ? __builtin_nanf("") : 1.0f / __builtin_sqrtf(f);
+-            } else {
+-              r = (f == 0.0f) ? __builtin_inff() * (1.0f / f) : 1.0f / f;
+-            }
+-            uint16_t rh = FpSingleToHalf(r);
+-            memcpy(reinterpret_cast<uint8_t*>(&result) + i * 2, &rh, 2);
+-          }
+-          break;
+-        }
+-        uint8_t fp_esize = (args.size & 1) ? 8 : 4;
+-        // Same bit23=1 rationale as the FCVTZS case above.
++        auto estimate = is_rsqrt ? ArmFpRSqrtEstimate : ArmFpRecipEstimate;
++        uint8_t fp_esize = args.is_fp16 ? 2 : ((args.size & 1) ? 8 : 4);
+         uint8_t fp_count = vec_len / fp_esize;
+         for (uint8_t i = 0; i < fp_count; i++) {
+-          if (fp_esize == 4) {
+-            float f;
+-            memcpy(&f, reinterpret_cast<const uint8_t*>(&src) + i * 4, 4);
+-            float r;
+-            if (is_rsqrt) {
+-              r = (f <= 0.0f || f != f) ? __builtin_nanf("") : 1.0f / __builtin_sqrtf(f);
+-            } else {
+-              r = (f == 0.0f) ? __builtin_inff() * (1.0f / f) : 1.0f / f;
+-            }
+-            memcpy(reinterpret_cast<uint8_t*>(&result) + i * 4, &r, 4);
+-          } else {
+-            double d;
+-            memcpy(&d, reinterpret_cast<const uint8_t*>(&src) + i * 8, 8);
+-            double r;
+-            if (is_rsqrt) {
+-              r = (d <= 0.0 || d != d) ? __builtin_nan("") : 1.0 / __builtin_sqrt(d);
+-            } else {
+-              r = (d == 0.0) ? __builtin_inf() * (1.0 / d) : 1.0 / d;
+-            }
+-            memcpy(reinterpret_cast<uint8_t*>(&result) + i * 8, &r, 8);
+-          }
++          uint64_t v = 0;
++          memcpy(&v, reinterpret_cast<const uint8_t*>(&src) + i * fp_esize, fp_esize);
++          uint64_t r = estimate(v, fp_esize == 2 ? 5 : fp_esize == 4 ? 8 : 11, fp_esize == 2 ? 10 : fp_esize == 4 ? 23 : 52);
++          memcpy(reinterpret_cast<uint8_t*>(&result) + i * fp_esize, &r, fp_esize);
+         }
+         break;
+       }
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_two_reg_misc.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_two_reg_misc.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_two_reg_misc.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_two_reg_misc.inc
+@@ -868,6 +868,8 @@
+       }
+ 
+       case Opcode::kFrecpe: {
++        // apklayer patch (0035): the interpreter computes the architectural 8-bit estimate (interpreter/arm64/fp_estimate.h).
++        if (true) { success_ = false; return; }
+         // FRECPE scalar: single-lane FP reciprocal estimate.  Decoder pins
+         // bit1 of size (size ∈ {10, 11}); bit0 selects S (0) vs D (1).
+         // Per ARM ARM C7.2.150 the result needs only ~8 bits of mantissa
+@@ -912,6 +914,8 @@
+       }
+ 
+       case Opcode::kFrsqrte: {
++        // apklayer patch (0035): the interpreter computes the architectural 8-bit estimate (interpreter/arm64/fp_estimate.h).
++        if (true) { success_ = false; return; }
+         // FRSQRTE scalar: single-lane FP reciprocal-square-root estimate.
+         // ARM ARM C7.2.155.  Decoder pins bit1 of size (size ∈ {10, 11});
+         // bit0 selects S (0) vs D (1).
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_two_reg_misc.inc
+@@ -531,6 +531,8 @@
+       //   result = (mask & qNaN) | (~mask & recip)
+       case Decoder::AdvSimdTwoRegMiscOpcode::kFrecpeV:
+       case Decoder::AdvSimdTwoRegMiscOpcode::kFrsqrteV: {
++        // apklayer patch (0035): the interpreter computes the architectural 8-bit estimate (interpreter/arm64/fp_estimate.h).
++        if (true) { success_ = false; return; }
+         if (args.is_fp16) { success_ = false; return; }
+         if ((args.size & 0b10) == 0) { Undefined(); return; }
+         const bool is_double = (args.size == 0b11);

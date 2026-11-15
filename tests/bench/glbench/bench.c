@@ -68,9 +68,11 @@ static int cmp(const void *a, const void *b)
 
 struct gl_state { GLuint fill, flat, vbo, fbo; GLint fill_t, fill_rect, flat_color, flat_rect; };
 
+static float clear_alpha = 1.0f;  /* window-alpha: the frame's alpha is 0.5 (an opaque Android window shows it as 1.0) */
+
 static void draw(const struct gl_state *g, const char *scene, int frame)
 {
-    glClearColor((frame % 60) / 60.0f, 0.2f, 0.3f, 1.0f);
+    glClearColor((frame % 60) / 60.0f * clear_alpha, 0.2f * clear_alpha, 0.3f * clear_alpha, clear_alpha);
     glClear(GL_COLOR_BUFFER_BIT);
     if (!strcmp(scene, "fill")) {
         glUseProgram(g->fill);
@@ -179,6 +181,7 @@ int bench_run(const struct bench_target *t, const char *scenes, double seconds)
              (const char *)glGetString(GL_RENDERER), (const char *)glGetString(GL_VERSION), eglQueryString(t->dpy, EGL_VENDOR),
              eglQueryString(t->dpy, EGL_VERSION));
     t->print(line);
+    clear_alpha = strstr(t->mode, "alpha") ? 0.5f : 1.0f;
     struct gl_state g = { program(fs_fill), program(fs_flat), 0, 0, 0, 0, 0, 0 };
     g.fill_t = glGetUniformLocation(g.fill, "t");
     g.fill_rect = glGetUniformLocation(g.fill, "rect");

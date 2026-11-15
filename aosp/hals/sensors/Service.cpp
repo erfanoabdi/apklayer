@@ -7,7 +7,10 @@
 #include <android/binder_process.h>
 #include <android-base/logging.h>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <set>
+#include <string>
 
 int sensorsProbe();
 // weak: the probe runs this library without a backend loaded (bionic's linker binds every symbol at load)
@@ -54,12 +57,26 @@ class BackendSensors final : public Sensors {
     BackendSensors() : Sensors(false) {  // without the example's sensors (patch 0003)
         apklayer_sensor_info infos[32];
         int n = apklayer_sensors_list(infos, 32);
+        std::set<std::string> features;  // android.hardware.sensor.* of this backend's sensors: HostSystemConfig declares them
         for (int i = 0; i < n; i++) {
             std::shared_ptr<Sensor> sensor;
             if (infos[i].on_change) sensor = std::make_shared<BackendSensor<OnChangeSensor>>(mNextHandle, this, i, infos[i]);
             else sensor = std::make_shared<BackendSensor<Sensor>>(mNextHandle, this, i, infos[i]);
             mSensors[mNextHandle++] = sensor;
             fprintf(stderr, "sensors: %s (type %d)\n", infos[i].name, infos[i].type);
+            switch (infos[i].type) {
+                case 1: features.insert("accelerometer"); break;
+                case 2: features.insert("compass"); break;
+                case 4: features.insert("gyroscope"); break;
+                case 5: features.insert("light"); break;
+                case 6: features.insert("barometer"); break;
+                case 8: features.insert("proximity"); break;
+            }
+        }
+        if (const char* data = getenv("APKLAYER_DATA")) {
+            std::string text, path = std::string(data) + "/apklayer/sensor_features";
+            for (const std::string& f : features) text += "android.hardware.sensor." + f + "\n";
+            if (FILE* out = fopen(path.c_str(), "w")) { fputs(text.c_str(), out); fclose(out); }
         }
     }
 };

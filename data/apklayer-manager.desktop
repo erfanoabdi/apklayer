@@ -2,10 +2,11 @@
 Type=Application
 Name=Apklayer
 Comment=Android apps on Linux: install, open and manage them
-Exec=apklayer-manager
+Exec=apklayer-manager %F
 Icon=apklayer
 Terminal=false
 Categories=X-Apklayer-App;Utility;
+MimeType=application/vnd.android.package-archive;application/x-android-apks;application/x-android-xapk;application/x-android-apkm;
 StartupWMClass=apklayer-manager
 X-Lomiri-Touch=true
 X-Lomiri-Single-Instance=true

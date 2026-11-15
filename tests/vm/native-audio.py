@@ -15,7 +15,7 @@ import instance  # noqa: E402  (changes into the repo root)
 LOGDIR = instance.LOGDIR
 ENV = dict(instance.ENV, APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
-    APKLAYER_JOPTS='-Dapklayer.nativeattribution=true -Dapklayer.runms=90000')
+    APKLAYER_JOPTS='-Dapklayer.nativeattribution=true -Dapklayer.testClasses=apklayer.host.NativeAttribution,apklayer.host.NativeParcel,org.robolectric.shadow.api.Shadow -Dapklayer.runms=90000')  # the host classes the app reaches by Class.forName
 extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
 if extra.exists(): ENV['APKLAYER_JOPTS'] += ' ' + extra.read_text().strip()
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
@@ -24,7 +24,7 @@ late = sys.argv[1:] == ['late']  # installed while the hub runs: audioserver mus
 audio_mode = late or sys.argv[1:] == ['audio']
 capture = None
 if audio_mode:
-    ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dhello.rate=1 -Dhello.record=1'
+    ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dhello.nativeaudio=true -Dapklayer.nativeparcels=true -Dhello.rate=1 -Dhello.record=1'
     ENV['APKLAYER_HOST_LIBS'] += ':' + ENV['APKLAYER_NATIVE'] + '/libapklayer-audio-pipewire.so'
 
 
@@ -118,7 +118,14 @@ try:
         assert '[hello-native-audio] MUTE PASS silent while muted' in text  # setMicrophoneMute: AudioFlinger's mute, the HAL's silent capture
         assert '[hello-native-audio] CALL PASS' in text
         assert '[hello-native-audio] CROSS PASS' in text  # another process's mode/device listeners and ACTION_MICROPHONE_MUTE_CHANGED (HubCallAudio)  # setMode and setCommunicationDevice reach the policy through the hub (HubCallAudio)
-        assert '[hello-native-audio] VOIP PASS' in text  # WebRTC's call audio: direct buffers with an array, mono capture, effects, ByteBuffer I/O
+        # two requesters (the app's two processes): the one with a player started owns the call mode, the newest of those (HubCallAudio.owner), in the hub log
+        import re
+        pids = re.search(r'OWNER PASS pids main=(\d+) listener=(\d+)', text)
+        assert pids, 'no OWNER PASS'
+        owners = re.findall(r'audio mode 3 of hello\.nativeaudio pid (\d+)', ''.join(p.read_text(errors='replace') for p in [logs / 'hub.log'] + ([hub_log] if late else []) if p.exists()))
+        main_pid, listener_pid = pids.groups()
+        assert listener_pid in owners and main_pid in owners[owners.index(listener_pid):], 'call mode owners (main %s, listener %s): %s' % (main_pid, listener_pid, owners)
+        assert '[hello-native-audio] VOIP PASS' in text # WebRTC's call audio: direct buffers with an array, mono capture, effects, ByteBuffer I/O
         capture.verify()
     if late:
         hub_text = hub_log.read_text(errors='replace')  # fed again when the app registered (the hub's start knew no hello.nativeaudio)

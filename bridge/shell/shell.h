@@ -34,8 +34,11 @@
  *                104 RELEASE        {i32 id, i32 buf}
  *                105 KEY            {i32 id, i32 action(0 down,1 up), i32 android keycode,
  *                                    i32 unicode (UTF-32), i32 android meta}  (xkb-translated, P2)
- *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*1000, i32 hscroll*1000}
- *                                    (x,y in buffer pixels; scroll in notches, +vscroll = up)
+ *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*10000, i32 hscroll*10000, i32 android meta}
+ *                                    (x,y in buffer pixels; scroll in notches, fractions for hi-res wheels and touchpads, +vscroll = up)
+ *                117 TABLET         {i32 id, i32 android action (0 down, 1 up, 2 move, 7 hover move, 9 hover enter, 10 hover exit), i32 x, i32 y (pixels),
+ *                                    i32 tool (Android TOOL_TYPE_*), i32 buttons (Android BUTTON_STYLUS_*), i32 pressure*10000, i32 distance*10000,
+ *                                    i32 tilt x deg*100, i32 tilt y deg*100, i32 rotation deg*100, i32 slider*10000}  (tablet.c)
  *                111 TOUCH          {i32 id, i32 action(0 down,1 up,2 move,3 cancel), i32 finger, i32 x, i32 y}  (pixels)
  *                110 IME            {i32 id, i32 delete_before, i32 delete_after} utf8 commit "\0" utf8 preedit
  *                109 CLIPBOARD      utf8 text: the system selection changed (text only, < 60 KB)
@@ -105,13 +108,15 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_FULLSCREEN 18    /* app -> shell: {own window id, on}: the app went fullscreen or left it (mobile.c) */
 #define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
+#define MSG_TABLET 117        /* shell -> app: a pen's event (tablet.c) */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
  * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's); close: the compositor's close
  * (xdg_toplevel.close, Lipstick's qt_extended_surface.close); ime {app px}: the host keyboard's area as maliit.c sets it. x, y: logical content pixels, y < 0 = the title bar. */
-enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME };
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME, TEST_OUTPUT, TEST_LAYOUT,
+       TEST_WHEEL /* {dx, dy, flags}: pointer_inject_wheel */, TEST_PEN /* text: tablet_inject */ };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -143,6 +148,7 @@ struct window {
     int float_w, float_h;       /* content size before a maximize/fullscreen/tile: restored when the compositor leaves the size to us */
     int lock;                   /* the top activity's fixed orientation (MSG_WINDOW_SIZE): 1 landscape, 2 portrait, 0 none */
     int turn;                   /* mobile style: the app turned against the window, degrees (90, 270; 0 none): the display owner composes it so (geometry.c) */
+    int comp_w, comp_h;         /* the window geometry of the compositor's last toplevel configure (0 x 0: none yet): a floating one that repeats it may predate our reshape */
     int bounds_w, bounds_h;     /* xdg_toplevel.configure_bounds: the largest window geometry that fits the work area, 0 = unknown */
     int maximized, activated;   /* xdg toplevel states (maximized: also fullscreen) */
     int fullscreen;             /* the compositor's fullscreen state: no title bar */
@@ -167,6 +173,8 @@ struct window {
     int nav_hidden;             /* the app hid the navigation bar (immersive) */
     int nav_h;                  /* logical height of the navigation bar, 0 without one */
     int nav_layer;              /* the window's owner composes the bar (MSG_NAVBAR_LAYER): used without subsurfaces */
+    struct wl_output *out;      /* the output the surface is on (wl_surface.enter), NULL = unknown: the largest one (registry.c) */
+    int told_px_w, told_px_h;   /* the screen size (that output, in pixels) the app was last told */
     int dpi, told_dpi, told_nav;/* density the app is told (mobile.c), and what it was last told */
     char label[64];             /* the app's name: the title bar's text */
     int dark;                   /* the bars' colour scheme: the desktop's, then the instance's (window_set_dark) */
@@ -216,6 +224,8 @@ extern int output_refresh_mhz;       /* the output's current mode (wl_output.mod
 extern int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known (fallback without configure_bounds) */
 extern int output_scale;                  /* percent: the largest integer wl_output scale (fallback without wp_fractional_scale_v1) */
 extern int output_px_w, output_px_h, output_mm_w, output_mm_h;  /* the largest output's mode in pixels and its physical size (0: unknown) */
+void window_output(const struct window *w, int *px_w, int *px_h, int *scale);
+int window_output_inject(struct window *w, int index);  /* registry.c, test input: the surface enters the index-th output (-1: none) */  /* registry.c: the output w is on, else the largest */
 extern struct window windows[MAX_WINDOWS];
 extern struct window *pointer_focus, *keyboard_focus;
 extern int debug_input;               /* APKLAYER_DEBUG_INPUT=1: log focus changes and key codes */
@@ -243,6 +253,7 @@ int maliit_pollfds(struct pollfd *p);
 void maliit_dispatch(struct pollfd *p);
 void maliit_enable(struct window *w, int enable);  /* maliit.c: the host keyboard without zwp_text_input_v3 (enable 2: show it again, 4: hide it) */
 void maliit_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* the field's text around the cursor */
+void text_input_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* textinput.c: set_surrounding_text */
 void text_input_send(struct window *w, int before, int after, const char *commit, const char *preedit);  /* textinput.c: one MSG_IME */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
 void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd);  /* with fd (SCM_RIGHTS) unless it is < 0 */
@@ -251,6 +262,7 @@ void client_read(struct client *c);  /* client.c */
 uint32_t kb_android_meta(void);  /* keyboard.c */
 long long now_ms(void);  /* keyboard.c */
 void key_event(uint32_t evdev, int down);  /* keyboard.c */
+int keyboard_inject_layout(const char *spec);  /* keyboard.c: test input */
 struct window *window_for_surface(struct wl_surface *s);  /* window.c */
 struct window *window_find(struct client *c, int id);
 struct window *window_find_input(struct client *c, int id);  /* window.c */
@@ -308,7 +320,13 @@ void keyboard_inject_focus(struct window *w);  /* keyboard.c */
 void keyboard_inject_leave(struct window *w);  /* keyboard.c */
 void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboard.c */
 void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */
+int pointer_inject_wheel(struct window *w, int dx, int dy, int flags);  /* pointer.c */
 void touch_inject(struct window *w, int action, int x, int y);  /* touch.c */
+/* tablet.c: zwp_tablet_v2 tools (pens) */
+void tablet_bind(struct wl_registry *r, uint32_t name, const char *iface, uint32_t ver);
+void tablet_seat_try(void);                      /* once the manager and the seat are both bound */
+void tablet_forget_window(struct window *w);
+int tablet_inject(struct window *w, const char *text);  /* "x y pressure tilt_x tilt_y rotation distance buttons", "out" */
 int text_input_inject(struct window *w, const char *text, int preedit);  /* textinput.c */
 void window_inject_configure(struct window *w, int cw, int ch, int activated);  /* geometry.c */
 void window_inject_maximize(struct window *w, int on, int gw, int gh);  /* geometry.c */

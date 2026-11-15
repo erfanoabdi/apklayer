@@ -22,6 +22,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <time.h>
 
 #include "driver.h"
 #include "protocol.h"
@@ -34,6 +35,10 @@ const char* const kContexts[] = {"binder", "hwbinder", "vndbinder"};
 constexpr int kNumContexts = 3;
 std::atomic<int> live{0};  // connections open (main thread's and loops')
 bool debug = false;
+
+constexpr long kSpinUs = 60;  // shortcut: fixed window, a spinning loop costs a CPU for this long after each message; tune or drop if idle CPU matters
+timespec now() { timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t; }
+long usSince(const timespec& a) { timespec b = now(); return (b.tv_sec - a.tv_sec) * 1000000L + (b.tv_nsec - a.tv_nsec) / 1000; }
 
 struct Message {
     int fd;
@@ -195,7 +200,11 @@ struct Loop {
     void run() {
         for (;;) {
             epoll_event evs[64];
-            int n = epoll_wait(epfd, evs, 64, -1);
+            // a short busy-poll window after a round of work before sleeping: the next message of a call/reply chain follows within
+            // microseconds, and the epoll sleep + wakeup is the larger part of each hop
+            int n = 0;
+            for (timespec t0 = now(); !(n = epoll_wait(epfd, evs, 64, 0)) && usSince(t0) < kSpinUs;) {}
+            if (!n) n = epoll_wait(epfd, evs, 64, -1);
             for (int i = 0; i < n; i++) {
                 int fd = evs[i].data.fd;
                 if (fd == wake) {

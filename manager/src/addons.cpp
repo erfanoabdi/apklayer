@@ -10,10 +10,17 @@ namespace {
 struct Addon {
     const char *id, *title, *description;
     std::vector<std::string> packages;  // the first one's version is the add-on's
+    // microG and Google's own share package names: the Services Framework (Google's only) tells whose they are
+    const char* needs = nullptr;     // counted as installed only with this package
+    const char* unless = nullptr;    // not counted as installed with this package
 };
-// the first run's optional apps (setup.slint, cli/setup.cpp): microG is its Services and its Companion (Play Store stand-in), apps need both
+// the first run's optional apps (setup.slint, cli/setup.cpp) and Google's own: microG is its Services and its Companion (Play Store stand-in), apps need both
 const std::vector<Addon> kAddons = {
-    {"microg", "microG", "Google's services, for apps that need them (Services and Companion)", {"com.google.android.gms", "com.android.vending"}},
+    {"microg", "microG", "Google's services, for apps that need them (Services and Companion)", {"com.google.android.gms", "com.android.vending"}, nullptr, "com.google.android.gsf"},
+    // Google's own (cli/gapps.cpp, `setup --gapps`): one or the other with microG
+    {"gapps", "Google Play", "Google's own Play services and Play Store (replaces microG)",
+     {"com.google.android.gms", "com.google.android.gsf", "com.android.vending", "com.google.android.syncadapters.contacts", "com.google.android.syncadapters.calendar"},
+     "com.google.android.gsf"},
     {"fdroid", "F-Droid", "A store of free software apps", {"org.fdroid.fdroid"}},
 };
 const Addon* find(const std::string& id) {
@@ -43,9 +50,11 @@ void Addons::show(const Rows& apps) {
         e.description = a.description;
         int have = 0;
         std::string version, dir;
+        auto has = [&](const char* pkg) { for (const auto& row : apps) if (field(row, 0) == pkg) return true; return false; };
+        const bool theirs = (a.needs && !has(a.needs)) || (a.unless && has(a.unless));
         for (const std::string& pkg : a.packages)
             for (const auto& row : apps)
-                if (field(row, 0) == pkg) {
+                if (!theirs && field(row, 0) == pkg) {
                     have++;
                     if (pkg == a.packages[0] || dir.empty()) { version = field(row, 2); dir = field(row, 3); }
                 }

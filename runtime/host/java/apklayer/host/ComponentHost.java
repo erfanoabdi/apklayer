@@ -21,6 +21,7 @@ public final class ComponentHost implements Runnable {
         AppEnvironment.setUpApplication(sandbox, apk, false);
         StartTrace.mark("application set up");
         AppEnvironment.nameProcessEarly();  // before the app's code, as Android's setArgV0
+        HostProviders.installEarly();  // Android's security providers before the app's code (its onCreate may take a default trust manager)
         Application app = RuntimeEnvironment.getApplication();
         StartTrace.mark("application created (onCreate done)");
         AppEnvironment.startRuntime(app);
@@ -50,11 +51,11 @@ public final class ComponentHost implements Runnable {
             // a message due later than the idle window does not keep it (Android ends such a cached process too): MediaProvider's WorkManager posts
             // its delayed work 14 h ahead (GreedyScheduler), the same work is a job the hub runs then (JobScheduler)
             long next = looper.getNextScheduledTaskTime().toMillis();
-            boolean idle = Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && (next == 0 || next - android.os.SystemClock.uptimeMillis() > idleExitNs / 1_000_000);
+            boolean idle = Services.none() && !HubServices.holdsBinding() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && (next == 0 || next - android.os.SystemClock.uptimeMillis() > idleExitNs / 1_000_000);
             if (idle) { System.out.println("[apklayer] component-host idle for " + idleExitNs / 1_000_000 + " ms (no service, no call): exiting"); stop(); }
             else if (!told[0]) {  // uncalled, yet kept: say once by what
                 told[0] = true;
-                System.out.println("[apklayer] component-host stays: " + (Services.none() ? "" : "a service runs, ") + ShadowHostRealBinder.IN_FLIGHT.get() + " calls in flight, next message "
+                System.out.println("[apklayer] component-host stays: " + (Services.none() ? "" : "a service runs, ") + (HubServices.holdsBinding() ? "a service of another process is bound, " : "") + ShadowHostRealBinder.IN_FLIGHT.get() + " calls in flight, next message "
                         + (looper.getNextScheduledTaskTime().toMillis() == 0 ? "none" : "in " + (looper.getNextScheduledTaskTime().toMillis() - android.os.SystemClock.uptimeMillis()) + " ms: "
                         + org.robolectric.util.ReflectionHelpers.getField(Looper.getMainLooper().getQueue(), "mMessages")));
             }

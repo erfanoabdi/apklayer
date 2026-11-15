@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -44,11 +45,19 @@ int main(int argc, char **argv)
     assert(bsigaction);
     const int sigs[] = { SIGSEGV, SIGABRT };
     for (unsigned i = 0; i < sizeof sigs / sizeof *sigs; i++) {
+        int err[2];
+        assert(pipe(err) == 0);
         pid_t pid = fork();
         assert(pid >= 0);
-        if (!pid) child(sigs[i]);
+        if (!pid) { dup2(err[1], 2); close(err[0]); child(sigs[i]); }
+        close(err[1]);
         int status = 0;
         assert(waitpid(pid, &status, 0) == pid);
+        char note[4096] = "";
+        read(err[0], note, sizeof note - 1);
+        close(err[0]);
+        /* the default handler's note carries the frames: module and offset of the fault and of its callers (0080) */
+        assert(strstr(note, "Fatal signal") && strstr(note, "#00 pc ") && strstr(note, "#01 pc ") && (sigs[i] != SIGSEGV || strstr(note, "fault-chain")));
         if (!WIFSIGNALED(status) || WTERMSIG(status) != sigs[i]) {
             fprintf(stderr, "signal %d: child status %#x, expected death by the signal\n", sigs[i], status);
             return 1;

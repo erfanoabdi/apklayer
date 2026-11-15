@@ -81,8 +81,11 @@ Release parseLatest(const std::string& text, const std::string& codename, const 
     r.runtimeVersion = json::str(json::member(runtime, "version"));
     r.runtime = asset(json::member(runtime, "assets"), cpus);
     r.deb = asset(json::member(json::member(chosen, "debs"), codename), cpus);  // none: this OS or CPU has no package (the caller says so when it matters)
+    r.click = asset(json::member(chosen, "clicks"), cpus);
     return r;
 }
+
+std::string packageFormat(const std::string& exe) { return exe.rfind("/opt/click.ubuntu.com/", 0) == 0 ? "click" : "deb"; }
 
 int compareVersions(const std::string& a, const std::string& b) {
     std::string sa, sb;

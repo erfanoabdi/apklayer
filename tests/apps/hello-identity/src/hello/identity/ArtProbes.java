@@ -105,6 +105,7 @@ final class ArtProbes {
         Out.probe("art.msg.npeField", () -> { try { Layout l = null; return l.i; } catch (NullPointerException e) { return e.getMessage(); } });
         Out.probe("art.msg.aioobe", () -> { try { int[] a = new int[3]; return a[5]; } catch (ArrayIndexOutOfBoundsException e) { return e.getMessage(); } });
         Out.probe("art.msg.sioobe", () -> { try { return "abc".charAt(5); } catch (StringIndexOutOfBoundsException e) { return e.getMessage(); } });
+        Out.probe("art.msg.listIoobe", () -> { try { return new java.util.ArrayList<String>().get(5); } catch (IndexOutOfBoundsException e) { return e.getMessage(); } });
         Out.probe("art.msg.cce", () -> { try { Object o = 1; return (String) o; } catch (ClassCastException e) { return e.getMessage(); } });
         Out.probe("art.msg.ase", () -> { try { Object[] a = new String[1]; a[0] = 1; return "none"; } catch (ArrayStoreException e) { return e.getMessage(); } });
         Out.probe("art.msg.nase", () -> { try { int n = -1; return new int[n].length; } catch (NegativeArraySizeException e) { return e.getMessage(); } });

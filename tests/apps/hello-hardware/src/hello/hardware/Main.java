@@ -42,8 +42,39 @@ public final class Main extends Activity {
         Thread.sleep(500);  // the pattern is 350 ms
         vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK));
         Thread.sleep(300);
+        if (Boolean.getBoolean("hw.compose")) compose(vibrator);  // -Dhw.compose=true: tests/vm/providers.sh (the host backends' tests read only the waveform and click)
         System.out.println("[hw] vibrator pattern and click played");
         return true;
+    }
+
+    private void compose(Vibrator vibrator) throws InterruptedException {
+        // a composition of two primitives (the HAL composes: the fake backend gets CLICK at 0.5, then THUD at 1.0), then haptic feedback (CONFIRM: a click, as the example HAL has only CLICK and TICK)
+        boolean primitives = vibrator.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_CLICK, VibrationEffect.Composition.PRIMITIVE_THUD);
+        System.out.println("[hw] vibrator primitives supported=" + primitives);
+        if (primitives) vibrator.vibrate(VibrationEffect.startComposition().addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.5f)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD, 1f, 50).compose());
+        Thread.sleep(600);
+        // SystemVibrator.performHapticFeedback (hidden: ViewRootImpl's path; the View's own call is below)
+        try {
+            Vibrator.class.getMethod("performHapticFeedback", int.class, int.class, String.class, int.class, int.class).invoke(vibrator, android.view.HapticFeedbackConstants.CONFIRM, 0, "hello", 0, 0);
+        } catch (ReflectiveOperationException failure) { failure.printStackTrace(System.out); }
+        Thread.sleep(400);
+        // View.performHapticFeedback(int): ViewRootImpl's path (robolectric patch 0029: ShadowView no longer answers it itself), a click too
+        System.out.println("[hw] view haptic feedback " + getWindow().getDecorView().performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM));
+        Thread.sleep(400);
+        System.out.println("[hw] vibrator haptic feedback sent");
+        ramp(vibrator);
+    }
+
+    /** A PWLE segment ( hidden classes, built by reflection) from 0 to 1 over 60 ms; the hub plays it as 20 ms steps. */
+    private void ramp(Vibrator vibrator) throws InterruptedException {
+        try {
+            Object segment = Class.forName("android.os.vibrator.PwleSegment").getConstructor(float.class, float.class, float.class, float.class, long.class).newInstance(0f, 1f, 100f, 100f, 60L);
+            Class<?> composed = Class.forName("android.os.VibrationEffect$Composed");
+            vibrator.vibrate((VibrationEffect) composed.getConstructor(java.util.List.class, int.class).newInstance(java.util.List.of(segment), -1));
+        } catch (ReflectiveOperationException failure) { failure.printStackTrace(System.out); }
+        Thread.sleep(300);
+        System.out.println("[hw] vibrator ramp sent");
     }
 
     private boolean location() throws InterruptedException {
@@ -68,6 +99,8 @@ public final class Main extends Activity {
         SensorManager sm = getSystemService(SensorManager.class);
         Sensor accel = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         System.out.println("[hw] sensors " + sm.getSensorList(Sensor.TYPE_ALL).size() + " accelerometer=" + (accel == null ? null : accel.getName()));
+        for (String f : new String[] {"accelerometer", "light", "proximity", "compass", "gyroscope"})  // declared from the backend's sensors (sensor_features)
+            System.out.println("[hw] feature sensor." + f + "=" + getPackageManager().hasSystemFeature("android.hardware.sensor." + f));
         for (Sensor s : sm.getSensorList(Sensor.TYPE_ALL)) {  // every sensor's range and a value (the host backends' mapping: tests/vm/providers-host.sh)
             System.out.println("[hw] listening type=" + s.getType() + " name=" + s.getName());
             float[] v = listen(sm, s, 1000);

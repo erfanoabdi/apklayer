@@ -39,13 +39,14 @@ public final class Main extends Activity {
     private static final UUID ECHO = UUID.fromString("a1b2c3d4-0000-1000-8000-00805f9b34fb");
     private static final String PIN_DEVICE = "AA:BB:CC:00:00:01", SETPIN_DEVICE = "AA:BB:CC:00:00:02", COMPARE_DEVICE = "AA:BB:CC:00:00:03";
     private BluetoothAdapter adapter;
-    private boolean found, sawOff;
+    private boolean found, sawOff, piSeen;
 
     private static UUID uuid(String short16) { return UUID.fromString("0000" + short16 + "-0000-1000-8000-00805f9b34fb"); }
     private static void log(String line) { System.out.println("[bt] " + line); }
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (System.getProperty("bt.halt") != null) { adapter = getSystemService(BluetoothManager.class).getAdapter(); halt(); return; }  // a server socket, then the process ends without closing it
         if (System.getProperty("bt.real") != null) { Real.start(this, System.getProperty("bt.real")); return; }  // against real devices (Real.java)
         adapter = getSystemService(BluetoothManager.class).getAdapter();
         log("feature le=" + getPackageManager().hasSystemFeature("android.hardware.bluetooth_le") + " scan-granted="
@@ -67,6 +68,15 @@ public final class Main extends Activity {
         try {
             log("discovery started=" + adapter.startDiscovery());
         } catch (SecurityException denied) { log("discovery SecurityException " + denied.getMessage()); }
+    }
+
+    private void halt() {
+        try {
+            BluetoothServerSocket server = adapter.listenUsingInsecureRfcommWithServiceRecord("apklayer-halt", ECHO);
+            new Thread(() -> { try { server.accept(); } catch (IOException closed) { } }).start();
+            log("halt listening pid=" + android.os.Process.myPid());
+            new Thread(() -> { try { Thread.sleep(1500); } catch (InterruptedException ignored) { } Runtime.getRuntime().halt(0); }).start();
+        } catch (IOException failed) { log("halt failed " + failed); }
     }
 
     private void received(Intent intent) {
@@ -154,6 +164,31 @@ public final class Main extends Activity {
                 peer.getOutputStream().write(("got:" + new String(got, 0, Math.max(n, 0), StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8));
                 client.join();
             }
+            // several clients of one server socket at once: the second connects while the first is still connected and unserved; both are accepted, then served
+            int[] served = {0};
+            Thread[] many = new Thread[2];
+            BluetoothSocket[] peers = new BluetoothSocket[2];
+            for (int i = 0; i < many.length; i++) {
+                many[i] = new Thread(() -> {
+                    try (BluetoothSocket socket = adapter.getRemoteDevice("11:22:33:44:55:66").createRfcommSocketToServiceRecord(ECHO)) {
+                        socket.connect();
+                        socket.getOutputStream().write("many\n".getBytes(StandardCharsets.UTF_8));
+                        if (socket.getInputStream().read(new byte[64]) > 0) synchronized (served) { served[0]++; }
+                    } catch (IOException failed) { log("server many client failed " + failed); }
+                });
+                many[i].start();
+                try { peers[i] = server.accept(8000); } catch (IOException failed) { log("server many accept failed " + failed.getMessage()); }
+            }
+            for (BluetoothSocket peer : peers) {
+                if (peer == null) continue;
+                try (peer) {
+                    byte[] got = new byte[64];
+                    int n = peer.getInputStream().read(got);
+                    peer.getOutputStream().write(("got:" + new String(got, 0, Math.max(n, 0), StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8));
+                } catch (IOException failed) { log("server many serve failed " + failed.getMessage()); }
+            }
+            for (Thread t : many) t.join(5000);
+            log("server several clients served=" + served[0]);
             Thread waiting = new Thread(() -> {
                 try { server.accept(); log("server accept after close returned"); } catch (IOException closed) { log("server close woke accept " + closed.getMessage()); }
             });
@@ -166,6 +201,19 @@ public final class Main extends Activity {
 
     private void scan() {
         ScanFilter battery = new ScanFilter.Builder().setServiceUuid(new ParcelUuid(BATTERY)).build();
+        // the same scan delivered by PendingIntent (a background scan's form): a broadcast with EXTRA_LIST_SCAN_RESULT
+        android.app.PendingIntent pending = android.app.PendingIntent.getBroadcast(this, 0, new Intent("hello.bluetooth.SCAN").setPackage(getPackageName()),
+                android.app.PendingIntent.FLAG_MUTABLE | android.app.PendingIntent.FLAG_UPDATE_CURRENT);
+        registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context context, Intent intent) {
+                List<ScanResult> results = intent.getParcelableArrayListExtra(android.bluetooth.le.BluetoothLeScanner.EXTRA_LIST_SCAN_RESULT);
+                if (results == null || results.isEmpty() || piSeen) return;
+                piSeen = true;
+                adapter.getBluetoothLeScanner().stopScan(pending);
+                log("pi-scan " + results.get(0).getDevice().getAddress() + " type=" + intent.getIntExtra(android.bluetooth.le.BluetoothLeScanner.EXTRA_CALLBACK_TYPE, -1));
+            }
+        }, new IntentFilter("hello.bluetooth.SCAN"), Context.RECEIVER_EXPORTED);
+        log("pi-scan started=" + adapter.getBluetoothLeScanner().startScan(List.of(battery), new ScanSettings.Builder().build(), pending));
         adapter.getBluetoothLeScanner().startScan(List.of(battery), new ScanSettings.Builder().build(), new ScanCallback() {
             @Override public void onScanResult(int type, ScanResult result) {
                 BluetoothDevice device = result.getDevice();

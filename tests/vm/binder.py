@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 LOGDIR = instance.LOGDIR
 ENV = dict(instance.ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
-    APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.runms=60000')
+    APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.testClasses=apklayer.host.RealBinder -Dapklayer.runms=60000')
 auto_mode = sys.argv[1:] == ['auto']
 bound_mode = auto_mode or sys.argv[1:] == ['bound']
 hub_mode = bound_mode or sys.argv[1:] == ['hub']

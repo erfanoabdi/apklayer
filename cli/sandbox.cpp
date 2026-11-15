@@ -7,6 +7,7 @@
 #include "flatpak.h"
 #include "logs.h"
 #include "halium.h"
+#include <algorithm>
 
 #include <algorithm>
 #include <cerrno>
@@ -45,8 +46,14 @@ Range subordinate(const char* file) {
 const gid_t kInetGid = 3003, kEverybodyGid = 9997;
 const long kExtraGids = 2;  // kInetGid and kEverybodyGid: mapped from the top of the subordinate range
 
-// Namespace uid (and gid) 1000, Android's system uid (the hub, the services), is the user; 10000 and up the subordinate range; gids 3003 and 9997
-// the last two subordinate gids
+// Android's AID_ISOLATED_START..END: an android:isolatedProcess service runs as one of these, one per process. They take the last kIsolatedCount of the
+// 65536 subordinate ids (newuidmap's one range ends before 99000 would): the app range shrinks by that; fewer than 11000 ids map the apps only
+const long kFirstIsolatedUid = 99000, kIsolatedCount = 1000;
+long isolatedIds(const Range& r) { return r.count >= kFirstAppUid + kIsolatedCount ? kIsolatedCount : 0; }
+long appIds(const Range& r) { return std::min(r.count, 65536L) - isolatedIds(r); }
+
+// Namespace uid (and gid) 1000, Android's system uid (the hub, the services), is the user; 10000 and up the subordinate range, 99000 and up its last
+// ids; gids 3003 and 9997 the two before the isolated ones
 bool writeMaps(int pid) {
     Range u = subordinate("/etc/subuid"), g = subordinate("/etc/subgid");
     if (u.count < kFirstAppUid || g.count < kFirstAppUid) {
@@ -55,11 +62,13 @@ bool writeMaps(int pid) {
     }
     Spawn map;
     map.env = currentEnv();
-    map.argv = {"newuidmap", std::to_string(pid), "1000", std::to_string(getuid()), "1", std::to_string(kFirstAppUid), std::to_string(u.start), std::to_string(std::min(u.count, 65536L))};
+    map.argv = {"newuidmap", std::to_string(pid), "1000", std::to_string(getuid()), "1", std::to_string(kFirstAppUid), std::to_string(u.start), std::to_string(appIds(u))};
+    if (isolatedIds(u)) map.argv.insert(map.argv.end(), {std::to_string(kFirstIsolatedUid), std::to_string(u.start + appIds(u)), std::to_string(kIsolatedCount)});
     if (runAndWait(map) != 0) return false;
-    long gids = std::min(g.count, 65536L) - kExtraGids;
+    long gids = appIds(g) - kExtraGids;
     map.argv = {"newgidmap", std::to_string(pid), "1000", std::to_string(getgid()), "1", std::to_string(kFirstAppUid), std::to_string(g.start), std::to_string(gids),
                 std::to_string(kInetGid), std::to_string(g.start + gids), "1", std::to_string(kEverybodyGid), std::to_string(g.start + gids + 1), "1"};
+    if (isolatedIds(g)) map.argv.insert(map.argv.end(), {std::to_string(kFirstIsolatedUid), std::to_string(g.start + appIds(g)), std::to_string(kIsolatedCount)});
     return runAndWait(map) == 0;
 }
 
@@ -98,6 +107,10 @@ bool joinInstance(const Instance& inst) {
     close(fd);
     return true;
 }
+
+// A directory's contents gone (the sandbox's namespace holds the capabilities that reach files of the subordinate uids), the directory itself kept
+int removeEntry(const char* path, const struct stat*, int, FTW* where) { return where->level == 0 ? 0 : remove(path); }
+void emptyDir(const std::string& dir) { nftw(dir.c_str(), removeEntry, 16, FTW_PHYS | FTW_DEPTH); }
 
 uid_t chownTo;
 int chownOne(const char* path, const struct stat*, int, FTW*) { return lchown(path, chownTo, chownTo) == 0 ? 0 : -1; }
@@ -183,7 +196,8 @@ void apply(const std::vector<Step>& steps) {
     for (const Step& s : steps) {
         if (s.kind == Step::Tmpfs) {
             makeDirs(s.path);
-            if (mount("tmpfs", s.path.c_str(), "tmpfs", MS_NOSUID | MS_NODEV, "mode=0755") != 0) die("cannot hide " + s.path + ": " + strerror(errno));
+            std::string options = s.owner == (uid_t)-1 ? "mode=0755" : "mode=0755,uid=" + std::to_string(s.owner) + ",gid=" + std::to_string(s.owner);
+            if (mount("tmpfs", s.path.c_str(), "tmpfs", MS_NOSUID | MS_NODEV, options.c_str()) != 0) die("cannot hide " + s.path + ": " + strerror(errno));
         } else if (s.kind == Step::Bind) {
             makeMountPoint(s.path, s.file);
             if (move_mount(s.tree, "", AT_FDCWD, s.path.c_str(), MOVE_MOUNT_F_EMPTY_PATH) != 0) die("cannot mount " + s.path + " in the sandbox: " + strerror(errno));
@@ -202,7 +216,7 @@ void apply(const std::vector<Step>& steps) {
 // What an app process sees: its own data, the instance's shared storage and /data, the runtime read-only; the user's home, /tmp and runtime directory
 // are empty tmpfs, the other apps' data is not there. Everything at the host's paths, so no path changes.
 
-std::vector<Step> appView(const Layout& l, const Instance& inst, const std::string& package, uid_t uid, const std::string& java) {
+std::vector<Step> appView(const Layout& l, const Instance& inst, const std::string& package, uid_t uid, const std::string& java, bool isolated) {
     std::string home = realPath(homeDir()), runtime = realPath(l.runtimeHome);
     std::vector<std::string> hidden = {home, "/tmp"};
     if (!under(runtime, home)) hidden.push_back(runtime);
@@ -236,7 +250,7 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
         steps.push_back({Step::Bind, path, cloneTree(source, writable), file});
     };
     for (const std::string& h : hidden) steps.push_back({Step::Tmpfs, h});
-    if (homeAccess(l, inst, package)) {  // the user's opt-in (`apklayer home-access`), as Flatpak's --filesystem=home
+    if (!isolated && homeAccess(l, inst, package)) {  // the user's opt-in (`apklayer home-access`), as Flatpak's --filesystem=home
         // a private directory on the way to the runtime (~/.cache, 0700) would stop the app's uid: an empty one there, the runtime's part bound into it
         auto closed = [](const std::string& dir) {
             struct stat st{};
@@ -295,12 +309,19 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     makeDirs(tmp);
     if (chown(tmp.c_str(), uid, uid) != 0) die("cannot give " + tmp + " to the app");
     steps.push_back({Step::Tmpfs, join(realPath(inst.root), "app-data")});  // the other apps' data is not in the view at all
-    bind(data, data, true);
-    bind(realPath(inst.storageDir), inst.storageDir, true);
+    // an isolated process (android:isolatedProcess) has no access to the app's data or the shared storage: an empty directory of its own where the data
+    // path is (the runtime expects it), nothing where the storage is
+    if (isolated) {
+        steps.push_back({Step::OwnDir, data, -1, false, uid});
+        steps.push_back({Step::Tmpfs, realPath(inst.storageDir)});
+    } else {
+        bind(data, data, true);
+        bind(realPath(inst.storageDir), inst.storageDir, true);
+    }
     // Android's /data as an app sees it: nothing but its own (above) and what the system exposes (WebView's command line, the HAL list); a system
     // app (SettingsProvider: the system uid on Android) also /data/system
     std::string androidData = realPath(inst.dataDir);
-    steps.push_back({Step::Tmpfs, androidData});
+    steps.push_back({Step::Tmpfs, androidData, -1, false, isolated ? (uid_t)-1 : uid});  // the app's own: its path layer makes /data/data and /data/user/0 in it (paths.c apklayer_map_own_data; Termux's `mkdir -p /data/data/...`)
     for (const char* shown : {"local/tmp", "apklayer"})
         if (isDir(join(androidData, shown))) bind(join(androidData, shown), join(androidData, shown), false);
     if (property(join(appDir(l, package), "info.properties"), "system") == "true") bind(join(androidData, "system"), join(androidData, "system"), true);
@@ -309,8 +330,8 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     if (isDir(assets)) bind(realPath(assets), assets, false);
     steps.push_back({Step::OwnDir, join(runtime, "apklayer"), -1, false, uid});  // in the hidden runtime directory: the app's vsync socket
     bind(realPath(inst.runtimeDir), inst.runtimeDir, false);  // the instance's properties
-    for (const std::string& socket : {l.shellSocket(), daemonSocket(l)})
-        if (exists(socket)) bind(socket, socket, true, true);
+    for (const std::string& socket : {l.shellSocket(), daemonSocket(l)})  // apklayerd's is the broker's: an isolated process asks for nothing
+        if (exists(socket) && !(isolated && socket == daemonSocket(l))) bind(socket, socket, true, true);
     // the userspace binder's sockets (cli/binder.cpp: the stack starts the daemon in this user namespace, so it sees the app uids)
     if (std::string binders = binderSocketDir(l.runtimeHome); stackUserspaceBinder(inst) && isDir(binders)) bind(realPath(binders), binders, true);
     return steps;
@@ -337,7 +358,7 @@ std::vector<std::string> driveRoots() {
 
 uid_t appUidOf(uid_t hostUid) {
     Range u = subordinate("/etc/subuid");
-    long n = std::min(u.count, 65536L);
+    long n = appIds(u);
     return u.count && (long)hostUid >= u.start && (long)hostUid < u.start + n ? (uid_t)(kFirstAppUid + hostUid - u.start) : (uid_t)-1;
 }
 
@@ -400,10 +421,18 @@ void enterInstanceUserNs() {
 }
 
 void sandboxSpawn(const Layout& l, const Instance& inst, Spawn& spec, const std::string& package) {
-    std::vector<std::string> argv = {l.cliBinary(), "--instance", inst.id, "sandbox-exec", package, "--"};
-    // an app reads the instance's class data sharing archive but never writes it (code the other apps' JVMs map): the hub dumps it (HubHost)
-    for (const std::string& a : spec.argv)
-        if (package == "-" || (a != "-XX:+RecordDynamicDumpInfo" && a.rfind("-Dapklayer.cdsdump=", 0) != 0)) argv.push_back(a);
+    std::vector<std::string> argv = {l.cliBinary(), "--instance", inst.id, "sandbox-exec", package};
+    // the hub names the uid of an android:isolatedProcess service's process (the launcher's environment, cli/run.cpp)
+    if (std::string iso = getenvOr("APKLAYER_ISOLATED_UID", ""); !iso.empty() && package != "-") argv.insert(argv.end(), {"--isolated", iso});
+    argv.push_back("--");
+    // an app reads the instance's class data sharing archive but never writes it (code the other apps' JVMs map): the hub dumps it (HubHost, JDK 21); on
+    // JDK 25 (.aot) no sandboxed JVM records (the hub's would exit to write its configuration): the spare the hub starts is not sandboxed and trains
+    // (CdsDump.trainSpare)
+    bool aot = std::any_of(spec.argv.begin(), spec.argv.end(), [](const std::string& a) { return a.rfind("-Dapklayer.cdsdump=", 0) == 0 && a.size() > 4 && a.compare(a.size() - 4, 4, ".aot") == 0; });
+    for (const std::string& a : spec.argv) {
+        bool aotRecording = aot && (a == "-XX:AOTMode=record" || a.rfind("-XX:AOTConfiguration=", 0) == 0 || a.rfind("-Dapklayer.cdsdump=", 0) == 0);
+        if (!aotRecording && (package == "-" || (a != "-XX:+RecordDynamicDumpInfo" && a.rfind("-Dapklayer.cdsdump=", 0) != 0))) argv.push_back(a);
+    }
     spec.argv = argv;
     // not in sandbox-exec itself: the path layer would answer its own path lookups with Android's (/storage...); sandbox-exec hands it on
     if (spec.env.count("LD_PRELOAD")) { spec.env["APKLAYER_SANDBOX_PRELOAD"] = spec.env["LD_PRELOAD"]; spec.env.erase("LD_PRELOAD"); }
@@ -412,29 +441,41 @@ void sandboxSpawn(const Layout& l, const Instance& inst, Spawn& spec, const std:
 }
 
 int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
-    if (args.size() < 3 || args[1] != "--") die("sandbox-exec <package|-> -- command...");
+    // sandbox-exec <package|-> [--isolated <uid>] -- command...: with --isolated the process of an android:isolatedProcess service (uid 99000 and up)
+    size_t dashes = args.size() > 3 && args[1] == "--isolated" ? 3 : 1;
+    if (args.size() < dashes + 2 || args[dashes] != "--") die("sandbox-exec <package|-> [--isolated <uid>] -- command...");
     const std::string& package = args[0];
-    std::vector<std::string> argv(args.begin() + 2, args.end());
+    long isolatedUid = dashes == 3 ? atol(args[2].c_str()) : 0;
+    bool isolated = isolatedUid != 0;
+    if (isolated && (package == "-" || isolatedUid < kFirstIsolatedUid || isolatedUid >= kFirstIsolatedUid + kIsolatedCount)) die("no isolated uid " + args[2]);
+    std::vector<std::string> argv(args.begin() + dashes + 1, args.end());
     char cwd[4096];
     std::string dir = getcwd(cwd, sizeof cwd) ? cwd : "/";
     if (!joinInstance(inst)) die("no sandbox to enter: the stack of " + inst.id + " runs without it (apklayer stop, then start with APKLAYER_SANDBOX=1), or this process is in it already (launches from inside go through apklayerd)");
     if (package != "-") {
-        uid_t uid = (uid_t)atol(property(join(appDir(l, package), "info.properties"), "uid").c_str());
+        uid_t uid = isolated ? (uid_t)isolatedUid : (uid_t)atol(property(join(appDir(l, package), "info.properties"), "uid").c_str());
         if (uid < (uid_t)kFirstAppUid) die("no app uid for " + package);
+        if (isolated && !isolatedIds(subordinate("/etc/subuid"))) die("no isolated uids: /etc/subuid has fewer than 11000 ids for this user");
         if (unshare(CLONE_NEWNS) != 0) { fputs(kAppArmorHint, stderr); return 1; }
         if (mount(nullptr, "/", nullptr, MS_REC | MS_SLAVE, nullptr) != 0) die("cannot make the sandbox's mounts private");
         std::string data = appDataDir(l, inst, package);
         struct stat st{};
-        if (::stat(data.c_str(), &st) == 0 && st.st_uid != uid) chownTree(data, uid);  // the app's files are its own uid's (data from before the sandbox too)
-        chmod(data.c_str(), 0700);
-        nftw(realPath(inst.storageDir).c_str(), openStorageDir, 16, FTW_PHYS);
+        if (!isolated) {
+            if (::stat(data.c_str(), &st) == 0 && st.st_uid != uid) chownTree(data, uid);  // the app's files are its own uid's (data from before the sandbox too)
+            chmod(data.c_str(), 0700);
+            // a system app (SettingsProvider) writes /data/system/users: its settings files and the ANDROID_IDs (read only, they were lost at every stop)
+            if (property(join(appDir(l, package), "info.properties"), "system") == "true") chownTree(join(realPath(inst.dataDir), "system/users"), uid);
+            nftw(realPath(inst.storageDir).c_str(), openStorageDir, 16, FTW_PHYS);
+        } else {
+            emptyDir(join(inst.tmpDir(), "sandbox-" + std::to_string(uid)));  // what an earlier process of this uid (another app's) left
+        }
         for (const std::string& f : listDir(appDir(l, package)))  // its APKs readable by its uid (installs before cli/apps.cpp made them 0644)
             if (f.size() > 4 && f.substr(f.size() - 4) == ".apk") chmod(join(appDir(l, package), f).c_str(), 0644);
         // a launch's intent file (APKLAYER_INTENT_FILE, wherever its writer put it) goes with it into the app's own tmp, consumed as the app would
         const char* intentFile = getenv("APKLAYER_INTENT_FILE");
         std::optional<std::string> intent = intentFile ? readFile(intentFile) : std::nullopt;
         if (intent) unlink(intentFile);
-        apply(appView(l, inst, package, uid, argv[0]));
+        apply(appView(l, inst, package, uid, argv[0], isolated));
         if (intent) {
             std::string moved = join(inst.tmpDir(), "intent-" + std::to_string(getpid()) + ".properties");
             writeFile(moved, *intent);
@@ -442,16 +483,19 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
             setenv("APKLAYER_INTENT_FILE", moved.c_str(), 1);
         }
         // what the app's uid may not open but the user may hand it (GPU nodes, the granted home): apklayerd's broker (cli/broker.cpp, bridge/native/broker.c)
-        if (exists(daemonSocket(l))) setenv("APKLAYER_BROKER", daemonSocket(l).c_str(), 1);
+        // an isolated process has no broker: its view has no socket and its environment no variable
+        if (!isolated && exists(daemonSocket(l))) setenv("APKLAYER_BROKER", daemonSocket(l).c_str(), 1);
         // the folders it may ask for (':'-separated): the granted home, the drives (apklayerd checks the app's storage permission on each request)
         std::string roots = homeAccess(l, inst, package) ? realPath(homeDir()) : "";
         for (const std::string& dir : driveRoots()) roots += (roots.empty() ? "" : ":") + dir;
-        if (!roots.empty()) setenv("APKLAYER_BROKER_HOME", roots.c_str(), 1);
-        setenv("APKLAYER_BROKER_LOG", appLogPath(inst, package).c_str(), 1);
+        if (!isolated && !roots.empty()) setenv("APKLAYER_BROKER_HOME", roots.c_str(), 1);
+        if (!isolated) setenv("APKLAYER_BROKER_LOG", appLogPath(inst, package).c_str(), 1);
+        if (isolated) { unsetenv("APKLAYER_BROKER"); unsetenv("APKLAYER_BROKER_HOME"); unsetenv("APKLAYER_BROKER_LOG"); }
         // the host's shader caches (Mesa's, NVIDIA's under XDG_CACHE_HOME) in the app's own cache: the user's cache is not in the view
         setenv("XDG_CACHE_HOME", join(data, "cache/host").c_str(), 1);
         if (chdir(dir.c_str()) != 0 && chdir("/") != 0) die("no working directory in the sandbox");  // by path again: the old one is a handle into the hidden tree
-        std::vector<gid_t> groups = appGroups(l, package, uid);  // never the user's own groups (1000 and the unmapped ones)
+        // never the user's own groups (1000 and the unmapped ones); an isolated process has its own gid only
+        std::vector<gid_t> groups = isolated ? std::vector<gid_t>{uid} : appGroups(l, package, uid);
         if (setgroups(groups.size(), groups.data()) != 0 || setresgid(uid, uid, uid) != 0 || setresuid(uid, uid, uid) != 0) die("cannot become uid " + std::to_string(uid));
     }
     prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);  // and no capabilities after exec: the namespace's uids are not 0

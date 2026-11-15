@@ -31,7 +31,7 @@ std::string cacheKey(const Layout& l, const std::string& apk, const std::vector<
     std::string text = sha256File(apk);
     for (const std::string& s : splits) text += " " + sha256File(s);  // a split's code converts with the base (dex2jvm reads split_*.apk beside base.apk)
     text += "\nconverter-abi " + std::to_string(kConverterAbi);
-    text += "\npost-processing v18: guest environment and process launches, per-session postprocessing, parent context metadata, genuine PathClassLoader casts, app-facing ART properties, verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
+    text += "\npost-processing v19: platform Class.getClassLoader/getResource, guest environment and process launches, per-session postprocessing, parent context metadata, genuine PathClassLoader casts, app-facing ART properties, verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
     std::vector<std::string> jars = listDir(l.frameworkDir());
     std::sort(jars.begin(), jars.end());
     for (const std::string& j : jars)
@@ -253,13 +253,13 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     removeTree(tmp);  // now, not at exit: reconvert --all-stale installs several in one run
     pending.clear();
     printf("apklayer: installed %s (%s) -> %s\n", pkg.c_str(), label.c_str(), dir.c_str());
-    // microG Services holds the cloud-messaging connection for every app: pushes reach closed apps only while the instance runs. Once per instance
+    // Play services (microG's or Google's own) holds the cloud-messaging connection for every app: pushes reach closed apps only while the instance runs. Once per instance
     // (its marker), so an update or a user's later `off` stays as it is
     const std::string asked = join(inst.stateDir, "autostart-microg");
     if (pkg == "com.google.android.gms" && !exists(asked)) {
         writeFile(asked, "1\n");
         if (!autostartOn(inst)) {
-            printf("apklayer: microG Services delivers push messages to closed apps: turning instance %s always on (`apklayer instance autostart %s off` undoes it)\n",
+            printf("apklayer: Play services delivers push messages to closed apps: turning instance %s always on (`apklayer instance autostart %s off` undoes it)\n",
                    inst.id.c_str(), inst.id.c_str());
             autostartCommand(l, {inst.id, "on"});
         }
@@ -268,7 +268,9 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
 }
 
 // none recorded: converted before the number existed, which is ABI 1 (installs from then are not stale under 1)
+// Or converted before the permission list was recorded (2026-11-04): reconvert keeps its data and records it, no reinstall.
 bool isStale(const std::string& info) {
+    if (readFile(info).value_or("").find("\npermissions=") == std::string::npos) return true;
     std::string abi = property(info, "converterAbi");
     return (abi.empty() ? 1 : atoi(abi.c_str())) < kConverterAbi;
 }

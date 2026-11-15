@@ -250,4 +250,10 @@ Result installDeb(const std::string& path) {
     return runProgram({"pkexec", "apt-get", "install", "-y", path});
 }
 
+Result installClick(const std::string& path) {
+    Result r = runProgram({"pkcon", "-y", "--allow-untrusted", "install-local", path});
+    // shortcut: untested off a phone; the fallback needs the click CLI and asks no password
+    return r.status == 0 ? r : runProgram({"click", "install", "--user", "--allow-unauthenticated", path});
+}
+
 }  // namespace manager

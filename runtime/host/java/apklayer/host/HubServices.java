@@ -104,6 +104,8 @@ final class HubServices {
         if (stopped) HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.SERVICE_STOPPED, request -> request.writeTypedObject(name, 0), reply -> null);
         return stopped;
     }
+    /** This process holds a binding to a service elsewhere (WebView's component host binds each renderer for the app): it is not idle, or its end takes that service down. */
+    static boolean holdsBinding() { synchronized (connections) { return !connections.isEmpty(); } }
     static boolean known(ServiceConnection connection) { synchronized (connections) { return connections.containsKey(connection); } }
     static boolean unbind(ServiceConnection connection) {
         Connection old;

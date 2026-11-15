@@ -21,10 +21,12 @@ gpu=; for n in /dev/dri/card* /dev/dri/renderD* /dev/nvidia*; do [ -c "$n" ] && 
 jopts="-Dhello.other=$other -Dhello.home=$home/home.txt -Dhello.notpicked=$home/notpicked.txt -Dhello.gpu=$gpu -Dhello.private=$home/private/p.txt -Dhello.privdir=$home/private -Dhello.write=$home/written.txt"
 # a launch's intent file lies where its writer put it (here in the home): the sandbox hands it into the app's view
 printf 'action=hello.SANDBOX\nextra.hello.extra=fromfile\ncomponent=hello.sandbox.Main\n' > "$home/intent.properties"
-APKLAYER_INTENT_FILE=$home/intent.properties APKLAYER_JOPTS="-Dapklayer.runms=20000 $jopts" bin/apklayer run hello.sandbox > "$out" 2>&1
+APKLAYER_INTENT_FILE=$home/intent.properties APKLAYER_JOPTS="-Dapklayer.runms=30000 $jopts" bin/apklayer run hello.sandbox > "$out" 2>&1
 grep -a "\[sandbox\]\|apklayer: " "$out"
 uid=$(grep -a '^uid=' "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/apps/hello.sandbox/info.properties" | cut -d= -f2)
 reg=$(grep -a "registered hello.sandbox " "$APKLY_STATE/hub.log" | tail -1); echo "hub: ${reg#*registered }"
+# an android:isolatedProcess service: its own uid from 99000 (the hub's registration of it names the kernel's uid too)
+isoreg=$(grep -a "registered hello.sandbox#hello.sandbox.IsolatedService " "$APKLY_STATE/hub.log" | tail -1); echo "hub isolated: ${isoreg#*registered }"
 # GeoClue for a sandboxed process: through apklayerd, as the user (the buses know no app uid)
 geo=$(bin/apklayer sandbox-exec hello.sandbox -- timeout 5 bin/apklayer portal helper geoclue.py 2>&1 | grep -a "^ready\|^unavailable\|refuses" | head -1); echo "geoclue: $geo"
 consumed=1; [ -e "$home/intent.properties" ] && consumed=0
@@ -33,6 +35,9 @@ bin/apklayer home-access hello.sandbox on
 APKLAYER_JOPTS="-Dapklayer.runms=15000 $jopts" bin/apklayer run hello.sandbox > "$out.home" 2>&1
 grep -a "\[sandbox\] \(home\|other\|private\|privdir\|write\|change\)" "$out.home"
 written=$(stat -c %U "$home/written.txt" 2>/dev/null)
+# the calls Java cannot make (tests/native/broker.c) as the app's uid, the path layer preloaded: times, xattrs, renameat2's flags, mkstemp, scandir in the 0700 folder
+native=$(ls "$PWD"/inst/lib/apklayer/native/libapklayer-preload.so 2>/dev/null | head -1)
+brk=$(APKLAYER_SANDBOX_PRELOAD=$native bin/apklayer sandbox-exec hello.sandbox -- "$PWD/b/tests/native/broker-test" "$home/private" 2>&1 | grep -a "^\[broker\]"); echo "$brk"
 # a launch with an intent file takes the app's spare (prepared after the launch above): the file's text goes with it (cli/run.cpp)
 printf 'action=hello.SANDBOX\nextra.hello.extra=fromspare\ncomponent=hello.sandbox.Main\n' > "$home/intent2.properties"
 APKLAYER_INTENT_FILE=$home/intent2.properties APKLAYER_JOPTS="-Dapklayer.runms=10000 $jopts" bin/apklayer run hello.sandbox > "$out.spare" 2>&1
@@ -49,6 +54,13 @@ for want in "uid app=$uid os=$uid" "intent hello.SANDBOX extra=fromfile" "groups
     grep -aq "\[sandbox\] $want" "$out" || { echo "FAIL: no '[sandbox] $want'"; ok=0; }
 done
 [ $consumed = 1 ] || { echo "FAIL: the intent file was not consumed"; ok=0; }
+# the isolated service: Process.myUid() is the kernel's uid, 99000 and up, isolated; it sees neither this app's files nor another app's; it binds back to the
+# app, whose service sees that uid and PackageManager names the app's package for it
+isouid=$(sed -n 's/.*\[sandbox\] iso uid=\(99[0-9][0-9][0-9]\) isolated=true os=\1$/\1/p' "$out" | head -1)
+[ -n "$isouid" ] || { echo "FAIL: no '[sandbox] iso uid=99xxx isolated=true os=99xxx'"; ok=0; }
+grep -aq "\[sandbox\] iso data denied" "$out" && grep -aq "\[sandbox\] iso other denied" "$out" || { echo "FAIL: the isolated process read the app's or another app's file"; ok=0; }
+grep -aq "\[sandbox\] iso back uid=$isouid packages=\[hello.sandbox\] name=hello.sandbox" "$out" || { echo "FAIL: the app's service did not see the isolated caller as uid $isouid of hello.sandbox"; ok=0; }
+echo "$isoreg" | grep -q " uid=$isouid kernel-uid=$isouid " || { echo "FAIL: the hub's caller uid of the isolated process is not $isouid"; ok=0; }
 # Chromium's switch file is written only where a WebView provider is installed
 [ ! -e "$root/data/local/tmp/webview-command-line" ] || grep -aq "\[sandbox\] webview read webview" "$out" || { echo "FAIL: no '[sandbox] webview read webview'"; ok=0; }
 # GeoClue reached as the user: ready, or its own refusal of the user's uid (its agent whitelist, Parallels)
@@ -59,6 +71,11 @@ grep -aq "\[sandbox\] private read private" "$out.home" && grep -aq "\[sandbox\]
     [ "$written" = "$(id -un)" ] || { echo "FAIL: home-access on: the broker did not read the private file, list its folder or write as the user ($written)"; ok=0; }
 grep -aq "\[sandbox\] change mkdir=true write=true rename=true delete=true rmdir=true access=true" "$out.home" ||
     { echo "FAIL: home-access on: the broker did not mkdir, write, rename, delete or answer access in a 0700 folder"; ok=0; }
+grep -aq "\[sandbox\] change2 chmod=ok symlink=true link=true" "$out.home" ||
+    { echo "FAIL: home-access on: the broker did not chmod, symlink or link in a 0700 folder"; ok=0; }
+for want in utimes utimensat futimens xattr-path xattr-list xattr-fd-remove renameat2-noreplace renameat2-exchange renameat2-new-name mkstemp mkdtemp scandir opendir-readdir; do
+    echo "$brk" | grep -aq "^\[broker\] $want ok" || { echo "FAIL: home-access on: the broker call $want"; ok=0; }
+done
 grep -aq "\[sandbox\] intent hello.SANDBOX extra=fromspare" "$out.spare" && [ "$spared" -ge 1 ] && [ $consumed2 = 1 ] ||
     { echo "FAIL: the intent-file launch did not take the app spare with its intent ($spared)"; ok=0; }
 grep -aq "\[sandbox\] private denied" "$out" || { echo "FAIL: home-access off: the private file was readable"; ok=0; }

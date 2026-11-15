@@ -1,5 +1,6 @@
 #include "logs.h"
 #include "apps.h"
+#include "logcap.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -39,7 +40,7 @@ int printFile(const std::string& path) {
 
 std::string appLogPath(const Instance& inst, const std::string& package) { return join(inst.logs(), "app-" + package + ".log"); }
 
-constexpr off_t kAppLogCap = 256 << 20;
+constexpr off_t kAppLogCap = 256 << 20;  // APKLAYER_APP_LOG_CAP (bytes) sets another, for the test
 
 void teeLaunchOutput(const Instance& inst, const std::string& package) {
     std::string path = appLogPath(inst, package);
@@ -61,21 +62,39 @@ void teeLaunchOutput(const Instance& inst, const std::string& package) {
         signal(SIGINT, SIG_IGN);  // Ctrl+C in the terminal ends the app; its last lines still reach the file
         close(pipeFds[1]);
         char buf[65536];
+        const off_t cap = getenv("APKLAYER_APP_LOG_CAP") ? atoll(getenv("APKLAYER_APP_LOG_CAP")) : kAppLogCap;
+        bool full = false;
+        size_t skippedLines = 0, skippedBytes = 0;
         for (;;) {
             ssize_t n = read(pipeFds[0], buf, sizeof buf);
             if (n < 0 && errno == EINTR) continue;
             if (n <= 0) break;
             if (terminal >= 0) writeAll(terminal, buf, n);
             if (file < 0) continue;
-            struct stat fs {};  // a runaway app (a crash handler looping on its fault) never fills the disk: the file stops at the cap
-            if (fstat(file, &fs) == 0 && fs.st_size + n > kAppLogCap) {
-                static const char note[] = "\n[apklayer] this log reached its size limit (256 MB): the rest of the launch's output is left out\n";
-                writeAll(file, note, sizeof note - 1);
-                close(file);
-                file = -1;
-                continue;
-            }
-            writeAll(file, buf, n);
+            // a runaway app (a crash handler looping on its fault) never fills the disk: the file takes whole lines up to the cap, then only counts
+            // what it leaves out (a note at the cap, another with the count at the end)
+            size_t keep = n;
+            if (!full) {
+                struct stat fs {};
+                size_t room = fstat(file, &fs) == 0 && fs.st_size < cap ? size_t(cap - fs.st_size) : 0;
+                keep = capKeep(buf, n, room);
+                if (keep < size_t(n)) {
+                    char note[128];
+                    int len = snprintf(note, sizeof note, "\n[apklayer] this log reached its size limit (%lld bytes): the rest of the launch's output is left out\n", (long long)cap);
+                    writeAll(file, buf, keep);
+                    writeAll(file, note, len);
+                    full = true;
+                }
+            } else keep = 0;
+            if (full) {
+                skippedLines += capLines(buf + keep, n - keep);
+                skippedBytes += n - keep;
+            } else writeAll(file, buf, n);
+        }
+        if (file >= 0 && full) {
+            char note[160];
+            int len = snprintf(note, sizeof note, "[apklayer] %zu lines (%zu bytes) of the launch's output were left out at the size limit\n", skippedLines, skippedBytes);
+            writeAll(file, note, len);
         }
         _exit(0);
     }

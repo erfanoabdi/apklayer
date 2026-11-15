@@ -15,6 +15,7 @@ public class Main extends Activity {
     /** Sheet stage 7: a tap that reaches the activity's window (the orphaned popup above it has no window). */
     @Override
     public boolean dispatchTouchEvent(android.view.MotionEvent e) {
+        logPen(e);
         if (Sheet.orphaned && e.getActionMasked() == android.view.MotionEvent.ACTION_UP) Sheet.touched(this);
         return super.dispatchTouchEvent(e);
     }
@@ -35,10 +36,50 @@ public class Main extends Activity {
         System.out.println("[hello-input] alt dialog shown");
     }
 
+    /** tests/vm/window-output.py: the screen the app sees (Display.getRealMetrics), at start and at each DisplayListener callback. */
+    private void displayLog() {
+        android.hardware.display.DisplayManager dm = getSystemService(android.hardware.display.DisplayManager.class);
+        Runnable log = () -> {
+            android.util.DisplayMetrics m = new android.util.DisplayMetrics();
+            dm.getDisplay(android.view.Display.DEFAULT_DISPLAY).getRealMetrics(m);
+            System.out.println("[hello-input] display " + m.widthPixels + "x" + m.heightPixels + " dpi=" + m.densityDpi);
+        };
+        dm.registerDisplayListener(new android.hardware.display.DisplayManager.DisplayListener() {
+            public void onDisplayAdded(int id) { System.out.println("[hello-input] display added " + id); }
+            public void onDisplayRemoved(int id) { System.out.println("[hello-input] display removed " + id); }
+            public void onDisplayChanged(int id) { System.out.println("[hello-input] display changed " + id); log.run(); }
+        }, new android.os.Handler(android.os.Looper.getMainLooper()));
+        log.run();
+    }
+
+    /** tests/vm/input-inject.py (-Dhello.backlog): Back is counted, not obeyed (the activity stays). */
+    @Override public void onBackPressed() {
+        if (System.getProperty("hello.backlog") != null) System.out.println("[hello-input] back pressed");
+        else super.onBackPressed();
+    }
+
+    /** A stylus event's axes (tests/vm/input-wheel-pen.py). */
+    private static void logPen(android.view.MotionEvent e) {
+        int tool = e.getToolType(0);
+        if (tool != android.view.MotionEvent.TOOL_TYPE_STYLUS && tool != android.view.MotionEvent.TOOL_TYPE_ERASER) return;
+        System.out.println("[hello-input] pen " + android.view.MotionEvent.actionToString(e.getActionMasked()) + " tool=" + tool + " x=" + e.getX() + " y=" + e.getY()
+                + " pressure=" + e.getPressure() + " tilt=" + e.getAxisValue(android.view.MotionEvent.AXIS_TILT) + " orientation=" + e.getOrientation()
+                + " distance=" + e.getAxisValue(android.view.MotionEvent.AXIS_DISTANCE) + " rotation=" + e.getAxisValue(android.view.MotionEvent.AXIS_GENERIC_1)
+                + " buttons=" + e.getButtonState() + " source=0x" + Integer.toHexString(e.getSource()));
+    }
+    @Override public boolean dispatchGenericMotionEvent(android.view.MotionEvent e) { logPen(e); return super.dispatchGenericMotionEvent(e); }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ClipboardManager clipboard = getSystemService(ClipboardManager.class);
-        LinearLayout layout = new LinearLayout(this);
+        LinearLayout layout = new LinearLayout(this) {  // the wheel (tests/vm/input-wheel-pen.py) reaches the views under the pointer as onGenericMotionEvent
+            @Override public boolean onGenericMotionEvent(android.view.MotionEvent e) {
+                if (e.getActionMasked() != android.view.MotionEvent.ACTION_SCROLL) return false;
+                System.out.println("[hello-input] wheel v=" + e.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL) + " h=" + e.getAxisValue(android.view.MotionEvent.AXIS_HSCROLL)
+                        + " shift=" + ((e.getMetaState() & 1) != 0) + " source=0x" + Integer.toHexString(e.getSource()));
+                return true;
+            }
+        };
         layout.setOrientation(LinearLayout.VERTICAL);
         EditText field = new EditText(this);
         field.setHint("Type or paste here");
@@ -107,6 +148,8 @@ public class Main extends Activity {
         if (System.getProperty("hello.covered") != null) Covered.coverWithDialog(this);
         if (System.getProperty("hello.translucent") != null && state == null) Translucent.underTranslucent(this);
         if (System.getProperty("hello.altim") != null) field.postDelayed(this::altFocusableIm, 1000);
+        if (System.getProperty("hello.display") != null) displayLog();
+
         if (System.getProperty("hello.sheet") != null) field.postDelayed(() -> Sheet.show(this, 1), 1500);
         if (System.getProperty("hello.magnifier") != null) {
             field.setText("magnify me");

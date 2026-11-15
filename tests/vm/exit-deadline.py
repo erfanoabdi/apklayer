@@ -33,7 +33,18 @@ def launch():
         lines.append(line.decode(errors='replace'))
         if STARTED in lines[-1]: break
     else: raise AssertionError('%s ended before it started (exit %s):\n%s' % (PKG, run.wait(), ''.join(lines[-30:])))
-    return run, lines, int((Path(LOGDIR) / ('run.%d' % run.pid)).read_text().split()[0])
+    return run, lines, int(record(run).read_text().split()[0])
+
+
+def record(run):
+    """The launch's run.<pid> record: its own pid's; sandboxed, apklayerd runs the launcher (`--no-daemon run <package>`, no child of this one): its record is found by its command line."""
+    own = Path(LOGDIR) / ('run.%d' % run.pid)
+    if own.exists(): return own
+    for f in Path(LOGDIR).glob('run.*'):
+        try:
+            if ('run\0' + PKG) in Path('/proc/%s/cmdline' % f.name[4:]).read_text() and len(f.read_text().split()) >= 2: return f
+        except OSError: pass
+    return own
 
 
 def end(run, jvm, lines):

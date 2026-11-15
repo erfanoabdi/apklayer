@@ -1,0 +1,24 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: a guest record names its host pthread_t from its creation, not only after the thread exited
+
+0029 mapped a record to its host pthread_t while the GuestThread was in the thread table (live) or after Destroy (kept). A thread leaving
+runs DetachCurrentThread: RemoveThread(tid) first, Destroy (which keeps the record) a moment later. A pthread_join of that thread that
+reaches GuestPthreadToHost inside that window finds neither, and the host pthread_join gets the bionic record itself as a pthread_t:
+glibc's __nptl_free_tcb -> __nptl_deallocate_stack walks a zeroed list (SEGV at address 8). Fennec's first run (Gecko's PR_JoinThread of a
+thread that was just exiting; found with gdb: the lookup returned "not found" one step before the thread's Destroy) aborted its parent
+about 45 s in; so did a spare JVM. The record is now registered when it is made (GlibcHostRecords), and kept after the exit as before.
+
+--- a/guest_os_primitives/guest_thread.cc	2026-11-15 04:27:13.917260418 +0330
++++ b/guest_os_primitives/guest_thread.cc	2026-11-15 04:27:13.984259183 +0330
+@@ -463,6 +463,11 @@
+     glibc_host_records_ = Mmap(kGlibcHostRecordsSize);
+     host_pthread_ = pthread_self();  // made on the thread itself (InitStaticTls, the linker's host pthread)
+     CHECK_NE(glibc_host_records_, MAP_FAILED);
++    {  // apklayer patch: known from the start, not only once the thread has exited (see GuestExitedRecordToHost)
++      ExitedRecords* kept = GetExitedRecords();
++      std::lock_guard<std::mutex> lock(kept->mutex);
++      kept->host[glibc_host_records_] = host_pthread_;
++    }
+     auto* thread = static_cast<pthread_internal_t*>(glibc_host_records_);
+     thread->tid = GettidSyscall();
+     thread->bionic_tls = reinterpret_cast<bionic_tls*>(static_cast<char*>(glibc_host_records_) + kGlibcHostThreadRecordSize);

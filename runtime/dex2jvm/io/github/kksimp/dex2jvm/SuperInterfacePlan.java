@@ -169,9 +169,9 @@ final class SuperInterfacePlan {
         this.loader = loader;
         this.extended = extended && loader != null;
         this.addDirect = loader != null
-                && !"0".equals(System.getenv("DEX2JVM_SUPER_IFACE_ADD"));
+                && true;
         this.protectedRepoint = loader != null
-                && !"0".equals(System.getenv("DEX2JVM_PROTECTED_REPOINT"));
+                && true;
     }
 
     static SuperInterfacePlan of(Map<String, DexClass> byName) {
@@ -186,12 +186,11 @@ final class SuperInterfacePlan {
      */
     static SuperInterfacePlan of(Map<String, DexClass> byName, ClassLoader loader) {
         if (byName == null || byName.isEmpty()) return NONE;
-        boolean ext = !"0".equals(System.getenv("DEX2JVM_SUPER_IFACE_EXT"));
+        boolean ext = true;
         SuperInterfacePlan p = new SuperInterfacePlan(byName, loader, ext);
         // DEX2JVM_SUPER_IFACE=0 still turns every interface-super rewrite off
         // (legacy walk, extended proof and the added-interface fallback), but no
         // longer the unrelated protected-receiver re-point that shares the facts.
-        if ("0".equals(System.getenv("DEX2JVM_SUPER_IFACE"))) p.ifaceOn = false;
         return p;
     }
 

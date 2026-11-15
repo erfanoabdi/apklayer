@@ -233,6 +233,7 @@ static const char *exe_view(long pid, const char *real)
         if (read_small(path, program, sizeof program) > 0 && program[0] == '/') return program;
         return NULL;
     }
+    if (!strcmp(base, "app_process64") && strstr(real, "/arm64/")) return "/system/bin/app_process64";  /* the translator's guest program (x86_64 hosts): the arm64 directory is not Android's */
     if (pid == getppid() && !strncmp(base, "apklayer", 8)) return "/system/bin/app_process64";  /* the CLI that started the JVM: zygote64's */
 #if defined(__aarch64__)  /* translated (x86_64) code gets the translator's /system/bin/arm64/app_process64 */
     if (!strcmp(base, "java")) return "/system/bin/app_process64";
@@ -264,6 +265,11 @@ long apklayer_proc_link_view(const char *path, char *buf, long n, size_t size)
     const char *view = NULL;
     if (!strcmp(rest, "exe")) view = exe_view(pid, real);
     else if (!strncmp(rest, "fd/", 3) && is_own_pid(pid)) view = runtime_file(real);
+    else if (!strncmp(rest, "map_files/", 10) && is_own_pid(pid)) {  /* the file behind a mapping, spelled as its maps line is; a mapping without an Android name keeps its path */
+        static __thread char spelled[PATH_MAX];
+        view = apklayer_proc_map_name(real, spelled, sizeof spelled);
+        if (view && !*view) view = NULL;
+    }
     errno = saved;
     if (!view) return n;
     size_t len = strlen(view);
@@ -303,6 +309,7 @@ const char *apklayer_proc_status_line(const char *line)
     if (!strncmp(line, "NoNewPrivs:", 11)) return "NoNewPrivs:\t1\n";
     if (!strncmp(line, "Seccomp:", 8)) return "Seccomp:\t2\n";
     if (!strncmp(line, "Seccomp_filters:", 16)) return "Seccomp_filters:\t1\n";
+    if (!strncmp(line, "Umask:", 6)) return "Umask:\t0077\n";  /* zygote's */
     if (!strncmp(line, "CapBnd:", 7)) return "CapBnd:\t0000000000000000\n";
     return NULL;
 }

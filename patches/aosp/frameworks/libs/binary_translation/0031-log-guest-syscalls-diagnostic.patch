@@ -1,0 +1,155 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] DIAGNOSTIC: BERBERIS_LOG_SYSCALLS / berberis.log_syscalls.<package>=1 logs the guest's syscalls (allow-list) to stderr
+
+What the guest asks the kernel for: paths of open/stat/readlink/access/exec/unlink/mkdir, ptrace, prctl, rt_sigaction (new handler and flags), sockets, connect
+(address and port, and the result: 0 or -errno), identity calls, clone, memfd, seccomp, perf_event_open. One stderr line per call, the first 20000 per process,
+not futex/ioctl/read/write/mmap. The syscall itself runs unchanged; nothing is filtered or answered differently. Used on PGR to see what Tencent ACE reads
+and which servers it reaches before it shuts down (docs/PLAN.md, CHANGELOG 2026-11-14). Module libberberis_arm64.
+
+diff --git a/kernel_api/arm64/syscall_emulation.cc b/kernel_api/arm64/syscall_emulation.cc
+--- a/kernel_api/arm64/syscall_emulation.cc
++++ b/kernel_api/arm64/syscall_emulation.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "berberis/base/config_globals.h"
+ #include "berberis/base/host_environment.h"
+ #include <fcntl.h>  // AT_FDCWD, AT_SYMLINK_NOFOLLOW
+ #include <linux/futex.h>
+@@ -46,6 +47,7 @@
+ #include "berberis/kernel_api/syscall_emulation_common.h"
+ 
+ #include "berberis/guest_os_primitives/scoped_pending_signals.h"
++#include <string>
+ #include <sys/uio.h>  // apklayer patch: process_vm_readv for the guest frame chain (ReportGuestSelfSignal)
+ #include <unistd.h>
+ #include "berberis/runtime_library/runtime_library.h"
+@@ -140,6 +142,110 @@
+   if (n > 0 && write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1) < 0) return;  // stderr gone: nothing to report to
+ }
+ 
++// apklayer patch (DIAGNOSTIC, for guesses about Tencent ACE): what the guest asks the kernel for. BERBERIS_LOG_SYSCALLS=1 in the
++// environment, or the property berberis.log_syscalls.<package>=1, writes one stderr line per call of an allow-list of syscalls (paths,
++// ptrace/prctl/sigaction, sockets, identity, clone/exec, memfd, seccomp, perf events; not futex/ioctl/read/write/mmap, which run millions of
++// times): tid, guest pc, the first three arguments, the path argument as text where there is one, and for rt_sigaction the signal, the new
++// handler and flags. The first 20000 lines per process. The syscall itself runs unchanged; nothing is filtered or answered differently.
++const char* GuestSyscallName(long nr) {
++  switch (nr) {
++    case 34: return "mkdirat"; case 35: return "unlinkat"; case 43: return "statfs"; case 48: return "faccessat"; case 49: return "chdir";
++    case 56: return "openat"; case 78: return "readlinkat"; case 79: return "newfstatat"; case 117: return "ptrace";
++    case 129: return "kill"; case 130: return "tkill"; case 131: return "tgkill"; case 132: return "sigaltstack"; case 134: return "rt_sigaction";
++    case 160: return "uname"; case 167: return "prctl"; case 174: return "getuid"; case 175: return "geteuid"; case 176: return "getgid";
++    case 177: return "getegid"; case 179: return "sysinfo"; case 198: return "socket"; case 203: return "connect"; case 220: return "clone";
++    case 221: return "execve"; case 241: return "perf_event_open"; case 261: return "prlimit64"; case 270: return "process_vm_readv";
++    case 277: return "seccomp"; case 279: return "memfd_create"; case 291: return "statx"; case 435: return "clone3"; case 437: return "openat2";
++    case 439: return "faccessat2";
++    default: return nullptr;
++  }
++}
++
++// The argument index of a path (or -1) for the syscalls above.
++int GuestSyscallPathArg(long nr) {
++  switch (nr) {
++    case 34: case 35: case 48: case 56: case 78: case 79: case 291: case 437: case 439: return 1;
++    case 43: case 49: case 221: case 279: return 0;
++    default: return -1;
++  }
++}
++
++bool GuestSyscallLogEnabled() {
++  static const bool enabled = [] {
++    if (getenv("BERBERIS_LOG_SYSCALLS") != nullptr) return true;
++    if (const char* package = GetAppPackageName(); package != nullptr) {
++      std::string prop = std::string("berberis.log_syscalls.") + package;
++      ConfigStr app("BERBERIS_LOG_SYSCALLS_PROP", prop.c_str());
++      return app.get() != nullptr && app.get()[0] == '1';
++    }
++    return false;
++  }();
++  return enabled;
++}
++
++void ReportGuestSyscall(const ThreadState* state, long guest_nr) {
++  if (!GuestSyscallLogEnabled()) return;
++  const char* name = GuestSyscallName(guest_nr);
++  if (name == nullptr) return;
++  static std::atomic<int> reported{0};
++  if (reported.fetch_add(1, std::memory_order_relaxed) >= 20000) return;
++  const pid_t self = getpid();
++  char text[128] = "";
++  const int path_arg = GuestSyscallPathArg(guest_nr);
++  if (path_arg >= 0 && state->cpu.x[path_arg] != 0) {
++    char raw[120];
++    struct iovec local = {raw, sizeof raw - 1}, remote = {reinterpret_cast<void*>(state->cpu.x[path_arg]), sizeof raw - 1};
++    ssize_t got = process_vm_readv(self, &local, 1, &remote, 1, 0);
++    if (got <= 0) {  // the string may end before the page does: read to the end of the page
++      size_t room = 4096 - (state->cpu.x[path_arg] & 4095);
++      local.iov_len = remote.iov_len = room < sizeof raw - 1 ? room : sizeof raw - 1;
++      got = process_vm_readv(self, &local, 1, &remote, 1, 0);
++    }
++    size_t used = 0;
++    for (ssize_t i = 0; i < got && raw[i] != '\0' && used + 1 < sizeof text; i++) text[used++] = raw[i] >= 32 && raw[i] < 127 ? raw[i] : '?';
++    text[used] = '\0';
++  }
++  char extra[96] = "";
++  if (guest_nr == 134 && state->cpu.x[1] != 0) {  // rt_sigaction(sig, act, old): the new handler and flags (arm64: handler, flags)
++    uint64_t act[2] = {0, 0};
++    struct iovec local = {act, sizeof act}, remote = {reinterpret_cast<void*>(state->cpu.x[1]), sizeof act};
++    if (process_vm_readv(self, &local, 1, &remote, 1, 0) == static_cast<ssize_t>(sizeof act)) {
++      snprintf(extra, sizeof extra, " handler 0x%llx flags 0x%llx", static_cast<unsigned long long>(act[0]), static_cast<unsigned long long>(act[1]));
++    }
++  }
++  if (guest_nr == 203 && state->cpu.x[1] != 0) {  // connect(fd, addr, len): where to (an IPv4/IPv6 address and port, or a unix path)
++    uint8_t sa[28] = {0};
++    size_t len = state->cpu.x[2] < sizeof sa ? static_cast<size_t>(state->cpu.x[2]) : sizeof sa;
++    struct iovec local = {sa, len}, remote = {reinterpret_cast<void*>(state->cpu.x[1]), len};
++    if (len >= 8 && process_vm_readv(self, &local, 1, &remote, 1, 0) == static_cast<ssize_t>(len)) {
++      unsigned family = sa[0] | (sa[1] << 8), port = (sa[2] << 8) | sa[3];
++      if (family == 2) {
++        snprintf(extra, sizeof extra, " af_inet %u.%u.%u.%u:%u", sa[4], sa[5], sa[6], sa[7], port);
++      } else if (family == 10 && len >= 24) {
++        snprintf(extra, sizeof extra, " af_inet6 [%02x%02x:%02x%02x:%02x%02x:%02x%02x:..:%02x%02x:%02x%02x]:%u", sa[8], sa[9], sa[10], sa[11],
++                 sa[12], sa[13], sa[14], sa[15], sa[20], sa[21], sa[22], sa[23], port);
++      } else if (family == 1) {
++        snprintf(extra, sizeof extra, " af_unix %.60s", reinterpret_cast<const char*>(sa + 2));
++      }
++    }
++  }
++  char line[420];
++  int n = snprintf(line, sizeof line, "berberis: syscall %s(0x%llx, 0x%llx, 0x%llx)%s%s%s%s tid %d pc 0x%llx\n", name,
++                   static_cast<unsigned long long>(state->cpu.x[0]), static_cast<unsigned long long>(state->cpu.x[1]),
++                   static_cast<unsigned long long>(state->cpu.x[2]), text[0] ? " \"" : "", text, text[0] ? "\"" : "", extra,
++                   static_cast<int>(syscall(__NR_gettid)), static_cast<unsigned long long>(state->cpu.insn_addr));
++  if (n > 0 && write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1) < 0) return;
++}
++
++// The result of a connect, right after it ran (0 or -errno): whether ACE's server connections succeed.
++void ReportGuestSyscallResult(const ThreadState* state, long guest_nr) {
++  if (guest_nr != 203 || !GuestSyscallLogEnabled()) return;
++  char line[96];
++  int n = snprintf(line, sizeof line, "berberis: syscall result connect = %ld tid %d\n", static_cast<long>(state->cpu.x[0]),
++                   static_cast<int>(syscall(__NR_gettid)));
++  if (n > 0 && write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1) < 0) return;
++}
++
+ long RunGuestSyscall___NR_execveat(long arg_1, long arg_2, long arg_3, long arg_4, long arg_5) {
+   UNUSED(arg_1, arg_2, arg_3, arg_4, arg_5);
+   TRACE("unimplemented syscall __NR_execveat");
+@@ -393,6 +499,7 @@
+     }
+   }
+ 
++  ReportGuestSyscall(state, guest_nr);  // apklayer patch: logging only (BERBERIS_LOG_SYSCALLS)
+   ReportGuestSelfSignal(state, guest_nr);  // apklayer patch: logs only, before the signal is sent (it may end the process)
+   long result = RunGuestSyscallImpl(guest_nr,
+                                     state->cpu.x[0],
+@@ -407,6 +514,8 @@
+     state->cpu.x[0] = result;
+   }
+ 
++  ReportGuestSyscallResult(state, guest_nr);  // apklayer patch: logging only
++
+   if (kInstrumentSyscalls) {
+     OnSyscallReturn(state, guest_nr);
+   }

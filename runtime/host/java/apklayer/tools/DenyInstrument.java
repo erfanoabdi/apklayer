@@ -252,6 +252,13 @@ public final class DenyInstrument {
                             super.visitMethodInsn(opcode, "apklayer/host/GuestLoaders", mname, mdesc, false);
                             return;
                         }
+                        // Class.getClassLoader/getResource of a platform class: Android's loader is BootClassLoader (HotSpot's: null or the sandbox), and a boot class has no resource
+                        if (opcode == Opcodes.INVOKEVIRTUAL && owner.equals("java/lang/Class")
+                                && ((mname.equals("getClassLoader") && mdesc.equals("()Ljava/lang/ClassLoader;"))
+                                || (mname.equals("getResource") && mdesc.equals("(Ljava/lang/String;)Ljava/net/URL;")))) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/GuestLoaders", mname, "(Ljava/lang/Class;" + mdesc.substring(1), false);
+                            return;
+                        }
                         // Unsafe.getUnsafe(): ART allows any caller, HotSpot only boot classes
                         if (opcode == Opcodes.INVOKESTATIC && owner.equals("sun/misc/Unsafe") && mname.equals("getUnsafe")) {
                             super.visitMethodInsn(opcode, "apklayer/host/UnsafeAccess", mname, mdesc, false);

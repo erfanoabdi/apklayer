@@ -82,10 +82,15 @@ public final class Services {
             Class<? extends Service> cls = (Class<? extends Service>) Class.forName(key, true, Services.class.getClassLoader());
             if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] creating service " + cls.getName() + " on " + Thread.currentThread().getName());
             Service made;
-            try { made = AppFactory.service(cls, intent); } catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
-            r.controller = made == null ? Robolectric.buildService(cls, intent) : ServiceController.of(made, intent);
+            // creating covers the AppComponentFactory too: Play services' factory (GmsAppComponentFactory.instantiateService) logs each
+            // instantiation with a startService of its own, which waits (DEFERRED) instead of instantiating again under it, endlessly
+            boolean nested = creating;
             creating = true;
-            try { r.controller.create(); } finally { creating = false; }
+            try {
+                try { made = AppFactory.service(cls, intent); } catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+                r.controller = made == null ? Robolectric.buildService(cls, intent) : ServiceController.of(made, intent);
+                r.controller.create();
+            } finally { creating = nested; }
             r.service = r.controller.get();
             RUNNING.put(key, r);
             System.out.println("[apklayer] service created: " + cls.getSimpleName());
@@ -170,6 +175,13 @@ public final class Services {
                 catch (ClassNotFoundException e) { System.out.println("[apklayer] service class missing: " + cn); }
             };
             new Handler(Looper.getMainLooper()).post(() -> { if (creating) DEFERRED.add(start); else start.run(); });
+            return cn;
+        }
+        if (creating) {  // a start from inside a service's creation (its factory, its onCreate): later, as Android's startService returns at once
+            DEFERRED.add(() -> {
+                try { deliver(cn, intent, intent); }
+                catch (ClassNotFoundException e) { System.out.println("[apklayer] service class missing: " + cn); }
+            });
             return cn;
         }
         return onMain(() -> {

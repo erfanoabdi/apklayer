@@ -18,3 +18,10 @@ if gbm_dep.found() and drm_dep.found()
       include_directories: gfx_inc, dependencies: [drm_dep, gbm_dep, egl_dep, glesv2_dep], link_with: libgfx)
   endif
 endif
+
+# the instance-GPU Vulkan filter (aosp/hals/graphics/vulkan/DeviceSelect.h): the header itself on the host, with a log.h stand-in
+vulkan_dep = dependency('vulkan', required: false)
+if vulkan_dep.found()
+  executable('vulkan-select-test', '../../../tests/hals/vulkan-select-test.cpp', override_options: ['b_ndebug=false'],
+    include_directories: include_directories('../../../tests/hals/include'), dependencies: [vulkan_dep, dependency('dl')])
+endif

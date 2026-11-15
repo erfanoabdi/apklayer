@@ -12,7 +12,7 @@ for line in open(sys.argv[1], errors='replace'):
         steps.append((int(m.group(1)), m.group(2).strip()))
 for path in sys.argv[3:]:  # the hub launcher's lines (its log, not the app's output)
     for line in open(path, errors='replace'):
-        m = re.search(r'\[apklayer\] t=(\d+) (hub .*)', line)
+        m = re.search(r'\[apklayer\] t=(\d+) (hub[ :].*)', line)
         if m:
             steps.append((int(m.group(1)), m.group(2).strip()))
 start = next(t for t, s in steps if s.startswith('run '))

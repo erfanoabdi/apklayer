@@ -9,7 +9,9 @@
 
 namespace apklayer {
 
-bool isHalium() { return isDir("/android/system") && exists("/dev/binderfs/binder-control") && isDir("/vendor/lib64"); }
+bool isHalium() {
+    return haliumLayout(isDir("/android/system"), exists("/dev/binderfs/binder-control"), exists("/dev/binder"), isDir("/vendor/lib64"));
+}
 
 std::string defaultInstanceId() { return isHalium() ? "ut" : "default"; }
 

@@ -26,7 +26,7 @@ extern char **environ;
 /* The runtime's variables, and the path layer's (paths.c read_env): an app that builds its own environment for its programs (Termux) drops them, and its programs' /data, /system and
  * binder devices were then the shared root's or the host's (Termux's mkdir -p wrote into the native android-root). LD_PRELOAD stays second (save_runtime_env). */
 static const char *const runtime_vars[] = {"LD_LIBRARY_PATH", "LD_PRELOAD", "XDG_DATA_DIRS", "APKLAYER_NATIVE", "BIONIC_LD_LIBRARY_PATH", "APKLAYER_HOST_LIBS",
-    "APKLAYER_ANDROID_ROOT", "APKLAYER_INSTANCE", "APKLAYER_INSTANCE_ROOT", "APKLAYER_STORAGE", "APKLAYER_DATA", "APKLAYER_HOST_BINDER", "APKLAYER_HOST_HWBINDER", NULL};
+    "APKLAYER_ANDROID_ROOT", "APKLAYER_INSTANCE", "XDG_RUNTIME_DIR", "APKLAYER_INSTANCE_ROOT", "APKLAYER_STORAGE", "APKLAYER_DATA", "APKLAYER_HOST_BINDER", "APKLAYER_HOST_HWBINDER", NULL};
 
 #define NVARS (sizeof runtime_vars / sizeof *runtime_vars - 1)
 static char *started[NVARS];  /* "NAME=value" of each runtime variable at load, or NULL */
@@ -452,7 +452,16 @@ static int apklayer_spawn_guest_in(pid_t *pid, const char *path, const posix_spa
 }
 
 /* a name without a slash is searched in PATH: host programs, left to glibc */
+static int execvpe_in(const char *file, char *const argv[], char *const envp[]);
 int execvpe(const char *file, char *const argv[], char *const envp[])
+{
+    size_t mark = arena_enter();  /* target() allocates from the arena: without it an app's jspawnhelper (own-data mapping) crashed here at NULL, and its core dump took ~1 s */
+    int r = execvpe_in(file, argv, envp);
+    arena.top = mark;
+    return r;
+}
+
+static int execvpe_in(const char *file, char *const argv[], char *const envp[])
 {
     if (strchr(file, '/') && (execve(file, argv, envp), errno != ENOEXEC)) return -1;  /* ENOEXEC (a script without #!): glibc runs it with /bin/sh */
     struct target t;

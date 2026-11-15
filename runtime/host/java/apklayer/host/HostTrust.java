@@ -37,6 +37,10 @@ final class HostTrust extends Provider {
             delegate.checkServerTrusted(chain, "UNKNOWN");  // not the key exchange Chromium names ("RSA" makes the JDK demand keyEncipherment, which Android's check does not)
             return Arrays.asList(chain);
         }
+        /** Conscrypt's TrustManagerImpl signature with OCSP and SCT data, which Chromium's X509Util looks up too (the stapled data is not checked here). */
+        public List<X509Certificate> checkServerTrusted(X509Certificate[] chain, byte[] ocspData, byte[] tlsSctData, String authType, String host) throws CertificateException {
+            return checkServerTrusted(chain, authType, host);
+        }
         @Override public X509Certificate[] getAcceptedIssuers() { return delegate.getAcceptedIssuers(); }
     }
 

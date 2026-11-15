@@ -90,7 +90,7 @@ public class Main extends Activity {
             } finally { nextField.set(payload, originalNext); }
             require(((Number) active.invoke(null)).intValue() == 0, "failed scope released");
             System.out.println("[hello-native-audio] attribution PASS fields/Unicode/chain/tokens/scoped release");
-            if (Boolean.getBoolean("apklayer.nativeaudio")) {
+            if (Boolean.getBoolean("hello.nativeaudio")) {
                 ParcelCheck.run();
                 TrackCheck.run(this);
                 if (System.getProperty("hello.rate") != null) RateCheck.run();
@@ -101,7 +101,7 @@ public class Main extends Activity {
                 Runnable show = () -> {
                     result.getViewTreeObserver().registerFrameCommitCallback(
                             () -> System.out.println("[hello-native-audio] FRAME PASS"));
-                    result.setText(Boolean.getBoolean("apklayer.nativeaudio")
+                    result.setText(Boolean.getBoolean("hello.nativeaudio")
                             ? "PASS: original AudioTrack JNI\nAudioFlinger → PipeWire\nPCM, clock, marker, timestamp"
                             : "PASS: real attribution Parcel\nFields, Unicode, chain, Binder identity\nScoped native ownership");
                     result.invalidate();

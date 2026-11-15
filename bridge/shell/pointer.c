@@ -1,4 +1,5 @@
 /* Pointer input: title bar clicks, edge resize, wheel, cursors. */
+#include <math.h>
 #include "shell.h"
 
 static void update_cursor(void);
@@ -18,6 +19,7 @@ static struct window *pointer_nav_win;   /* window whose navigation bar the poin
 
 void pointer_forget_window(struct window *w)
 {
+    tablet_forget_window(w);
     if (pointer_focus != w && pointer_decor_win != w && pointer_nav_win != w) return;
     pointer_focus = pointer_decor_win = pointer_nav_win = NULL;
     ptr_down = 0;
@@ -198,6 +200,10 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
     (void)d; (void)p;
     last_input_serial = s;
     int pressed = st == WL_POINTER_BUTTON_STATE_PRESSED;
+    if (b == 0x113 || b == 0x116) {  /* BTN_SIDE / BTN_BACK: the mouse's back button is Android's Back (the title bar has none under server-side decorations) */
+        if (pressed && pointer_focus) window_send_back(pointer_focus);
+        return;
+    }
     if (pressed && pointer_decor_win && b == 0x110) { bar_button(pointer_decor_win, s, t); return; }
     if (pointer_nav_win) {  /* a navigation bar button acts when let go over it, as Android's */
         struct window *w = pointer_nav_win;
@@ -230,7 +236,12 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
     ptr_down = pressed;
     send_input(pointer_focus, ptr_down ? EV_DOWN : EV_UP, ptr_x, ptr_y);
 }
-static double axis_v, axis_h; /* accumulated wheel deltas, flushed on pointer frame (P2) */
+/* Wheel and touchpad scrolling, flushed on the pointer frame. 1.0 = one wheel notch of Android's AXIS_VSCROLL/AXIS_HSCROLL (the view applies its
+ * scroll factor); wl_pointer v8's axis_value120 (hi-res wheels, 120 per notch) and a finger's continuous axis are fractions of it. */
+static double axis_v, axis_h;              /* wl_pointer.axis: ~10 per wheel notch, ~15 per notch-equivalent for a finger; + = down/right */
+static int v120_v, v120_h, disc_v, disc_h; /* axis_value120 / axis_discrete since the last frame */
+static uint32_t axis_src = WL_POINTER_AXIS_SOURCE_WHEEL;
+static int scroll_meta = -1;               /* test input: the Android meta state the scroll carries (-1: the keyboard's) */
 static void ptr_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t a, wl_fixed_t v)
 {
     (void)d; (void)p; (void)t;
@@ -239,32 +250,52 @@ static void ptr_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t a, wl_f
     if (a == WL_POINTER_AXIS_VERTICAL_SCROLL) axis_v += val;
     else if (a == WL_POINTER_AXIS_HORIZONTAL_SCROLL) axis_h += val;
 }
-static void ptr_frame(void *d, struct wl_pointer *p)
-{
-    (void)d; (void)p;
-    if ((axis_v != 0 || axis_h != 0) && pointer_focus) {
-        /* Wayland axis: ~10 per wheel notch, + = down/right. Android: AXIS_VSCROLL + = up,
-         * AXIS_HSCROLL + = right, in notches (the view applies its scroll factor); sent *1000. */
-        struct window *w = pointer_focus;
-        if (debug_input) fprintf(stderr, "[shell] scroll v=%.1f h=%.1f at %d,%d\n", axis_v, axis_h, ptr_x, ptr_y);
-        int sx = ptr_x, sy = ptr_y;
-        window_to_app(w, &sx, &sy);
-        int32_t v[5] = { W_ID(w), sx * w->scale / 100, sy * w->scale / 100,
-                         (int32_t)(-axis_v * 100), (int32_t)(axis_h * 100) };
-        send_msg(W_TARGET(pointer_focus), MSG_SCROLL, v, 5);
-    }
-    axis_v = axis_h = 0;
-}
 static void ptr_axis_source(void *d, struct wl_pointer *p, uint32_t s)
-{ (void)d; (void)p; (void)s; }
+{ (void)d; (void)p; axis_src = s; }
+/* A finger left the touchpad: Android has no scroll fling (a view scrolls by what ACTION_SCROLL carries), so there is nothing to stop. */
 static void ptr_axis_stop(void *d, struct wl_pointer *p, uint32_t t, uint32_t a)
 { (void)d; (void)p; (void)t; (void)a; }
 static void ptr_axis_discrete(void *d, struct wl_pointer *p, uint32_t a, int32_t n)
-{ (void)d; (void)p; (void)a; (void)n; }
+{
+    (void)d; (void)p;
+    if (a == WL_POINTER_AXIS_VERTICAL_SCROLL) disc_v += n; else disc_h += n;
+}
+static void ptr_axis_value120(void *d, struct wl_pointer *p, uint32_t a, int32_t n)
+{
+    (void)d; (void)p;
+    if (a == WL_POINTER_AXIS_VERTICAL_SCROLL) v120_v += n; else v120_h += n;
+}
+/* Notches of one axis: the hi-res value, else the wheel's discrete steps, else the continuous value. */
+static double notches(double axis, int v120, int disc)
+{
+    return v120 ? v120 / 120.0 : disc ? disc : axis / (axis_src == WL_POINTER_AXIS_SOURCE_FINGER ? 15 : 10);
+}
+static void ptr_frame(void *d, struct wl_pointer *p)
+{
+    (void)d; (void)p;
+    double nv = notches(axis_v, v120_v, disc_v), nh = notches(axis_h, v120_h, disc_h);
+    if ((nv != 0 || nh != 0) && pointer_focus) {
+        /* Android: AXIS_VSCROLL + = up (Wayland: down), AXIS_HSCROLL + = right; sent *10000, with the meta state (Shift+wheel is the app's) */
+        struct window *w = pointer_focus;
+        if (debug_input) fprintf(stderr, "[shell] scroll v=%.3f h=%.3f notches at %d,%d\n", nv, nh, ptr_x, ptr_y);
+        int sx = ptr_x, sy = ptr_y;
+        window_to_app(w, &sx, &sy);
+        int32_t v[6] = { W_ID(w), sx * w->scale / 100, sy * w->scale / 100, (int32_t)lround(-nv * 10000), (int32_t)lround(nh * 10000),
+                         scroll_meta >= 0 ? scroll_meta : (int32_t)kb_android_meta() };
+        send_msg(W_TARGET(pointer_focus), MSG_SCROLL, v, 6);
+    }
+    axis_v = axis_h = 0;
+    v120_v = v120_h = disc_v = disc_h = 0;
+    axis_src = WL_POINTER_AXIS_SOURCE_WHEEL;
+}
 const struct wl_pointer_listener ptr_listener = {
     .enter = ptr_enter, .leave = ptr_leave, .motion = ptr_motion, .button = ptr_button,
     .axis = ptr_axis, .frame = ptr_frame, .axis_source = ptr_axis_source,
-    .axis_stop = ptr_axis_stop, .axis_discrete = ptr_axis_discrete };
+    .axis_stop = ptr_axis_stop, .axis_discrete = ptr_axis_discrete,
+#ifdef WL_POINTER_AXIS_VALUE120_SINCE_VERSION
+    .axis_value120 = ptr_axis_value120,
+#endif
+};
 
 /* Test input: the pointer over w at (x, y) (logical content pixels; y < 0 = the title bar; in mobile style the bottom nav_h pixels are the
  * navigation bar over the content), then a button: 0 none, +code press, -code release (BTN_LEFT 0x110, BTN_RIGHT 0x111). Leave, enter,
@@ -281,4 +312,25 @@ void pointer_inject(struct window *w, int x, int y, int button)
     ptr_motion(NULL, the_pointer, 0, fx, fy);
     if (button) ptr_button(NULL, the_pointer, last_input_serial, (uint32_t)now_ms(), (uint32_t)abs(button),
                            button > 0 ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
+}
+
+/* Test input: a wheel over w as a v8 compositor sends it (the pointer is moved over w first). dx, dy: + = right/down, in notches; flags &1: in
+ * 1/120 notches (a hi-res wheel), &2: a finger's continuous scroll (15 units a notch), &4: Shift held. */
+int pointer_inject_wheel(struct window *w, int dx, int dy, int flags)
+{
+    if (pointer_focus != w) pointer_inject(w, w->cfg_w / 2, w->cfg_h / 2, 0);
+    if (pointer_focus != w) return -2;
+    scroll_meta = flags & 4 ? 1 : 0;
+    ptr_axis_source(NULL, the_pointer, flags & 2 ? WL_POINTER_AXIS_SOURCE_FINGER : WL_POINTER_AXIS_SOURCE_WHEEL);
+    for (int a = 0; a < 2; a++) {
+        int n = a ? dx : dy;
+        uint32_t axis = a ? WL_POINTER_AXIS_HORIZONTAL_SCROLL : WL_POINTER_AXIS_VERTICAL_SCROLL;
+        if (!n) continue;
+        ptr_axis(NULL, the_pointer, 0, axis, wl_fixed_from_double(flags & 1 ? n / 12.0 : flags & 2 ? n : n * 10));
+        if (flags & 1) ptr_axis_value120(NULL, the_pointer, axis, n);
+        else if (!(flags & 2)) ptr_axis_discrete(NULL, the_pointer, axis, n);
+    }
+    ptr_frame(NULL, the_pointer);
+    scroll_meta = -1;
+    return 0;
 }

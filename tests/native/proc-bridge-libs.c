@@ -52,6 +52,11 @@ int main(int argc, char **argv) {
     if (f) fclose(f);
     assert(seen_bridge && seen_plain);
     if (!host) assert(bridge_nameless);
+    char link[256], target[1024];
+    snprintf(link, sizeof link, "/proc/self/map_files/%lx-%lx", (unsigned long)mb, (unsigned long)mb + 4096);
+    ssize_t n = readlink(link, target, sizeof target - 1);
+    assert(n > 0); target[n] = 0;
+    assert(host ? strstr(target, "libfixture_plain.so") && strncmp(target, "/system/", 8) : !strcmp(target, "/system/lib64/libfixture_plain.so"));  /* as its maps line */
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmp);
     if (!strncmp(tmp, "/tmp/apklayer-bridge-libs-", 26)) assert(system(cmd) == 0);
     puts(host ? "proc-bridge-libs host view ok" : "proc-bridge-libs ok");

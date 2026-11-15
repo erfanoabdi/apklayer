@@ -32,7 +32,7 @@ public final class HubHost {
         Path apps = Path.of(System.getProperty("apklayer.apps"));
         HubDirectory directory = new HubDirectory(apps);
         StartTrace.mark("hub: directory");
-        if (!RealBinder.publish(HubProtocol.SERVICE, directory))
+        if (!RealBinder.publish(HubProtocol.SERVICE, directory, true))
             throw new IllegalStateException("Cannot publish instance hub");
         if (!RealBinder.publish(HubAccounts.SERVICE, directory.accounts()))
             throw new IllegalStateException("Cannot publish the account service");
@@ -56,7 +56,9 @@ public final class HubHost {
         if (apk != null) {  // the system process's package: registered and its providers created before READY, so no client asks for a host of it
             android.app.Application app = RuntimeEnvironment.getApplication();
             AppEnvironment.installSystemPackage(app);
+            StartTrace.mark("hub: system package installed");
             HubClient.attach(app);
+            StartTrace.mark("hub: attached");
             AppEnvironment.installProviders(app);
             StartTrace.mark("hub: " + app.getPackageName() + " attached");
             sun.misc.Signal.handle(new sun.misc.Signal("TERM"), signal -> ComponentHost.stop());  // its due writes are saved first (ComponentHost.saveDueWork)

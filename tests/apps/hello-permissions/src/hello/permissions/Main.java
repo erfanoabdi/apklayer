@@ -12,11 +12,14 @@ import android.os.Looper;
  * Runtime permissions and roles as the system's permission screen answers them (the hub's prompt, tests/vm/permissions.py answers it): CAMERA
  * allowed, the contacts group denied twice (rationale after the first), a third request denied with no question, RECORD_AUDIO granted in the
  * manager before the start (no question), CAMERA not asked again, the SMS role refused without telephony, the browser role given.
- * The main looper keeps running while a question is up. Prints `[perm] PASS|FAIL <step>`, then `[perm] DONE`.
+ * Location (-Dhello.perm.place, tests/vm/permission-location.py): "Approximate" with "While using the app" grants the coarse permission only, the background
+ * location is a question of its own once the foreground is held, "Only this time" grants the precise one until this process ends (-Dhello.perm.place2: the next
+ * process holds the coarse and the background one, not the precise one). The main looper keeps running while a question is up. Prints `[perm] PASS|FAIL <step>`, then `[perm] DONE`.
  */
 public class Main extends Activity {
     private static final String CAMERA = "android.permission.CAMERA", READ = "android.permission.READ_CONTACTS", WRITE = "android.permission.WRITE_CONTACTS",
-            AUDIO = "android.permission.RECORD_AUDIO";
+            AUDIO = "android.permission.RECORD_AUDIO", FINE = "android.permission.ACCESS_FINE_LOCATION", COARSE = "android.permission.ACCESS_COARSE_LOCATION",
+            BACKGROUND = "android.permission.ACCESS_BACKGROUND_LOCATION";
     private final Handler main = new Handler(Looper.getMainLooper());
     private int ticks;
 
@@ -28,6 +31,18 @@ public class Main extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (Boolean.getBoolean("hello.perm.second")) {  // the run after the first, which made this app the browser: the role is kept
+            check(getSystemService(RoleManager.class).isRoleHeld(RoleManager.ROLE_BROWSER), "role kept across restarts");
+            finish();
+            return;
+        }
+        if (Boolean.getBoolean("hello.perm.place2")) {  // the process after the one with "only this time"
+            check(!held(FINE), "only this time: precise revoked when the process ended");
+            check(held(COARSE) && held(BACKGROUND), "approximate and background kept");
+            System.out.println("[perm] DONE");
+            return;
+        }
+        if (Boolean.getBoolean("hello.perm.place")) { requestPermissions(new String[] {FINE, COARSE}, 21); return; }
         tick();
         check(!held(CAMERA), "unasked camera not held");
         check(held(AUDIO), "manager grant held at start");
@@ -53,6 +68,12 @@ public class Main extends Activity {
                 check(granted, "granted: not asked again");
                 startActivityForResult(getSystemService(RoleManager.class).createRequestRoleIntent(RoleManager.ROLE_SMS), 7);
             }
+            case 21 -> {
+                check(results.length == 2 && results[0] == PackageManager.PERMISSION_DENIED && results[1] == PackageManager.PERMISSION_GRANTED && !held(FINE) && held(COARSE), "approximate: coarse granted, precise not");
+                requestPermissions(new String[] {BACKGROUND}, 22);
+            }
+            case 22 -> { check(granted && held(BACKGROUND), "background location: its own question, granted"); requestPermissions(new String[] {FINE}, 23); }
+            case 23 -> { check(granted && held(FINE), "only this time: precise granted"); System.out.println("[perm] DONE"); }
             default -> check(false, "unexpected request " + code);
         }
     }

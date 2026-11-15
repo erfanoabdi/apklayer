@@ -14,7 +14,10 @@ public final class Main extends Activity {
             Object list = android.content.pm.ApplicationInfo.class.getField("sharedLibraryInfos").get(getApplicationInfo());
             if (list != null) for (Object info : (java.util.List<?>) list)
                 infos.append(((android.content.pm.SharedLibraryInfo) info).getName()).append(':').append(((android.content.pm.SharedLibraryInfo) info).getType()).append(' ');
-            System.out.println("[sharedlib] hello.applib.user PASS static=" + fromStatic + " system=" + fromSystem + " infos=" + infos.toString().trim());
+            // the static library's resources (hello.applib's string, loaded as a shared library: its package id is the app's to assign) are in the app's own AssetManager
+            int id = getResources().getIdentifier("applib_text", "string", "hello.applib");
+            String text = id == 0 ? "none" : getResources().getString(id);
+            System.out.println("[sharedlib] hello.applib.user PASS static=" + fromStatic + " system=" + fromSystem + " infos=" + infos.toString().trim() + " res=" + text);
         } catch (Throwable failure) {
             System.out.println("[sharedlib] hello.applib.user FAIL " + failure);
             failure.printStackTrace(System.out);

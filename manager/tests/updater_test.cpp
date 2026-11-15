@@ -28,7 +28,8 @@ static const char* kReleases = R"({
      "runtime": {"version": "2", "assets": {"arm64": {"url": "https://example.org/rt-arm64-2.tar.zst", "sha256": "aa", "size": 500, "unpacked_size": 1600}}},
      "debs": {"noble": {"arm64": {"url": "https://example.org/apklayer_0.2.0-1~noble1_arm64.deb", "sha256": "bb"},
                         "amd64": {"url": "https://example.org/apklayer_0.2.0-1~noble1_amd64.deb", "sha256": "cc"}},
-              "trixie": {"arm64": {"url": "https://example.org/apklayer_0.2.0-1~trixie1_arm64.deb", "sha256": "dd"}}}},
+              "trixie": {"arm64": {"url": "https://example.org/apklayer_0.2.0-1~trixie1_arm64.deb", "sha256": "dd"}}},
+     "clicks": {"arm64": {"url": "https://example.org/apklayer.erfanoabdi_0.2.0_arm64.click", "sha256": "ee"}}},
     {"version": "0.1.0", "date": "2026-11-05", "notes_url": "https://example.org/v0.1.0", "converter_abi": 1, "data_format": 1,
      "runtime": {"version": "1", "assets": {}}, "debs": {}}
   ]
@@ -41,6 +42,8 @@ int main() {
     CHECK(error.empty() && r.version == "0.2.0" && r.converterAbi == 2 && r.runtimeVersion == "2" && r.notesUrl == "https://example.org/v0.2.0", "releases.json: the latest release");
     CHECK(r.deb.url == "https://example.org/apklayer_0.2.0-1~trixie1_arm64.deb" && r.deb.sha256 == "dd" && r.runtime.sha256 == "aa", "the deb of this codename and CPU, the runtime of this CPU");
     CHECK(r.runtime.size == 500 && r.runtime.unpacked == 1600 && r.deb.size == 0, "the runtime's sizes (none listed: 0)");
+    CHECK(r.click.url == "https://example.org/apklayer.erfanoabdi_0.2.0_arm64.click" && r.package("click").sha256 == "ee" && r.package("deb").sha256 == "dd", "the click asset beside the deb: the package of the installed format");
+    CHECK(packageFormat("/opt/click.ubuntu.com/apklayer.erfanoabdi/current/usr/bin/apklayer-manager") == "click" && packageFormat("/usr/bin/apklayer-manager") == "deb", "the format of the installed package");
     r = parseLatest(kReleases, "noble", {"amd64", "x86_64"}, error);
     CHECK(r.deb.sha256 == "cc" && !r.runtime.found(), "another CPU: its deb, no runtime asset");
     error.clear();

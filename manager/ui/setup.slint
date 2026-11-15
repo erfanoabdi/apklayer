@@ -67,6 +67,17 @@ export component FirstRunPage {
                     accessible-role: checkbox;
                     accessible-action-default => { self.clicked(); }
                     enabled: !Backend.setup-running && !Backend.setup-done;
+                    // microG and Google's own share package names: one or the other
+                    checked-state-changed(state) => { if state == CheckState.checked { gapps-box.check-state = CheckState.unchecked; } }
+                }
+                gapps-box := CheckBoxTile {
+                    text: "Google Play";
+                    supporting-text: "Google's own Play services and Play Store, in place of microG (about 250 MB)";
+                    accessible-label: "Google Play";
+                    accessible-role: checkbox;
+                    accessible-action-default => { self.clicked(); }
+                    enabled: !Backend.setup-running && !Backend.setup-done;
+                    checked-state-changed(state) => { if state == CheckState.checked { microg-box.check-state = CheckState.unchecked; } }
                 }
                 fdroid-box := CheckBoxTile {
                     text: "F-Droid";
@@ -80,7 +91,7 @@ export component FirstRunPage {
                     alignment: end;
                     spacing: MaterialStyleMetrics.spacing_8;
                     if !Backend.setup-done : TextButton { text: "Skip"; enabled: !Backend.setup-running; clicked => { Backend.setup-finish(); } }
-                    if !Backend.setup-done : FilledButton { text: "Set up"; enabled: !Backend.setup-running; clicked => { Backend.setup-start(microg-box.check-state == CheckState.checked, fdroid-box.check-state == CheckState.checked); } }
+                    if !Backend.setup-done : FilledButton { text: "Set up"; enabled: !Backend.setup-running; clicked => { Backend.setup-start(microg-box.check-state == CheckState.checked ? "microg" : gapps-box.check-state == CheckState.checked ? "gapps" : "", fdroid-box.check-state == CheckState.checked); } }
                     if Backend.setup-done : FilledButton { text: "Start"; clicked => { Backend.setup-finish(); } }
                 }
             }

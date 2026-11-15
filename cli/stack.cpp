@@ -279,6 +279,16 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     }
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
     setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
+    // the other partitions' ro.<part>.build.* (a device has one set per partition image; the GSI tree only writes system's): the same build, so the same values
+    for (const char* part : {"bootimage", "odm", "product", "system_ext", "vendor"}) {
+        std::string p = std::string("ro.") + part + ".build.";
+        setProperty(l, ne, (p + "fingerprint").c_str(), fingerprint.c_str());
+        setProperty(l, ne, (p + "version.incremental").c_str(), incremental.c_str());
+        for (const char* k : {"id", "tags", "type", "date", "date.utc", "version.release", "version.release_or_codename", "version.sdk"}) {
+            std::string v = get((std::string("ro.build.") + k).c_str());
+            if (!v.empty()) setProperty(l, ne, (p + k).c_str(), v.c_str());
+        }
+    }
     // as the build system writes them for the build type and tags the instance presents (apklayer.prop), not the tree's "userdebug ... test-keys"
     std::string flavor = get("ro.product.name") + "-" + get("ro.build.type");
     setProperty(l, ne, "ro.build.display.id", (get("ro.build.id") + " " + get("ro.build.tags")).c_str());
@@ -386,7 +396,19 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, gatekeeper(l), "apklayer-gatekeeper.xml", "aosp/hals/security/gatekeeper-manifest.xml");
     // the hardware providers of providers.toml: their HALs are declared for this stack's lifetime (servicemanager reads the manifests once)
     std::vector<ProviderService> providers = providerServices(l, inst);
-    writeHostHals(l, inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
+    const bool hostHals = writeHostHals(l, inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
+    // An instance hwservicemanager (docs/HIDL.md) for the HIDL clients of old system apps and the apps' own HALs. libhwbinder takes the real manager
+    // when /system/bin/hwservicemanager exists, so the file is made in the instance's own root only: an instance with host HALs keeps libhidl's
+    // stand-in, which forwards the listed names to the host (libhidl 0001-0003) and the rest to the manager running beside it (0004, its marker file).
+    const bool hidl = staged(l, "libapklayer_hwservicemanager.so");
+    const std::string localMarker = join(inst.dataDir, "apklayer/hwservicemanager.local");
+    stageManifest(inst, l, hidl, "apklayer-hwservicemanager.xml", "aosp/hals/hwservicemanager/manifest.xml", "system");
+    if (hidl && !hostHals) {
+        makeDirs(join(join(inst.runtimeDir, "android-root"), "system/bin"));
+        writeFile(join(join(inst.runtimeDir, "android-root"), "system/bin/hwservicemanager"), "");
+    }
+    if (hidl && hostHals) { makeDirs(join(inst.dataDir, "apklayer")); writeFile(localMarker, ""); }
+    else unlink(localMarker.c_str());
     for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
     if (deviceGraphics(l, inst)) undeclareOwnGraphics(inst, l);
     if (deviceDomain(l, inst, "media")) stageDeviceCodecXml(inst);
@@ -450,6 +472,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         int pid = spawn(s);
         running.push_back({"servicemanager", pid, pidfdOpen(pid), s});
     }
+    if (hidl) start("hwservicemanager", "libapklayer_hwservicemanager.so", {});  // HIDL clients wait for its hwservicemanager.ready
     start("permission", "libapklayer_permission.so", {});  // libbinder's checkPermission() asks this (no system_server PermissionController)
     if (!deviceGraphics(l, inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
     start("composer", "libapklayer_composer.so", {});
@@ -473,6 +496,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
             start("gatekeeperd", "libapklayer_gatekeeperd.so", {"/data/misc/gatekeeper"});
         }
     }
+    makeDirs(join(inst.dataDir, "apklayer"));
+    unlink(join(inst.dataDir, "apklayer/sensor_features").c_str());  // the sensors HAL front writes it (HostSystemConfig's sensor features)
     for (const ProviderService& p : providers) {
         start(p.name, p.front, p.options, p.backend);
         // system_server's SensorService, over the sensors HAL: what SensorManager in apps talks to (HostSensorShadows)
@@ -501,6 +526,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // "server died"). One waiter per service blocks in waitForService; the daemon sets the ready property after all of them returned.
     std::vector<std::string> waitFor = {"SurfaceFlingerAIDL"};
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
+    if (sensors && staged(l, "libapklayer_sensorservice.so")) waitFor.push_back("sensorservice");  // the HAL listed its sensors (sensor_features) by then
     for (const Service& s : running)  // an app's first camera list (the provider joins cameraserver whenever it registers); started on first use: no wait
         if (s.name == "cameraserver" && s.pid > 0) waitFor.push_back("media.camera");
     std::vector<int> waiters;

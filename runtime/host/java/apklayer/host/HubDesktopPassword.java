@@ -8,29 +8,41 @@ import java.nio.file.Path;
 import java.util.Arrays;
 
 /**
- * Whether a password is the desktop user's login password: PAM's own helper for unprivileged callers, unix_chkpwd (pam_unix runs it when the
- * program checking is not root, as a screen locker does). It is setgid shadow and checks only the caller's own user, so the hub needs no privilege.
- * shortcut: the local passwords of pam_unix only (not LDAP, systemd-homed or a fingerprint); a PAM conversation helper when a desktop needs them.
+ * Whether a password is the desktop user's login password: apklayer-pamcheck runs the PAM stack of the service APKLAYER_PAM_SERVICE (config
+ * `keystore-pam-service`, default "login") with a conversation that answers every prompt with the password, so sssd, LDAP or FreeIPA users unlock
+ * as well; the hub needs no privilege (pam_unix runs its setgid-shadow unix_chkpwd). Without the helper or libpam: unix_chkpwd directly (local
+ * passwords only). A module that waits for a fingerprint or a token before it asks for the password waits here too: name a service without it.
  */
 final class HubDesktopPassword {
     private static final String[] HELPERS = {"/usr/sbin/unix_chkpwd", "/sbin/unix_chkpwd", "/usr/bin/unix_chkpwd"};
     private HubDesktopPassword() {}
 
-    /** True when the helper accepts {@code password} for the user the hub runs as; false for a wrong one, or without the helper. */
+    /** True when PAM accepts {@code password} for the user the hub runs as; false for a wrong one, or without any checker. */
     static boolean check(String password) {
+        if (password.isEmpty()) return false;
+        String nativeDir = System.getProperty("apklayer.native"), service = System.getenv("APKLAYER_PAM_SERVICE"), user = System.getProperty("user.name");
+        if (nativeDir != null && Files.isExecutable(Path.of(nativeDir, "bin/apklayer-pamcheck"))) {
+            int status = run(password, Path.of(nativeDir, "bin/apklayer-pamcheck").toString(), user, service == null || service.isEmpty() ? "login" : service);
+            if (status == 0 || status == 1) return status == 0;  // 2: no libpam; -1 or a crash: the helper did not answer
+        }
         String helper = Arrays.stream(HELPERS).filter(path -> Files.isExecutable(Path.of(path))).findFirst().orElse(null);
-        if (helper == null || password.isEmpty()) { System.out.println("[apklayer-hub] login password not checked: " + (helper == null ? "no unix_chkpwd" : "empty")); return false; }
-        byte[] typed = (password + "\0").getBytes(StandardCharsets.UTF_8);  // the helper reads one NUL-terminated password from its stdin (a pipe, never a tty)
+        if (helper == null) { System.out.println("[apklayer-hub] login password not checked: no PAM helper"); return false; }
+        return run(password, helper, user, "nonull") == 0;  // the same NUL-terminated password on stdin
+    }
+
+    /** The helper's exit status with {@code password} (NUL-terminated) on its stdin, a pipe, never a tty; -1 when it did not run. */
+    private static int run(String password, String... command) {
+        byte[] typed = (password + "\0").getBytes(StandardCharsets.UTF_8);
         try {
-            Process process = new ProcessBuilder(helper, System.getProperty("user.name"), "nonull").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            Process process = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
             try (OutputStream in = process.getOutputStream()) { in.write(typed); }
-            return process.waitFor() == 0;
+            return process.waitFor();
         } catch (IOException failure) {
             System.out.println("[apklayer-hub] login password not checked: " + failure);
-            return false;
+            return -1;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            return false;
+            return -1;
         } finally { Arrays.fill(typed, (byte) 0); }
     }
 }

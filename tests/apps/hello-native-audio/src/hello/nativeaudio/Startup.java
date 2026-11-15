@@ -11,7 +11,7 @@ public class Startup extends Application {
             if (implementation.equals("deli:true")) throw new AssertionError("queue incompatible with API36 scheduler");
         } catch (NoSuchMethodException olderFramework) {
         } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
-        if (!Boolean.getBoolean("apklayer.nativeaudio")) return;
+        if (!Boolean.getBoolean("hello.nativeaudio")) return;
         int minimum = AudioTrack.getMinBufferSize(48000, AudioFormat.CHANNEL_OUT_STEREO,
                 AudioFormat.ENCODING_PCM_16BIT);
         try {

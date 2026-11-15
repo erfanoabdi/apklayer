@@ -1,0 +1,119 @@
+From: apklayer
+Subject: [PATCH] The default fault handler prints the fault's frames
+
+The note of 0046 named the signal, fault address, pc and lr only; a crash (Unity's null call, an assert trap) could not be placed from the
+app log. The handler now walks the frame pointers from the faulting context (Android's libraries keep them) and writes each frame as
+debuggerd does, `#NN pc <file offset>  <module path>`, found in /proc/self/maps; raw syscalls only (openat, read, process_vm_readv), no
+lock, at most 24 frames, the walk stops at an unreadable or non-ascending frame.
+
+apklayer patch: 0080 of patches/bionic_translation (see docs/PATCHES.md).
+---
+diff --git a/libc/libc.c b/libc/libc.c
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -20,6 +20,7 @@
+ 
+ #include <sys/stat.h>
+ #include <sys/syscall.h>
++#include <sys/uio.h>
+ #include <sys/types.h>
+ #include <sys/user.h> // PAGE_SIZE, PAGE_SHIFT
+ 
+@@ -456,17 +457,87 @@
+ /* apklayer patch: HotSpot's libjsig (LD_PRELOADed) defines it; then a fault handler is chained behind the JVM's, which runs it for faults that are not its own */
+ extern void *JVM_get_signal_action(int sig) __attribute__((weak));
+ 
++/* apklayer patch: the frames of a fault as debuggerd prints them (module and offset), written with raw syscalls only: the walk follows the frame
++ * pointers (Android's libraries keep them) from the faulting context, every address is looked up in /proc/self/maps, no lock is taken */
++static void apklayer_frame_line(int idx, unsigned long pc)
++{
++	char buf[2048], row[600], out[720];
++	size_t rl = 0;
++	int found = 0;
++	unsigned long rel = pc;
++	const char *name = "<unknown>";
++	long fd = syscall(SYS_openat, AT_FDCWD, "/proc/self/maps", O_RDONLY | O_CLOEXEC);
++	for (long n; fd >= 0 && !found && (n = syscall(SYS_read, fd, buf, sizeof buf)) > 0;) {
++		for (long i = 0; i < n && !found; i++) {
++			if (buf[i] != '\n') {
++				if (rl < sizeof row - 1)
++					row[rl++] = buf[i];
++				continue;
++			}
++			row[rl] = 0;
++			rl = 0;
++			char *p;
++			unsigned long lo = strtoul(row, &p, 16), hi = *p == '-' ? strtoul(p + 1, &p, 16) : 0;
++			if (pc < lo || pc >= hi)
++				continue;
++			while (*p == ' ') p++;
++			while (*p && *p != ' ') p++; /* perms */
++			while (*p == ' ') p++;
++			rel = pc - lo + strtoul(p, &p, 16); /* the file offset of the address */
++			for (int f = 0; f < 2 && *p; f++) { /* dev, inode */
++				while (*p == ' ') p++;
++				while (*p && *p != ' ') p++;
++			}
++			while (*p == ' ') p++;
++			name = *p ? p : "<anonymous>";
++			found = 1;
++		}
++	}
++	if (fd >= 0)
++		syscall(SYS_close, fd);
++	const int n = snprintf(out, sizeof out, "    #%02d pc %016lx  %s\n", idx, rel, name);
++	if (n > 0)
++		write(STDERR_FILENO, out, n < (int)sizeof out ? n : (int)sizeof out - 1);
++}
++
++static int apklayer_peek(unsigned long addr, void *dst, size_t len)
++{
++	struct iovec l = {dst, len}, r = {(void *)addr, len};
++	return syscall(SYS_process_vm_readv, getpid(), &l, 1, &r, 1, 0) == (long)len;
++}
++
++static void apklayer_fault_frames(unsigned long pc, unsigned long lr, unsigned long fp)
++{
++	int idx = 0, first = 1;
++	apklayer_frame_line(idx++, pc);
++	if (lr)
++		apklayer_frame_line(idx++, lr);
++	while (idx < 24 && fp && !(fp & 7)) {
++		unsigned long frame[2];
++		if (!apklayer_peek(fp, frame, sizeof frame) || !frame[1] || (frame[0] && frame[0] <= fp))
++			break;
++		if (!(first && frame[1] == lr)) /* the first return address of the chain is the lr register's when the function had a frame */
++			apklayer_frame_line(idx++, frame[1]);
++		first = 0;
++		if (!frame[0])
++			break;
++		fp = frame[0];
++	}
++}
++
+ /* apklayer patch: Android's debuggerd handler (the linker installs it in every process) ends a fault that no handler took: an app
+  * handler that chains to the "previous" handler finds this one in place of SIG_DFL, instead of returning into the same fault forever */
+ static void apklayer_default_fault_handler(int sig, siginfo_t *info, void *ucontext)
+ {
+-	unsigned long pc = 0, lr = 0;
++	unsigned long pc = 0, lr = 0, fp = 0;
+ 	if (ucontext) {
+ #if defined(__aarch64__)
+ 		pc = ((ucontext_t *)ucontext)->uc_mcontext.pc;
+ 		lr = ((ucontext_t *)ucontext)->uc_mcontext.regs[30];
++		fp = ((ucontext_t *)ucontext)->uc_mcontext.regs[29];
+ #elif defined(__x86_64__)
+ 		pc = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_RIP];
++		fp = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_RBP];
+ #endif
+ 	}
+ 	char note[224]; /* shortcut: snprintf of integers and pointers only, as debuggerd's async_safe_format does */
+@@ -474,6 +545,8 @@
+ 	                       sig, info ? info->si_code : 0, info ? info->si_addr : NULL, pc, lr, (long)syscall(SYS_gettid));
+ 	if (n > 0)
+ 		write(STDERR_FILENO, note, n < (int)sizeof note ? n : (int)sizeof note - 1);
++	if (pc)
++		apklayer_fault_frames(pc, lr, fp);
+ 	unsigned long dfl[4] = {0}; /* the kernel's struct sigaction with SIG_DFL; the raw call passes libjsig's chain */
+ 	syscall(SYS_rt_sigaction, sig, dfl, NULL, 8);
+ 	syscall(SYS_tgkill, getpid(), syscall(SYS_gettid), sig); /* delivered with SIG_DFL once the handlers return (core, exit status) */

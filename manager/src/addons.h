@@ -1,5 +1,5 @@
-// The Apps page's add-ons (microG, F-Droid): the optional apps of the first run, offered at any time. Installs and updates go through the
-// first run's own path (`apklayer setup --microg|--fdroid`, src/setup.h); a removal uninstalls their packages.
+// The Apps page's add-ons (microG or Google Play, F-Droid): the optional apps of the first run, offered at any time. Installs and updates go through the
+// first run's own path (`apklayer setup --microg|--gapps|--fdroid`, src/setup.h); a removal uninstalls their packages.
 #pragma once
 
 #include <functional>

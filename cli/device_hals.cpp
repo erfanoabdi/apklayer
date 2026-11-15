@@ -32,7 +32,7 @@ bool declares(const std::string& hal) { return declared().find("<name>" + hal + 
 }  // namespace
 
 DeviceHal probeDeviceHal(const Layout& l, const std::string& domain) {
-    if (!isHalium()) return {-1, "not a Halium device (no /android/system, binderfs and /vendor/lib64)"};
+    if (!isHalium()) return {-1, "not a Halium device (no /android/system, binderfs or /dev/binder, and /vendor/lib64)"};
     if (hostBinder("hwbinder").empty() && hostBinder("binder").empty()) return {-1, "the device's binder nodes are missing"};
     if (domain == "vibrator")
         return declares("android.hardware.vibrator") ? DeviceHal{30, "the device's vibrator HAL"} : DeviceHal{-1, "the device declares no vibrator HAL"};

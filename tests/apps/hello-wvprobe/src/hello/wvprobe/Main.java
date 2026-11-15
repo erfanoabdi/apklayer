@@ -30,7 +30,13 @@ public class Main extends Activity {
                     System.out.println("[wv] page finished " + url);
                     // a cookie the page sets is the app's CookieManager's (the provider's store, as on a device: sign-in flows read it there)
                     v.evaluateJavascript("document.cookie = 'probe=1; path=/'; 1+1", value -> {
+                        // the page's cookie reaches the browser process's store over a pipe of its own, not the one that carried this result: the first
+                        // getCookie can still see nothing (3 of 4 runs on the x86 PC); asked again for up to 5 s
                         String cookie = android.webkit.CookieManager.getInstance().getCookie(BASE);
+                        for (int i = 0; (cookie == null || !cookie.contains("probe=1")) && i < 50; i++) {
+                            try { Thread.sleep(100); } catch (InterruptedException e) { break; }
+                            cookie = android.webkit.CookieManager.getInstance().getCookie(BASE);
+                        }
                         if (cookie == null || !cookie.contains("probe=1")) { System.out.println("[wv] FAIL cookie set by the page not in CookieManager: " + cookie); return; }
                         if (!changedConfiguration && System.getProperty("hello.wvinput") == null) {
                             // A new ResourcesImpl must retain the registered provider assets.
@@ -56,8 +62,8 @@ public class Main extends Activity {
                 view.setWebChromeClient(new android.webkit.WebChromeClient() {
                     @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage m) { System.out.println("[wv] " + m.message()); return true; }
                 });
-                view.loadDataWithBaseURL(BASE, "<html><body style='margin:0'><input id=f value='word' style='font-size:40px;width:100%;height:100vh'>"
-                        + "<script>f.oninput = () => console.log('value=' + f.value); f.onfocus = () => console.log('focused'); document.onselectionchange = () => console.log('selection=' + f.selectionStart + ',' + f.selectionEnd)</script></body></html>",
+                view.loadDataWithBaseURL(BASE, "<html><body style='margin:0'><input id=f value='" + (System.getProperty("hello.wvsymbols") != null ? "" : "word") + "' style='font-size:40px;width:100%;height:100vh'>"
+                        + "<script>f.onkeydown = e => console.log('key=' + e.key + ' code=' + e.code); f.oninput = () => console.log('value=' + f.value); f.onfocus = () => console.log('focused'); document.onselectionchange = () => console.log('selection=' + f.selectionStart + ',' + f.selectionEnd)</script></body></html>",
                         "text/html", "utf-8", null);
                 return;
             }

@@ -1,0 +1,5 @@
+// Our allow-all access policy for the HIDL service manager (the tree's system/hwservicemanager module libapklayer_hwservicemanager uses it).
+filegroup {
+    name: "apklayer_hwservicemanager_access",
+    srcs: ["AccessControl.cpp"],
+}

@@ -1,0 +1,48 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: MRS TPIDRRO_EL0 reads, CNTPCT_EL0 raises SIGILL
+
+Linux leaves EL0 access to the physical counter off (only CNTVCT_EL0 and CNTFRQ_EL0 are readable) and reads TPIDRRO_EL0 as 0 for a 64-bit task; Berberis answered
+the opposite on both. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+--- a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
++++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+@@ -486,6 +486,7 @@ class Decoder {
+     // Values are computed from the op-field decomposition via SysRegEncoding() so an
+     // encoding can never diverge from its (op0,op1,CRn,CRm,op2) tuple.
+     kTpidrEl0 = SysRegEncoding(3, 3, 13, 0, 2),  // TPIDR_EL0
++    kTpidrroEl0 = SysRegEncoding(3, 3, 13, 0, 3),  // TPIDRRO_EL0 (apklayer patch 0037)
+     kNzcv = SysRegEncoding(3, 3, 4, 2, 0),       // NZCV
+     kFpcr = SysRegEncoding(3, 3, 4, 4, 0),       // FPCR
+     kFpsr = SysRegEncoding(3, 3, 4, 4, 1),       // FPSR
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -585,8 +586,11 @@ class Interpreter {
+         // Counter frequency: 19.2 MHz, the de-facto Android generic-timer rate.
+         // CNTVCT/CNTPCT below are scaled to match, so cntvct/cntfrq = seconds.
+         return 19200000ULL;
+-      case Decoder::SystemReg::kCntvctEl0:
+-      case Decoder::SystemReg::kCntpctEl0: {
++      // apklayer patch (0037): TPIDRRO_EL0 is readable (0 for a 64-bit Linux task); CNTPCT_EL0 is not (Linux leaves EL0PCTEN off: the read
++      // is an undefined instruction, SIGILL, which the default case raises); only CNTVCT_EL0 is.
++      case Decoder::SystemReg::kTpidrroEl0:
++        return 0;
++      case Decoder::SystemReg::kCntvctEl0: {
+         // Monotonic virtual/physical counter backed by the host steady clock,
+         // expressed in 19.2 MHz ticks. __uint128_t intermediate avoids overflow.
+         uint64_t ns = static_cast<uint64_t>(
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region_exec_tests.cc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region_exec_tests.cc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region_exec_tests.cc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region_exec_tests.cc
+@@ -48248,9 +48248,7 @@ TEST_F(Arm64LiteTranslateRegionTest, MrsCounterTimer) {
+   EXPECT_GT(t0, 0ULL);
+   Interpret(0xd53be041U);  // mrs x1, cntvct_el0
+   EXPECT_GE(state_.cpu.x[1], t0);
+-
+-  Interpret(0xd53be021U);  // mrs x1, cntpct_el0
+-  EXPECT_GE(state_.cpu.x[1], t0);
++  // apklayer patch (0037): mrs x1, cntpct_el0 (0xd53be021) is an undefined instruction at EL0 on Linux, like hardware: no read here.
+ }
+ 
+ // DUP (general) from the zero register must broadcast zero, not call

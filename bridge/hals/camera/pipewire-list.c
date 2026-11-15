@@ -1,7 +1,9 @@
 /* The PipeWire camera backend (libapklayer-camera-pipewire.so), its cameras: the desktop's PipeWire video sources (libcamera, V4L2 or any
  * Video/Source node) with the raw sizes they offer, and the sizes they offer only as MJPEG (most USB webcams' larger ones: the provider
  * decodes those). Streams: pipewire.c. Option: role=camera (default: only nodes whose media.role is
- * Camera, as libcamera's and V4L2's are; role=any takes every Video/Source). */
+ * Camera, as libcamera's and V4L2's are; role=any takes every Video/Source). Option mount=[NAME:]DEGREES (repeatable): the camera is
+ * turned with its display (a webcam on a portrait monitor): DEGREES (0, 90, 180, 270) are added to its sensor orientation; NAME: only for
+ * the nodes whose name or description contains it. */
 #include "apklayer/camera.h"
 #include "apklayer/sound_server.h"
 #include "pipewire.h"
@@ -16,6 +18,9 @@
 #include <spa/pod/iter.h>
 
 static int any_role;
+#define MAX_MOUNTS 8
+static struct { char name[64]; int degrees; } mounts[MAX_MOUNTS];  /* name "": every camera */
+static int mount_count;
 
 struct entry {
     struct apklayer_camera_info info;  /* its raw sizes */
@@ -115,6 +120,9 @@ static void on_global(void *data, uint32_t id, uint32_t permissions, const char 
     snprintf(c->name, sizeof c->name, "%s", description ? description : c->id);
     c->facing = location && !strcmp(location, "front") ? APKLAYER_CAM_FRONT : location && !strcmp(location, "back") ? APKLAYER_CAM_BACK : APKLAYER_CAM_EXTERNAL;
     c->orientation = c->facing == APKLAYER_CAM_FRONT ? 270 : 90;  /* upright on the landscape desktop: camera.h */
+    for (int i = 0; i < mount_count; i++)
+        if (!mounts[i].name[0] || (name && strstr(name, mounts[i].name)) || (description && strstr(description, mounts[i].name)))
+            c->orientation = (c->orientation + mounts[i].degrees) % 360;
     c->max_fps = 30;
     /* its formats: asked now, answered before the next roundtrip ends */
     struct pw_node *node = pw_registry_bind(l->registry, id, type, PW_VERSION_NODE, 0);
@@ -144,14 +152,21 @@ int apklayer_camera_probe(void)
 }
 
 const char apklayer_camera_needs[] = "a PipeWire daemon with a camera";
-const char apklayer_camera_options[] = "role\tcamera\ttext\n";  /* camera or any (every video source) */
+const char apklayer_camera_options[] = "role\tcamera\ttext\nmount\t\ttext\n";  /* role: camera or any (every video source); mount: [NAME:]DEGREES */
 
 int apklayer_camera_init(int count, const char *const *options)
 {
     for (int i = 0; i < count; i++) {
         if (!strcmp(options[i], "role=any")) any_role = 1;
         else if (!strcmp(options[i], "role=camera")) any_role = 0;
-        else { fprintf(stderr, "camera pipewire: unknown option %s\n", options[i]); return -EINVAL; }
+        else if (!strncmp(options[i], "mount=", 6)) {
+            const char *v = options[i] + 6, *colon = strrchr(v, ':');
+            char *end;
+            long deg = strtol(colon ? colon + 1 : v, &end, 10);
+            if (*end || deg < 0 || deg % 90 || deg > 270 || mount_count == MAX_MOUNTS || (colon && colon - v >= (long)sizeof mounts[0].name)) return -EINVAL;
+            snprintf(mounts[mount_count].name, sizeof mounts[0].name, "%.*s", colon ? (int)(colon - v) : 0, v);
+            mounts[mount_count++].degrees = deg;
+        } else { fprintf(stderr, "camera pipewire: unknown option %s\n", options[i]); return -EINVAL; }
     }
     return 0;
 }

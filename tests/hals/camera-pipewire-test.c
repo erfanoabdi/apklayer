@@ -37,7 +37,8 @@ int main(int argc, char **argv)
         if (!found) usleep(100000);
     }
     for (int i = 0; i < n; i++)
-        printf("camera %s \"%s\" facing %d, %d sizes, largest %ux%u\n", info[i].id, info[i].name, info[i].facing, info[i].num_sizes,
+        printf("camera %s \"%s\" facing %d, orientation %d, %d sizes, largest %ux%u\n", info[i].id, info[i].name, info[i].facing,
+               info[i].orientation, info[i].num_sizes,
                info[i].sizes[info[i].num_sizes - 1][0], info[i].sizes[info[i].num_sizes - 1][1]);
     if (n < 1) { puts("FAIL no camera"); return 1; }
     struct apklayer_camera_callbacks cb = {NULL, on_frame, on_error};

@@ -4,6 +4,9 @@
 //   atrace [INSTANCE]   IAtraceDevice@1.0 (the test HAL: a small HIDL interface still in the tree): its categories, enableCategories
 //   cameras [INSTANCE]  ICameraProvider@2.4 (default instance internal/0): the camera ids (getCameraIdList only, nothing opened)
 //   codecs [INSTANCE]   media.c2@1.0 IComponentStore (default "default"): the component names (listComponents only)
+//   manager             the instance's own hwservicemanager (libapklayer_hwservicemanager, docs/HIDL.md): getTransport and list of its own entry
+//   local               registers a service of its own (an IBase named "local-native": no VINTF entry, docs/HIDL.md) with the
+//                       instance's hwservicemanager, finds it again with getService and lists it
 // The client commands find the HAL like any HIDL client (IFoo::getService); libhidl asks the host for names in host_hals.conf.
 #include <android/hardware/camera/provider/2.4/ICameraProvider.h>
 #include <android/hardware/media/c2/1.0/IComponentStore.h>
@@ -11,6 +14,7 @@
 #include <android/hidl/manager/1.0/IServiceManager.h>
 #include <hidl/HidlBinderSupport.h>
 #include <hidl/HidlTransportSupport.h>
+#include <hidl/ServiceManagement.h>
 #include <hwbinder/Binder.h>
 #include <hwbinder/IPCThreadState.h>
 #include <hwbinder/ProcessState.h>
@@ -114,6 +118,34 @@ extern "C" int main(int argc, char** argv) {
         printf("codecs: %zu\n", n);
         return r.isOk() && n > 0 ? 0 : 1;
     }
-    fprintf(stderr, "usage: hidltool device | atrace [INSTANCE] | cameras [INSTANCE] | codecs [INSTANCE]\n");
+    if (!strcmp(cmd, "manager")) {
+        const std::string self = "android.hidl.manager@1.0::IServiceManager";
+        sp<IServiceManager> sm = android::hardware::defaultServiceManager();
+        if (sm == nullptr) { printf("manager: none\n"); return 1; }
+        Return<IServiceManager::Transport> transport = sm->getTransport(self, "default");
+        bool listed = false;
+        Return<void> r = sm->list([&](const hidl_vec<hidl_string>& names) {
+            for (const auto& n : names) listed |= std::string(n) == self + "/default";
+        });
+        bool hwbinder = transport.isOk() && transport == IServiceManager::Transport::HWBINDER;
+        printf("manager: transport %s, listed %d\n", hwbinder ? "hwbinder" : "other", listed);
+        return r.isOk() && hwbinder && listed ? 0 : 1;
+    }
+    if (!strcmp(cmd, "local")) {
+        using android::hardware::details::getRawServiceInternal;
+        using android::hardware::details::registerAsServiceInternal;
+        const std::string name = "android.hidl.base@1.0::IBase/local-native";
+        android::hardware::ProcessState::self()->startThreadPool();
+        sp<IBase> own = new IBase();
+        android::status_t reg = registerAsServiceInternal(own, "local-native");
+        sp<IBase> found = getRawServiceInternal(IBase::descriptor, "local-native", false, false);  // in this process: the object itself
+        bool listed = false;
+        sp<IServiceManager> sm = android::hardware::defaultServiceManager();
+        if (sm != nullptr)
+            sm->list([&](const hidl_vec<hidl_string>& l) { for (const auto& n : l) listed |= std::string(n) == name; });
+        printf("local: register %d, found %d, listed %d\n", reg == android::OK, found != nullptr, listed);
+        return reg == android::OK && found != nullptr && listed ? 0 : 1;
+    }
+    fprintf(stderr, "usage: hidltool device | atrace [INSTANCE] | cameras [INSTANCE] | codecs [INSTANCE] | manager | local\n");
     return 2;
 }

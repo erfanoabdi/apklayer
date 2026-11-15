@@ -34,7 +34,12 @@ Setup::State probe(const Cli& cli) {
     for (const auto& row : cli.rows({"list", "--tsv"})) if (field(row, 8) == "1") s.stale.push_back(row);
     std::string file = downloadsDir() + "/releases.json";
     s.error = download(releasesUrl(), file, nullptr);
-    if (s.error.empty()) s.release = parseLatest(readText(file), osCodename(), cpuNames(), s.error);
+    if (s.error.empty()) {
+        s.release = parseLatest(readText(file), osCodename(), cpuNames(), s.error);
+        char exe[4096] = "";
+        ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+        s.release.deb = s.release.package(packageFormat(n > 0 ? std::string(exe, n) : ""));  // release.deb is this host's package: the click on Ubuntu Touch
+    }
     return s;
 }
 
@@ -132,7 +137,7 @@ void Setup::runUpdate(Cli cli, std::shared_ptr<State> s) {
         e = fetch(s->release.deb.url, s->release.deb.sha256, file, [&](double p) { report(what, p); });
         if (e.empty()) {
             report("Installing apklayer " + s->release.version + " (it asks for your password)", -1);
-            Result r = installDeb(file);
+            Result r = file.size() > 6 && file.compare(file.size() - 6, 6, ".click") == 0 ? installClick(file) : installDeb(file);
             if (r.status != 0) e = "The package was not installed: " + summary(r);
         }
         unlink(file.c_str());
@@ -183,12 +188,12 @@ void Setup::runUpdate(Cli cli, std::shared_ptr<State> s) {
     });
 }
 
-void Setup::runSetup(Cli cli, bool microg, bool fdroid) {
+void Setup::runSetup(Cli cli, std::string google, bool fdroid) {
     auto stepLater = [this](std::string id, std::string state, std::string detail, bool running) { post([=, this] { step(id, state, detail, running); }); };
     auto progress = [this](double p) { post([this, p] { ui_->global<Backend>().set_setup_progress(static_cast<float>(p)); }); };
     // the CLI's `setup` does the work; its `step <id> <state> <detail>` lines become the UI's steps
     std::vector<std::string> flags;
-    if (microg) flags.push_back("--microg");
+    if (!google.empty()) flags.push_back("--" + google);  // --microg or --gapps
     if (fdroid) flags.push_back("--fdroid");
     int status = runCliSetup(cli, flags, [&](const std::string& id, const std::string& state, const std::string& detail) {
         if (id == "webview") return;  // no row of its own
@@ -199,14 +204,16 @@ void Setup::runSetup(Cli cli, bool microg, bool fdroid) {
 
 void Setup::wire() {
     auto& b = ui_->global<Backend>();
-    b.on_setup_start([this](bool microg, bool fdroid) {
+    b.on_setup_start([this](slint::SharedString chosen, bool fdroid) {
+        const std::string google(chosen);
         auto& b = ui_->global<Backend>();
         for (size_t i = steps_->row_count(); i-- > 0;)  // a retry: the extras as chosen now
-            if (auto row = steps_->row_data(i); row && (row->id == "microg" || row->id == "fdroid")) steps_->erase(i);
-        if (microg) steps_->push_back(SetupStep{"microg", "microG", "Services and Companion", "", false});
+            if (auto row = steps_->row_data(i); row && (row->id == "microg" || row->id == "gapps" || row->id == "fdroid")) steps_->erase(i);
+        if (google == "microg") steps_->push_back(SetupStep{"microg", "microG", "Services and Companion", "", false});
+        if (google == "gapps") steps_->push_back(SetupStep{"gapps", "Google Play", "Play services and Play Store (LiteGapps)", "", false});
         if (fdroid) steps_->push_back(SetupStep{"fdroid", "F-Droid", "From f-droid.org", "", false});
         b.set_setup_running(true);
-        std::thread([this, cli = cli_, microg, fdroid] { runSetup(cli, microg, fdroid); }).detach();
+        std::thread([this, cli = cli_, google, fdroid] { runSetup(cli, google, fdroid); }).detach();
     });
     b.on_setup_finish([this] {
         std::string m = marker();

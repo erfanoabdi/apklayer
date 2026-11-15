@@ -395,7 +395,7 @@ public final class CodeWriter {
      *  target N". Setting DEX2JVM_FRAME_DEBUG names the offset that caused
      *  the drop, which is the only way to find it without a debugger. */
     private static final boolean FRAME_DEBUG =
-            System.getenv("DEX2JVM_FRAME_DEBUG") != null;
+            false;
 
     /** Re-decodes every StackMapTable this writer produces and fails loudly if
      *  it does not read back as the frames that were handed in. Off by default
@@ -403,7 +403,7 @@ public final class CodeWriter {
      *  to be trusted into a thing that is checked. See
      *  StackMapWriter.roundTripMismatch. */
     private static final boolean FRAME_SELFCHECK =
-            System.getenv("DEX2JVM_FRAME_SELFCHECK") != null;
+            false;
 
     /**
      * How many methods have had their StackMapTable dropped, process wide.

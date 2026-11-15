@@ -29,6 +29,11 @@ run = ["tests/vm/tls.sh"]
 apps = ["hello-recreate"]
 run = ["tests/vm/recreate.sh"]
 
+[fragment]
+# a fragment committed in onCreate has its view at onViewCreated, onStart and onResume, also after recreate() (androidx FragmentActivity's flow; Droid-ify's TabsFragment)
+apps = ["hello-fragment"]
+run = ["tests/vm/fragment.sh"]
+
 [identity-matrix]
 # runtime identity probes for docs/runtime-identity-matrix.md (a measurement: tests/identity/collect.sh compares them with Android)
 apps = ["hello-identity"]
@@ -58,6 +63,11 @@ optional = true
 apps = ["hello-vulkan-arm64"]
 run = ["python3 -u tests/vm/vulkan-present.py hello.vulkan.arm64 hello.vulkan.arm64.Main"]
 
+[threads]
+# thread lifetime stress (create/join/detach/exit/signal/fork, 2000 iterations) of an arm64-only JNI library: the lines are real arm64's (binary_translation 0039)
+apps = ["hello-arm64"]
+run = ["tests/vm/threads.sh"]
+
 [properties]
 run = ["tests/vm/properties.sh"]
 
@@ -75,6 +85,10 @@ run = ["tests/vm/dex2jvm-stub.sh"]
 [reconvert]
 run = ["tests/vm/reconvert.sh"]
 
+[pamcheck]
+# the lock screen's password check through any PAM stack (temporary services in /etc/pam.d, needs sudo -n)
+run = ["tests/vm/pamcheck.sh"]
+
 [keystore]
 apps = ["hello-keystore", "hello-keystore-other"]
 run = ["tests/vm/keystore.sh", "python3 -u tests/vm/keystore-auth.py"]
@@ -91,6 +105,10 @@ run = ["tests/vm/devices.sh"]
 [camera]
 apps = ["hello-camera"]
 run = ["tests/vm/camera.sh", "tests/vm/camera-reload.sh", "python3 -u tests/vm/camera-portrait.py", "CAMERA1=1 python3 -u tests/vm/camera-portrait.py"]
+
+[camera-ndk]  # the NDK camera API (Android's libcamera2ndk) from a native app
+apps = ["hello-camera-ndk"]
+run = ["tests/vm/camera-ndk.sh"]
 
 [camera-pipewire]  # a camera node on the desktop's PipeWire (other instances' PipeWire backends see it while it runs)
 apps = ["hello-camera"]
@@ -136,10 +154,10 @@ alone = true
 
 [permissions]  # the runtime permission prompt and role requests (HubPermissionPrompt): answers by test input, kept for the manager
 apps = ["hello-permissions"]
-run = ["python3 -u tests/vm/permissions.py", "python3 -u tests/vm/permission-mobile.py"]
+run = ["python3 -u tests/vm/permissions.py", "python3 -u tests/vm/permission-mobile.py", "python3 -u tests/vm/permission-location.py"]
 
 [host-binder]
-run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
+run = ["python3 tests/vm/host-binder.py", "g++ -std=c++20 -I common tests/native/halium-detect.cpp -o /tmp/halium-detect-$APKLAYER_INSTANCE && /tmp/halium-detect-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/halium-detect-$APKLAYER_INSTANCE; exit $r"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
 
 [host-binder-kernel]  # the same on the kernel's binder (apklayer binder kernel, the option next to the userspace default)
 binder = "kernel"
@@ -149,7 +167,7 @@ run = ["python3 tests/vm/host-binder.py"]
 apps = ["hello-files"]
 needs = ["com.android.externalstorage", "com.android.providers.media.module"]  # the storage provider it queries; VOLUMES=1 reads MediaStore
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
-run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh"]
+run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh", "SCOPED=1 tests/vm/files.sh", "LIBCORE=1 tests/vm/files.sh"]
 
 [volumes]  # a vfat loop image mounted at /media/<user>/<label> and removed while hello-files runs (root: sudo -n, or sudo -A with SUDO_ASKPASS)
 apps = ["hello-files"]
@@ -182,7 +200,7 @@ run = ["unshare --user --map-users=100500:$(id -u):1 --map-groups=100500:$(id -g
 
 [system-apps]
 apps = ["hello-system", "hello-accounts", "hello-accounts-hidden", "hello-rotated"]  # signing reads hello-rotated; the accounts scenario shows its account to the one and not the other
-needs = ["com.android.providers.contacts", "com.android.documentsui"]
+needs = ["com.android.providers.settings", "com.android.providers.contacts", "com.android.providers.userdictionary", "com.android.providers.calendar", "com.android.providers.downloads", "com.android.externalstorage", "com.android.providers.media.module", "com.android.documentsui"]
 run = ["tests/vm/system-apps.sh"]
 
 [first-start]
@@ -223,6 +241,11 @@ run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py 
 apps = ["hello-sharedlib", "hello-sharedlib-old"]
 run = ["tests/vm/sharedlib.sh"]
 
+[hidl]
+# HIDL for old system apps (docs/HIDL.md): the instance's hwservicemanager and the framework's HwBinder JNI; hello-hidl asks IServiceManager through them
+apps = ["hello-hidl"]
+run = ["tests/vm/hidl.sh"]
+
 [installer]
 apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries the payload APKs (hello-payload with config and ABI splits, hello-payload2, hello-payload-other, hello-installer2) as assets
 run = ["python3 -u tests/vm/installer.py"]
@@ -240,7 +263,7 @@ run = ["python3 -u tests/vm/hub.py pendingintents broadcast", "python3 -u tests/
 
 [notifications]
 apps = ["hello-nt-poster"]
-run = ["python3 -u tests/vm/hub.py notifications click", "python3 -u tests/vm/hub.py notifications cancel", "python3 -u tests/vm/hub.py notifications muted", "python3 -u tests/vm/hub.py notifications channels"]
+run = ["python3 -u tests/vm/hub.py notifications click", "python3 -u tests/vm/hub.py notifications cancel", "python3 -u tests/vm/hub.py notifications muted", "python3 -u tests/vm/hub.py notifications channels", "python3 -u tests/vm/hub.py notifications settings"]
 
 [broadcasts]
 apps = ["hello-bc-receiver", "hello-bc-sender", "hello-bc-denied"]
@@ -274,7 +297,7 @@ run = ["python3 -u tests/vm/hub.py webview probe"]
 [webview-input]
 apps = ["hello-wvprobe"]
 needs = ["com.android.webview"]
-run = ["python3 -u tests/vm/webview-input.py"]
+run = ["python3 -u tests/vm/webview-input.py", "python3 -u tests/vm/symbol-keys.py webview"]
 
 [splash]
 needs = ["com.android.test.uibench"]
@@ -283,6 +306,10 @@ run = ["python3 -u tests/vm/splash.py"]
 [dialog-resize]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/dialog-resize.py"]
+
+[window-output]  # an app sees its window's output (two virtual monitors of a headless GNOME Shell), an output change reaches it at once
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/window-output.py"]
 
 [window-geometry]
 needs = ["com.android.test.uibench"]
@@ -293,10 +320,22 @@ needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py --mobile", "python3 -u tests/vm/fullscreen-key.py"]
 
 [decoration]
-# server-side title bars under sway (headless, its own socket): needs sway on the VM
+# server-side title bars under sway (headless, its own socket) when sway is on the VM, else under the desktop's own compositor if it has xdg-decoration (KDE)
 needs = ["com.android.test.uibench"]
 optional = true
 run = ["python3 -u tests/vm/decoration.py"]
+
+[kde-window]
+# KDE Plasma's KWin (the desktop session) drives the window: maximize, fullscreen, quick tile, script-set size, minimize, close; the shell's configures must match KWin's geometry
+needs = ["com.android.test.uibench"]
+optional = true
+run = ["python3 -u tests/vm/kde-window.py"]
+
+[kde-output]
+# two outputs of different scale under a KWin of its own (kwin_wayland --virtual): the window moves between them, one is disabled; the scale follows
+needs = ["com.android.test.uibench"]
+optional = true
+run = ["python3 -u tests/vm/kde-output.py"]
 
 [mobile]  # also the hub's questions as full-screen pages in the mobile style (permission-mobile.py)
 needs = ["com.android.test.uibench"]
@@ -319,9 +358,23 @@ needs = ["com.android.test.uibench"]
 setup = ["locale -a | grep -qx nl_NL.utf8 || sudo -n locale-gen nl_NL.UTF-8 >/dev/null"]
 run = ["python3 -u tests/vm/gpu-smoke.py", "LANG=nl_NL.UTF-8 LC_ALL=nl_NL.UTF-8 python3 -u tests/vm/gpu-smoke.py", "python3 -u tests/vm/hwbitmap.py"]
 
+[gpu-import-fail]
+# a failing dmabuf import of a window frame (forced: APKLAYER_RUNTIME_DEBUG=egl-import-fail) falls back to a CPU copy; the frames still reach the compositor
+needs = ["com.android.test.uibench"]
+run = ["APKLAYER_RUNTIME_DEBUG=egl-import-fail python3 -u tests/vm/gpu-smoke.py"]
+
+[gles1]
+# an OpenGL ES 1 app (GLSurfaceView's default context): the host driver's libGLESv1_CM (NVIDIA, Mesa with ES 1) or libapklayer-gles1's translator
+apps = ["hello-gles1"]
+run = ["python3 -u tests/vm/gles1.py"]
+
 [gfx-readback]
 # the GPU copy of buffers the CPU cannot map (readback.c: NVIDIA's tiled window and capture buffers), every format it moves, tiled and LINEAR
 run = ["b/bridge/hals/graphics/readback-test"]
+
+[vulkan-select]
+# the instance-GPU Vulkan filter (DeviceSelect.h): a fake device list, then the host's real loader (render node -> that GPU only, no-driver node -> CPU device)
+run = ["b/bridge/hals/graphics/vulkan-select-test real"]
 
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)
@@ -360,9 +413,17 @@ run = ["python3 -u tests/vm/vulkan-present.py"]
 needs = ["org.godotengine.editor.v4"]
 run = ["python3 -u tests/vm/godot-vulkan.py"]
 
+[logs]  # the launch's app log and its size cap (cli/logs.cpp, cli/logcap.h)
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/logs.py", "g++ -std=c++17 -I cli tests/native/log-cap.cpp -o /tmp/log-cap-$APKLAYER_INSTANCE && /tmp/log-cap-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/log-cap-$APKLAYER_INSTANCE; exit $r", "g++ -std=c++17 -I cli tests/native/detach-stdout.cpp cli/util.cpp cli/unit.cpp -o /tmp/detach-stdout-$APKLAYER_INSTANCE && /tmp/detach-stdout-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/detach-stdout-$APKLAYER_INSTANCE; exit $r"]
+
 [input]
 apps = ["hello-input", "hello-system"]  # hello.system's Ime: the Android input method bound to hello.input's field (ime-bind)
-run = ["python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
+run = ["cc -o b/utf16-offsets tests/vm/utf16-offsets.c && b/utf16-offsets", "python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/symbol-keys.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/stopped-windows.py translucent", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/ime-fields.py", "python3 -u tests/vm/ime-insets.py", "python3 -u tests/vm/bottom-sheet.py"]
+
+[input-lang]  # other scripts: xkb layouts (ru, ara, ir, dead keys), Ctrl+A on any layout, IME commits, byte-counted deletion, glyphs not tofu
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/input-lang.py"]
 
 [magnifier]
 apps = ["hello-input"]
@@ -453,6 +514,27 @@ optional = true
 alone = true
 mac = ["python3 tests/corpus/run.py"]
 
+[corpus-aurora]
+# real Aurora Store: onboarding clicks, anonymous login and a Google Play search over HTTPS; the result list's texts come from the host's `views` step
+# (Compose's accessibility nodes). Needs the network and Google accepting an anonymous token
+optional = true
+needs = ["com.aurora.store"]
+run = ["python3 -u tests/corpus/aurora-search.py"]
+
+[corpus-fdroid]
+# real F-Droid client 2.0, offline: a one-app repository served by the test (index-v2, entry.jar signed with a throw-away key) -> its app page offers Update ->
+# the update installs through the hub's PackageInstaller (hello-installer 1 -> 2) -> Uninstall in the page's menu removes it
+optional = true
+apps = ["hello-installer"]
+needs = ["org.fdroid.fdroid"]
+run = ["python3 -u tests/corpus/fdroid-flow.py"]
+
+[corpus-telegram]
+# real Telegram FOSS: the intro screen's Start Messaging button leads to the Your Phone page (no login)
+optional = true
+needs = ["org.telegram.messenger"]
+run = ["python3 -u tests/corpus/telegram-intro.py"]
+
 [fennec]
 optional = true  # its page-text check fails on virgl hosts (ints set in shader branches come back as NaN: tests/vm/gles-int-branch.c)
 needs = ["org.mozilla.fennec_fdroid"]
@@ -472,7 +554,7 @@ run = ["tests/vm/newpipe-media.sh"]
 [sandbox]
 optional = true  # needs tools/host-setup/sandbox.sh once (uidmap, subordinate ids, the AppArmor profile, render nodes)
 apps = ["hello-sandbox"]
-run = ["tests/vm/sandbox.sh"]
+run = ["tests/vm/sandbox.sh", "g++ -std=c++20 tests/native/nvidia-modprobe.cpp -o /tmp/nvidia-modprobe-$APKLAYER_INSTANCE && /tmp/nvidia-modprobe-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/nvidia-modprobe-$APKLAYER_INSTANCE; exit $r"]  # the second: the NVIDIA node -> nvidia-modprobe arguments of the broker
 
 [otr2-probe]
 # the same with the window scale changed while the game runs (100 -> 200 -> 100 %), tap and click
@@ -490,3 +572,32 @@ run = ["python3 -u tests/vm/otr2-input.py aspect"]
 [art-maps]
 apps = ["hello-arm64"]
 run = ["python3 -u tests/vm/art-maps.py"]
+
+[spawn]  # a program started from the app JVM (ProcessBuilder) takes no second: exec_preload, jspawnhelper and the path layer
+apps = ["hello-spawn"]
+run = ["tests/vm/spawn.sh"]
+
+[acediff]
+# the arm64 translator against real arm64: tests/apps/hello-acediff prints one line per instruction family / signal behaviour; real-arm64.txt is the output of the same code on real hardware
+apps = ["hello-acediff"]
+run = ["tests/vm/acediff.sh"]
+
+[termux-sandbox]
+# real Termux (a user-supplied APK) in the per-app sandbox: its first launch bootstraps /data/data/com.termux/files (an own uid, a mount view of its own), then the
+# corpus probes: owner names and getprop, hardware punctuation, exec failures, the environment of children. Needs tools/host-setup/sandbox.sh once
+optional = true
+needs = ["com.termux"]
+run = ["export APKLAYER_SANDBOX=1; APKLAYER_JOPTS=-Dapklayer.runms=45000 bin/apklayer run com.termux >$APKLY_STATE/termux-boot.out 2>&1; bin/apklayer stop >/dev/null 2>&1; python3 -u tests/corpus/termux-sys.py && python3 -u tests/corpus/termux-exec.py && python3 -u tests/corpus/termux-env.py"]
+
+[resize-frame]  # a new frame of the new size reaches the compositor after every window resize, also in a burst (hello-input draws nothing by itself)
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/resize-frame.py"]
+
+[input-wheel-pen]  # the wheel's notches and fractions (AXIS_VSCROLL/HSCROLL) and a stylus's axes through the shell's test input
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/input-wheel-pen.py"]
+
+[open-files]
+# the files an app's manifest opens, from the desktop: .desktop MimeType= and mime package, `apklayer open` (a content Uri, onNewIntent), docs/FILE-ASSOCIATIONS.md
+apps = ["hello-openfile"]
+run = ["python3 -u tests/vm/open-files.py"]

@@ -1,0 +1,149 @@
+From: apklayer
+Subject: [PATCH] libhidl: the host-forwarding stand-in sends the rest to the instance's own hwservicemanager
+
+apklayer patch (docs/PATCHES.md, docs/HIDL.md, docs/HALIUM.md). An instance with host HALs (Halium: camera/media/graphics = device) keeps
+libhidl's NoHwServiceManager stand-in (libhwbinder takes the real manager only when /system/bin/hwservicemanager exists, and then
+the stand-in's forwarding of the host's names is gone). Next to it the stack now runs libapklayer_hwservicemanager and writes
+/data/apklayer/hwservicemanager.local; with that marker every call of the stand-in that is not for a host HAL (get, add, addWithChain, getTransport,
+list, listByInterface, listManifestByInterface, (un)registerForNotifications, client callbacks, tryUnregister) goes to the instance's context
+manager (ProcessState::self(), not the host one), and the stand-in's old answers apply when it does not answer. Rebuild: `m libhidlbase`.
+Against system/libhidl 061055fc4dad (REVISION), after 0001-0003. Apply: patches/apply aosp <LineageOS tree>.
+---
+--- a/transport/ServiceManagement.cpp
++++ b/transport/ServiceManagement.cpp
+@@ -201,8 +201,18 @@
+ namespace details {
+ static bool isHostHal(const std::string& fqName);
+ static sp<IServiceManager1_2> hostServiceManager();
++static sp<IServiceManager1_2> localServiceManager();
+ }  // namespace details
+ 
++// apklayer patch (libhidl 0004): an instance with host HALs also runs its own hwservicemanager (docs/HIDL.md, Halium), which is not libhwbinder's
++// default (no /system/bin/hwservicemanager, so the host-forwarding stand-in below stays); what is not the host's goes to it. Not run
++// (no marker file), or not answering: the stand-in's old answers.
++#define APKLAYER_LOCAL(CALL, ...)                                         \
++    if (sp<IServiceManager1_2> local = details::localServiceManager()) {  \
++        auto r = local->CALL(__VA_ARGS__);                                \
++        if (r.isOk()) return r;                                           \
++    }
++
+ /*
+  * A replacement for hwservicemanager when it is not installed on a device.
+  *
+@@ -213,16 +223,19 @@
+  * registered.
+  */
+ struct NoHwServiceManager : public IServiceManager1_2, hidl_death_recipient {
+-    Return<sp<IBase>> get(const hidl_string& fqName, const hidl_string&) override {
++    Return<sp<IBase>> get(const hidl_string& fqName, const hidl_string& name) override {
+         sp<IBase> ret = nullptr;
+ 
+         if (isServiceManager(fqName)) {
+             ret = defaultServiceManager1_2();
++        } else {
++            APKLAYER_LOCAL(get, fqName, name)  // apklayer patch
+         }
+         return ret;
+     }
+ 
+-    Return<bool> add(const hidl_string& name, const sp<IBase>& /* service */) override {
++    Return<bool> add(const hidl_string& name, const sp<IBase>& service) override {
++        APKLAYER_LOCAL(add, name, service)  // apklayer patch
+         LOG(INFO) << "Cannot add " << name << " without hwservicemanager";
+         return false;
+     }
+@@ -237,12 +250,14 @@
+         if (isServiceManager(fqName)) {
+             return Transport::HWBINDER;
+         }
++        APKLAYER_LOCAL(getTransport, fqName, name)  // apklayer patch
+         LOG(INFO) << "Trying to get transport of " << fqName << "/" << name
+                   << " without hwservicemanager";
+         return Transport::EMPTY;
+     }
+ 
+     Return<void> list(list_cb _hidl_cb) override {
++        APKLAYER_LOCAL(list, _hidl_cb)  // apklayer patch
+         _hidl_cb({});
+         LOG(INFO) << "Cannot list all services without hwservicemanager";
+         return Void();
+@@ -251,6 +266,7 @@
+         if (details::isHostHal(fqName)) {  // apklayer patch
+             if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->listByInterface(fqName, _hidl_cb);
+         }
++        APKLAYER_LOCAL(listByInterface, fqName, _hidl_cb)  // apklayer patch
+         _hidl_cb({});
+         LOG(INFO) << "Cannot list service " << fqName << " without hwservicemanager";
+         return Void();
+@@ -280,6 +296,7 @@
+         if (details::isHostHal(fqName)) {  // apklayer patch: the host's hwservicemanager notifies (at once for what is registered already)
+             if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->registerForNotifications(fqName, name, callback);
+         }
++        APKLAYER_LOCAL(registerForNotifications, fqName, name, callback)  // apklayer patch
+         LOG(INFO) << "Will not get any notifications for " << fqName << "/" << name
+                   << " without hwservicemanager but keeping the callback.";
+         if (callback == nullptr) {
+@@ -322,6 +339,7 @@
+         if (details::isHostHal(fqName)) {  // apklayer patch
+             if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->unregisterForNotifications(fqName, name, callback);
+         }
++        APKLAYER_LOCAL(unregisterForNotifications, fqName, name, callback)  // apklayer patch
+         auto ret = mServiceNotifications[static_cast<std::string>(fqName) + "/" +
+                                          static_cast<std::string>(name)]
+                            .erase(callback);
+@@ -334,17 +352,20 @@
+     }
+ 
+     Return<bool> registerClientCallback(const hidl_string& fqName, const hidl_string& name,
+-                                        const sp<IBase>&, const sp<IClientCallback>&) {
++                                        const sp<IBase>& service, const sp<IClientCallback>& callback) {
++        APKLAYER_LOCAL(registerClientCallback, fqName, name, service, callback)  // apklayer patch
+         LOG(INFO) << "Cannot add client callback for " << fqName << "/" << name
+                   << " without hwservicemanager";
+         return false;
+     }
+-    Return<bool> unregisterClientCallback(const sp<IBase>&, const sp<IClientCallback>&) {
++    Return<bool> unregisterClientCallback(const sp<IBase>& service, const sp<IClientCallback>& callback) {
++        APKLAYER_LOCAL(unregisterClientCallback, service, callback)  // apklayer patch
+         LOG(INFO) << "Cannot unregister client callbacks without hwservicemanager";
+         return false;
+     }
+-    Return<bool> addWithChain(const hidl_string& fqName, const sp<IBase>&,
+-                              const hidl_vec<hidl_string>&) {
++    Return<bool> addWithChain(const hidl_string& fqName, const sp<IBase>& service,
++                              const hidl_vec<hidl_string>& chain) {
++        APKLAYER_LOCAL(addWithChain, fqName, service, chain)  // apklayer patch
+         LOG(INFO) << "Cannot add " << fqName << " with chain without hwservicemanager";
+         return false;
+     }
+@@ -369,11 +390,13 @@
+                 return Void();
+             }
+         }
++        APKLAYER_LOCAL(listManifestByInterface, fqName, _hidl_cb)  // apklayer patch
+         LOG(INFO) << "Cannot list manifest for " << fqName << " without hwservicemanager";
+         return Void();
+     }
+     Return<bool> tryUnregister(const hidl_string& fqName, const hidl_string& name,
+-                               const sp<IBase>&) {
++                               const sp<IBase>& service) {
++        APKLAYER_LOCAL(tryUnregister, fqName, name, service)  // apklayer patch
+         LOG(INFO) << "Cannot unregister service " << fqName << "/" << name
+                   << " without hwservicemanager";
+         return false;
+@@ -958,6 +981,15 @@
+     return fromBinder<IServiceManager1_2, BpHwServiceManager, BnHwServiceManager>(host->getContextObject(nullptr));
+ }
+ 
++// the instance's own hwservicemanager (libhidl 0004): the stack writes its marker where host_hals.conf is
++static sp<IServiceManager1_2> localServiceManager() {
++    using android::hidl::manager::V1_2::BnHwServiceManager;
++    using android::hidl::manager::V1_2::BpHwServiceManager;
++    static const bool run = access("/data/apklayer/hwservicemanager.local", F_OK) == 0;
++    if (!run) return nullptr;
++    return fromBinder<IServiceManager1_2, BpHwServiceManager, BnHwServiceManager>(ProcessState::self()->getContextObject(nullptr));
++}
++
+ static sp<IBase> hostHal(const std::string& descriptor, const std::string& instance) {
+     if (!isHostHal(descriptor)) return nullptr;
+     // get() is IServiceManager 1.0's: every host since Android 8 answers it

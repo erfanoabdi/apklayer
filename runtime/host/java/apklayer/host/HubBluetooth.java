@@ -92,6 +92,14 @@ final class HubBluetooth {
     private record Asking(int pid, Thread thread) {}
     private final java.util.Map<String, Asking> asking = new java.util.concurrent.ConcurrentHashMap<>();  // address -> the app asking and the thread showing its question
 
+    /** The app is gone: the dispatchers of its server sockets (bluez.py serve, keyed by its pid) end, which drops their service records at BlueZ; their
+     *  own end (the last waiting listener's) misses an app that dies between accepts. */
+    void died(HubDirectory.Peer peer) {
+        String key = "apklayer-bt-" + peer.pid() + "-";
+        ProcessHandle.allProcesses().filter(p -> p.info().arguments().map(a -> a.length >= 5 && a[a.length - 5].equals("serve") && a[a.length - 1].startsWith(key)).orElse(false))
+                .forEach(p -> { System.out.println("[apklayer-hub] bluetooth: ended the service record of " + peer.name() + " pid=" + peer.pid()); p.destroy(); });
+    }
+
     /** The adapter's power as ACTION_STATE_CHANGED broadcasts; from the first session on (no Bluetooth user, no BlueZ client). */
     private synchronized void watch() throws IOException {
         if (watcher != null) return;

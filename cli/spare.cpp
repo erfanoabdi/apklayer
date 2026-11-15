@@ -79,7 +79,7 @@ void forward(int sig) { if (forwardTo > 0) kill(forwardTo, sig); forwarded = 1; 
 
 // A launch's own environment, which the runtime reads after its target: a spare gets it with the target (spare_target.c sets it, Java reads
 // -Dapklayer.env.<name>), a cold JVM in its environment. Neither in the key nor in the spare's own environment.
-const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_INTENT_TEXT", "APKLAYER_RESULT_FILE", "APKLAYER_COMPONENT_HOST", "APKLAYER_ISOLATED", "APKLAYER_PROCESS"};
+const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_INTENT_TEXT", "APKLAYER_RESULT_FILE", "APKLAYER_COMPONENT_HOST", "APKLAYER_ISOLATED", "APKLAYER_PROCESS", "APKLAYER_CWD"};
 // What differs from launch to launch and the runtime never reads: the JOPTS (in argv, but the launch's own late ones), a desktop launcher's
 // activation token, pipes of the process that started the launch (the hub's ready pipe, a launch's started pipe), the login session's and the shell's bookkeeping
 const std::set<std::string> kIgnoredEnv = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID", "APKLAYER_HUB_READY_FD", "APKLAYER_STARTED_FD",
@@ -89,7 +89,11 @@ const std::set<std::string> kIgnoredEnv = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOK
                                            // who started the launch (lomiri-app-launch's identity of apklayer-manager or of a drawer entry, the
                                            // manager's scale), not the app: the spare the hub started has none of them
                                            "APP_ID", "APP_DESKTOP_FILE_PATH", "APP_EXEC", "APP_URIS", "DESKTOP_FILE_HINT", "XDG_SESSION_TYPE",
-                                           "SLINT_SCALE_FACTOR"};
+                                           "SLINT_SCALE_FACTOR",
+                                           // the terminal's own (a launch from another terminal or tab is the same app)
+                                           "WINDOWID", "TERM_SESSION_ID", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM", "STY", "TMUX", "TMUX_PANE",
+                                           "KONSOLE_DBUS_SESSION", "KONSOLE_DBUS_WINDOW", "KONSOLE_DBUS_SERVICE", "VTE_VERSION", "GNOME_TERMINAL_SCREEN",
+                                           "GNOME_TERMINAL_SERVICE", "ITERM_SESSION_ID", "LC_TERMINAL", "LC_TERMINAL_VERSION", "WT_SESSION"};
 
 // The first entry (NUL-separated) in which a launch's key differs from the spare's: why a spare could not take it.
 std::string firstDifference(const std::string& spare, const std::string& launch) {
@@ -216,6 +220,10 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::s
     fcntl(pair[1], F_SETFD, 0);
     Spawn jvm;
     jvm.argv = argv;
+    // JDK 25 without an AOT cache: this idle spare records, and trains headless (CdsDump.trainSpare); the key above has no part of it, so a launch can still take it
+    for (const std::string& a : argv)
+        if (a.rfind("-Dapklayer.cdsdump=", 0) == 0 && a.size() > 4 && a.compare(a.size() - 4, 4, ".aot") == 0 && !exists(a.substr(19)))
+            jvm.argv.insert(jvm.argv.begin() + 1, {"-XX:AOTMode=record", "-XX:AOTConfiguration=" + a.substr(19) + "conf." + std::to_string(getpid())});
     jvm.argv.push_back("--spare");
     jvm.env = ne.env;
     jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);
@@ -269,6 +277,10 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::s
     fflush(stdout);
     sendWithFds(launch, "pid " + std::to_string(pid), nullptr, 0);
     int status = 0;
+    // the launcher sends nothing more: its socket closing first means it died (SIGKILL), and the JVM it took ends with it
+    pollfd live[2] = {{launch, POLLIN, 0}, {exited, POLLIN, 0}};
+    while (poll(live, 2, -1) < 0 && errno == EINTR) {}
+    if (!live[1].revents) kill(pid, SIGKILL);
     while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
     sendWithFds(launch, "exit " + std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status)), nullptr, 0);
     return 0;

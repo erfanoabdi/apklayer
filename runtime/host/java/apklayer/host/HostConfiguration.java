@@ -42,12 +42,20 @@ final class HostConfiguration {
         }
     }
 
-    /** The desktop session's lock (the hub's "locked", logind's LockedHint): KeyguardManager.isKeyguardLocked and isDeviceLocked, as TrustManager has them. */
-    private static void locked(boolean locked) {
+    private static volatile boolean desktopLocked;
+
+    /**
+     * The desktop session's lock (the hub's "locked", logind's LockedHint): KeyguardManager.isKeyguardLocked, and isDeviceLocked as TrustManager has it:
+     * only with a credential set (isDeviceSecure; HostKeyStore.lockScreen sets it once the instance's credential is known, then calls relock).
+     */
+    private static void locked(boolean locked) { desktopLocked = locked; relock(); }
+
+    static void relock() {
+        boolean locked = desktopLocked, deviceLocked = locked && Boolean.TRUE.equals(org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceSecure"));
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isKeyguardLocked", locked);
-        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceLocked", locked);
+        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceLocked", deviceLocked);
         java.util.Set<Integer> users = org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "deviceLockedForUsers");
-        if (locked) users.add(android.os.UserHandle.myUserId()); else users.remove(android.os.UserHandle.myUserId());
+        if (deviceLocked) users.add(android.os.UserHandle.myUserId()); else users.remove(android.os.UserHandle.myUserId());
     }
 
     private static int apply(Bundle next) {
@@ -103,6 +111,8 @@ final class HostConfiguration {
         screen = bounds;
     }
 
+    private static android.graphics.Rect notifiedScreen;  // the screen the listeners last knew
+
     private static void apply() {
         StringBuilder extra = new StringBuilder();
         String locale = settings.getString("locale");
@@ -125,6 +135,11 @@ final class HostConfiguration {
             c.windowConfiguration.setMaxBounds(screen);
             c.seq = 0;  // unsequenced: always applied
             android.app.ResourcesManager.getInstance().applyConfigurationToResources(c, null);
+            if (notifiedScreen != null && !screen.equals(notifiedScreen)) {  // the screen changed (another output, a hotplug): DisplayListener.onDisplayChanged now
+                try { android.hardware.display.DisplayManagerGlobal.getInstance().handleDisplayChangeFromWindowManager(android.view.Display.DEFAULT_DISPLAY); }
+                catch (RuntimeException e) { System.out.println("[apklayer] display change not announced: " + e); }
+            }
+            notifiedScreen = new android.graphics.Rect(screen);
         }
         // not a qualifier, and the qualifiers' configuration leaves it undefined (0), which keeps the last one: set every time, 1 included
         RuntimeEnvironment.setFontScale(settings.getFloat("fontScale", 1f));

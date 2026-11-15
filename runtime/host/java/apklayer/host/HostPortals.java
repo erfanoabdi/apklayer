@@ -82,6 +82,21 @@ final class HostPortals {
         return true;
     }
 
+    /** ACTION_APP_NOTIFICATION_SETTINGS: the hub's notification page of this app (HubPermissionPrompt.notificationSettings); RESULT_OK when it was closed. */
+    static boolean notificationSettings(Intent intent, android.app.Activity requester, boolean wantsResult) {
+        if (!android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS.equals(intent.getAction())) return false;
+        Thread asking = new Thread(() -> {
+            try { if (HubClient.connected()) HubClient.current().notificationSettings(); }
+            catch (RuntimeException noHub) { System.out.println("[apklayer] notification settings failed: " + noHub); }
+            requester.runOnUiThread(() -> {
+                if (wantsResult && !requester.isDestroyed()) ((ShadowActivity) Shadow.extract(requester)).receiveResult(intent, android.app.Activity.RESULT_OK, null);
+            });
+        }, "notification-settings");
+        asking.setDaemon(true);
+        asking.start();
+        return true;
+    }
+
     /** KeyguardManager.createConfirmDeviceCredentialIntent (Settings' ConfirmDeviceCredentialActivity): the desktop's login password in the hub's
      *  dialog (HubLockScreen.confirm); RESULT_OK once it verified the credential, so keys with an authentication timeout work. */
     static boolean confirmCredential(Intent intent, android.app.Activity requester, boolean wantsResult) {
@@ -120,7 +135,7 @@ final class HostPortals {
             System.out.println("[apklayer] role " + role + (held ? " held" : " not given"));
             boolean given = held;
             requester.runOnUiThread(() -> {
-                // shortcut: the role is held by this process only (ShadowRoleManager), asked again after a restart; keep it in the hub when an app needs it kept
+                // the hub recorded it (HostRoles.record): the app's next start holds it again
                 if (given) Shadows.shadowOf(application.getSystemService(RoleManager.class)).addHeldRole(role);
                 if (wantsResult && !requester.isDestroyed())
                     ((ShadowActivity) Shadow.extract(requester)).receiveResult(intent, given ? android.app.Activity.RESULT_OK : android.app.Activity.RESULT_CANCELED, null);
@@ -142,7 +157,7 @@ final class HostPortals {
         String action = intent.getAction();
         return action == null || Intent.ACTION_VIEW.equals(action) || Intent.ACTION_CHOOSER.equals(action) || isPicker(intent)
                 || Set.of(PackageManager.ACTION_REQUEST_PERMISSIONS, RoleManager.ACTION_REQUEST_ROLE, Intent.ACTION_INSTALL_PACKAGE, Intent.ACTION_DELETE, Intent.ACTION_UNINSTALL_PACKAGE,
-                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.app.KeyguardManager.ACTION_CONFIRM_DEVICE_CREDENTIAL,
+                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS, android.app.KeyguardManager.ACTION_CONFIRM_DEVICE_CREDENTIAL,
                         android.app.KeyguardManager.ACTION_CONFIRM_DEVICE_CREDENTIAL_WITH_USER).contains(action);
     }
 

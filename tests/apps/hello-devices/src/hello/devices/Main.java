@@ -39,7 +39,9 @@ public final class Main extends Activity {
                     for (RouteInfo r : link == null ? java.util.List.<RouteInfo>of() : link.getRoutes()) defaultRoute |= r.isDefaultRoute();
                     System.out.println("[dev] link handle=" + network.getNetworkHandle() + " iface=" + (link == null ? null : link.getInterfaceName()) + " v4=" + v4.toString().trim()
                             + " defaultRoute=" + defaultRoute + " dns=" + (link == null ? null : link.getDnsServers()) + " mtu=" + (link == null ? -1 : link.getMtu())
-                            + " internet=" + (nc != null && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)));
+                            + " internet=" + (nc != null && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+                            + " transport=" + (nc == null ? "none" : nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ? "vpn" : nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ? "wifi" : nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ? "ethernet" : "other")
+                            + " active=" + network.equals(cm.getActiveNetwork()));
                 }
                 System.out.println("[dev] usb devices=" + getSystemService(UsbManager.class).getDeviceList().size());
                 LocationManager lm = getSystemService(LocationManager.class);

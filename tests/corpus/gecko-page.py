@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Runs on the test VM in an instance where real Fennec (org.mozilla.fennec_fdroid) is installed: Gecko (not Android WebView) opens a local page,
 its JavaScript reports back after three animation frames (value=42), and `apklayer screenshot` must show the page's red square (content painted,
-not only the toolbar). Uses a test-only onboarding-done profile (preferences as tests/vm/fennec-media.sh sets them).
+not only the toolbar). Uses a test-only onboarding-done profile (preferences as tests/vm/fennec-media.sh sets them); GECKO_PAGE_FIRST_RUN=1 leaves the profile as it is (a real first run).
 Usage (instance environment, repo root): python3 tests/corpus/gecko-page.py. Files: instance.OUT/gecko-page.{log,png}."""
 import http.server
 import os
@@ -22,12 +22,12 @@ data = Path(dict(line.split('\t', 1) for line in info.splitlines() if '\t' in li
 assert '/%s/app-data/' % instance.INSTANCE in str(data), data
 prefs = data / 'app/shared_prefs'
 prefs.mkdir(parents=True, exist_ok=True)
-for file, entries in {
+for file, entries in ({} if os.environ.get('GECKO_PAGE_FIRST_RUN') else {
         'fenix.onboarding.xml': [('int', 'fenix.onboarding.last_version', '1')],
         'fenix_preferences.xml': [('boolean', 'pref_key_terms_accepted', 'true'), ('int', 'pref_key_terms_accepted_version', '5'),
                                   ('long', 'pref_key_terms_accepted_date', str(int(time.time() * 1000))),
                                   ('long', 'pref_key_onboarding_completed_timestamp', str(int(time.time() * 1000))),
-                                  ('boolean', 'pref_key_is_first_run', 'false')]}.items():
+                                  ('boolean', 'pref_key_is_first_run', 'false')]}).items():
     path = prefs / file
     tree = ET.parse(path) if path.exists() else ET.ElementTree(ET.Element('map'))
     for kind, name, value in entries:
@@ -88,6 +88,14 @@ try:
                 threads()
                 raise AssertionError('No rendered-page beacon: ' + repr(seen))
             server.handle_request()
+        hold = time.monotonic() + int(os.environ.get('GECKO_PAGE_HOLD', 0))  # a first run must stay up: Gecko's parent aborted ~45 s in (x86)
+        while time.monotonic() < hold:
+            assert process.poll() is None, 'Fennec exited while held'
+            assert instance.mine('^' + pkg + '$'), 'Gecko parent process gone while held'
+            time.sleep(1)
+        if os.environ.get('GECKO_PAGE_FIRST_RUN'):  # the onboarding screen covers the page: no pixel check, the beacon and the hold are the test
+            print('PASS first run: Gecko fetched the page, ran JS=42 and stayed up for the hold', flush=True)
+            sys.exit(0)
         shell = instance.STATE / 'shell.log'
         subprocess.run(['python3', 'tests/corpus/first-frame.py', str(shell), str(shell.stat().st_size), '15', '1', '1'])
         red = 0

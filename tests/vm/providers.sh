@@ -36,20 +36,27 @@ grep -aq "PASS sensors through SensorService" $tool && grep -aq "last 0.500 9.50
 bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
 grep -a "PASS\|Check failed" $tool; grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq "PASS vibrator AIDL" $tool && grep -aq "vibrator: on 120 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "vibrator AIDL: the backend did not get on 120 ms at 0.5"
+# the fake backend composes: two primitives (CLICK at 0.5, THUD at 1.0 after 50 ms) and a 60 ms PWLE ramp 0.2..0.8 as 20 ms steps
+grep -aq "PASS vibrator compose and PWLE" $tool && [ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -5 | tr '\n' ' ')" = \
+  "vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 1.00 vibrator: on 20 ms amplitude 0.30 vibrator: on 20 ms amplitude 0.50 vibrator: on 20 ms amplitude 0.70 " ] \
+    || fail "vibrator AIDL: compose/composePwle did not reach the backend as steps"
 bin/apklayer stack libapklayer_gnss.so --client 2 >/dev/null 2>&1
 grep -a "^location\|PASS\|Check failed" $tool
 grep -aq "PASS gnss AIDL" $tool && grep -aq "^location 48.8584000 2.2945000 3.0" $tool || fail "gnss AIDL: no fix at the configured location"
 
 # 2. through Android's APIs: Vibrator (the hub's vibrator_manager over the HAL), LocationManager's gps provider, SensorManager over SensorService
 out=$APKLY_STATE/providers-app.out
-grep -aq -m1 '^\[hw\] \(PASS\|FAIL\)' < <(APKLAYER_JOPTS="-Dapklayer.runms=40000" bin/apklayer run hello.hardware 2>&1 | tee $out)
+grep -aq -m1 '^\[hw\] \(PASS\|FAIL\)' < <(APKLAYER_JOPTS="-Dapklayer.runms=40000 -Dhw.compose=true" bin/apklayer run hello.hardware 2>&1 | tee $out)
 grep -a '\[hw\]\|\[runtime\] registering\|no registration function' $out
 grep -a "location \[" $APKLY_STATE/hub.log
 grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
-# the waveform's two steps, then the click (the example HAL's 100 ms effect), in this order
+# the waveform's two steps, the click (the example HAL's 100 ms effect), the composition's two primitives (CLICK at 0.5, THUD at 1.0: Vibrator.compose through the HAL) and the CONFIRM haptic feedback through SystemVibrator and through View.performHapticFeedback (a click each: the example HAL has CLICK and TICK only), in this order
+[ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -9 | head -6 | tr '\n' ' ')" = \
+  "vibrator: on 200 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 vibrator: on 100 ms amplitude 1.00 vibrator: on 100 ms amplitude 1.00 vibrator: on 100 ms amplitude 1.00 " ] || fail "the app's waveform and click did not reach the vibrator backend"
 [ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -3 | tr '\n' ' ')" = \
-  "vibrator: on 100 ms amplitude 1.00 vibrator: on 200 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 " ] || fail "the app's waveform and click did not reach the vibrator backend"
+  "vibrator: on 20 ms amplitude 0.17 vibrator: on 20 ms amplitude 0.50 vibrator: on 20 ms amplitude 0.83 " ] || fail "the app's ramp (PWLE) segment did not reach the vibrator backend as steps"
+grep -aq '^\[hw\] view haptic feedback true' $out || fail "View.performHapticFeedback did not reach the vibrator"
 grep -aq '^\[hw\] gps fix 48.85840 2.29450 accuracy 3.0' $out || fail "the app's gps fix is not the configured one"
 # SensorManager over SensorService: 50 Hz for 2 s (about 100 events), the configured value
 events=$(grep -a -o '^\[hw\] accelerometer [0-9]* events' $out | grep -o '[0-9][0-9]*')

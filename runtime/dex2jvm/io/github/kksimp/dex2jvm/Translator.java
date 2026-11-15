@@ -109,7 +109,7 @@ public final class Translator {
      * converter's code identity rather than on this flag has to be cleared
      * between the arms of an A/B comparison.
      */
-    static final boolean NARROW_TRY = !"0".equals(System.getenv("DEX2JVM_NARROW_TRY"));
+    static final boolean NARROW_TRY = true;
 
     /**
      * DEX2JVM_MONITOR_SAFE_TRY -- under NARROW_TRY, a method that contains a
@@ -157,7 +157,7 @@ public final class Translator {
      * narrow output: convertible and verifiable beats compilable.
      */
     static final boolean MONITOR_SAFE_TRY =
-            !"0".equals(System.getenv("DEX2JVM_MONITOR_SAFE_TRY"));
+            true;
 
     /**
      * exception_table_length is a u2 (JVMS 4.7.3); see emitTryCatch for what
@@ -171,18 +171,7 @@ public final class Translator {
      * the count wraps and HotSpot dies with a fatal error when bytecode
      * verification is off.
      */
-    static final int MAX_EXCEPTION_ROWS = exceptionRowsLimit();
-
-    private static int exceptionRowsLimit() {
-        String v = System.getenv("DEX2JVM_EXCEPTION_ROWS_LIMIT");
-        if (v == null || v.isEmpty()) return 65535;
-        try {
-            int n = Integer.parseInt(v.trim());
-            return n > 0 && n < 65535 ? n : 65535;
-        } catch (NumberFormatException e) {
-            return 65535;
-        }
-    }
+    static final int MAX_EXCEPTION_ROWS = 65535;
 
     /**
      * DEX2JVM_NULL_AGET -- an aget on a PROVABLY NULL array stores a typed
@@ -192,7 +181,7 @@ public final class Translator {
      * 1.43) plant such loads behind opaque predicates; they always throw, so only verifiability
      * changes.
      */
-    static final boolean NULL_AGET = !"0".equals(System.getenv("DEX2JVM_NULL_AGET"));
+    static final boolean NULL_AGET = true;
 
     /** Raised when one method cannot be translated. DexConverter catches this
      *  per method so a single bad method cannot lose the whole class. */
@@ -560,7 +549,7 @@ public final class Translator {
      * DEX2JVM_MONITOR_COVER_DEBUG=1 prints one line per attempted method (rescued / refused / reverted, with the reason).
      */
     static final boolean MONITOR_COVER =
-            !"0".equals(System.getenv("DEX2JVM_MONITOR_COVER"));
+            true;
 
     /**
      * DEX2JVM_MONITOR_COVER_THROWING -- let MONITOR_COVER also give a
@@ -585,7 +574,7 @@ public final class Translator {
      * See MonitorCover's header.
      */
     static final boolean MONITOR_COVER_THROWING =
-            !"0".equals(System.getenv("DEX2JVM_MONITOR_COVER_THROWING"));
+            true;
 
     /**
      * The code_length a MONITOR_COVER re-plan may reach before it is reverted:
@@ -594,21 +583,10 @@ public final class Translator {
      * (=20 reverts every re-plan; no corpus method comes within 55 KB of the
      * real limit).
      */
-    static final int MONITOR_COVER_CODE_LIMIT = coverCodeLimit();
-
-    private static int coverCodeLimit() {
-        String v = System.getenv("DEX2JVM_MONITOR_COVER_CODE_LIMIT");
-        if (v == null || v.isEmpty()) return 65535;
-        try {
-            int n = Integer.parseInt(v.trim());
-            return n > 0 && n < 65535 ? n : 65535;
-        } catch (NumberFormatException e) {
-            return 65535;
-        }
-    }
+    static final int MONITOR_COVER_CODE_LIMIT = 65535;
 
     private static final boolean MONITOR_COVER_DEBUG =
-            System.getenv("DEX2JVM_MONITOR_COVER_DEBUG") != null;
+            false;
 
     private static void coverStat(DexMethod m, String outcome, String before, String why) {
         if (!MONITOR_COVER_DEBUG) return;
@@ -676,7 +654,7 @@ public final class Translator {
      *  could not be translated and fell back to the fully narrowed table. Its
      *  own variable, because DEX2JVM_NARROW_DEBUG names every method. */
     private static final boolean NARROW_MONITOR_DEBUG =
-            System.getenv("DEX2JVM_MONITOR_DEBUG") != null;
+            false;
 
     // ==================================================================
     // One method

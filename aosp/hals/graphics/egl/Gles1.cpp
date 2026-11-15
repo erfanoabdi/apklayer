@@ -12,7 +12,9 @@
 #include <log/log.h>
 
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
+#include <string>
 #include <map>
 #include <mutex>
 
@@ -71,9 +73,14 @@ void* hostGles1(const char* name) {
     static void* lib = dlopen("libGLESv1_CM.so.1", RTLD_NOW);
     return hostProc(lib, name);
 }
+// apklayer patch: the GL names ES 1 and ES 2 share (glGetString, glGetIntegerv, the draws) reach an app through this table, not through
+// libGLESv2.so: dlopen of that name follows bionic_translation's cfg.d, so with APKLAYER_GL_HIDE it is bridge/native/gles_filter.c's library
+// (hidden extensions, the sampler cap, the debug log), else the host's.
 void* hostGles2(const char* name) {
-    static void* lib = dlopen("libGLESv2.so.2", RTLD_NOW);
-    return hostProc(lib, name);
+    static void* lib = dlopen("libGLESv2.so", RTLD_NOW);
+    static void* host = dlopen("libGLESv2.so.2", RTLD_NOW);
+    void* f = lib ? dlsym(lib, name) : nullptr;
+    return f ? f : hostProc(host, name);
 }
 void* none(const char*) { return nullptr; }
 

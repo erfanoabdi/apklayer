@@ -84,7 +84,7 @@ final class ConstReadingElision {
 
     private ConstReadingElision() {}
 
-    static final boolean ENABLED = !"0".equals(System.getenv("DEX2JVM_CONST_ELISION"));
+    static final boolean ENABLED = true;
 
     /** How far past the constant to look for its killer, in instructions. */
     private static final int WINDOW = 64;
@@ -106,7 +106,7 @@ final class ConstReadingElision {
      * as DEX2JVM_SPLIT_FORCE / DEX2JVM_OUTLINE_FORCE. Unset normally.
      */
     static final boolean FORCE = ENABLED
-            && "1".equals(System.getenv("DEX2JVM_CONST_ELISION_FORCE"));
+            && false;
 
     static boolean armed() { return FORCE || ARMED.get(); }
 

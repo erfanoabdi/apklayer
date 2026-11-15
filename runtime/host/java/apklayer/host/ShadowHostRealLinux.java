@@ -72,12 +72,14 @@ public class ShadowHostRealLinux extends ShadowLinux {
         return natively("open", ClassParameter.from(String.class, path), ClassParameter.from(int.class, flags), ClassParameter.from(int.class, mode));
     }
     // the file system as it is (Robolectric's stat never fails and calls a missing path a symlink when its canonical form differs; symlink, rename, remove, chmod do nothing)
-    // shortcut: fstat(fd) stays Robolectric's (mode 0): the real one stopped MediaProvider's scan after a write through openOutputStream (system-apps media: size 0), cause not found yet; upgrade once it is
     private static ClassParameter<String> path(String path) { return ClassParameter.from(String.class, path); }
     @Implementation @Override public android.system.StructStat stat(String path) { return natively("stat", path(path)); }
-    // Robolectric's fstat(fd) is stat(null): with the real stat above that threw EFAULT for every descriptor IoBridge.open checks
-    // (ParcelFileDescriptor.open, so JW Library's thumbnails never loaded). Its old answer, without the path: mode 0, size 0.
-    @Implementation @Override protected android.system.StructStat fstat(FileDescriptor fd) { return new android.system.StructStat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); }
+    // Robolectric's fstat(fd) is stat(null): with the real stat above that threw EFAULT for every descriptor IoBridge.open checks (ParcelFileDescriptor.open).
+    // The real one: stat of the descriptor's /proc/self/fd link (it follows to the open file; a pipe, socket or memfd answers too)
+    @Implementation @Override protected android.system.StructStat fstat(FileDescriptor fd) throws android.system.ErrnoException {
+        try { return natively("stat", path("/proc/self/fd/" + ReflectionHelpers.getField(fd, "fd"))); }
+        catch (Exception e) { if (e instanceof android.system.ErrnoException n && n.errno == android.system.OsConstants.ENOENT) throw new android.system.ErrnoException("fstat", android.system.OsConstants.EBADF); throw e; }
+    }
     @Implementation @Override protected android.system.StructStat lstat(String path) { return natively("lstat", path(path)); }
     @Implementation @Override public void mkdir(String path, int mode) { natively("mkdir", path(path), ClassParameter.from(int.class, mode)); }
     @Implementation protected void chmod(String path, int mode) { natively("chmod", path(path), ClassParameter.from(int.class, mode)); }

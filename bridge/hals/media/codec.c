@@ -101,8 +101,23 @@ static GstCaps *input_caps(const char *mime)
 static void gst_start(void)
 {
     gst_init(NULL, NULL);
-    if (g_getenv("APKLAYER_GST_AMC")) return;
     GList *all = gst_element_factory_list_get_elements(GST_ELEMENT_FACTORY_TYPE_DECODER, GST_RANK_NONE);
+    /* The instance's GPU (APKLAYER_RENDER_NODE, cli/env.cpp): the va plugin names the first device's decoders plainly (vah264dec) and the others'
+     * after the node (varenderD129h264dec); decodebin takes the highest rank, so the instance's own decoders go first and, when the plain ones
+     * are another GPU's, they go off. A node with no decoders of its own is the first device (or has no VA): nothing changes. */
+    const char *node = g_getenv("APKLAYER_RENDER_NODE");
+    if (node && strrchr(node, '/')) {
+        char *own = g_strconcat("va", strrchr(node, '/') + 1, NULL);
+        gboolean other = FALSE;
+        for (GList *l = all; l; l = l->next)
+            if (g_str_has_prefix(GST_OBJECT_NAME(l->data), own)) other = TRUE, gst_plugin_feature_set_rank(GST_PLUGIN_FEATURE(l->data), GST_RANK_PRIMARY + 2);
+        for (GList *l = all; other && l; l = l->next) {
+            const char *name = GST_OBJECT_NAME(l->data);
+            if (g_str_has_prefix(name, "va") && !g_str_has_prefix(name, "varenderD") && !g_str_has_prefix(name, own)) gst_plugin_feature_set_rank(GST_PLUGIN_FEATURE(l->data), GST_RANK_NONE);
+        }
+        g_free(own);
+    }
+    if (g_getenv("APKLAYER_GST_AMC")) { gst_plugin_feature_list_free(all); return; }
     for (GList *l = all; l; l = l->next)
         if (g_str_has_prefix(GST_OBJECT_NAME(l->data), "amc")) gst_plugin_feature_set_rank(GST_PLUGIN_FEATURE(l->data), GST_RANK_NONE);
     gst_plugin_feature_list_free(all);

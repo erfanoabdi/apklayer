@@ -48,8 +48,19 @@ final class AppEnvironment {
         String appLog = System.getProperty("apklayer.applog");
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out;
         else if (appLog != null) {
-            try { org.robolectric.shadows.ShadowLog.stream = new java.io.PrintStream(new java.io.FileOutputStream(appLog, true), true); }
-            catch (java.io.IOException e) { System.out.println("[apklayer] app log " + appLog + ": " + e); }
+            try {
+                // the launcher's tee (cli/logs.cpp) caps the file: this second writer takes a line only while it fits, so nothing follows the cap note
+                String capEnv = System.getenv("APKLAYER_APP_LOG_CAP");
+                long cap = capEnv != null ? Long.parseLong(capEnv) : 256L << 20;
+                java.io.FileOutputStream file = new java.io.FileOutputStream(appLog, true);
+                org.robolectric.shadows.ShadowLog.stream = new java.io.PrintStream(new java.io.OutputStream() {
+                    @Override public void write(int b) throws java.io.IOException { write(new byte[] {(byte) b}, 0, 1); }
+                    @Override public void write(byte[] b, int off, int len) throws java.io.IOException {
+                        if (file.getChannel().size() + len <= cap) file.write(b, off, len);
+                    }
+                }, true);
+            }
+            catch (java.io.IOException | NumberFormatException e) { System.out.println("[apklayer] app log " + appLog + ": " + e); }
         }
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
                 : new AndroidManifest(null, null, null, null, "", apk) {
@@ -332,6 +343,7 @@ final class AppEnvironment {
         // activity's android:process (HostProcessName.windowProcess)
         String process = System.getProperty("apklayer.isolated") == null ? HostProcessName.windowProcess() : System.getProperty("apklayer.processname", "");
         try {
+            if (!HostProcessName.isolated) HostOpenedFiles.register(app);  // the host files opened with this app (`apklayer open`)
             android.content.pm.ProviderInfo[] providers = app.getPackageManager()
                     .getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PROVIDERS).providers;
             if (providers == null || HostProcessName.isolated) return;
@@ -380,15 +392,16 @@ final class AppEnvironment {
         NativeLoader.nameProcess(System.getProperty("apklayer.processname", app.getPackageName()));
         NativeLoader.killIfExitStalls();
         if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
-        HostContentService.install();
-        HostNetwork.install(app);
-        HostBattery.install(app);
+        HostContentService.install(); StartTrace.mark("runtime: HostContentService");
+        HostNetwork.install(app); StartTrace.mark("runtime: HostNetwork");
+        HostBattery.install(app); StartTrace.mark("runtime: HostBattery");
         // no doze on the desktop: an app is never held back by battery optimization
         org.robolectric.Shadows.shadowOf((android.os.PowerManager) app.getSystemService(android.content.Context.POWER_SERVICE)).setIgnoringBatteryOptimizations(app.getPackageName(), true);
-        HostStorage.install(app);
+        HostStorage.install(app); StartTrace.mark("runtime: HostStorage");
         HostProviders.install(app);  // Android's security providers and TLS (Conscrypt); without it HostTrust's host-aware default trust manager (Chromium, X509TrustManagerExtensions)
-        HostLocation.install(app);
-        HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build
+        StartTrace.mark("runtime: HostProviders");
+        HostLocation.install(app); StartTrace.mark("runtime: HostLocation");
+        HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build StartTrace.mark("runtime: system config");
 
         // Simulator.start(): real draws and animations, a paused Choreographer driven by the loop.
         ShadowView.setUseRealViewAnimations(true);
@@ -397,7 +410,7 @@ final class AppEnvironment {
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(15));
         ShadowLog.setCaptureLogsEnabled(false);
         if (Boolean.getBoolean("apklayer.logcat")) ShadowLog.stream = System.out; // debug: the app's android.util.Log lines
-        NativeMedia.ensureInitialized();
+        NativeMedia.ensureInitialized(); StartTrace.mark("runtime: NativeMedia");
     }
 
     private AppEnvironment() {}

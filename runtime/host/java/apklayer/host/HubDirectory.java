@@ -58,6 +58,12 @@ final class HubDirectory extends Binder {
     private final HubPermissionPrompt permissionPrompt;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
+    // android:isolatedProcess (sandbox only): the process keys of such services, the uid each live process was given (Process.FIRST_ISOLATED_UID and up,
+    // one per process, as ActivityManagerService hands them out), and the package a uid belongs to (PackageManagerService's mIsolatedOwners)
+    private static final boolean SANDBOXED = "1".equals(System.getenv("APKLAYER_SANDBOX"));
+    private final java.util.Set<String> isolatedKeys = new java.util.HashSet<>();
+    private final Map<String, Integer> isolatedUids = new HashMap<>();
+    private final Map<Integer, String> isolatedOwners = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
     static final Path LOGS = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"));
     private final Path logs = LOGS;
@@ -125,6 +131,29 @@ final class HubDirectory extends Binder {
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
     /** A running process of the app with this Android uid (an app and its component hosts share it), or null. */
     Peer peerByUid(int appUid) { synchronized (peers) { return peers.values().stream().filter(peer -> peer.appUid == appUid).findFirst().orElse(null); } }
+    /** A service about to run in the process `key` (a bind or a start): one declared android:isolatedProcess gets its own uid when its host starts. */
+    void noteIsolated(String key, android.content.pm.ServiceInfo info) {
+        if ((info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0) synchronized (isolatedUids) { isolatedKeys.add(key); }
+    }
+    private static boolean isolatedUid(int uid) {
+        int app = uid % android.os.UserHandle.PER_USER_RANGE;
+        return app >= android.os.Process.FIRST_ISOLATED_UID && app <= android.os.Process.LAST_ISOLATED_UID;
+    }
+    /** The lowest free uid of the isolated range for this process's host, 0 when it is not an isolated service's (or without the sandbox: every process then runs as the user). */
+    private int allocateIsolated(String key) {
+        if (!SANDBOXED) return 0;
+        synchronized (isolatedUids) {
+            if (!isolatedKeys.contains(key)) return 0;
+            for (int uid = android.os.Process.FIRST_ISOLATED_UID; uid <= android.os.Process.LAST_ISOLATED_UID; uid++)
+                if (!isolatedUids.containsValue(uid)) { isolatedUids.put(key, uid); return uid; }
+            throw new IllegalStateException("No isolated uid left for " + key);
+        }
+    }
+    private void releaseIsolated(String key) {
+        Integer uid;
+        synchronized (isolatedUids) { uid = isolatedUids.remove(key); }
+        if (uid != null) isolatedOwners.remove(uid);
+    }
     /** The key of a process: the package, plus "#instance" for an isolated service instance (bindIsolatedService), which runs in a process of its own. */
     static String key(String pkg, String instance) { return instance == null ? pkg : pkg + "#" + instance; }
     static String key(Peer peer) { return key(peer.name, peer.instance); }
@@ -176,6 +205,7 @@ final class HubDirectory extends Binder {
 
     /** Every other running app's package manager learns that the package was installed, updated or removed (before the package broadcasts go out). */
     void packageChanged(String name, boolean removed) {
+        packages.declarationsChanged();
         for (Peer peer : peersExcept(null)) {
             if (peer.name.equals(name)) continue;
             try { HubProtocol.call(peer.endpoint, HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_PACKAGE_CHANGED, request -> { request.writeString(name); request.writeBoolean(removed); }, reply -> null); }
@@ -233,13 +263,17 @@ final class HubDirectory extends Binder {
                 ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
                         .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
                 if (instance != null) command.environment().put("APKLAYER_ISOLATED", instance);
-                Process process = command.start();
+                int isolated = allocateIsolated(name);
+                if (isolated != 0) command.environment().put("APKLAYER_ISOLATED_UID", Integer.toString(isolated));  // cli/sandbox.cpp: the process runs as it
+                Process process;
+                try { process = command.start(); } catch (IOException | RuntimeException failed) { releaseIsolated(name); throw failed; }
                 hosts.put(name, process);
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + " launcherPid=" + process.pid() + " t=" + System.nanoTime() / 1_000_000);
                 Process started = process;
                 process.onExit().thenAccept(exited -> {
                     System.out.println("[apklayer-hub] host " + name + " exited with " + exited.exitValue());
                     synchronized (hosts) { hosts.remove(name, started); }
+                    releaseIsolated(name);
                     // or a client asked for it while this one was ending (launch above saw it alive and started none): it waits for a registration
                     if (!stopping && peer(name) == null && (bindings.needsHost(name) || broadcasts.awaitingStart(name))) {
                         int failed;
@@ -267,11 +301,18 @@ final class HubDirectory extends Binder {
                 int installedUid = packages.uid(name);  // what others know this process by (UID_OF_PID, oneway callers): the installed uid, not one it claims
                 int pid = Binder.getCallingPid(), uid = Binder.getCallingUid();
                 // the hub's own package (HubHost: system_server's SettingsProvider) runs as the system uid, as on a device
-                if (installedUid >= 0 && appUid != installedUid && pid != android.os.Process.myPid()) throw new SecurityException(name + " is uid " + installedUid + ", not " + appUid);
                 int kernel = ShadowHostRealBinder.kernelUid(pid);  // sandboxed (cli/sandbox.cpp): the process runs as its app uid, which it cannot choose
+                // an isolated service's process claims the uid the hub gave its host, and the kernel agrees
+                boolean isolatedProcess = isolatedUid(appUid);
+                if (isolatedProcess) {
+                    Integer given; synchronized (isolatedUids) { given = isolatedUids.get(key(name, instance)); }
+                    if (given == null || given != appUid || kernel != appUid) throw new SecurityException(name + " is not the isolated process of uid " + appUid);
+                    isolatedOwners.put(appUid, name);
+                }
+                else if (installedUid >= 0 && appUid != installedUid && pid != android.os.Process.myPid()) throw new SecurityException(name + " is uid " + installedUid + ", not " + appUid);
                 if (kernel >= android.os.Process.FIRST_APPLICATION_UID && kernel <= android.os.Process.LAST_APPLICATION_UID && kernel != installedUid)
                     throw new SecurityException(name + " is uid " + installedUid + ", its process runs as " + kernel);
-                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid, instance, process);
+                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, isolatedProcess ? installedUid : appUid, instance, process);  // the app's own uid for the hub's bookkeeping
                 synchronized (peers) {
                     if (stopping) throw new IllegalStateException(HubProtocol.EXITING);
                     Peer old = peers.get(pid);
@@ -284,7 +325,7 @@ final class HubDirectory extends Binder {
                 }
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + (instance != null ? "#" + instance : "") + " pid=" + pid + " uid=" + uid + " kernel-uid=" + kernel + " t=" + System.nanoTime() / 1_000_000);
                 synchronized (failures) { failures.remove(key(peer)); }  // launches are counted per host (package#process): a host that registered did not fail
-                HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
+                if (pid != android.os.Process.myPid()) HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package (not the hub's own: it plays no track and waited for a whole feed, ~0.3 s of every hub start)
                 HubLockScreen.appStarted();
                 bindings.registered(peer);
                 broadcasts.registered(peer);
@@ -492,6 +533,10 @@ final class HubDirectory extends Binder {
                 for (Peer peer : own) { reply.writeInt(peer.pid); reply.writeString(peer.process != null ? peer.process : peer.name); reply.writeBoolean(peer.headless); }
                 return true;
             }
+            case HubProtocol.ISOLATED_OWNER -> {  // PackageManagerService's mIsolatedOwners: the package an isolated uid runs for
+                caller(); int isolatedUid = request.readInt(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeString(isolatedOwners.get(isolatedUid)); return true;
+            }
             case HubProtocol.UID_OF_PID -> {
                 caller(); int pid = request.readInt(); request.enforceNoDataAvail();
                 Peer peer = peerByPid(pid);
@@ -582,7 +627,11 @@ final class HubDirectory extends Binder {
             }
             case HubProtocol.PERMISSIONS_REQUEST -> {
                 Peer caller = caller(); String[] names = request.createStringArray(); request.enforceNoDataAvail();
-                reply.writeNoException(); reply.writeIntArray(permissionPrompt.request(caller.name(), names)); return true;
+                reply.writeNoException(); reply.writeIntArray(permissionPrompt.request(caller.name(), caller.pid(), names)); return true;
+            }
+            case HubProtocol.NOTIFICATION_SETTINGS -> {
+                Peer caller = caller(); request.enforceNoDataAvail();
+                permissionPrompt.notificationSettings(caller.name()); reply.writeNoException(); return true;
             }
             case HubProtocol.ROLE_REQUEST -> {
                 Peer caller = caller(); String role = request.readString(); request.enforceNoDataAvail();
@@ -592,11 +641,20 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); int mode = request.readInt(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeInt(callAudio.setMode(caller, mode)); return true;
             }
+            case HubProtocol.AUDIO_ACTIVITY -> {
+                Peer caller = caller(); boolean on = request.readBoolean(); request.enforceNoDataAvail();
+                callAudio.activity(caller, on); reply.writeNoException(); return true;
+            }
             case HubProtocol.AUDIO_COMMUNICATION_DEVICE -> {
                 Peer caller = caller(); boolean set = request.readBoolean();
                 android.media.AudioDeviceAttributes device = request.readTypedObject(android.media.AudioDeviceAttributes.CREATOR); request.enforceNoDataAvail();
                 if (set) callAudio.setCommunicationDevice(caller, device);
                 reply.writeNoException(); reply.writeTypedObject(callAudio.communicationDevice(), 0); return true;
+            }
+            case HubProtocol.EJECT_VOLUME -> {
+                Peer caller = caller(); String id = request.readString(); request.enforceNoDataAvail();
+                if (!packages.uidHolds(caller.appUid(), android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)) throw new SecurityException("StorageManager.unmount needs MOUNT_UNMOUNT_FILESYSTEMS");
+                reply.writeNoException(); reply.writeBoolean(volumes.eject(id, caller.pid())); return true;
             }
             case HubProtocol.MICROPHONE_MUTE -> {
                 Peer caller = caller(); boolean on = request.readBoolean(); request.enforceNoDataAvail();
@@ -605,6 +663,10 @@ final class HubDirectory extends Binder {
             case HubProtocol.CONFIRM_CREDENTIAL -> {
                 Peer caller = caller(); String title = request.readString(), description = request.readString(); long challenge = request.readLong(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(HubLockScreen.confirm(caller.name(), title, description, challenge)); return true;
+            }
+            case HubProtocol.CANCEL_CREDENTIAL -> {
+                Peer caller = caller(); request.enforceNoDataAvail();
+                HubLockScreen.cancel(caller.name()); reply.writeNoException(); return true;
             }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();
@@ -626,6 +688,7 @@ final class HubDirectory extends Binder {
         activities.restartIfAlone(peer.name);
         startedServices.died(peer);
         gnss.died(peer);
+        bluetooth.died(peer);
         callAudio.died(peer);
         exitWhenIdle(IDLE_EXIT_MS);
     }

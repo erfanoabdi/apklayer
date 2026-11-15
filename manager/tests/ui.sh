@@ -8,6 +8,9 @@ b=$1 apk=$2 pkg=$3 shots=$4
 cli="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/apklayer"
 m="$b/apklayer-manager"
 mkdir -p "$shots"
+# an instance without apps shows the first-run checklist over every page (the manager's Setup::firstRun) unless the setup marker exists: ui.sh ends with no app
+marker="${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/setup-done"
+[ -e "$marker" ] || { mkdir -p "$(dirname "$marker")"; touch "$marker"; trap 'rm -f "$marker"' EXIT; }
 check() { [ "$(running)" = "$1" ] || { echo "FAIL $2 (running: '$(running)')"; exit 1; }; echo "ok   $2"; }
 running() { "$cli" list --tsv | awk -F'\t' -v p="$pkg" '$1 == p { print $6 }'; }
 "$cli" uninstall "$pkg" >/dev/null 2>&1 || true
@@ -24,6 +27,16 @@ grep -qx NoDisplay=true "$entry" || { echo "FAIL the drawer switch did not hide 
 "$m" --screenshot "$shots/ui-3c-drawer.png" --size 400x840 --app "$pkg" --click "Show in app drawer" --wait-refresh 1
 ! grep -qx NoDisplay=true "$entry" || { echo "FAIL the drawer switch did not show $pkg"; exit 1; }
 echo "ok   the app detail's drawer switch hides and shows its launcher"
+# the app detail's Permissions card: the first runtime (dangerous) permission's switch flips its grant (an app without one: skipped)
+perm=$("$cli" permissions "$pkg" 2>/dev/null | awk -F'\t' '$2 == "dangerous" { print $1, $3; exit }') || true
+if [ -n "$perm" ]; then
+    name=${perm% *} was=${perm#* } title=${name##*.}
+    title="$(echo "${title:0:1}" | tr a-z A-Z)$(echo "${title:1}" | tr A-Z a-z | tr _ ' ')"
+    "$m" --screenshot "$shots/ui-3d-permission.png" --size 1100x1600 --scroll 1500 --app "$pkg" --click "Allow $title" --wait-refresh 1
+    now=$("$cli" permissions "$pkg" | awk -F'\t' -v n="$name" '$1 == n { print $3 }')
+    [ "$now" != "$was" ] || { echo "FAIL the Permissions switch did not change $name (still $was)"; exit 1; }
+    echo "ok   the app detail's permission switch changed $name ($was -> $now)"
+fi
 "$m" --screenshot "$shots/ui-4-uninstall.png" --size 400x840 --app "$pkg" --click "Uninstall…" --click Uninstall --wait-refresh 1
 check "" "uninstalled after the confirmation"
 spare="$APKLAYER_INSTANCE-ui"
@@ -34,6 +47,13 @@ expect=()
 "$cli" instances | grep -q "^$spare	" || { echo "FAIL the new instance is not listed"; exit 1; }
 echo "ok   instance created through its dialog (and the binder setup offered when its devices are missing)"
 "$cli" instance remove "$spare" >/dev/null
+# the Hardware page lists a card per domain (only what is on screen is found: the later ones after --scroll) and a domain whose host has no device says so
+"$m" --screenshot "$shots/ui-6-domains.png" --size 1100x900 --page 4 --expect "Apply sensors" --expect "Apply gnss"
+"$m" --screenshot "$shots/ui-6-domains2.png" --size 1100x900 --page 4 --scroll 1300 --expect "Apply audio" --expect "Apply graphics" --expect "Apply media"
+if [ "$("$cli" providers | awk -F'\t' '$1 == "default" && $2 == "sensors" { print $3 }')" = "(none: off)" ]; then
+    "$m" --screenshot "$shots/ui-6-nodevice.png" --size 1100x900 --page 4 --expect "Automatic: off"
+fi
+echo "ok   the Hardware page lists its providers (and says 'Automatic: off' for sensors where the host has none)"
 "$cli" providers set sensors fake >/dev/null  # the Hardware page: a backend's option typed in, Apply (the card must be in view: 900 px)
 "$m" --screenshot "$shots/ui-6-hardware.png" --size 1100x900 --page 4 --type "sensors accel=1,2,3" --click "Apply sensors" --wait-refresh 1
 "$cli" providers | grep -q "^sensors	apklayer	fake	accel=1,2,3$" || { echo "FAIL the Hardware page did not set the sensors option"; exit 1; }

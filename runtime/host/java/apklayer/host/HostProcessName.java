@@ -38,5 +38,15 @@ final class HostProcessName {
         return process == null || process.equals(info.packageName) || (info.applicationInfo != null && process.equals(info.applicationInfo.processName)) ? null : process;
     }
 
+    /**
+     * ApplicationInfo.processName as PackageManagerService fixes it at scan time (fixProcessName): the package's name when <application> names no
+     * android:process. PackageParser leaves it null and Robolectric fills it below API 28 only (AndroidTestEnvironment.installAndCreateApplication);
+     * Play services compares it with the process's name (aoob.m: processName.equals) and its persistent process died on the null.
+     */
+    static android.content.pm.ApplicationInfo fill(android.content.pm.ApplicationInfo info) {
+        if (info != null && info.processName == null) info.processName = info.packageName;
+        return info;
+    }
+
     private static void set(String name) { System.setProperty("apklayer.processname", name); }  // ShadowActivityThread.currentProcessName answers it
 }

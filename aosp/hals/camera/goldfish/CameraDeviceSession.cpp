@@ -545,7 +545,17 @@ struct timespec CameraDeviceSession::captureOneFrame(struct timespec nextFrameT,
         }
     }
 
-    const int64_t shutterTimestampNs = timespec2nanos(nextFrameT);
+    // the frame's own capture time when the camera reports one (ANDROID_SENSOR_TIMESTAMP of its result) and it is newer than the last shutter, else the paced time
+    int64_t shutterTimestampNs = timespec2nanos(nextFrameT);
+    camera_metadata_ro_entry_t tsEntry;
+    if (!metadata.metadata.empty() && find_camera_metadata_ro_entry(reinterpret_cast<const camera_metadata_t*>(metadata.metadata.data()), ANDROID_SENSOR_TIMESTAMP, &tsEntry) == 0 &&
+        tsEntry.count == 1 && tsEntry.data.i64[0] > mLastShutterNs) {
+        shutterTimestampNs = tsEntry.data.i64[0];
+        if (!mFrameShutterLogged) mFrameShutterLogged = true, ALOGW("shutter timestamps are the frames' own");  // once: tests/vm/camera.sh looks for it
+    } else if (shutterTimestampNs <= mLastShutterNs) {
+        shutterTimestampNs = mLastShutterNs + 1;
+    }
+    mLastShutterNs = shutterTimestampNs;
     notifyShutter(&*mCb, frameNumber, shutterTimestampNs, shutterTimestampNs + exposureDurationNs);
     metadataSetShutterTimestamp(&metadata, shutterTimestampNs);
     consumeCaptureResult(makeCaptureResult(frameNumber,

@@ -55,7 +55,7 @@ try:
                     if '[ks] lock now' in line: lock(True); locked = True
                     if '[ks] locked:' in line: lock(False); locked = False
             hub = (log / 'hub.log').read_text(errors='replace').split('\n') if (log / 'hub.log').exists() else []
-            shown = [l for l in hub if 'dialog shown:' in l]
+            shown = [l for l in hub if 'dialog shown:' in l and 'dialog shown: "Cancelled by the app"' not in l]  # that one closes by itself (prompt 3)
             if len(shown) > shown_count:
                 question = shown[shown_count].split('dialog shown: ')[1]
                 steps = ANSWERS[shown_count] if shown_count < len(ANSWERS) else ['no']
@@ -76,6 +76,7 @@ checks = {
     'four password dialogs': shown_count == 4,
     'a wrong password refused': 'credential confirmation of hello.keystore: wrong password' in hub,
     'the desktop lock reached the hub': 'desktop locked' in hub and 'desktop unlocked' in hub,
+    'a prompt cancelled by the app closes its dialog': 'dialog shown: "Cancelled by the app"' in hub and 'dialog closed: "Cancelled by the app"' in hub,
     'app checks': any('[ks] PASS auth' in l for l in lines),
 }
 for name, ok in checks.items(): print('%s %s' % ('PASS' if ok else 'FAIL', name))

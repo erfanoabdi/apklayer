@@ -1,0 +1,583 @@
+aes                          a3c6e9a5f380d3fa
+sha1                         6e9fe29cb0553b0f
+sha256                       89626ed67165fe8c
+  vsha512hq_u64(a, b, c) 6d060a472259a841
+  vsha512h2q_u64(a, b, c) 3842297bb1b2ffdf
+  vsha512su0q_u64(a, b) a6604e93375be62c
+  vsha512su1q_u64(a, b, c) 686d71d86e230878
+sha512                       0000000000000000
+sha3 eor3/rax1/xar/bcax      76b278e239c03a76
+sm4                          SIG4
+pmull                        a7ec5d7386060ac1
+crc32                        91e0249ea598ee35
+tbl/tbx                      e6fe462a8a56f754
+shuffles/ext/rev/cnt         abb3bb85c342d19a
+neon int arith               36644beba1e03f3c
+ld1-4/st1-4                  b6e72335118835e0
+  vaddq_f32(a, b) 46b5ff6bbfdada2a
+  vsubq_f32(a, b) 2f8586e4d23a428b
+  vmulq_f32(a, b) 7d5ff63509647b7a
+  vdivq_f32(a, b) 9fc95c8bd4b4b5af
+  vsqrtq_f32(a) 4b37757b445703e6
+  vfmaq_f32(c, a, b) 58c9d048b957519e
+  vfmsq_f32(c, a, b) e993ee87e7b85036
+  vmaxq_f32(a, b) 4ac23aecda67a5e1
+  vminq_f32(a, b) 6b8482d4158b6224
+  vmaxnmq_f32(a, b) 4ac23aecda67a5e1
+  vminnmq_f32(a, b) 6b8482d4158b6224
+  vabdq_f32(a, b) 140d93c6523a428b
+  vabsq_f32(a) 5bf6d7be79fc1064
+  vnegq_f32(a) 5f25447879fc1064
+  vaddq_f64(x, y) 43e54979d0a08ee8
+  vmulq_f64(x, y) 852c7326817be852
+  vdivq_f64(x, y) 03553041ae0dae00
+  vsqrtq_f64(x) 63cd6e3ca75f7ce1
+  vfmaq_f64(z, x, y) 6f70e23895e24361
+  vmaxq_f64(x, y) 75b4941c8c25eb6c
+  vminnmq_f64(x, y) 1e206306938bbae1
+  vrecpeq_f32(a) 6b0440a630f6e000
+  vrsqrteq_f32(a) c8154d39c8f00000
+  vrecpsq_f32(a, b) 7fb7051d87d25e8b
+  vrsqrtsq_f32(a, b) a4f702dfd93e4760
+  vrecpeq_f64(x) c328b00000000000
+  vrsqrteq_f64(x) ddb9400000000000
+  vrecpsq_f64(x, y) 2f86f590635d5ae5
+  vcvtq_u32_f32(a) e404165a17eadcd2
+  vreinterpretq_u32_s32(vcvtq_s32_f32(a)) bc47966d1c00047d
+  vreinterpretq_u32_s32(vcvtnq_s32_f32(a)) 684bf59033b7d671
+  vreinterpretq_u32_s32(vcvtaq_s32_f32(a)) a51fcc3a882f0388
+  vreinterpretq_u32_s32(vcvtmq_s32_f32(a)) 7e3959818a5cec4c
+  vreinterpretq_u32_s32(vcvtpq_s32_f32(a)) 1a9a69eb00becffc
+  vreinterpretq_u64_s64(vcvtq_s64_f64(x)) 7a04146414e23259
+  vcvtq_u64_f64(x) bc2c09faf5af7f63
+  vreinterpretq_u64_s64(vcvtnq_s64_f64(x)) ec4c12f79e5e3cd4
+  vcvtq_f32_s32(vreinterpretq_s32_f32(a)) 95e1fb0da339eedd
+  vcvtq_f32_u32(vreinterpretq_u32_f32(b)) 2a7484a0b62298bc
+  vcvtq_f64_s64(vreinterpretq_s64_f64(x)) 2d2710848692fe55
+  vcvtq_f64_u64(vreinterpretq_u64_f64(y)) 46a06e883e508e73
+  vrndq_f32(a) 561c4f7511090a4b
+  vrndnq_f32(a) 300904467cb2a033
+  vrndmq_f32(a) 37e1a56b9f87b8d3
+  vrndpq_f32(a) 7fa3253d3bc1839b
+  vrndaq_f32(a) cd94fc94e7dc41f7
+  vrndxq_f32(a) 300904467cb2a033
+  vrndiq_f32(a) 300904467cb2a033
+  vrndnq_f64(x) a65881180c9b9595
+  vrndaq_f64(y) 793657825376f045
+  vceqq_f32(a, b) 0000000000000000
+  vcgeq_f32(a, b) e1afdaa34ec97871
+  vcgtq_f32(a, b) e1afdaa34ec97871
+  vcageq_f32(a, b) a49f5df3705f7a45
+  vcgtzq_f32(a) f63cd148f1457d1a
+  vcvt_f64_f32(vget_low_f32(a)) 9284267a20000000
+  vcombine_f32(vcvt_f32_f64(x), vcvt_f32_f64(y)) faa0fe9537ed8408
+  vcvt_f32_f16(vreinterpret_f16_u16(vget_low_u16(vreinterpretq_u16_f32(a)))) 72664aca4804a000
+float finite                 f6fdb92a777a1de7
+  vaddq_f32(a, b) ddf91a6014666d37
+  vsubq_f32(a, b) 1e3f26601d79c0af
+  vmulq_f32(a, b) fa3bab66afbd7966
+  vdivq_f32(a, b) a435f8d42eda76a1
+  vsqrtq_f32(a) 265e8b9257a14032
+  vfmaq_f32(c, a, b) 5438649c5a11b410
+  vfmsq_f32(c, a, b) 5e04605eaeea5709
+  vmaxq_f32(a, b) 023271926ce32a3e
+  vminq_f32(a, b) cc0eca4c1e60c207
+  vmaxnmq_f32(a, b) d254524b3d99eca7
+  vminnmq_f32(a, b) c958485c06950bea
+  vabdq_f32(a, b) 5f4bcad39d79c0af
+  vabsq_f32(a) c6199482a2dc9945
+  vnegq_f32(a) bd7c9839a2dc9945
+  vaddq_f64(x, y) f79507ec7f21ed0f
+  vmulq_f64(x, y) 9675ba9c648071f7
+  vdivq_f64(x, y) 9aa2df0201cdd569
+  vsqrtq_f64(x) a5e6d5f7a86d0d04
+  vfmaq_f64(z, x, y) b69f917a44cb3132
+  vmaxq_f64(x, y) c1e1da29e16be41f
+  vminnmq_f64(x, y) dea2671149ed9181
+  vrecpeq_f32(a) f6b3cf322b6684de
+  vrsqrteq_f32(a) de494e3521e984de
+  vrecpsq_f32(a, b) 680e92e778f42efa
+  vrsqrtsq_f32(a, b) 94fe996baf54d0a4
+  vrecpeq_f64(x) 7c0b400000000000
+  vrsqrteq_f64(x) 3428400000000000
+  vrecpsq_f64(x, y) f53acf4348ac800f
+  vcvtq_u32_f32(a) e79d30f538ac07c4
+  vreinterpretq_u32_s32(vcvtq_s32_f32(a)) d9148f25fd2052f3
+  vreinterpretq_u32_s32(vcvtnq_s32_f32(a)) 5c51bf709d0f3750
+  vreinterpretq_u32_s32(vcvtaq_s32_f32(a)) 2215a1f19d0f3750
+  vreinterpretq_u32_s32(vcvtmq_s32_f32(a)) f547509b6b4208fa
+  vreinterpretq_u32_s32(vcvtpq_s32_f32(a)) 37d36900fc57fcc9
+  vreinterpretq_u64_s64(vcvtq_s64_f64(x)) 5d14140223cfe545
+  vcvtq_u64_f64(x) 8a74d7b8a95d35e4
+  vreinterpretq_u64_s64(vcvtnq_s64_f64(x)) 4bbf1160df953fdd
+  vcvtq_f32_s32(vreinterpretq_s32_f32(a)) 6fb268f94889a501
+  vcvtq_f32_u32(vreinterpretq_u32_f32(b)) 1b8983ed3cbbd9db
+  vcvtq_f64_s64(vreinterpretq_s64_f64(x)) d5ddcf9c11d4668d
+  vcvtq_f64_u64(vreinterpretq_u64_f64(y)) 05db6dc2a148b6c0
+  vrndq_f32(a) 76fc5f7e551fbfc6
+  vrndnq_f32(a) 8bbf5a77e1c6d332
+  vrndmq_f32(a) 1ff25cfeb3769808
+  vrndpq_f32(a) 4a868a77f355282c
+  vrndaq_f32(a) b5f43a85e1c6d332
+  vrndxq_f32(a) 8bbf5a77e1c6d332
+  vrndiq_f32(a) 8bbf5a77e1c6d332
+  vrndnq_f64(x) 8fb4ea1fee4398aa
+  vrndaq_f64(y) 0342cb3550d0c97b
+  vceqq_f32(a, b) 0000000000000000
+  vcgeq_f32(a, b) c0984644f475cb85
+  vcgtq_f32(a, b) c0984644f475cb85
+  vcageq_f32(a, b) dc366a40e180daa7
+  vcgtzq_f32(a) b826c91d4190dbd3
+  vcvt_f64_f32(vget_low_f32(a)) 2453986e20000000
+  vcombine_f32(vcvt_f32_f64(x), vcvt_f32_f64(y)) 7467a3d7fc72283c
+  vcvt_f32_f16(vreinterpret_f16_u16(vget_low_u16(vreinterpretq_u16_f32(a)))) 2c8d656c1852e000
+float any bits               cfab8955785b32f6
+  fpcr read-back 0001388cd0000000
+  rmode nearest add d931f3b58cd61999
+  rmode nearest mul 0f03a4b2e5a01822
+  rmode nearest div afad917852c13bc3
+  rmode nearest lrintf 466bc41c2f5daf9a
+  rmode +inf add 8fa6e6a78e3deb43
+  rmode +inf mul 4e77e4614c9a5d97
+  rmode +inf div 944f0b42a3c25fff
+  rmode +inf lrintf 98678fc620239b5e
+  rmode -inf add 03be33ec609e0572
+  rmode -inf mul ec01420817a559f4
+  rmode -inf div 5c78a7aa3d54559a
+  rmode -inf lrintf 934f307d5210f009
+  rmode zero add defd0b69b2a822bc
+  rmode zero mul 8be7d01f407074d7
+  rmode zero div d4402d334221a90c
+  rmode zero lrintf 16b5c021bb8a0019
+  flush-to-zero mul 0000000000000000
+  flush-to-zero add 0000000000000000
+  default-NaN add c00000d913400000
+  fpsr after inexact 0000100000001b30
+  fpsr after div by zero 0000120000001e96
+  fpsr QC after sat add 0000000000000000
+  sat add result 00007f000000d7cd
+fpcr/fpsr                    0000000000000000
+  s fmax 18fb3e18e9845a38
+  s fmin 9cf8f02a8fff6dd0
+  s fmaxnm 49c62b6c758221de
+  s fminnm bb0b8e6fbf2c5c76
+  s frecps 35a1754728ae3bcc
+  s frsqrts 44e314b13e8e7bb4
+  d fmax 62427f42f01ff84a
+  d fmin d3171cfed6414214
+  d fmaxnm 9fd8d6b3d83222d4
+  d fminnm 3f56698a53af4aa6
+  d frecps 09c708c02550263c
+  d frsqrts 7e6f660d7a28073c
+  s fadd f99fe43b3b1f56e8
+  s fsub e16f186120de6930
+  s fmul 11d9130a1858b7c0
+  s fdiv b7cbfbcacff99bd8
+  s fnmul 2b47d6641858b7c0
+  s fabd 8d4ac68120de6930
+  s fmulx 11d9130a1858b7c0
+  s fsqrt e998069511ff1bc4
+  s fmadd e64ac0cc034d0d2e
+  d fadd 513b86d1f53f8932
+  d fsub 4469c8931b326225
+  d fmul 5e9a9ad35b87faed
+  d fdiv f756a6c8ab5c8470
+  d fnmul 649aaa3bf12cf2f5
+  d fsqrt d4e9318632a57578
+  d fmadd fcdb83446737905f
+  4s fmax e1fe2f051b4adde6
+  4s fmin 5eb6de7a7a7d80b6
+  4s fmaxnm 50b7845826cc2c9b
+  4s fminnm e331f0b66623f1af
+  4s frecps ba843979a458cdec
+  4s frsqrts 97688a9d7aabcbcb
+  4s fmls 478f6187e6777d10
+  4s fmaxp 7d0f764b7f547db5
+  4s fmaxnmp 09c67e184c1e3098
+  2d fmax 0b5e08ca253c86f6
+  2d fmin 35a6efed483b365f
+  2d fmaxnm ba8a79ca2dc9e7f5
+  2d fminnm 9374416e482fa398
+  2d frecps 075ce81f710239e9
+  2d frsqrts 4aa56ac2684ab3e0
+  2d fmls add03f45e389d936
+  4s fadd 64af0488e80bd969
+  4s fsub 1ac3b441a777604a
+  4s fmul 1c2c6d916bd136bb
+  4s fdiv 56cab4c415cc07fb
+  4s fabd 15205116019a266e
+  4s fmulx 1c2c6d916bd136bb
+  4s fsqrt 59ae2dc3ac3add8a
+  4s fmla d2d5f2d19ee6de23
+  2d fadd 4e65969ab6f2c90f
+  2d fmul 9c32d80af4db3546
+  2d fdiv ce4007e36aa2de84
+  2d fsqrt 7af60952f803981c
+  2d fmla 35c51b58f5f9680d
+nan rules                    0000000000000000
+  inv s fmax 200d6558afe7a384
+  inv s fmin 1301e6229d0a924c
+  inv s fmaxnm bfd1b52b89823082
+  inv s fminnm 11c393bf1cce8eda
+  inv s frecps 4b6dc46c9dbcf8c6
+  inv s frsqrts 329e4175fe9fe8be
+  inv d fmax 101f93b4362159fa
+  inv d fmin 1d9a28ec9465f899
+  inv d fmaxnm 0bf3c9804cebb586
+  inv d fminnm 47eed8c76f8b7aed
+  inv d frecps 48729cbfd9f68676
+  inv d frsqrts ed9b24bead4f64cb
+  inv s fadd 743f2debfd19a97a
+  inv s fsub 957b1ebe8ee26902
+  inv s fmul 087a32e44f606e76
+  inv s fdiv ed33ee81c1258d42
+  inv s fnmul 558ce0e84f606e76
+  inv s fabd 6b331d6c8ee26902
+  inv s fmulx 5d519c4712606e76
+  inv s fsqrt 039ed06bcd1f1b64
+  inv s fmadd 2804fedd95ad1f6c
+  inv s fmsub d88ba928e7ad1f6c
+  inv s fnmadd eeb1d2e295ad1f6c
+  inv s fnmsub 81ea3928e7ad1f6c
+  inv d fadd b80bb5b4536f9a97
+  inv d fsub e833d10f06b8de65
+  inv d fmul 4aefc11e3b4dae2a
+  inv d fdiv f1cb9448f0dd3623
+  inv d fnmul 4ebd65cfd8f8d962
+  inv d fsqrt 6cd3ce93963492c5
+  inv d fmadd 463446e4017f0442
+  inv d fmsub 09e5f5f318288af8
+  inv d fnmadd 761a8bcc225504f7
+  inv d fnmsub 2978c7cb415f2044
+  inv 4s fmax 57db30e1d7997ed4
+  inv 4s fmin 290750585297f77f
+  inv 4s fmaxnm 4e7cfcd6f3d49c0a
+  inv 4s fminnm 0fd036a4fc63cd95
+  inv 4s frecps 442b7c3241a5b195
+  inv 4s frsqrts a0b356ba5b2f61a1
+  inv 4s fmls 09276d1572e7c5dd
+  inv 4s fmaxp c586595a309c7475
+  inv 4s fmaxnmp 131c9febf0125088
+  inv 2d fmax 1e67976ea192fd58
+  inv 2d fmin 6a7474932c1c0366
+  inv 2d fmaxnm 22323df406e7af8c
+  inv 2d fminnm 37cc9bb9b6a137ce
+  inv 2d frecps 11e10bb5654cff3d
+  inv 2d frsqrts b6964dbbdbb12a66
+  inv 2d fmls 98fe26763c78f50a
+  inv 4s fadd 98f2abea1b5acc9c
+  inv 4s fsub a13d053d0aa36a8b
+  inv 4s fmul ba7e96af6553107f
+  inv 4s fdiv b59be5733d0ff292
+  inv 4s fabd e4156a7854c32948
+  inv 4s fmulx 8756cc655e522ce2
+  inv 4s faddp 94682c1d005a1c1a
+  inv 4s fsqrt 2d497d69cccb72ee
+  inv 4s fmla ee6e3dbfdf309824
+  inv 4s fmla idx da90f33e090652a4
+  inv 4s fmls idx 22a784fe99de972f
+  inv 2d fadd 26c28d36a092feae
+  inv 2d fmul 562a7fba947d671b
+  inv 2d fdiv e21e8a194746ee1a
+  inv 2d fsqrt 11fb01425446f7dd
+  inv 2d fmla 4de5b603e84d02b4
+nan rules invalid operations 0000000000000000
+  dn s fmax 7c907c916f1521e0
+  dn s fmin 3f9c97bd264efffe
+  dn s fmaxnm 0f75a0c1e410b7fe
+  dn s fminnm 6c63c0428ca018f0
+  dn s frecps 354734f4e2acd3f6
+  dn s frsqrts c2c0ae26eca19814
+  dn d fmax ab01e38bce879d6c
+  dn d fmin 14e729a92faae7bb
+  dn d fmaxnm ca06e5e9b5e45f6d
+  dn d fminnm a46f6a9603b1fb66
+  dn d frecps 418595eec124fa02
+  dn d frsqrts 60e198dbf77e1c1e
+  dn s fadd 13579b7cf78d4424
+  dn s fsub 840651d43895394e
+  dn s fmul a70dc28896fd3d0a
+  dn s fdiv 212f5e5419e9ebc4
+  dn s fnmul e5abd2e696fd3d0a
+  dn s fabd 9db29c353895394e
+  dn s fmulx a70dc28896fd3d0a
+  dn s fsqrt 3910850cc46886de
+  dn s fmadd f8524547a98a4dca
+  dn d fadd c85df4f24501e9b7
+  dn d fsub 825ea3ab307749a9
+  dn d fmul cfb3d284b819f771
+  dn d fdiv 5fbebb80d0851886
+  dn d fnmul 5fe95c58c906dcf9
+  dn d fsqrt 367372d36e805238
+  dn d fmadd 69c06a3687eabda3
+  dn 4s fmax 11afce2cb30ceb3d
+  dn 4s fmin cdb0a3816d2c0588
+  dn 4s fmaxnm 08ddfb289b80a52f
+  dn 4s fminnm 666848ef47916626
+  dn 4s frecps 3351c0eb7c49375c
+  dn 4s frsqrts bd0bc59ab67bf3d4
+  dn 4s fmls a53dddf65c185e0b
+  dn 4s fmaxp f2a91ccc1477f551
+  dn 4s fmaxnmp 79199d1927acd780
+  dn 2d fmax a05f0539f6f8e77e
+  dn 2d fmin 17af18c5eddf4e2e
+  dn 2d fmaxnm dbb8e7c3d6f8892e
+  dn 2d fminnm ac0ad6c089a7b272
+  dn 2d frecps 4ef05a40b474e0bd
+  dn 2d frsqrts 62473b4ce9745ac8
+  dn 2d fmls 30773f1a9e6fb42f
+  dn 4s fadd d3cd6fcc90d655b7
+  dn 4s fsub ac7bec6625679d9f
+  dn 4s fmul 435b93b60a02434f
+  dn 4s fdiv bee8772a98e6e725
+  dn 4s fabd 7ec428147d812d1e
+  dn 4s fmulx 435b93b60a02434f
+  dn 4s fsqrt 5bc7909905b3777c
+  dn 4s fmla c23b114434bcd997
+  dn 2d fadd 2bfb185e39a62674
+  dn 2d fmul b5fe4afc1329b086
+  dn 2d fdiv 17a1abc83cb7888d
+  dn 2d fsqrt 3b1042f1e29f6abe
+  dn 2d fmla a848dfd153c16e53
+nan rules FPCR.DN            0000000000000000
+  nn s fmax 1e247dfe31f2224e
+  nn s fmin e6dfe0c2e8ffdc78
+  nn s fmaxnm 0336488d6215b9be
+  nn s fminnm 5aeaa92065dc1378
+  nn s frecps 1be16ab0e6f5c34a
+  nn s frsqrts e95af053fcd46554
+  nn d fmax d2be86b2b683cda3
+  nn d fmin c92c1e428ecd462e
+  nn d fmaxnm 082ae0edd7afce1a
+  nn d fminnm 2c68c123adfab837
+  nn d frecps 5ece4b782a5c65c6
+  nn d frsqrts 949df0654860c24d
+  nn s fadd 1d292ca4f78eea6a
+  nn s fsub 3ef29ac391d32426
+  nn s fmul eb42ece63e3f20a8
+  nn s fdiv d629277bfcef16ba
+  nn s fnmul 4028cdae3e3f20a8
+  nn s fabd c10a82cf91d32426
+  nn s fmulx eb42ece63e3f20a8
+  nn s fsqrt 4ded729f24caa610
+  nn s fmadd cba2f70d822deb62
+  nn s fmsub 1e2a1e1f06575bd4
+  nn s fnmadd 050addf9822deb62
+  nn s fnmsub ef07b50a06575bd4
+  nn d fadd 5e17871a79cd5882
+  nn d fsub b907db9dd7d2c4a2
+  nn d fmul b253e13776842cb9
+  nn d fdiv 02cda17bee30bfdd
+  nn d fnmul 8a55ec759c96c005
+  nn d fsqrt 0d3feb692b51a09a
+  nn d fmadd 5c1a4c33c761f580
+  nn d fmsub 13ab8cca3a6e3f2c
+  nn d fnmadd c4131823b4c4dd69
+  nn d fnmsub 881f2e08089e4063
+  nn 4s fmax a935e730980a6dfd
+  nn 4s fmin cf08a1692bd6bec8
+  nn 4s fmaxnm 70f1150c903f88cc
+  nn 4s fminnm e155d966db51e47d
+  nn 4s frecps 8e5c2d5fb5251770
+  nn 4s frsqrts 87ef3fd472385717
+  nn 4s fmls ff300e511f5557be
+  nn 4s fmaxp 4d8aa7a58557e865
+  nn 4s fmaxnmp 35efb507e2b69439
+  nn 2d fmax 12c45674288c5f17
+  nn 2d fmin 61942b25d9327e72
+  nn 2d fmaxnm 55164d1f49b95a2d
+  nn 2d fminnm 0f531b1271607574
+  nn 2d frecps 0f8565438f8601d5
+  nn 2d frsqrts faa247ba2ff2d740
+  nn 2d fmls f0f3c77f47793370
+  nn 4s fadd 2210b67ab606a675
+  nn 4s fsub accc6136be8108c1
+  nn 4s fmul e7fa8ef287cfeb64
+  nn 4s fdiv 441dda3c4f4ef6f4
+  nn 4s fabd 4e3a45cdc6beb5ca
+  nn 4s fmulx e7fa8ef287cfeb64
+  nn 4s faddp 0c689479b3cf3132
+  nn 4s fsqrt 59f728ed51f3175a
+  nn 4s fmla 4630e24b4f54393e
+  nn 4s fmla idx 08dca2d2a1d41c36
+  nn 4s fmls idx 613414bfdf33ad1d
+  nn 2d fadd f4b4d21c21eb3439
+  nn 2d fmul bd4e3b4a661ec48e
+  nn 2d fdiv c470f710b2107613
+  nn 2d fsqrt 9d95a4f1ec0424ec
+  nn 2d fmla 33a82a377b3b4b29
+nan rules two NaN operands   0000000000000000
+scalar int/flags             857c6a37fd06d68a
+lse atomics                  2a8dd5d5bffb278f
+  ldaxr/stlxr value 9479a610fa155896
+  ldaxr/stlxr cell 9479a610fa155896
+  ldxrb/stxrb value 2e0acecf9e90773e
+  ldxrb/stxrb cell 6dfa86a47f47023e
+  ldxp/stxp value 6dfa86a47f47023e
+  ldxp/stxp cell 6dfa86a47f47023e
+  stxr without monitor (1) c9eb2188cb5944fc
+  stxr after clrex (1) c9eb2188cb5944fc
+exclusives                   0000000000000000
+unaligned                    8940cdc2ef45ff02
+  vaddq_f16(a, b) fcc09f50110a3001
+  vmulq_f16(a, b) a964f680fd8db100
+  vdivq_f16(a, b) 03290b5a1720f264
+  vfmaq_f16(c, a, b) c7ee7a7252b47218
+  vsqrtq_f16(a) 583d3e87f015e28a
+  vmaxq_f16(a, b) a18aa6d73385246b
+  vabsq_f16(a) 62c55dcb9ecc06ce
+  vrecpeq_f16(a) f718a4bbe6c16005
+  vrndnq_f16(a) 15d22b923a807037
+  vreinterpretq_u8_s16(vcvtq_s16_f16(a)) 2c0104a8e4275bef
+  vcvtq_f16_s16(vreinterpretq_s16_f16(b)) 99a7a95190319111
+  vreinterpretq_u8_u16(vceqq_f16(a, b)) 0000000000000000
+  vcvt_f32_f16(vget_high_f16(a)) 795c2c7618de6000
+  vcombine_f16(vcvt_f16_f32(rf(1)), vcvt_f16_f32(rf(1))) 1bd6e1d000cc18f3
+  vcvt_f64_f32(vget_low_f32(vcvt_f32_f16(vget_low_f16(c)))) 47d3300000000000
+fp16                         0000000000000000
+  ldapr/ldaprb 5aee25619548dd87
+  dc/dsb/dmb/isb/prfm done 209862fbbf0869c6
+  ic ivau done 209862fbbf0869c6
+  tpidr_el0 nonzero 209862fbbf0869c6
+  dc cvap done 00000100000001b3
+lrcpc/dc/ic/barriers         0000000000000000
+  rt_sigaction set 0000000000000000
+  rt_sigaction get ret 0000000000000000
+  get handler 00000100000001b3
+  get flags 00000400000006cc
+  get mask 00080000000d9800
+  get restorer null 00000100000001b3
+  rt_sigaction bad sigsetsize ffffe9ffffffda9e
+  rt_sigaction signal 0 ffffe9ffffffda9e
+  rt_sigaction SIGKILL ffffe9ffffffda9e
+  tgkill self 0000000000000000
+  raw handler ran 00000100000001b3
+  si_code SI_TKILL 00000100000001b3
+  kill self 0000000000000000
+  raw handler ran 2 0000020000000366
+  sigprocmask block 0000000000000000
+  old mask was clear of usr1 00000100000001b3
+  blocked: no delivery 0000020000000366
+  rt_sigpending ret 0000000000000000
+  pending has usr1 00000100000001b3
+  unblock delivers 0000030000000519
+  unblock delivers by 100 ms 0000030000000519
+  libc: blocked raise not delivered 0000000000000000
+  libc: sigpending has usr1 00000100000001b3
+  libc: delivered at unblock 00000100000001b3
+  libc: delivered by 100 ms 00000100000001b3
+  sigaltstack set 0000000000000000
+  sigaltstack get 0000000000000000
+  altstack same 00000100000001b3
+  sigaltstack too small (-ENOMEM) fffff3ffffffeb9c
+  PR_GET_DUMPABLE 00000100000001b3
+  PR_GET_SECCOMP 0000000000000000
+  PR_GET_NO_NEW_PRIVS 0000000000000000
+  PR_SET_NAME 0000000000000000
+  PR_GET_NAME 00000100000001b3
+  uname ret 0000000000000000
+  uname machine == aarch64 00000100000001b3
+  uname sysname 00000100000001b3
+  getrandom 0000080000000d98
+  clock_gettime ret 0000000000000000
+  sched_getaffinity > 0 00000100000001b3
+  futex timeout ret (-ETIMEDOUT) ffff91ffffff4516
+  futex waited 20..80 ms 00000100000001b3
+  svc mmap ok 00000100000001b3
+  mincore 0000000000000000
+  mprotect 0000000000000000
+  madvise 0000000000000000
+  munmap 0000000000000000
+  ptrace TRACEME twice child status 0000130000002049
+  TracerPid 0000000000000000
+raw svc syscalls             0000000000000000
+  mrs cntpct_el0       SIGILL
+  mrs cntvct_el0       readable
+  mrs cntfrq_el0       readable
+  mrs midr_el1         readable
+  mrs mpidr_el1        readable
+  mrs revidr_el1       readable
+  mrs id_aa64pfr0_el1  readable
+  mrs id_aa64pfr1_el1  readable
+  mrs id_aa64isar0_el1 readable
+  mrs id_aa64isar1_el1 readable
+  mrs id_aa64isar2_el1 readable
+  mrs id_aa64mmfr0_el1 readable
+  mrs id_aa64mmfr1_el1 readable
+  mrs id_aa64mmfr2_el1 readable
+  mrs id_aa64dfr0_el1  readable
+  mrs id_aa64dfr1_el1  readable
+  mrs id_aa64afr0_el1  readable
+  mrs s3_0_c0_c4_4     readable
+  mrs id_pfr0_el1      SIGILL
+  mrs id_isar0_el1     readable
+  mrs ctr_el0          readable
+  mrs dczid_el0        readable
+  mrs currentel        SIGILL
+  mrs daif             SIGILL
+  mrs sctlr_el1        SIGILL
+  mrs tpidr_el0        readable
+  mrs tpidrro_el0      readable
+  mrs tpidr_el1        SIGILL
+  mrs pmccntr_el0      readable
+  mrs pmcr_el0         readable
+  mrs pmuserenr_el0    readable
+  mrs pmselr_el0       readable
+  mrs cntkctl_el1      SIGILL
+  mrs vbar_el1         SIGILL
+  mrs ttbr0_el1        SIGILL
+  mrs tcr_el1          SIGILL
+  mrs elr_el1          SIGILL
+  mrs spsr_el1         SIGILL
+  mrs sp_el0           SIGILL
+  mrs spsel            SIGILL
+  mrs nzcv             readable
+  mrs fpcr             readable
+  mrs fpsr             readable
+  mrs s3_3_c4_c2_5     readable
+  mrs s3_3_c4_c2_6     SIGILL
+  mrs s3_3_c4_c2_7     readable
+  mrs pan              SIGILL
+  mrs uao              SIGILL
+  mrs mdscr_el1        SIGILL
+  mrs oslsr_el1        SIGILL
+  mrs dbgdtr_el0       SIGILL
+  mrs cntp_ctl_el0     SIGILL
+  mrs cntv_ctl_el0     SIGILL
+  mrs s3_3_c2_c4_0     SIGILL
+  mrs s3_3_c2_c4_1     SIGILL
+mrs readability              0000000000000000
+  ldaddal total (80000) 0138800002130180
+  ldaxr/stlxr total (80000) 0138800002130180
+  release/acquire order violations 0000000000000000
+threads                      0000000000000000
+smc a-mprotect-flip checked
+smc (flush)                  c263853bcc4a6add
+signal wild-jump round 0: in_handler=2 signo=7 code=1 addr=0x1342 pc=0x1342 sp=0x1342
+signal wild-jump round 1: in_handler=2 signo=11 code=1 addr=0 pc=0 sp=0
+signal wild-jump round 2: in_handler=2 signo=11 code=1 addr=0x1000 pc=0 sp=0x1000
+signal sigaction roundtrip flags=0x58000004 handler=1 mask-usr2=1 mask-term=1 mask-int=0
+signal altstack roundtrip size=65536 flags=0 same=1
+signal bad-sp no-altstack child: killed by signal 11
+signal misaligned-handler child: exited 101
+signal default-action Segmentation fault via kill: killed by signal 11
+signal default-action Segmentation fault via raise: killed by signal 11
+signal default-action Segmentation fault via tgkill: killed by signal 11
+signal default-action Bus error via kill: killed by signal 7
+signal default-action Bus error via raise: killed by signal 7
+signal default-action Bus error via tgkill: killed by signal 7
+signal default-action Illegal instruction via kill: killed by signal 4
+signal default-action Illegal instruction via raise: killed by signal 4
+signal default-action Illegal instruction via tgkill: killed by signal 4
+signal default-action Floating point exception via kill: killed by signal 8
+signal default-action Floating point exception via raise: killed by signal 8
+signal default-action Floating point exception via tgkill: killed by signal 8
+signal default-action Aborted via kill: killed by signal 6
+signal default-action Aborted via raise: killed by signal 6
+signal default-action Aborted via tgkill: killed by signal 6
+signal default-action Aborted via abort: killed by signal 6
+signal br-misaligned: in_handler=2 signo=7 code=1 addr==target 1
+signal blr-misaligned: in_handler=2 signo=7 code=1 addr==target 1
+signal ret-misaligned: in_handler=2 signo=7 code=1 addr==target 1
+signal br-noexec-page: in_handler=2 signo=11 code=2 addr==target 1
+signals                      114c2c0009ca3a6a

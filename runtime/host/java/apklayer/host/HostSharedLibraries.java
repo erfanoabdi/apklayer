@@ -5,6 +5,7 @@ import android.content.pm.VersionedPackage;
 import android.content.res.ApkAssets;
 import android.content.res.XmlResourceParser;
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -55,8 +56,8 @@ final class HostSharedLibraries {
             if (name != null && !libs.containsKey(name)) libs.put(name, !"false".equals(e.attributes().get(ATTR_REQUIRED)));
         }
         // PackageBackwardCompatibility's updaters, in their order (frameworks/base/services/core/java/com/android/server/pm/parsing/library)
-        for (String onBootClassPath : new String[] {"wear-sdk", "android.net.ipsec.ike", "com.google.android.maps", "android.hidl.base", "android.hidl.manager"})
-            libs.remove(onBootClassPath);  // on the boot class path, or dropped for apps (maps; HIDL for non-system apps)
+        for (String onBootClassPath : new String[] {"wear-sdk", "android.net.ipsec.ike", "com.google.android.maps", "android.hidl.base-V1.0-java", "android.hidl.manager-V1.0-java"})
+            libs.remove(onBootClassPath);  // on the boot class path (the framework carries android.hidl.base/manager's classes, docs/HIDL.md), or dropped for apps (maps)
         if (targetSdk > 0 && targetSdk < 28) prefixRequired(libs, "org.apache.http.legacy");  // OrgApacheHttpLegacyUpdater: targets below P
         prefixImplicit(libs, "android.test.runner", "android.test.mock");  // AndroidTestRunnerSplitUpdater
         if (targetSdk > 0 && targetSdk <= 29) prefixRequired(libs, "android.test.base");  // AndroidTestBaseUpdater: targets up to Q
@@ -168,9 +169,30 @@ final class HostSharedLibraries {
         info.sharedLibraryFiles = all.toArray(new String[0]);
     }
 
+    /** Another installed app's libraries as PackageManagerService records them in its ApplicationInfo (read from its manifest once per APK version). */
+    static void recordOther(android.content.pm.ApplicationInfo info, java.io.File apk) {
+        Resolved resolved = OTHERS.computeIfAbsent(apk.getPath() + "@" + apk.lastModified(), key -> {
+            int target = ApkSdk.target(apk);
+            return resolve(used(apk, target), HostAppLibraries.uses(apk), usedNative(apk, target));
+        });
+        if (resolved.infos().isEmpty()) return;
+        info.sharedLibraryInfos = new ArrayList<>(resolved.infos());
+        info.sharedLibraryFiles = withApks(resolved.jars());
+    }
+
+    /** The libraries' files as PackageManagerService lists them: the jars, then the installed providers' APKs (ResourcesManager adds an .apk of sharedLibraryFiles to the app's AssetManager: the library's resources). */
+    private static String[] withApks(List<Path> jars) {
+        List<String> all = new ArrayList<>();
+        for (Path jar : jars) all.add(jar.toString());
+        for (Path jar : jars) { Path apk = jar.resolveSibling("base.apk"); if (jar.getFileName().toString().equals("classes.jar") && Files.isRegularFile(apk)) all.add(apk.toString()); }
+        return all.toArray(new String[0]);
+    }
+
+    private static final Map<String, Resolved> OTHERS = new java.util.concurrent.ConcurrentHashMap<>();
+
     /**
      * Before any class of the app loads: the libraries' jars join the app's class loader and its ApplicationInfo.sharedLibraryFiles (LoadedApk and
-     * apps read them; ResourcesManager skips .jar files). A required library the runtime lacks is reported: the app may still run without it.
+     * apps read them; ResourcesManager skips .jar files and takes the .apk ones (withApks)). A required library the runtime lacks is reported: the app may still run without it.
      */
     static void install(Path apk) {
         if (apk == null) return;
@@ -190,7 +212,7 @@ final class HostSharedLibraries {
         try {
             if (app != null) app.getClass().getMethod("addLibraries", Path[].class).invoke(app, (Object) resolved.jars().toArray(new Path[0]));
         } catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
-        files = resolved.jars().stream().map(Path::toString).toArray(String[]::new);
+        files = withApks(resolved.jars());
         try {
             Object bound = org.robolectric.util.ReflectionHelpers.getField(org.robolectric.RuntimeEnvironment.getActivityThread(), "mBoundApplication");
             record(org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo"));

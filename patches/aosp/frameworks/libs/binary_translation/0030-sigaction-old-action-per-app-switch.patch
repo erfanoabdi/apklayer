@@ -1,0 +1,57 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] EXPERIMENT: berberis.sigaction_stub.<package> / BERBERIS_SIGACTION_STUB=1 gives one app the fatal-signal stub as the old action again
+
+A guess, labelled as one: PGR with the 0025 translator (rt_sigaction reported the fatal-signal stub as the old action of SIGSEGV/SIGILL/SIGBUS/SIGFPE)
+lived longer in three runs than with 0028 (SIG_DFL). Later runs with and without this switch crashed in the same range (switch off: 74, 92, 40 s; on:
+44, 61 s), so it changed nothing measurable. Kept as a switch because it is off by default and costs nothing; Gecko, Breakpad and Go need SIG_DFL
+(0028). The property name must fit in 64 characters: berberis.sigaction_stub.<package> does not for a long package (use the environment variable).
+Module libberberis_arm64.
+
+diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/guest_signal_handling.cc
+--- a/guest_os_primitives/guest_signal_handling.cc
++++ b/guest_os_primitives/guest_signal_handling.cc
+@@ -22,6 +22,7 @@
+ #include <cstddef>
+ #include <memory>
+ #include <mutex>
++#include <string>
+ // region digitalis
+ #include <android/log.h>
+ // endregion
+@@ -387,6 +388,27 @@
+ 
+ const GuestAddr kFatalGuestHandlerStub = ToGuestAddr(&kFatalGuestHandlerStub);
+ 
++namespace {
++
++// apklayer patch (EXPERIMENT, a guess): berberis.sigaction_stub.<package>=1 (BERBERIS_SIGACTION_STUB=1 in the environment) makes one app's
++// rt_sigaction report the fatal-signal stub as the old action of SIGSEGV/SIGILL/SIGBUS/SIGFPE again, as before 0028. PGR ran longer with that
++// (2 of 3 runs without a crash report in 130-165 s, against 38-39 s with SIG_DFL; too few runs to trust): the switch makes the comparison one
++// property, not a translator swap. Off by default: Gecko, Breakpad and Go need SIG_DFL (a chained handler that jumps to the stub spins).
++bool ReportFatalStubAsOldAction() {
++  static const bool value = [] {
++    if (const char* package = GetAppPackageName(); package != nullptr) {
++      std::string prop = std::string("berberis.sigaction_stub.") + package;
++      ConfigStr app("BERBERIS_SIGACTION_STUB", prop.c_str());
++      if (app.get() != nullptr) return app.get()[0] == '1';
++    }
++    ConfigStr var("BERBERIS_SIGACTION_STUB", "berberis.sigaction_stub");
++    return var.get() != nullptr && var.get()[0] == '1';
++  }();
++  return value;
++}
++
++}  // namespace
++
+ }  // namespace
+ 
+ void InitGuestSignalHandling() {
+@@ -669,7 +691,7 @@
+   // apklayer patch: the fatal-signal stub claims SIGSEGV/SIGILL/SIGBUS/SIGFPE, but it is the address of a host variable, not guest code: a crash
+   // handler that chains to the old action (Gecko's, Breakpad's) would jump to it and loop in berberis_HandleNoExec for ever. The guest has
+   // not installed a handler: report SIG_DFL, as the kernel does.
+-  if (changed && old_act && old_act->guest_sa_sigaction == kFatalGuestHandlerStub) {
++  if (changed && old_act && old_act->guest_sa_sigaction == kFatalGuestHandlerStub && !ReportFatalStubAsOldAction()) {
+     old_act->guest_sa_sigaction = Guest_SIG_DFL;
+     old_act->sa_flags = 0;
+     old_act->sa_mask = {};

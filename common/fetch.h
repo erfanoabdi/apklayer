@@ -36,5 +36,7 @@ std::string runtimeRoom(const std::string& root, long long need, std::string* no
 std::string unpackRuntime(const std::string& bundle, const std::string& root, const std::string& version, std::string* note = nullptr);
 // PackageKit (pkcon install-local, its InstallFiles) when installed, else pkexec apt-get install: both ask the desktop user through polkit
 Result installDeb(const std::string& path);
+// a click (Ubuntu Touch): PackageKit's install-local, else `click install`
+Result installClick(const std::string& path);
 
 }  // namespace manager

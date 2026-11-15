@@ -71,7 +71,10 @@ if host_machine.system() == 'linux'
   # bionic_translation at its pinned revision (subprojects/bionic_translation.wrap) with our series applied (patches/apply, idempotent; an edited
   # patch resets it to that revision first, below), plus patches/bionic_translation/compat where the toolchain is older
   bt_src = meson.project_source_root() / 'subprojects/bionic_translation'
-  if not fs.is_dir(bt_src)
+  local_bt = run_command('sh', '-c', 'echo "$APKLAYER_BIONIC_TRANSLATION"', check: true).stdout().strip()  # a local checkout: no network
+  if not fs.is_dir(bt_src) and local_bt != ''
+    run_command('cp', '-a', local_bt, bt_src, check: true)
+  elif not fs.is_dir(bt_src)
     run_command(find_program('meson'), 'subprojects', 'download', '--sourcedir', meson.project_source_root(), 'bionic_translation', check: true)
   endif
   apply = find_program('patches/apply')
@@ -120,7 +123,7 @@ subdir('tests/native')
 
 # what the CLI reads from its root (the source tree, or <prefix>/share/apklayer installed: cli/layout.cpp)
 install_data('tools/release/versions', install_dir: share_dir)
-install_data('tools/sysapps.list', 'tools/release/setup-runtime.sh', 'tools/release/jdk-image.sh', install_dir: share_dir / 'tools')
+install_data('tools/sysapps.list', 'tools/release/setup-runtime.sh', 'tools/release/jdk-image.sh', 'tools/release/gapps.sh', install_dir: share_dir / 'tools')
 install_subdir('tools/host-setup', install_dir: share_dir / 'tools')
 install_data('runtime/host/jvm.args', install_dir: share_dir / 'runtime/host')
 install_data('bridge/native/apklayer.prop', 'bridge/native/bionic_translation.cfg', install_dir: share_dir / 'bridge/native')
@@ -136,6 +139,8 @@ if not arm32_only
   install_symlink('apklayer', pointing_to: '../lib/apklayer/cli/apklayer', install_dir: get_option('bindir'))
 endif
 install_data('data/apklayer-manager.desktop', install_dir: get_option('datadir') / 'applications')
+# the .apks/.xapk/.apkm types the manager's entry opens (shared-mime-info; the packaging updates its database: docs/FILE-ASSOCIATIONS.md)
+install_data('data/apklayer-mime.xml', rename: 'apklayer.xml', install_dir: get_option('datadir') / 'mime/packages')
 # the Apklayer submenu of the desktop's app menu (as Waydroid's): apps carry Categories=X-Apklayer-App; the CLI writes a per-user copy too
 install_data('data/apklayer.menu', install_dir: get_option('sysconfdir') / 'xdg/menus/applications-merged')
 install_data('data/apklayer.directory', install_dir: get_option('datadir') / 'desktop-directories')

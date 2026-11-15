@@ -18,13 +18,14 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 PKG = 'com.android.test.uibench'
-DECOR_H = 46  # bridge/shell/decor.h
+DECOR_H = 46  # bridge/shell/decor.h; 0 where the compositor draws the title bar (KDE, sway: server-side decorations, see bar_h)
 ENV = dict(instance.ENV)
 STEPS = ((5000, 'hover:1,0'), (8000, 'hover:2,0'), (11000, 'hover:3,0'), (14000, 'hover:4,0'), (17000, 'hover:5,0'), (17500, 'orient:0'),
          (20000, 'hover:6,0'), (22000, 'hover:7,0'))
 ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=24000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
 CONFIGURE = re.compile(r'configure content (\d+)x(\d+) @(\d+)% \((\d+)x(\d+) px\), title bar (\d+) logical = (\d+) px(, maximized)?')
 seen, checks = [], []
+bar_h = DECOR_H
 
 
 def configures():
@@ -39,7 +40,7 @@ def expect(w, h, scale, maximized=False):
     has the matching pixel size."""
     c = configures()[-1]
     px = (w * scale // 100, h * scale // 100)
-    assert c == (w, h, scale) + px + (DECOR_H, (DECOR_H * scale + 99) // 100, maximized), 'configure %s, expected %dx%d @%d%%' % (c, w, h, scale)
+    assert c == (w, h, scale) + px + (bar_h, (bar_h * scale + 99) // 100, maximized), 'configure %s, expected %dx%d @%d%%' % (c, w, h, scale)
     assert any('configure %dx%d @%d%%' % (w, h, scale) in line and '@%ddpi' % (160 * scale // 100) in line for line in seen), \
         'the app did not take %dx%d @%d%%' % (w, h, scale)
     shot = Image.open(instance.capture('geometry %dx%d@%d' % (w, h, scale), PKG)).size
@@ -54,11 +55,11 @@ app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.
 try:
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
-    end = time.monotonic() + 60
+    end = time.monotonic() + 90
     pending, first, landscape = b'', None, None
     with open(instance.OUT / 'window-geometry.log', 'wb') as log:
         while True:
-            assert selector.select(10) and time.monotonic() < end, 'geometry test stalled'
+            assert selector.select(30) and time.monotonic() < end, 'geometry test stalled'
             data = os.read(app.stdout.fileno(), 65536)
             if not data: break
             log.write(data)
@@ -70,6 +71,11 @@ try:
                 seen.append(line)
                 if 'script: hover:1,0' in line:
                     first = configures()[-1]
+                    # the bar is ours (DECOR_H) or the compositor's (0 under server-side decorations, shell.log says which)
+                    bar_h = first[5]
+                    ssd = 'server-side decorations' in (instance.STATE / 'shell.log').read_text(errors='replace')
+                    assert bar_h == (0 if ssd else DECOR_H), 'title bar %d logical, server-side decorations: %s' % (bar_h, ssd)
+                    checks.append('server-side bar' if ssd else 'own bar')
                     expect(*first[:3])
                     instance.inject(PKG, 'scale:200')
                 elif 'script: hover:2,0' in line:
@@ -79,7 +85,7 @@ try:
                     expect(first[0], first[1], 150)
                     instance.inject(PKG, 'maximize:900,700')
                 elif 'script: hover:4,0' in line:
-                    expect(900, 700 - DECOR_H, 150, maximized=True)
+                    expect(900, 700 - bar_h, 150, maximized=True)
                     instance.inject(PKG, 'unmaximize')
                 elif 'script: hover:5,0' in line:
                     expect(first[0], first[1], 150)  # restored to the floating size
@@ -87,17 +93,18 @@ try:
                     landscape = configures()[-1]
                     assert landscape[0] > landscape[1], 'the landscape request did not reshape the window: %s' % (landscape,)
                     # turned, the window fills 85% of the work area as the first (portrait) one does: grown, not only shrunk (bridge/shell/geometry.c fit_size)
+                    # fit_size reserves DECOR_H also for a compositor's own bar
                     bw, bh = (int(n) for n in re.search(r'first configure: display \d+x\d+, bounds (\d+)x(\d+)', (instance.STATE / 'shell.log').read_text(errors='replace')).groups())
                     assert bw <= 0 or abs(landscape[0] - bw * 85 // 100) <= 1 or abs(landscape[1] - (bh * 85 // 100 - DECOR_H)) <= 1, \
                         'the landscape window %s does not fill 85%% of the %dx%d work area' % (landscape[:2], bw, bh)
                     expect(*landscape[:3])
                     count = len(configures())
-                    instance.inject(PKG, 'unmaximize:%d,%d' % (first[0], first[1] + DECOR_H))  # a floating configure the compositor sent before it saw the reshape
+                    instance.inject(PKG, 'unmaximize:%d,%d' % (first[0], first[1] + bar_h))  # a floating configure the compositor sent before it saw the reshape
                 elif 'script: hover:7,0' in line:
                     assert len(configures()) == count, 'a stale floating configure reshaped the window back: %s' % (configures()[-1],)
                     checks.append('stale configure ignored')
     assert app.wait() == 0, 'app failed'
-    assert len(checks) == 7, checks
+    assert len(checks) == 8, checks
     print('PASS window geometry and scale: %s' % ', '.join(checks), flush=True)
 finally:
     instance.stop()

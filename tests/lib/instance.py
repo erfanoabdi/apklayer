@@ -111,8 +111,16 @@ def capture(name, app=None):
         return image
     env = dict(os.environ, XDG_RUNTIME_DIR=SESSION, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % SESSION, WAYLAND_DISPLAY='wayland-0',
                XDG_SESSION_TYPE='wayland', XDG_CURRENT_DESKTOP='GNOME')
-    # flameshot can wait forever on GNOME's screenshot portal: a bounded wait, so one stuck capture never stalls a run
-    subprocess.run(['flameshot', 'full', '-p', str(image)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=20)
+    # flameshot 12 (Qt 5, Ubuntu 24.04) starts only on X: through the session's Xwayland (as tests/vm/vmcapture.py). It can wait forever on
+    # GNOME's screenshot portal: a bounded wait and a retry, so one stuck capture never stalls a run
+    auth = sorted(Path(SESSION).glob('.mutter-Xwaylandauth.*'))
+    env.update(DISPLAY=':0', XAUTHORITY=str(auth[0]) if auth else '')
+    for attempt in range(2):
+        try:
+            subprocess.run(['flameshot', 'full', '-p', str(image)], env=env, stdout=subprocess.DEVNULL, stderr=open(OUT / 'flameshot.log', 'ab'), check=True, timeout=15)
+            break
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            if attempt: raise
     print('CAPTURED ' + str(image), flush=True)
     return image
 
@@ -130,36 +138,44 @@ def keys(*steps, **kw):
 
 MODS = {'alt': 56, 'ctrl': 29, 'shift': 42, 'super': 125}  # evdev codes of combo:<mod>+<code>
 TEST_INPUT, TEST_DONE = 11, 115  # bridge/shell/shell.h
-FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE, IME = range(10)
+FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE, IME, OUTPUT, LAYOUT, WHEEL, PEN = range(14)
 
 
 def inject(window, *steps, secret=False):
     """Test input into one window of this instance's shell (bridge/shell/testinput.c): no desktop, no focus, so groups that use it run in
     parallel. The events take the shell's own path from the seat on (focus, xkb, pointer, touch, text-input, configure). window: the app's
     package. Steps (x, y: logical pixels in the window's content, y < 0: its title bar):
-      focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | delete:<n> | resize:<w>,<h>
+      focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | xclick:<x>,<y> (the back button) | output:<n> (wl_surface.enter of the n-th output) | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | delete:<n> (UTF-8 bytes, as text-input-v3) | layout:<layout[,layout2]>[:<variant>[:<options>]] (the xkb keymap the key steps use, e.g. ru, us,ara:,:grp:caps_toggle) | resize:<w>,<h>
       | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>] | close
+      | wheel:<dx>,<dy>[,hires][,finger][,shift] (a wheel over the window, + = right/down, in notches; hires: in 1/120 notches as a v8 compositor's hi-res wheel; finger: a touchpad's continuous scroll, 15 units a notch; shift: Shift held)
+      | pen:<x>,<y>,<pressure 0..1>[,<tilt_x deg>,<tilt_y deg>,<rotation deg>,<distance 0..1>,<buttons: bit 0 stylus, bit 1 stylus2>,<tool: 0 pen, 1 eraser>] (a tablet tool: in proximity, touching while the pressure is above 0) | pen:out
       | ime:<px> (the host's on-screen keyboard covers the bottom px app pixels, 0: hidden; as the phones' Maliit keyboard)"""
     print('INJECT %s %s' % (window, ' '.join('text:***' if secret and s.startswith('text:') else s for s in steps)), flush=True)  # secret: a password typed in
     messages = []
     for step in steps:
         kind, _, arg = step.partition(':')
-        xy = [int(n) for n in arg.split(',')] if kind in ('click', 'rclick', 'tap', 'press', 'move', 'release', 'resize', 'maximize') or (kind == 'unmaximize' and arg) else [0, 0]
+        xy = [int(n) for n in arg.split(',')] if kind in ('click', 'rclick', 'xclick', 'tap', 'press', 'move', 'release', 'resize', 'maximize') or (kind == 'unmaximize' and arg) else [0, 0]
         if kind == 'focus': messages.append((FOCUS, 0, 0, 0, ''))
         elif kind == 'blur': messages.append((FOCUS, 1, 0, 0, ''))
         elif kind == 'key': messages += [(KEY, int(arg), 1, 0, ''), (KEY, int(arg), 0, 0, '')]
         elif kind == 'combo':
             mod, code = arg.split('+')
             messages += [(KEY, MODS[mod], 1, 0, ''), (KEY, int(code), 1, 0, ''), (KEY, int(code), 0, 0, ''), (KEY, MODS[mod], 0, 0, '')]
-        elif kind in ('click', 'rclick'):
-            button = 0x110 if kind == 'click' else 0x111
+        elif kind in ('click', 'rclick', 'xclick'):
+            button = {'click': 0x110, 'rclick': 0x111, 'xclick': 0x113}[kind]  # xclick: the mouse's back button (BTN_SIDE)
             messages += [(POINTER, *xy, button, ''), (POINTER, *xy, -button, '')]
         elif kind == 'tap': messages += [(TOUCH, 0, *xy, ''), (TOUCH, 1, *xy, '')]
         elif kind in ('press', 'release', 'move'): messages.append((TOUCH, ('press', 'release', 'move').index(kind), *xy, ''))
         elif kind in ('text', 'preedit'): messages.append((TEXT, int(kind == 'preedit'), 0, 0, arg))
         elif kind == 'delete': messages.append((TEXT, 2, 0, 0, arg))  # the IME deletes <n> characters before the cursor
+        elif kind == 'layout': messages.append((LAYOUT, 0, 0, 0, arg))
         elif kind == 'resize': messages.append((RESIZE, *xy, 0, ''))
         elif kind == 'scale': messages.append((SCALE, int(arg), 0, 0, ''))
+        elif kind == 'output': messages.append((OUTPUT, int(arg), 0, 0, ''))  # the surface enters the n-th output (wl_surface.enter), -1: none
+        elif kind == 'wheel':
+            n = arg.split(',')
+            messages.append((WHEEL, int(n[0]), int(n[1]), sum(1 << i for i, f in enumerate(('hires', 'finger', 'shift')) if f in n[2:]), ''))
+        elif kind == 'pen': messages.append((PEN, 0, 0, 0, arg.replace(',', ' ')))
         elif kind == 'ime': messages.append((IME, int(arg), 0, 0, ''))
         elif kind == 'maximize': messages.append((MAXIMIZE, 1, *xy, ''))
         elif kind == 'unmaximize': messages.append((MAXIMIZE, 0, *xy, ''))  # with w,h: a floating configure of that size
@@ -186,6 +202,16 @@ if __name__ == '__main__':  # for shell tests: python3 tests/lib/instance.py sto
 _libc = ctypes.CDLL(None, use_errno=True)
 
 
+def probe_dir(data):
+    """(host path, name in the app) of the folder a test shares with an app's shell: the app's home (~) without the sandbox; with APKLAYER_SANDBOX=1 the
+    app's data is its own uid's (0700, the user can neither read nor write it), so the instance's shared storage, which every app and the user may use."""
+    if ENV.get('APKLAYER_SANDBOX') != '1': return data / 'app/files/home', '~'
+    shared = data.parent.parent / 'storage/emulated/0/apklayer-probe'
+    shared.mkdir(exist_ok=True)
+    shared.chmod(0o777)
+    return shared, '/sdcard/apklayer-probe'
+
+
 def wait_file(path, needle, seconds):
     """Block on inotify (no polling) until the file contains the needle; returns the text."""
     fd = _libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
@@ -195,8 +221,11 @@ def wait_file(path, needle, seconds):
     with selectors.DefaultSelector() as events:
         events.register(fd, selectors.EVENT_READ)
         while _time.monotonic() < end:
-            text = path.read_text(errors='replace') if path.exists() else ''
+            try: text = path.read_text(errors='replace')
+            except FileNotFoundError: text = ''  # absent, or rotated between two calls
             if needle in text: os.close(fd); return text
             if events.select(min(2, max(0.1, end - _time.monotonic()))): os.read(fd, 65536)
     os.close(fd)
-    raise AssertionError('timed out waiting for ' + needle + ' in ' + str(path) + '\n' + (path.read_text(errors='replace')[-2000:] if path.exists() else '(no file)'))
+    try: tail = path.read_text(errors='replace')[-2000:]
+    except FileNotFoundError: tail = '(no file)'
+    raise AssertionError('timed out waiting for ' + needle + ' in ' + str(path) + '\n' + tail)

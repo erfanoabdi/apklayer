@@ -682,7 +682,7 @@ public final class TypeInference {
     /** Diagnostic only: name the methods that fell back to the ART exception-edge
      *  rule, which is where the residual handler-frame mismatches concentrate. */
     private static final boolean NARROW_EDGE_DEBUG =
-            System.getenv("DEX2JVM_NARROW_DEBUG") != null;
+            false;
 
     // ==================================================================
     // Driver
@@ -797,7 +797,7 @@ public final class TypeInference {
             return;
         }
         boolean wide = m.wideHandlerEdges
-                && !"0".equals(System.getenv("DEX2JVM_WIDE_HANDLERS"));
+                && true;
         for (Insn insn : code) {
             // Under the ART rule a non-throwing instruction still reaches the
             // catch-all handler when catchAllWideEdges says the table covers it

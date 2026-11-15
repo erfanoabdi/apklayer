@@ -55,6 +55,26 @@ static void outputs_changed(void)
         if (windows[i].client) window_display_changed(&windows[i]);
 }
 
+/* The output w is on (its pixels and integer scale in percent), else the largest. */
+void window_output(const struct window *w, int *px_w, int *px_h, int *scale)
+{
+    *px_w = output_px_w; *px_h = output_px_h; *scale = output_scale;
+    for (int i = 0; i < MAX_OUTPUTS && w->out; i++)
+        if (outs[i].o == w->out && outs[i].w > 0) { *px_w = outs[i].w; *px_h = outs[i].h; *scale = (outs[i].scale > 0 ? outs[i].scale : 1) * 100; }
+}
+
+/* Test input: the compositor says w entered the index-th live output (wl_surface.enter), -1 it left them all. 0 done, -2 no such output. */
+int window_output_inject(struct window *w, int index)
+{
+    struct wl_output *o = NULL;
+    for (int i = 0, n = 0; i < MAX_OUTPUTS && index >= 0; i++)
+        if (outs[i].o && n++ == index) o = outs[i].o;
+    if (index >= 0 && !o) return -2;
+    w->out = o;
+    window_display_changed(w);
+    return 0;
+}
+
 static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int32_t pw,
                          int32_t ph, int32_t sub, const char *make, const char *model,
                          int32_t tf)
@@ -117,9 +137,11 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     } else if (!strcmp(iface, wl_shell_interface.name))
         wl_shell_global = wl_registry_bind(r, name, &wl_shell_interface, 1);
     else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
-        /* v5: pointer frame/axis events; every listener slot is filled. */
-        seat = wl_registry_bind(r, name, &wl_seat_interface, ver < 5 ? ver : 5);
+        /* v5: pointer frame/axis events; v8 (libwayland 1.21): axis_value120 of hi-res wheels; every listener slot is filled. */
+        uint32_t known = wl_seat_interface.version < 8 ? wl_seat_interface.version : 8;
+        seat = wl_registry_bind(r, name, &wl_seat_interface, ver < known ? ver : known);
         wl_seat_add_listener(seat, &seat_listener, NULL);
+        tablet_seat_try();
     } else if (!strcmp(iface, wl_output_interface.name)) {
         for (int i = 0; i < MAX_OUTPUTS; i++)
             if (!outs[i].o) {
@@ -135,12 +157,14 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         activation = wl_registry_bind(r, name, &xdg_activation_v1_interface, 1);
     else if (!strcmp(iface, zxdg_decoration_manager_v1_interface.name))
         deco_mgr = wl_registry_bind(r, name, &zxdg_decoration_manager_v1_interface, 1);
+    else tablet_bind(r, name, iface, ver);
 }
 static void registry_rm(void *d, struct wl_registry *r, uint32_t n)
 {
     (void)d; (void)r;
     for (int i = 0; i < MAX_OUTPUTS; i++)
         if (outs[i].o && outs[i].name == n) {
+            for (int k = 0; k < MAX_WINDOWS; k++) if (windows[k].out == outs[i].o) windows[k].out = NULL;  /* no dangling proxy (its address may be reused) */
             wl_output_destroy(outs[i].o);
             outs[i] = (struct out){ 0 };
             outputs_changed();

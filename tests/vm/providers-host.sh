@@ -54,6 +54,8 @@ want $out "accelerometer=null"  # an orientation is not an accelerometer
 want $out "type=27 name=iio-sensor-proxy orientation max=3.00 mindelay=200000 value=3.000"  # left-up: rotated 90 degrees clockwise
 want $out "type=5 name=iio-sensor-proxy light max=100000.00 mindelay=200000 value=456.000"
 want $out "type=8 name=iio-sensor-proxy proximity max=5.00 mindelay=200000 value=0.000"  # near
+want $out "feature sensor.light=true"; want $out "feature sensor.proximity=true"  # the backend's sensors are declared as features
+want $out "feature sensor.accelerometer=false"; want $out "feature sensor.compass=false"
 grep -aq "type=3 " $out && fail "the compass heading was listed (it has no honest Android type)"
 grep -a "Vibrate" $APKLY_STATE/feedbackd.calls
 # amplitude/ms of each Vibrate call; off is a 1 ms step at 0
@@ -77,6 +79,9 @@ events=$(grep -a -o '^\[hw\] accelerometer [0-9]* events' $out | grep -o '[0-9][
 grep -a "vibrate" $APKLY_STATE/hfd.calls
 [ "$(grep -a -o 'vibrate [0-9]*' $APKLY_STATE/hfd.calls | pattern - "vibrate 1")" = "vibrate 100 vibrate 200 vibrate 100 " ] ||
     fail "the app's waveform and click did not reach hfd-service"
+# no amplitude in hfd and none in feedbackd's events: the HAL reports no compose capability and refuses compose
+bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
+grep -aq "PASS vibrator without compose" $APKLY_STATE/tool.log || fail "hfd: the HAL reports or plays compositions"
 bin/apklayer providers set vibrator feedbackd >/dev/null
 bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
 grep -a "PASS\|Check failed" $APKLY_STATE/tool.log; grep -a "TriggerFeedback\|EndFeedback" $APKLY_STATE/feedbackd-events.calls

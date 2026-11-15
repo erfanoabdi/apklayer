@@ -25,6 +25,10 @@ int apklayer_vibrator_on(int32_t duration_ms);
 int apklayer_vibrator_off(void);
 /* the strength of this and later vibrations, 0 < amplitude <= 1 (1 until the first call); a running vibration may take it at once. 0 or -errno */
 int apklayer_vibrator_amplitude(float amplitude);
+/* optional: nonzero if on() after amplitude() can play a composition's steps (the front sends one amplitude and on per step, as short as 20 ms,
+ * and then reports the compose and PWLE capabilities: Vibrator.compose, VibrationEffect compositions). Leave it out if the amplitude is
+ * not honoured (hfd) or the backend cannot restart quickly. */
+int apklayer_vibrator_compose(void);
 
 #pragma GCC visibility pop
 #ifdef __cplusplus

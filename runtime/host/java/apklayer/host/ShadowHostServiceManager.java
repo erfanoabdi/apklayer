@@ -83,9 +83,15 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
             if (method.getDeclaringClass() != Object.class && !method.getName().equals("asBinder") && seen.add(method)) FakeLog.hit(name, iface + "." + method.getName());
             // WindowManagerService attaches a window context (an InputMethodService, a WindowProviderService) to its display area or window token and
             // answers its configuration: null means "not attached", and an IME's initializeInternal throws on it
-            if (android.content.Context.WINDOW_SERVICE.equals(name) && method.getName().startsWith("attachWindowContextTo"))
-                return new android.window.WindowContextInfo(new android.content.res.Configuration(org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration()),
-                        android.view.Display.DEFAULT_DISPLAY);
+            if (android.content.Context.WINDOW_SERVICE.equals(name) && method.getName().startsWith("attachWindowContextTo")) {
+                int display = method.getName().endsWith("ToDisplayArea") ? (Integer) args[3] : method.getName().endsWith("ToDisplayContent") ? (Integer) args[2] : android.view.Display.DEFAULT_DISPLAY;  // the display asked for
+                return new android.window.WindowContextInfo(new android.content.res.Configuration(org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration()), display);
+            }
+            // a window context's WindowMetrics: the insets of the app's windows (bars, IME), not an empty state
+            if (android.content.Context.WINDOW_SERVICE.equals(name) && method.getName().equals("getWindowInsets") && args.length == 3 && args[2] instanceof android.view.InsetsState state) {
+                org.robolectric.shadows.NavigationBarInset.windowInsets(state);
+                return null;
+            }
             // the display's density without the user's display-size setting (getInitialDisplayDensity, getBaseDisplayDensity): the window's own, which
             // is the display's here. 0 (the fake's answer) made KuroSDK lay its login dialog out at density 0: PGR showed only the dialog's dim
             if (android.content.Context.WINDOW_SERVICE.equals(name) && (method.getName().equals("getInitialDisplayDensity") || method.getName().equals("getBaseDisplayDensity")))

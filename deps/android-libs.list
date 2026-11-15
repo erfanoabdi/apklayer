@@ -191,6 +191,7 @@ libbinderdebug.so
 libbpf_bcc.so
 libbpf_minimal.so
 libc++.so
+libcamera2ndk.so
 libcamera_client.so
 libcamera_metadata.so
 libcameracompatbilityinfo.so

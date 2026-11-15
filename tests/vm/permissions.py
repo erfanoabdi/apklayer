@@ -16,13 +16,13 @@ from instance import ENV, INSTANCE, LOGDIR, capture, inject, stop  # noqa: E402
 PKG = 'hello.permissions'
 STEPS = ['unasked camera not held', 'manager grant held at start', 'allow: camera granted', 'looper ran during the dialog', 'deny once: denied, rationale',
          'deny twice: denied, no rationale', 'third request denied', 'manager grant: no question', 'granted: not asked again',
-         'sms role refused without telephony', 'browser role given']
+         'sms role refused without telephony', 'browser role given', 'role kept across restarts']
 ANSWERS = [('take pictures and record video', 'yes='), ('access your contacts', 'no='), ('access your contacts', 'no='), ('default browser app', 'yes=')]
 data = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer' / ('0' if INSTANCE == 'default' else INSTANCE)
 log = Path(LOGDIR)
 
 stop()
-for name in ('permissions-granted', 'permissions-revoked'):  # a fresh store for the app: nothing answered yet
+for name in ('permissions-granted', 'permissions-revoked', 'roles'):  # a fresh store for the app: nothing answered yet
     f = data / name
     if f.exists(): f.write_text(''.join(l + '\n' for l in f.read_text().split('\n') if l and not l.startswith(PKG + '\t')))
 assert subprocess.run(['bin/apklayer', 'permissions', 'grant', PKG, 'android.permission.RECORD_AUDIO'], env=ENV).returncode == 0
@@ -64,6 +64,9 @@ try:
 finally:
     stop()
     proc.wait()
+again = subprocess.run(['bin/apklayer', 'run', PKG], env=dict(env, APKLAYER_JOPTS='-Dapklayer.runms=30000 -Dhello.perm.second=true'), capture_output=True, text=True).stdout  # a new process
+stop()
+lines += again.split('\n')
 listing = subprocess.run(['bin/apklayer', 'permissions', PKG], env=ENV, capture_output=True, text=True).stdout
 print(listing, end='')
 held = {l.split('\t')[0]: l.split('\t')[2] for l in listing.split('\n') if l.count('\t') == 2}

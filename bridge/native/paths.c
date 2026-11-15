@@ -4,12 +4,15 @@
  * when that file exists there, otherwise the host's own file is used, so nothing the host needs is hidden. Installed into
  * bionic_translation's libc (open, fopen, stat, lstat, fstatat) through its apply_path_overrides hook. */
 #define _GNU_SOURCE
+#include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/syscall.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -90,15 +93,29 @@ static bool drive_path(const char *storage, const char *rest, char **mapped)
 /* Android's storage paths are the instance's storage directory ($APKLAYER_STORAGE, cli/layout): /storage/emulated/0 as on a device (MediaProvider
  * reads volume and relative path from that spelling), and its other names /sdcard and /data/media/0; a removable drive's /mnt/media_rw/<uuid> is its
  * /storage/<uuid> (a link to the desktop's mount, HostVolumes.Removable). Mapped whether or not the file exists yet. */
+static void storage_links(const char *storage)
+{   /* /storage/self/primary -> /storage/emulated/0 and /sdcard -> /storage/self/primary, as links in the storage directory (readlink says Android's text: apklayer_virtual_readlink) */
+    static int done;
+    char dir[PATH_MAX], link[PATH_MAX];
+    if (__atomic_exchange_n(&done, 1, __ATOMIC_ACQ_REL)) return;
+    snprintf(dir, sizeof dir, "%s/self", storage);
+    syscall(SYS_mkdirat, AT_FDCWD, dir, 0755);
+    snprintf(link, sizeof link, "%s/primary", dir);
+    syscall(SYS_symlinkat, "../emulated/0", AT_FDCWD, link);
+    snprintf(link, sizeof link, "%s/.sdcard", dir);
+    syscall(SYS_symlinkat, "primary", AT_FDCWD, link);
+}
+
 static bool storage_path(char **path)
 {
-    static const char *const names[][2] = { { "/storage", "" }, { "/sdcard", "/emulated/0" }, { "/data/media/0", "/emulated/0" }, { "/mnt/media_rw", "" } };
+    static const char *const names[][2] = { { "/storage", "" }, { "/sdcard", "/self/.sdcard" }, { "/data/media/0", "/emulated/0" }, { "/mnt/media_rw", "" } };
     const char *storage = storage_env;
     if (!storage[0]) return false;
     for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
         size_t n = strlen(names[i][0]);
         if (strncmp(*path, names[i][0], n) || ((*path)[n] && (*path)[n] != '/')) continue;
         char *mapped;
+        if (i < 2) storage_links(storage);
         if (!names[i][1][0] && drive_path(storage, *path + n, &mapped)) { *path = mapped; return true; }
         if (asprintf(&mapped, "%s%s%s", storage, names[i][1], *path + n) < 0) return false;
         *path = mapped;
@@ -200,7 +217,32 @@ void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const 
     /* and in the instance's /data as directories, as on Android: a walk that reaches them component by component (mkdir -p: /data/data, then
      * "com.termux" relative to it) lands in the app's tree, not in a new one (errors ignored: the sandbox's view has its own) */
     const char *links[][3] = { {"data", "", o->dir}, {"user", "/0", o->dir}, {"user_de", "/0", o->device} };
-    for (int i = 0; data_env[0] && i < 3; i++) {
+    {   /* /data/data is a link to /data/user/0 on Android (lstat, readlink and realpath say so: apklayer_virtual_readlink); an older instance's directory is emptied of its links first */
+        char *dl = NULL;
+        struct stat st;
+        if (data_env[0] && asprintf(&dl, "%s/data", data_env) >= 0) {
+            if (lstat(dl, &st) == 0 && S_ISDIR(st.st_mode)) {
+                DIR *d = opendir(dl);
+                for (struct dirent *e; d && (e = readdir(d));) {
+                    char *entry = NULL;
+                    if (e->d_name[0] != '.' && asprintf(&entry, "%s/%s", dl, e->d_name) >= 0 && lstat(entry, &st) == 0 && S_ISLNK(st.st_mode)) unlink(entry);
+                    free(entry);
+                }
+                if (d) closedir(d);
+                rmdir(dl);
+            }
+            char *user = NULL;
+            if (asprintf(&user, "%s/user/0", data_env) >= 0) { char *top = NULL; if (asprintf(&top, "%s/user", data_env) >= 0) mkdir(top, 0771); mkdir(user, 0771); free(top); free(user); }
+            symlink("user/0", dl);  /* EEXIST: another process of the app made it, or the directory has files in it and stays (then it holds this app's link, as before) */
+            if (lstat(dl, &st) == 0 && S_ISDIR(st.st_mode)) {
+                char *own = NULL;
+                if (asprintf(&own, "%s/%s", dl, pkg) >= 0) symlink(o->dir, own);
+                free(own);
+            }
+            free(dl);
+        }
+    }
+    for (int i = 1; data_env[0] && i < 3; i++) {
         char *top = NULL, *dir = NULL, *link = NULL;
         if (asprintf(&top, "%s/%s", data_env, links[i][0]) >= 0) mkdir(top, 0771);
         if (asprintf(&dir, "%s/%s%s", data_env, links[i][0], links[i][1]) >= 0) mkdir(dir, 0771);
@@ -492,6 +534,30 @@ static int other_package_path(const char *path)
     return 0;
 }
 
+/* apklayer patch (scoped storage, Android 11+): <external>/Android/data/<other> and Android/obb/<other> are the owning package's alone (the FUSE daemon answers
+ * ENOENT for the others), also for an app with MANAGE_EXTERNAL_STORAGE. The system's (no own package), MediaProvider, the storage provider and DownloadProvider (it writes a download into the requesting app's
+ * Android/data/<pkg>/files) see them. shortcut: the spellings listed (/storage/emulated/0, /storage/self/primary, /sdcard, /data/media/0 and Android's /mnt/user, /mnt/runtime, /mnt/pass_through forms; ".." and "." are collapsed first), not symlinks an app makes or /proc/self/cwd-relative opens; upgrade with a fd-based check. */
+static int other_scoped_path(const char *path)
+{
+    static const char *const roots[] = { "/storage/emulated/0/Android/", "/storage/self/primary/Android/", "/sdcard/Android/", "/data/media/0/Android/",
+        "/mnt/user/0/primary/Android/", "/mnt/user/0/emulated/0/Android/", "/mnt/pass_through/0/emulated/0/Android/", "/mnt/androidwritable/0/emulated/0/Android/",
+        "/mnt/runtime/default/emulated/0/Android/", "/mnt/runtime/read/emulated/0/Android/", "/mnt/runtime/write/emulated/0/Android/", NULL };
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!data_filter_active() || !strcmp(o->pkg, "com.android.providers.media.module") || !strcmp(o->pkg, "com.android.providers.media")
+        || !strcmp(o->pkg, "com.android.externalstorage")
+        || !strcmp(o->pkg, "com.android.providers.downloads")) return 0;
+    for (int i = 0; roots[i]; i++) {
+        size_t n = strlen(roots[i]);
+        if (strncmp(path, roots[i], n)) continue;
+        const char *rest = path + n;
+        if (!strncmp(rest, "data/", 5)) rest += 5; else if (!strncmp(rest, "obb/", 4)) rest += 4; else return 0;
+        size_t k = strlen(o->pkg);
+        if (!*rest) return 0;
+        return !(!strncmp(rest, o->pkg, k) && (!rest[k] || rest[k] == '/'));
+    }
+    return 0;
+}
+
 /* The desktop's terminals: /dev/pts/<n> are the user's shells and terminal tabs. An app on Android has none of them in its /dev/pts; ACE (PGR) probes
  * /dev/pts/0..7, which on Android tells a debugger or `adb shell` session from a plain start. ENOENT for an app process (own data set) under any path that
  * names one by number; /dev/pts itself and /dev/pts/ptmx stay (Termux opens a pty of its own: its new terminals are numbered ones too, so APKLAYER_PTS_VIEW=host
@@ -555,29 +621,74 @@ static int desktop_root_path(const char *path)
     return 0;
 }
 
-/* apklayer patch: /data/local/tmp (Android's, empty and writable) lives in the instance's data; /system/bin/app_process64 is the ELF stand-in of
- * /proc/self/exe (proc_view.c), written once beside it. Both are made on first use. */
+/* apklayer patch: Android paths an app can stat and this machine has no file for, as stand-ins in the instance's data (made on first use, once). /data/local/tmp is
+ * Android's, empty and writable; /system/bin/app_process64 (and 32) is the ELF stand-in of /proc/self/exe (proc_view.c); /data/dalvik-cache and /vendor/lib64
+ * are empty directories; /dev/socket/zygote is a bound unix socket nobody listens on; /system/framework/framework.jar links to the Robolectric framework jar
+ * of the runtime, /apex/com.android.art/javalib/core-oj.jar is an empty zip (the runtime has no such jar). Exactly these paths, nothing below them. */
 extern size_t apklayer_app_process_elf(unsigned char *out) __attribute__((weak));
+
+static void make_stand_in(char kind, const char *file)
+{
+    if (!syscall(SYS_faccessat, AT_FDCWD, file, F_OK)) return;
+    char target[PATH_MAX];
+    long fd;
+    switch (kind) {
+    case 'd': syscall(SYS_mkdirat, AT_FDCWD, file, 0771); break;
+    case 'e': {
+        if (!apklayer_app_process_elf) break;
+        unsigned char elf[128];
+        size_t n = apklayer_app_process_elf(elf);
+        fd = syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0755);
+        if (fd >= 0) { syscall(SYS_write, fd, elf, n); syscall(SYS_close, fd); }
+        break; }
+    case 'z': {  /* the end-of-central-directory record of an empty archive */
+        static const unsigned char empty_zip[22] = {'P', 'K', 5, 6};
+        fd = syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd >= 0) { syscall(SYS_write, fd, empty_zip, sizeof empty_zip); syscall(SYS_close, fd); }
+        break; }
+    case 'j': {
+        char jar[PATH_MAX];
+        snprintf(target, sizeof target, "%s/../aosp/android-all/android-all-current-robolectric-r0.jar", root());
+        if (!realpath(target, jar) || syscall(SYS_symlinkat, jar, AT_FDCWD, file)) make_stand_in('z', file);
+        break; }
+    case 's': {  /* bound through the directory's /proc/self/fd path: a socket path holds 107 characters, the instance's data path may be longer */
+        char dir[PATH_MAX], *slash;
+        snprintf(dir, sizeof dir, "%s", file);
+        if (!(slash = strrchr(dir, '/'))) break;
+        *slash = 0;
+        long dirfd = syscall(SYS_openat, AT_FDCWD, dir, O_PATH | O_DIRECTORY | O_CLOEXEC, 0);
+        fd = syscall(SYS_socket, AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        struct sockaddr_un sa = {.sun_family = AF_UNIX};
+        snprintf(sa.sun_path, sizeof sa.sun_path, "/proc/self/fd/%ld/%s", dirfd, slash + 1);
+        if (dirfd >= 0 && fd >= 0) syscall(SYS_bind, fd, &sa, sizeof sa);
+        if (fd >= 0) syscall(SYS_close, fd);
+        if (dirfd >= 0) syscall(SYS_close, dirfd);
+        break; }
+    }
+}
 
 static bool android_stub_path(char **path)
 {
+    static const struct { const char *path, *file; char kind; } stand_ins[] = {
+        {"/system/bin/app_process64", "local/.app_process64", 'e'}, {"/system/bin/app_process32", "local/.app_process64", 'e'},
+        {"/data/dalvik-cache", "dalvik-cache", 'd'}, {"/vendor/lib64", "local/.vendor-lib64", 'd'}, {"/dev/socket/zygote", "local/.zygote", 's'},
+        {"/system/framework/framework.jar", "local/.framework.jar", 'j'}, {"/apex/com.android.art/javalib/core-oj.jar", "local/.core-oj.jar", 'z'},
+    };
     const char *p = *path, *data = data_env;
-    if (!data[0]) return false;
-    int exe = !strcmp(p, "/system/bin/app_process64");
-    if (!exe && strncmp(p, "/data/local/tmp", 15)) return false;
+    if (!data[0] || p[0] != '/') return false;
+    int local = !strncmp(p, "/data/local/tmp", 15), found = -1;
+    for (size_t i = 0; i < sizeof stand_ins / sizeof *stand_ins && !local; i++) if (!strcmp(p, stand_ins[i].path)) found = (int)i;
+    if (!local && found < 0) return false;
     char dir[PATH_MAX], file[PATH_MAX];
     snprintf(dir, sizeof dir, "%s/local", data);
     syscall(SYS_mkdirat, AT_FDCWD, dir, 0771);
-    snprintf(dir, sizeof dir, "%s/local/tmp", data);
-    syscall(SYS_mkdirat, AT_FDCWD, dir, 0771);
-    if (!exe) return false;  /* data_path maps it */
-    snprintf(file, sizeof file, "%s/local/.app_process64", data);
-    if (syscall(SYS_faccessat, AT_FDCWD, file, F_OK) && apklayer_app_process_elf) {
-        unsigned char elf[128];
-        size_t n = apklayer_app_process_elf(elf);
-        long fd = syscall(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0755);
-        if (fd >= 0) { syscall(SYS_write, fd, elf, n); syscall(SYS_close, fd); }
+    if (local) {
+        snprintf(dir, sizeof dir, "%s/local/tmp", data);
+        syscall(SYS_mkdirat, AT_FDCWD, dir, 0771);
+        return false;  /* data_path maps it */
     }
+    snprintf(file, sizeof file, "%s/%s", data, stand_ins[found].file);
+    make_stand_in(stand_ins[found].kind, file);
     char *m = strdup(file);
     if (!m) return false;
     *path = m;
@@ -586,14 +697,109 @@ static bool android_stub_path(char **path)
 
 static bool from_root(const char *r, char **path);
 
+/* apklayer patch: the path below a /proc/self/root (or /proc/thread-self/root, /proc/<own pid>/root) prefix, "//" collapsed; NULL for any other path. Android's
+ * root is the process's own, so "/proc/self/root//data/user/0/<pkg>/files" is "/data/user/0/<pkg>/files": Tencent ACE (PGR) stats both and takes a
+ * difference (the path layer served only the plain spelling, the other met the host's /data) for a virtual-app container, and its shutdown follows. */
+static const char *proc_root_rest(const char *p)
+{
+    char own[32];
+    if (!p || strncmp(p, "/proc/", 6)) return NULL;
+    p += 6;
+    snprintf(own, sizeof own, "%ld/root", (long)getpid());
+    size_t n = !strncmp(p, "self/root", 9) ? 9 : !strncmp(p, "thread-self/root", 16) ? 16 : !strncmp(p, own, strlen(own)) ? strlen(own) : 0;
+    if (!n || (p[n] && p[n] != '/')) return NULL;
+    p += n;
+    while (p[0] == '/' && p[1] == '/') p++;
+    return p[0] == '/' && strncmp(p, "/proc", 5) ? p : NULL;  /* /proc/self/root/proc/... is the hidden-process rules' */
+}
+
+/* apklayer patch: what readlink says of the three links Android has and the instance's data and storage have as host links (their targets are host-relative):
+ * /data/data -> /data/user/0, /sdcard -> /storage/self/primary, /storage/self/primary -> /storage/emulated/0. `mapped` is the path after the mapping; -2: not one. */
+ssize_t apklayer_virtual_readlink(const char *mapped, char *buf, size_t n)
+{
+    if (!__atomic_load_n(&own_data, __ATOMIC_ACQUIRE) || !mapped) return -2;
+    const struct { const char *base, *file, *target; } links[] = {
+        { data_env, "/data", "/data/user/0" }, { storage_env, "/self/.sdcard", "/storage/self/primary" }, { storage_env, "/self/primary", "/storage/emulated/0" } };
+    for (int i = 0; i < 3; i++) {
+        size_t b = strlen(links[i].base);
+        if (!b || strncmp(mapped, links[i].base, b) || strcmp(mapped + b, links[i].file)) continue;
+        size_t t = strlen(links[i].target);
+        if (t > n) t = n;  /* readlink truncates and does not terminate */
+        memcpy(buf, links[i].target, t);
+        return (ssize_t)t;
+    }
+    return -2;
+}
+
+/* apklayer patch: "//", "/./" and "/../" collapsed textually in the paths the layer maps (/data, /storage, /sdcard), NULL when there is nothing to collapse. Android's
+ * root is the process's own, so /data/user/0/<pkg>/.. is /data/user/0; the kernel would take the host's parent of the app's directory (and a name above the app's own
+ * package would pass the other-package check) */
+static char *collapsed(const char *p)
+{
+    if (strncmp(p, "/data/", 6) && strncmp(p, "/storage/", 9) && strncmp(p, "/sdcard/", 8) && strncmp(p, "/mnt/", 5)) return NULL;
+    size_t len = strlen(p);
+    if (!strstr(p, "//") && !strstr(p, "/./") && !strstr(p, "/../") && strcmp(p + len - 2, "/.") && strcmp(p + len - 3, "/..")) return NULL;
+    char *out = malloc(len + 2), *w = out;
+    if (!out) return NULL;
+    for (const char *r = p; *r;) {
+        while (*r == '/') r++;
+        if (!*r) break;
+        const char *e = strchr(r, '/');
+        size_t k = e ? (size_t)(e - r) : strlen(r);
+        if (k == 2 && r[0] == '.' && r[1] == '.') { while (w > out && *--w != '/') ; }
+        else if (k != 1 || r[0] != '.') { *w++ = '/'; memcpy(w, r, k); w += k; }
+        r += k;
+    }
+    if (w == out || p[len - 1] == '/') *w++ = '/';
+    *w = 0;
+    return out;
+}
+
+static bool mapped_path(char **path)
+{
+    return binder_device(path) || android_stub_path(path) || storage_path(path) || own_data_path(path) || own_apk_path(path) || data_path(path) || linker_path(path);
+}
+
+/* Android 10+ (untrusted_app) answers EACCES for /proc/net/unix (also /proc/self/net, /proc/<own pid>/net, /proc/thread-self/net); the x86 guest gets it from
+ * binary_translation 0018. App processes only (own data set); APKLAYER_PROC_VIEW=host turns it off. The path becomes one the kernel itself refuses
+ * (/root: mode 0700, not searchable for an app uid), so every wrapper and bionic's libc fail with EACCES without a separate errno channel. */
+static int proc_net_unix_denied(const char *path)
+{
+    if (strncmp(path, "/proc/", 6) || !__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
+    char own[32];
+    snprintf(own, sizeof own, "%ld/", (long)getpid());
+    const char *r = path + 6;
+    if (!strncmp(r, "self/", 5)) r += 5;
+    else if (!strncmp(r, "thread-self/", 12)) r += 12;
+    else if (!strncmp(r, own, strlen(own))) r += strlen(own);
+    if (strcmp(r, "net/unix")) return 0;
+    const char *v = getenv("APKLAYER_PROC_VIEW");
+    return !(v && !strcmp(v, "host"));
+}
+
 bool apklayer_apply_path_overrides(char **path)
 {
-    if (apklayer_proc_hidden(*path) || other_package_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
+    char *flat = collapsed(*path);
+    if (flat) {  /* the checks and the mapping below judge the path as Android's kernel would resolve it */
+        char *mapped = flat;
+        if (apklayer_apply_path_overrides(&mapped)) free(flat);
+        *path = mapped;
+        return true;
+    }
+    if (apklayer_proc_hidden(*path) || other_package_path(*path) || other_scoped_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
         char *gone = strdup("/proc/.apklayer-hidden");
         if (gone) { *path = gone; return true; }
     }
+    if (proc_net_unix_denied(*path)) {
+        char *denied = strdup("/root/.apklayer-denied");
+        if (denied) { *path = denied; return true; }
+    }
     if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
-    if (binder_device(path) || android_stub_path(path) || storage_path(path) || own_data_path(path) || own_apk_path(path) || data_path(path) || linker_path(path)) return true;
+    const char *below = proc_root_rest(*path);
+    char *plain = below ? strdup(below) : NULL;
+    if (plain && apklayer_apply_path_overrides(&plain)) { *path = plain; return true; }  /* plain does not start with /proc/self/root again: no loop */
+    free(plain);
+    if (mapped_path(path)) return true;
     /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */
     const char *own = own_env;
     return (own && own[0] && from_root(own, path)) || from_root(root(), path);
@@ -684,11 +890,25 @@ long apklayer_android_spelling(char *buf, long n, long size)
     return n;
 }
 
+/* apklayer patch: what Android code (bionic_translation's libc) sees: the exact directories /home and /tmp are absent (Android has neither), files below them stay
+ * (the app's data and apks are host paths below /home). Only this guest hook hides them: the JVM and the glibc wrappers keep the host view, so Files.createDirectories
+ * on a path below /home never meets an ENOENT parent. APKLAYER_ETC_VIEW=host turns it off. */
+bool apklayer_guest_path_overrides(char **path)
+{
+    const char *p = *path;
+    if (p && (!strncmp(p, "/home", 5) || !strncmp(p, "/tmp", 4)) && __atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) {
+        size_t n = p[1] == 'h' ? 5 : 4;
+        const char *v = getenv("APKLAYER_ETC_VIEW");
+        if ((!p[n] || (p[n] == '/' && !p[n + 1])) && !(v && !strcmp(v, "host")) && (*path = strdup("/proc/.apklayer-hidden"))) return true;
+    }
+    return apklayer_apply_path_overrides(path);
+}
+
 /* Hands the override function to bionic_translation's libc (loaded as a glibc library once Android code is). */
 void apklayer_install_path_layer(void)
 {
     void (*set)(bool (*)(char **)) = dlsym(RTLD_DEFAULT, "libc_bio_set_apply_path_overrides_func");
-    if (set) set(apklayer_apply_path_overrides);
+    if (set) set(apklayer_guest_path_overrides);
     push_app_uid();
     {   /* this process's exec environment where another process of the app can read it (its /proc/<pid>/environ view, proc_task.c) */
         extern int apklayer_proc_publish_environment(void) __attribute__((weak));

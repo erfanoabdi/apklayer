@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 from instance import ENV, LOGDIR, inject, stop  # noqa: E402
 
-STEPS = ['attach broadcast', 'no permission before asking', 'permission result', 'open', 'file descriptor', 'control GET_DESCRIPTOR', 'raw descriptors',
+STEPS = ['interface filter', 'attach broadcast', 'no permission before asking', 'permission result', 'open', 'file descriptor', 'control GET_DESCRIPTOR', 'raw descriptors',
          'configurations', 'setConfiguration', 'claimInterface', 'bulk loopback', 'UsbRequest', 'releaseInterface', 'detach broadcast', 'attach launch']
 ANSWERS = ['no=', 'yes=', 'yes=']
 gadget = str(Path(__file__).with_name('usb-gadget.sh'))

@@ -66,7 +66,16 @@ public class Main extends Activity {
             }
             case "selfstop" -> {
                 startService(counter("s").putExtra("selfstop", true));
+                // the hub starts a service's process without making the caller wait: the start may land after this bind (the service then
+                // lives until the unbind). So: wait until the start has been delivered, then the next bind finds a new instance
                 Object[] fresh = state();
+                for (int i = 0; i < 50 && (int) fresh[0] == 0; i++) { Thread.sleep(200); fresh = state(); }
+                require((int) fresh[0] == 1, "start never delivered " + java.util.Arrays.toString(fresh));
+                for (int i = 0; i < 25; i++) {
+                    fresh = state();
+                    if ((int) fresh[0] == 0) break;
+                    Thread.sleep(200);
+                }
                 require((int) fresh[0] == 0, "service survived stopSelf " + java.util.Arrays.toString(fresh));
                 System.out.println("[svc] PASS selfstop: stopSelf in the service's app ended it");
             }

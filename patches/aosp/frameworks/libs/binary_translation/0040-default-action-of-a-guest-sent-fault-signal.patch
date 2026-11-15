@@ -1,0 +1,67 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: a guest signal sent by a process with no guest handler ends the process with that signal (not in HotSpot's crash handler)
+
+kill(getpid(), SIGSEGV) / raise(SIGBUS) / tgkill after the guest reset the signal to SIG_DFL ended in the JVM's crash report and SIGABRT (hello-acediff, known
+difference): HandleFatalSignal runs the original action, HotSpot's handler, and a guest sigaction(SIG_DFL) went to libjsig, which keeps it to itself while the
+kernel's handler stays HotSpot's. Now SIG_DFL for SIGSEGV/SIGILL/SIGBUS/SIGFPE puts the fatal stub back (the state at start), and a signal with si_code <= 0
+(kill, raise, tgkill, sigqueue) that reaches the stub dies by DieWithDefaultAction (raw rt_sigaction SIG_DFL + tgkill, 0032): the process ends with that signal.
+Faults (si_code > 0) are untouched: HotSpot's own faults still reach HotSpot's handler.
+
+--- a/guest_os_primitives/guest_signal_handling.cc
++++ b/guest_os_primitives/guest_signal_handling.cc
+@@ -58,6 +58,11 @@
+ #endif
+ 
+ namespace berberis {
++
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++// apklayer patch (0040): guest_signal_handling_arch.cc.
++[[noreturn]] void GuestDieWithDefaultAction(int sig);
++#endif
+ 
+ namespace {
+ 
+@@ -629,6 +634,14 @@
+         }
+         __android_log_print(ANDROID_LOG_ERROR, "berberis",
+             "  SP=%016llx", (unsigned long long)cpu.sp);
++      }
++      // apklayer patch (0040): a signal some process sent (kill, raise, tgkill, sigqueue: si_code <= 0) that the guest has no handler for
++      // ends the process with that signal, as on hardware; HandleFatalSignal would run HotSpot's handler, which prints a JVM crash
++      // report and ends with SIGABRT. Faults (si_code > 0) go on to HandleFatalSignal: HotSpot's own faults are among them.
++      if (signal_info->si_code <= 0) {
++        int signo = signal_info->si_signo;
++        pending_signals_.FreeSignal(signal_info);
++        GuestDieWithDefaultAction(signo);
+       }
+       auto* host_ucontext = pending_signals_.GetUcontext(signal_info);
+       CHECK(host_ucontext->has_value());
+@@ -698,6 +711,17 @@
+     act = nullptr;
+   }
+ 
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  // apklayer patch (0040): SIG_DFL for a fault signal puts the fatal stub (the initial state) back, not the host's SIG_DFL: HotSpot's
++  // libjsig keeps that disposition to itself and the kernel's handler stays HotSpot's, so a later kill/raise of the signal ended in the
++  // JVM's crash report (SIGABRT). The stub ends a signal a process sent with the default action (ProcessPendingSignalsImpl).
++  Guest_sigaction fatal_stub;
++  if (act && !(act->sa_flags & SA_SIGINFO) && act->guest_sa_sigaction == Guest_SIG_DFL &&
++      (signal == SIGSEGV || signal == SIGILL || signal == SIGBUS || signal == SIGFPE)) {
++    fatal_stub = {.guest_sa_sigaction = kFatalGuestHandlerStub, .sa_flags = SA_SIGINFO};
++    act = &fatal_stub;
++  }
++#endif
+   std::lock_guard<std::mutex> lock(*GetSignalActionsGuardMutex());
+   GuestSignalAction& action = GetCurrentGuestThread()->GetSignalActionsTable()->at(signal - 1);
+   bool changed = action.Change(signal, act, HandleHostSignal, old_act, error);
+--- a/guest_os_primitives/guest_signal_handling_arch.cc
++++ b/guest_os_primitives/guest_signal_handling_arch.cc
+@@ -67,6 +67,8 @@
+ }
+ 
+ }  // namespace
++
++[[noreturn]] void GuestDieWithDefaultAction(int sig) { DieWithDefaultAction(sig); }  // apklayer patch (0040)
+ #endif
+ 
+ 

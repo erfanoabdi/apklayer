@@ -8,7 +8,7 @@ c_bio = bt.get_variable('c_bio')
 jni_dep = dependency('jni', required: false)
 if jni_dep.found()
   # the JNI shim Robolectric loads (runtime/meson.build puts it into native-runtime.jar and the framework jars)
-  shim = shared_module('android_runtime', ['runtime_shim.c', 'media_runtime.c', 'binder_runtime.c', 'app_native.c', 'environment_runtime.c', 'jni_system_route.c', 'jni_guest_surface.c', 'jni_art.c', 'proc_title.c', 'native_loader.c', 'native_bridge.c', 'spare_target.c', 'private_stdio.c',
+  shim = shared_module('android_runtime', ['runtime_shim.c', 'media_runtime.c', 'binder_runtime.c', 'app_native.c', 'environment_runtime.c', 'jni_system_route.c', 'jni_guest_surface.c', 'jni_art.c', 'proc_title.c', 'native_loader.c', 'native_bridge.c', 'jni_trace.c', 'spare_target.c', 'private_stdio.c',
       'android_platform.c', 'properties.c', 'paths.c', 'android_stubs.c'],
     dependencies: jni_dep, link_with: dl_bio, c_args: native_cargs, override_options: native_opts)
 endif
@@ -23,7 +23,7 @@ executable('btload', ['bionic_tls.c', 'btload.c', 'android_platform.c', 'propert
   c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
 # the LD_PRELOAD library (first in symbol lookup for every library of the process, first static TLS module): the path layer and bionic's TLS slots
 # and the userspace binder's route (binder_route.c: bionic_translation's fd hooks find it here, one copy per process)
-apklayer_preload = shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'proc_view.c', 'proc_task.c', 'raw_syscall.c', 'exec_preload.c', 'guest_exec_environment.c', 'bionic_tls.c', 'binder_route.c', 'broker.c', '../binderd/wire.c'],
+apklayer_preload = shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'proc_view.c', 'proc_task.c', 'raw_syscall.c', 'vma_names.c', 'exec_preload.c', 'guest_exec_environment.c', 'bionic_tls.c', 'binder_route.c', 'broker.c', '../binderd/wire.c'],
   link_args: ['-ldl', '-lpthread'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)
 # the host's libGLESv2 with extensions hidden from Android code (APKLAYER_GL_HIDE; cli/env.cpp maps libGLESv2.so here only then)
 gles_filter_glesv2 = dependency('glesv2', required: false)
@@ -32,6 +32,8 @@ if gles_filter_glesv2.found()
     name_prefix: 'lib', c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)
 endif
 executable('aprop', ['aprop.c', 'properties.c'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
+# the lock screen's password check: any PAM stack (HubDesktopPassword)
+executable('apklayer-pamcheck', 'pamcheck.c', dependencies: dependency('dl'), c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
 install_data('getprop', install_dir: native_dir / 'bin', install_mode: 'rwxr-xr-x')  # Android's getprop for the apps that run it
 
 # bionic_translation's libraries: <pkg_lib>/bionic_translation/b (the CLI's APKLAYER_BT), and the native dir's names for them (its

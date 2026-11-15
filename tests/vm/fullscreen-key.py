@@ -24,6 +24,11 @@ def shell():
     return LOG.read_text(errors='replace') if LOG.exists() else ''
 
 
+def own_bar():
+    """Whether the title bar is ours (the compositor draws none: server-side decorations, KDE, then the bar is always 0)."""
+    return 'server-side decorations' not in shell()
+
+
 def bar():
     """The title bar of the last configure of this app's window (0 in fullscreen)."""
     text = shell()
@@ -47,14 +52,14 @@ try:
         for line in (l.decode(errors='replace') for l in lines):
             seen.append(line)
             if 'script: hover:1,0' in line:
-                assert bar() > 0, 'the window starts with a title bar'
+                assert (bar() > 0) == own_bar(), 'the window starts with a title bar'
                 instance.inject(PKG, 'focus', 'key:87')
             elif 'script: hover:2,0' in line:
                 assert 'fullscreen on' in shell() and bar() == 0, 'F11 did not make the window fullscreen (title bar %d)' % bar()
                 checks.append('F11 fullscreen')
                 instance.inject(PKG, 'key:87')
             elif 'script: hover:3,0' in line:
-                assert 'fullscreen off' in shell() and bar() > 0, 'F11 again did not leave fullscreen (title bar %d)' % bar()
+                assert 'fullscreen off' in shell() and (bar() > 0) == own_bar(), 'F11 again did not leave fullscreen (title bar %d)' % bar()
                 checks.append('F11 again leaves it')
     assert app.wait() == 0, 'app failed'
     assert len(checks) == 2, checks

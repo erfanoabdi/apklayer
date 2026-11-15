@@ -19,5 +19,6 @@ std::string hostCli(const std::string& cli);
 // The names of the launchers, the submenu's merge file and directory entry this install writes at the host's XDG paths: "apklayer-", the
 // Flatpak's "<app id>." (a deb beside it keeps its own; neither one's remove-all or uninstall touches the other's)
 std::string launcherPrefix();
+std::string menuPrefix();
 
 }  // namespace apklayer

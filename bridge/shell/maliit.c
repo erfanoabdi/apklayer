@@ -53,13 +53,36 @@ static int32_t qt_to_android(int32_t key)
     }
 }
 
-/* The keyboard covers h output pixels at the bottom: the window's inset in the app's pixels. */
-static void set_area(struct window *w, int h)
+static struct window *area_win;  /* the slide-in's latest height waits for area_tick in this window */
+static int area_h, area_armed;
+
+static void apply_area(struct window *w, int h)
 {
     int px = h > 0 ? (int)((long)h * window_scale(w) / output_scale) : 0;
     if (w->ime_px == px) return;
     w->ime_px = px;
     if (w->configured) window_send_configure(w);
+}
+static gboolean area_tick(gpointer d)
+{
+    (void)d;
+    area_armed = 0;
+    if (area_win) apply_area(area_win, area_h);
+    return G_SOURCE_REMOVE;
+}
+/* The keyboard covers h output pixels at the bottom: the window's inset in the app's pixels. Maliit's slide-in reports every animation step
+ * (~10 heights in 200 ms): a growing area is applied at most every 50 ms with the latest height (one CONFIGURE, not ten); hiding at once. */
+static void set_area(struct window *w, int h)
+{
+    if (h <= 0 || !ctx) { area_win = NULL; apply_area(w, 0); return; }
+    area_win = w;
+    area_h = h;
+    if (area_armed) return;
+    area_armed = 1;
+    GSource *src = g_timeout_source_new(50);
+    g_source_set_callback(src, area_tick, NULL, NULL);
+    g_source_attach(src, ctx);
+    g_source_unref(src);
 }
 
 static void call(const char *method, GVariant *args)
@@ -209,7 +232,7 @@ void maliit_enable(struct window *w, int enable)
     int show = enable == 2;
     call(show ? "showInputMethod" : "hideInputMethod", NULL);
     if (!show) set_area(w, 0);
-    if (!enable) mwin = NULL;  /* 4: the field keeps focus, its next showSoftInput (2) sends its state again */
+    if (!enable) { mwin = NULL; if (area_win == w) area_win = NULL; }  /* 4: the field keeps focus, its next showSoftInput (2) sends its state again */
     hidden = enable == 4;
     if (debug_input) fprintf(stderr, "[shell] host keyboard %s\n", show ? "shown" : enable ? "hidden, field kept" : "hidden");
 }

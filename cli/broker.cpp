@@ -1,6 +1,7 @@
 #include "broker.h"
 #include "apps.h"
 #include "logs.h"
+#include "nvidia.h"
 #include "sandbox.h"
 
 #include <algorithm>
@@ -9,6 +10,10 @@
 #include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <sys/xattr.h>
+#include <vector>
 #include <unistd.h>
 
 namespace apklayer {
@@ -26,6 +31,22 @@ std::string fdPath(int fd) {
 // AMD's compute (kfd), WSL's (dxg). Never a display's other devices (input, video capture, framebuffers).
 bool gpuNode(const std::string& p) {
     return p.rfind("/dev/dri/", 0) == 0 || p.rfind("/dev/nvidia", 0) == 0 || p == "/dev/kfd" || p == "/dev/dxg";
+}
+
+// A NVIDIA node the driver has not made yet: the setuid nvidia-modprobe makes it (an app cannot run it under no new privileges, cli/nvidia.h)
+bool makeNvidiaNode(const std::string& path) {
+    std::vector<std::string> args = nvidiaModprobeArgs(path);
+    if (args.empty()) return false;
+    pid_t pid = fork();
+    if (pid == 0) {
+        std::vector<char*> argv = {const_cast<char*>("nvidia-modprobe")};
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        execvp("nvidia-modprobe", argv.data());
+        _exit(127);
+    }
+    int st = 0;
+    return pid > 0 && waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0;
 }
 
 // The app of a namespace uid in this layout (uids are per package, the same in every instance)
@@ -98,6 +119,7 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
     struct stat st{};
     if (path.rfind("/dev/", 0) == 0) {
         fd = open(path.c_str(), base & ~(O_CREAT | O_EXCL | O_TRUNC));
+        if (fd < 0 && errno == ENOENT && makeNvidiaNode(path)) fd = open(path.c_str(), base & ~(O_CREAT | O_EXCL | O_TRUNC));
         if (fd < 0) return -errno;
         if (fstat(fd, &st) != 0 || !S_ISCHR(st.st_mode) || !gpuNode(fdPath(fd))) { close(fd); return -EACCES; }
     } else {
@@ -127,8 +149,36 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
     return fd;
 }
 
-// The granted home's and drives' other operations, as the user: mkdir, unlink, rmdir, rename, access. 0 or -errno.
-int changeFor(const Layout& l, const std::vector<std::string>& r, uid_t hostUid, const Instance& inst) {
+bool endsWith(const std::string& s, const char* tail) { size_t n = strlen(tail); return s.size() >= n && s.compare(s.size() - n, n, tail) == 0; }
+
+// A value or list of an extended attribute as the user: op getxattr {path, name, nofollow, size}, listxattr {path, nofollow, size}, setxattr {path, name,
+// nofollow, flags, hex value ("-": empty)}, removexattr {path, name, nofollow}. The O_PATH fd's /proc entry stands for the file. 0 or -errno; *ret, *data: what a read answers.
+int xattrFor(int dir, const std::string& name, const std::vector<std::string>& r, long* ret, std::string* data) {
+    int fd = openat(dir, name.c_str(), O_PATH | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0) return -errno;
+    const std::string path = "/proc/self/fd/" + std::to_string(fd), &op = r[0];
+    int rc = -EINVAL;
+    if (op == "setxattr" && r.size() == 6) {
+        std::string value;
+        if (r[5] != "-" && r[5].size() % 2 == 0)
+            for (size_t i = 0; i < r[5].size(); i += 2) value.push_back((char)strtol(r[5].substr(i, 2).c_str(), nullptr, 16));
+        if (r[5] == "-" || r[5].size() % 2 == 0) rc = setxattr(path.c_str(), r[2].c_str(), value.data(), value.size(), atoi(r[4].c_str()));
+    } else if (op == "removexattr" && r.size() == 4) rc = removexattr(path.c_str(), r[2].c_str());
+    else if ((op == "getxattr" && r.size() == 5) || (op == "listxattr" && r.size() == 4)) {
+        size_t want = std::min<unsigned long>(strtoul(r.back().c_str(), nullptr, 10), 65536);
+        std::vector<char> buf(want ? want : 1);
+        ssize_t n = op == "getxattr" ? getxattr(path.c_str(), r[2].c_str(), buf.data(), want) : listxattr(path.c_str(), buf.data(), want);
+        if (n >= 0) { *ret = n; if (want) data->assign(buf.data(), n); }
+        rc = n >= 0 ? 0 : -1;
+    }
+    int err = errno;
+    close(fd);
+    return rc == 0 ? 0 : rc == -EINVAL ? rc : -err;
+}
+
+// The granted home's and drives' other operations, as the user: mkdir, unlink, rmdir, rename (renameat2's flags), access, chmod, symlink, link, utimes,
+// the xattr calls. 0 or -errno.
+int changeFor(const Layout& l, const std::vector<std::string>& r, uid_t hostUid, const Instance& inst, long* ret, std::string* data) {
     std::string package = peerPackage(l, hostUid);
     if (package.empty()) return -EACCES;
     for (size_t i = 1; i < r.size(); i++) if (r[i].empty()) return -EINVAL;
@@ -136,17 +186,30 @@ int changeFor(const Layout& l, const std::vector<std::string>& r, uid_t hostUid,
     if (home.roots.empty()) return -EACCES;
     std::string name, name2;
     const std::string& op = r[0];
-    int dir = home.parent(r[1], op == "access", &name);  // never through a link as the last name: the link itself is what goes
+    bool follow = op == "access" || op == "chmod";
+    if (op == "utimes" && r.size() == 3) follow = r[2].back() == '0';
+    else if (endsWith(op, "xattr")) follow = (op == "listxattr" ? r.size() > 2 && r[2] == "0" : r.size() > 3 && r[3] == "0");
+    int dir = home.parent(r[1], follow, &name);  // never through a link as the last name: the link itself is what goes
     if (dir < 0) return dir;
     int rc = -EINVAL;
     if (op == "mkdir" && r.size() == 3) rc = mkdirat(dir, name.c_str(), atoi(r[2].c_str()) & 07777);
     else if (op == "unlink" && r.size() == 2) rc = unlinkat(dir, name.c_str(), 0);
     else if (op == "rmdir" && r.size() == 2) rc = unlinkat(dir, name.c_str(), AT_REMOVEDIR);
     else if (op == "access" && r.size() == 3) rc = faccessat(dir, name.c_str(), atoi(r[2].c_str()) & 7, 0);
-    else if (op == "rename" && r.size() == 3) {
+    else if (op == "chmod" && r.size() == 3) rc = fchmodat(dir, name.c_str(), atoi(r[2].c_str()) & 07777, 0);
+    else if (op == "utimes" && r.size() == 3) {
+        long v[4]; int nofollow = 0;
+        if (sscanf(r[2].c_str(), "%ld %ld %ld %ld %d", &v[0], &v[1], &v[2], &v[3], &nofollow) == 5) {
+            timespec ts[2] = {{(time_t)v[0], v[1]}, {(time_t)v[2], v[3]}};
+            rc = utimensat(dir, name.c_str(), ts, nofollow ? AT_SYMLINK_NOFOLLOW : 0);
+        }
+    } else if (endsWith(op, "xattr")) { int x = xattrFor(dir, name, r, ret, data); close(dir); return x; }
+    else if (op == "symlink" && r.size() == 4) rc = symlinkat(r[2].c_str(), dir, name.c_str());
+    else if ((op == "rename" || op == "link") && r.size() == 4) {
         int to = home.parent(r[2], false, &name2);
         if (to < 0) { close(dir); return to; }
-        rc = renameat(dir, name.c_str(), to, name2.c_str());
+        rc = op == "link" ? linkat(dir, name.c_str(), to, name2.c_str(), 0)
+                          : (int)syscall(SYS_renameat2, dir, name.c_str(), to, name2.c_str(), (unsigned)atoi(r[3].c_str()));
         int err = errno;
         close(to);
         errno = err;
@@ -156,8 +219,10 @@ int changeFor(const Layout& l, const std::vector<std::string>& r, uid_t hostUid,
     return rc == 0 ? 0 : rc == -EINVAL ? rc : -err;
 }
 
-void reply(int conn, int fd, int err) {
+// data: an xattr's value or list, after "ok <ret>" and a NUL (bridge/native/broker.c ask_data)
+void reply(int conn, int fd, int err, long ret = -1, const std::string& data = "") {
     std::string text = err == 0 ? "ok" : "err " + std::to_string(err);
+    if (err == 0 && ret >= 0) text += " " + std::to_string(ret) + std::string(1, '\0') + data;
     iovec iov{text.data(), text.size()};
     msghdr msg{};
     msg.msg_iov = &iov;
@@ -177,7 +242,7 @@ void reply(int conn, int fd, int err) {
 }  // namespace
 
 bool brokerRequest(const std::vector<std::string>& request) {
-    static const char* ops[] = {"open", "mkdir", "unlink", "rmdir", "rename", "access"};
+    static const char* ops[] = {"open", "mkdir", "unlink", "rmdir", "rename", "access", "chmod", "symlink", "link", "utimes", "setxattr", "getxattr", "listxattr", "removexattr"};
     for (const char* op : ops) if (!request.empty() && request[0] == op) return true;
     return false;
 }
@@ -185,7 +250,13 @@ bool brokerRequest(const std::vector<std::string>& request) {
 void brokerAnswer(const Layout& l, int conn, const std::vector<std::string>& request, const ucred& peer, const std::string& instance) {
     if (peer.uid == getuid() || instance.empty()) { reply(conn, -1, EPERM); return; }
     Instance inst = Instance::open(l, instance);
-    if (request[0] != "open") { int rc = changeFor(l, request, peer.uid, inst); reply(conn, -1, -rc); return; }
+    if (request[0] != "open") {
+        long ret = -1;
+        std::string data;
+        int rc = changeFor(l, request, peer.uid, inst, &ret, &data);
+        reply(conn, -1, -rc, ret, data);
+        return;
+    }
     int fd = request.size() == 4 ? openFor(l, request[1], atoi(request[2].c_str()), atoi(request[3].c_str()), peer.uid, inst) : -EINVAL;
     if (request.size() == 4 && request[1].rfind("/dev/", 0) == 0)  // the GPU nodes a driver needed (apklayerd.log: what an NVIDIA check reads first)
         fprintf(stderr, "apklayerd: broker %s %s for uid %u: %s\n", fd >= 0 ? "opened" : "refused", request[1].c_str(), peer.uid, fd >= 0 ? "ok" : strerror(-fd));

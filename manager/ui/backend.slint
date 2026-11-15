@@ -13,8 +13,8 @@ export struct InfoEntry { key: string, value: string }
 // `apklayer permissions`: runtime ones (dangerous) can be granted and revoked; state: what the others' grant is ("Granted", "Not granted", ...)
 export struct PermEntry { name: string, title: string, runtime: bool, granted: bool, state: string }
 
-// a first-run step (src/setup.cpp): id binder|runtime|instance|system-apps|microg|fdroid; state: "", "Done", "Failed", "Skipped"
-// an add-on of the Apps page (src/addons.cpp): id microg|fdroid; installed: any of its packages, complete: all of them; detail: what its
+// a first-run step (src/setup.cpp): id binder|runtime|instance|system-apps|microg|gapps|fdroid; state: "", "Done", "Failed", "Skipped"
+// an add-on of the Apps page (src/addons.cpp): id microg|gapps|fdroid; installed: any of its packages, complete: all of them; detail: what its
 // install or removal is doing; icon: the installed app's
 export struct AddonEntry { id: string, title: string, description: string, detail: string, version: string, icon: image, installed: bool, complete: bool, running: bool }
 
@@ -30,15 +30,16 @@ export struct HwDomain { name: string, title: string, configured: string, curren
                          unavailable: string, test: string }
 
 export global Backend {
+    in property <length> scroll-y;           // the screenshot mode's --scroll: the app detail and the hardware page start scrolled by it
     // the first run's checklist (FirstRunPage) and its choices
     in property <bool> first-run;
     in property <[SetupStep]> setup-steps;
     in property <bool> setup-running;
     in property <bool> setup-done;
     in property <float> setup-progress;    // of the running step: 0..1, negative while its size is unknown
-    callback setup-start(bool, bool);  // with microG, with F-Droid
+    callback setup-start(string, bool);  // Google's services ("microg", "gapps" or ""), with F-Droid
     callback setup-finish();
-    // the Apps page's add-ons: the first run's optional apps at any time (`apklayer setup --microg|--fdroid`, uninstall to remove)
+    // the Apps page's add-ons: the first run's optional apps at any time (`apklayer setup --microg|--gapps|--fdroid`, uninstall to remove)
     in property <[AddonEntry]> addons;
     in property <string> addon-running;    // the add-on whose install or removal runs ("" none): one at a time
     in property <string> addon-detail;
@@ -79,7 +80,10 @@ export global Backend {
     in property <string> binder-command;   // set when a new instance still needs its binder devices
     in property <string> binder-instance;
     in property <int> binder-serial;       // bumped to show the binder dialog
-    in property <string> chosen-path;      // what the file chooser returned
+    in property <string> chosen-path;      // what the file chooser returned, or the file the desktop opened with the manager (an .apk, .apks, .xapk, .apkm)
+    in property <string> installed-package;  // the last install's app: its dialog offers to open it
+    in property <string> installed-label;
+    in property <int> installed-serial;    // bumped to show that dialog
     in property <[InfoEntry]> found-apks;  // no file chooser at all: the .apk files found in the usual folders (key: the name, value: the path)
 
     callback refresh();

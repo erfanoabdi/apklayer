@@ -7,7 +7,7 @@ runtime: org.freedesktop.Platform
 runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.openjdk21
+  - org.freedesktop.Sdk.Extension.openjdk25
 command: apklayer-manager
 finish-args:
   # windows: apklayer's shell and the manager are Wayland clients only
@@ -27,12 +27,12 @@ finish-args:
   - --system-talk-name=org.bluez
   - --system-talk-name=org.freedesktop.GeoClue2
   - --talk-name=org.freedesktop.Notifications
-  # the JDK apps run on (the openjdk21 extension's JRE, installed into /app/jre)
+  # the JDK apps run on (the openjdk25 extension's JRE, installed into /app/jre)
   - --env=APKLAYER_NATIVE_JAVA=/app/jre/bin/java
 build-options:
-  append-path: /usr/lib/sdk/openjdk21/bin
+  append-path: /usr/lib/sdk/openjdk25/bin
   env:
-    JAVA_HOME: /usr/lib/sdk/openjdk21/jvm/openjdk-21
+    JAVA_HOME: /usr/lib/sdk/openjdk25/jvm/openjdk-25
 # after every module's debuginfo step: libdl_bio's unstripped copy back (apklayer module's post-install)
 cleanup-commands:
   - for z in /app/lib/apklayer/bionic_translation/b/libdl_bio.so.*.symtab.gz; do gunzip -c "$z" > "${z%.symtab.gz}" && rm "$z"; done
@@ -40,7 +40,7 @@ modules:
   - name: openjdk
     buildsystem: simple
     build-commands:
-      - /usr/lib/sdk/openjdk21/install.sh
+      - /usr/lib/sdk/openjdk25/install.sh
 
   # bionic_translation's libbsd (the 26.08 SDK has neither); the same releases as rpm/sources
   - name: libmd
@@ -149,10 +149,10 @@ modules:
       - install -Dm644 ../data/apklayer.svg /app/share/icons/hicolor/scalable/apps/io.github.erfanoabdi.Apklayer.svg
       - install -Dm644 ../data/apklayer-256.png /app/share/icons/hicolor/256x256/apps/io.github.erfanoabdi.Apklayer.png
       - install -Dm644 ../flatpak/io.github.erfanoabdi.Apklayer.metainfo.xml -t /app/share/metainfo
-      # the manager's entry under the app id (Flatpak exports only files named after it), which also opens .apk files (`apklayer run`, as the
-      # deb's apklayer-open-apk entry); the deb's other entries are not exported
-      - sed -e 's/^Icon=.*/Icon=io.github.erfanoabdi.Apklayer/' -e 's/^Exec=apklayer-manager$/Exec=apklayer-manager %f/' -e '$a MimeType=application/vnd.android.package-archive;'
-        ../data/apklayer-manager.desktop > /app/share/applications/io.github.erfanoabdi.Apklayer.desktop
+      # the manager's entry under the app id (Flatpak exports only files named after it): it opens .apk, .apks, .xapk and .apkm files (MimeType= and
+      # %F in the entry: the manager's install dialog), and their mime package, named after the app id too; the deb's other entries are not exported
+      - sed -e 's/^Icon=.*/Icon=io.github.erfanoabdi.Apklayer/' ../data/apklayer-manager.desktop > /app/share/applications/io.github.erfanoabdi.Apklayer.desktop
+      - mv /app/share/mime/packages/apklayer.xml /app/share/mime/packages/io.github.erfanoabdi.Apklayer.xml
       - rm /app/share/applications/apklayer-manager.desktop /app/share/applications/apklayer-share.desktop
       # the manager (debian/rules' second build)
       - cd .. && sh manager/fetch-slint.sh $PWD/slint

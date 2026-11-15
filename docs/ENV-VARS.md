@@ -25,7 +25,9 @@ Nothing else is a user option. The rest of this page is for people who work on a
 | `pts-view` | `APKLAYER_PTS_VIEW` | app | host: all of the host's terminals | yes |
 | `raw-syscall-view` | `APKLAYER_RAW_SYSCALL_VIEW` | on | off: an app's own system calls see the host's /proc, /etc and identity | yes |
 | `webview-provider` | `APKLAYER_WEBVIEW_PROVIDER` | Chromium when installed | none, or the package of a provider | yes |
+| `camera-mount` | `APKLAYER_CAMERA_MOUNT` | none | `[NAME:]DEGREES` the PipeWire cameras are turned on the display (portrait monitor: 90); the provider option `mount=` wins | |
 | `audio-output` | `APKLAYER_AUDIO_TARGET` | the default sink | the PipeWire/PulseAudio sink apps play to | |
+| `keystore-pam-service` | `APKLAYER_PAM_SERVICE` | login | the PAM service (/etc/pam.d) that checks the lock screen's password; any stack works (sssd, LDAP, FreeIPA); `apklayer-pamcheck` | |
 | `audio-input` | `APKLAYER_AUDIO_TARGET_IN` | the default source | the source apps record from | |
 
 Not here on purpose: the window style, colour scheme and the other host settings are `apklayer settings` (live in a running instance, also in the
@@ -78,7 +80,7 @@ nativejar|platformres|applog|processname|isolated|componenthost|layerstack|displ
 
 ## Vendored: not apklayer's
 
-`runtime/dex2jvm/` (upstream, unchanged, docs/THIRD_PARTY.md) has its own `DEX2JVM_*` converter switches (the converter's experiments and test knobs).
+`runtime/dex2jvm/` (upstream, unchanged, docs/THIRD_PARTY.md) keeps only the `DEX2JVM_*` switches of its `Options` class (SYNTHETIC_PREFIX, REDIRECT_UNSAFE/EXIT, THREADS, LOG_TAG, PARSED_MARKER, LIBRARY, TEST_FAIL_CLASS: set by tests/vm/dex2jvm-stub.sh). Its ~25 other experiment/debug/force knobs (FRAME_*, *_DEBUG, *_FORCE, SPLIT_*, MONITOR_COVER*, NARROW_TRY, SUPER_IFACE*, INIT_REPOINT, ...) were read but set nowhere: removed 2026-11-14, their code is hard-coded to the default.
 Build-time only: `APKLAYER_PREBUILTS`, `_SLINT`, `_ARCH`, `_VARIANT`, `_PRODUCT`, `_MAVEN`, `_DEPS_LOCAL`, `_ORB`, `_SAILFISH_CACHE`, `_CLICK_JAVA`.
 
 ## Removed (2026-11-14)

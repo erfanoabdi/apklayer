@@ -25,14 +25,18 @@ static int32_t inject(struct window *w, const int32_t *v, const char *text)
             if (windows[i].client && windows[i].configured) { windows[i].test_focus = 1; window_inject_configure(&windows[i], 0, 0, &windows[i] == w); }
         keyboard_inject_focus(w);
         return 0;
+    case TEST_LAYOUT: return keyboard_inject_layout(text);
     case TEST_KEY: keyboard_inject_key(w, (uint32_t)v[1], v[2]); return 0;
     case TEST_POINTER: pointer_inject(w, v[1], v[2], v[3]); return 0;
     case TEST_TOUCH: touch_inject(w, v[1], v[2], v[3]); return 0;
+    case TEST_WHEEL: return pointer_inject_wheel(w, v[1], v[2], v[3]);
+    case TEST_PEN: return tablet_inject(w, text);
     case TEST_TEXT: return text_input_inject(w, text, v[1]);
     case TEST_RESIZE: window_inject_configure(w, v[1], v[2], w->activated); return 0;
     case TEST_SCALE: if (v[1] < 100 || v[1] > 400) return -3; window_scale_changed(w, v[1]); return 0;
     case TEST_MAXIMIZE: window_inject_maximize(w, v[1], v[2], v[3]); return 0;
     case TEST_IME: if (v[1] < 0) return -3; w->ime_px = v[1]; window_send_configure(w); return 0;  /* as maliit.c's set_area */
+    case TEST_OUTPUT: return window_output_inject(w, v[1]);
     case TEST_CLOSE: window_close(w); return 0;
     default: return -3;
     }

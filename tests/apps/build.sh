@@ -16,7 +16,7 @@ if ls *.c >/dev/null 2>&1; then
   ABI=x86_64; [ ! -f lib.abi ] || read -r ABI < lib.abi; ABI=${APP_ABI:-$ABI}  # APP_ABI overrides (hello-identity: x86_64 for Waydroid); lib.abi: the one ABI of the library (arm64-v8a: an app only a native bridge runs on x86_64; armeabi-v7a: only the 32-bit app process)
   case "$ABI" in arm64-v8a) TRIPLE=aarch64-linux-android;; armeabi-v7a) TRIPLE=armv7a-linux-androideabi;; *) TRIPLE=x86_64-linux-android;; esac
   mkdir -p "$W/lib/$ABI"
-  "$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/${TRIPLE}26-clang)" -shared -fPIC -O2 -o "$W/lib/$ABI/libhello.so" *.c -Wl,--as-needed -lEGL -lGLESv2 -landroid -llog -lm
+  "$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/${TRIPLE}26-clang)" -shared -fPIC -O2 -o "$W/lib/$ABI/libhello.so" *.c -Wl,--as-needed -lEGL -lGLESv2 -landroid -llog -lm -lcamera2ndk -lmediandk
   LIBS="lib/$ABI/libhello.so"
 fi
 if [ -f aidl.list ]; then
@@ -26,7 +26,8 @@ if [ -f aidl.list ]; then
   done < aidl.list
 fi
 OPT=$(ls "$SDK"/platforms/android-36.1/optional/*.jar | paste -sd: -)  # the optional shared libraries (<uses-library>): compile only, as the SDK's stubs
-javac -nowarn -d "$W/cls" -cp "$AJ:$OPT" $(find -H src "$W/aidl" -name '*.java')
+CO=""; if [ -d compile-only ]; then mkdir -p "$W/co"; javac -nowarn -d "$W/co" -cp "$AJ" $(find compile-only -name '*.java'); CO=":$W/co"; fi  # compile-only/: framework classes the SDK hides, on the classpath only
+javac -nowarn -d "$W/cls" -cp "$AJ:$OPT$CO" $(find -H src "$W/aidl" -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
 key() { local ks="$PWD/../../../build/keys/$1.jks"; mkdir -p "$(dirname "$ks")"
   [ -f "$ks" ] || keytool -genkeypair -keystore "$ks" -alias key -storepass apklayer -keypass apklayer -dname "CN=$1" -keyalg RSA -validity 10000 -noprompt >/dev/null 2>&1
@@ -53,7 +54,8 @@ ABIS=()
 if [ -f split.list ]; then while IFS=: read -r split config; do
   if [ "$config" = abi ]; then ABIS+=("$split"); elif [ -n "$split" ]; then SPLITS+=(--split "$W/split_$split.apk:$config"); fi
 done < split.list; fi
-"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} ${SPLITS[@]+"${SPLITS[@]}"} --manifest "$MANIFEST"
+SHARED=(); [ ! -f shared-lib ] || SHARED=(--shared-lib)  # a library with resources: its package id is assigned when an app loads it (sharedLibraryFiles)
+"$BT"/aapt2 link ${SHARED[@]+"${SHARED[@]}"} ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} ${SPLITS[@]+"${SPLITS[@]}"} --manifest "$MANIFEST"
 (cd "$W" && zip -q base.apk classes.dex $LIBS)
 for abi in ${ABIS[@]+"${ABIS[@]}"}; do  # what bundletool makes of lib/<abi>/: a split of the same package and versionCode named config.<abi>
   printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="%s" android:versionCode="%s" split="config.%s"><application android:hasCode="false"/></manifest>' \

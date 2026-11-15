@@ -18,12 +18,15 @@ import java.util.concurrent.TimeUnit;
 /**
  * A drive plugged in while the app runs (hello.hotplug; tests/vm/volumes.py mounts and removes it): the volume broadcasts and callbacks, the volume in
  * getStorageVolumes and MediaStore, the drive's files indexed at mount (DCIM/pre.png, put there before), files written afterwards on the drive and on
- * internal storage indexed (and a deleted one dropped), then after the removal the eject, unmounted and removed broadcasts and the volume gone.
+ * internal storage indexed (and a deleted one dropped), then (hello.eject: StorageManager.unmount while the runner holds a file of the drive open; hello.pull: the
+ * device pulled out while mounted) after the removal the eject, unmounted and removed broadcasts and the volume gone.
  * Prints `[hotplug] PASS|FAIL <step>`, `[hotplug] ready` (mount the drive now), `[hotplug] unmount` (remove it now), `[hotplug] DONE`.
  */
 final class Hotplug {
     private Hotplug() {}
     private static final LinkedBlockingQueue<String> EVENTS = new LinkedBlockingQueue<>(), CALLBACKS = new LinkedBlockingQueue<>();
+
+    private static final java.util.Set<String> SEEN = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     static void start(Activity activity) {
         IntentFilter filter = new IntentFilter();
@@ -36,6 +39,12 @@ final class Hotplug {
                 EVENTS.add(i.getAction() + " " + i.getData().getPath() + " " + (v == null ? "" : v.getState()));
             }
         }, filter, Context.RECEIVER_EXPORTED);
+        IntentFilter extra = new IntentFilter(Intent.ACTION_MEDIA_CHECKING);  // apart: the strict order of EVENTS stays
+        extra.addAction(Intent.ACTION_MEDIA_BAD_REMOVAL);
+        extra.addDataScheme("file");
+        activity.getApplicationContext().registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) { say("event " + i.getAction() + " " + i.getData()); SEEN.add(i.getAction() + " " + i.getData().getPath()); }
+        }, extra, Context.RECEIVER_EXPORTED);
         StorageManager storage = activity.getSystemService(StorageManager.class);
         storage.registerStorageVolumeCallback(activity.getMainExecutor(), new StorageManager.StorageVolumeCallback() {
             @Override public void onStateChanged(StorageVolume v) { say("callback " + v.getUuid() + " " + v.getState()); CALLBACKS.add(v.getUuid() + " " + v.getState()); }
@@ -58,10 +67,14 @@ final class Hotplug {
         if (mounted == null) return;
         String path = mounted.split(" ")[1], uuid = new File(path).getName();
         String callback;
-        do callback = CALLBACKS.poll(10, TimeUnit.SECONDS); while (callback != null && !callback.startsWith(uuid + " "));
+        do callback = CALLBACKS.poll(10, TimeUnit.SECONDS); while (callback != null && !callback.equals(uuid + " mounted"));  // past its "checking"
         check("volume callback", (uuid + " mounted").equals(callback));
-        StorageVolume volume = storage.getStorageVolumes().stream().filter(v -> uuid.equals(v.getUuid())).findFirst().orElse(null);
+        StorageVolume volume = storage.getStorageVolumes().stream().filter(v -> v != null && uuid.equals(v.getUuid())).findFirst().orElse(null);
         check("volume listed", volume != null && volume.isRemovable() && "mounted".equals(volume.getState()) && path.equals(volume.getDirectory().getPath()));
+        for (int i = 0; i < 30 && !SEEN.contains(Intent.ACTION_MEDIA_CHECKING + " " + path); i++) Thread.sleep(100);
+        check("MEDIA_CHECKING broadcast", SEEN.contains(Intent.ACTION_MEDIA_CHECKING + " " + path));
+        File[] dirs = context.getExternalFilesDirs(null);  // the primary's, then the drive's
+        check("secondary external files dir", dirs.length == 2 && dirs[1] != null && dirs[1].getPath().equals(path + "/Android/data/" + context.getPackageName() + "/files") && dirs[1].isDirectory());
         String media = uuid.toLowerCase();
         check("mediastore volume", MediaStore.getExternalVolumeNames(context).contains(media));
         boolean scanned = appears(context, media, "pre.png", true);
@@ -79,8 +92,16 @@ final class Hotplug {
         check("internal file dropped", appears(context, MediaStore.VOLUME_EXTERNAL_PRIMARY, pictures.getName(), false));
         CALLBACKS.clear();
         say("unmount");
+        if (System.getProperty("hello.eject") != null) {  // the runner holds a file of the drive open as one of this instance's processes: Eject must end it and unmount
+            Thread.sleep(1000);  // the holder started
+            StorageManager.class.getMethod("unmount", String.class).invoke(storage, "public:" + uuid);
+        }
         for (String state : new String[] {Intent.ACTION_MEDIA_EJECT + " " + path + " ejecting", Intent.ACTION_MEDIA_UNMOUNTED + " " + path + " unmounted", Intent.ACTION_MEDIA_REMOVED + " " + path + " removed"})
             check(state.split(" ")[0].replace("android.intent.action.", "") + " broadcast", state.equals(EVENTS.poll(60, TimeUnit.SECONDS)));
+        if (System.getProperty("hello.pull") != null) {  // the device went away while mounted: vold's BAD_REMOVAL first, then the usual end
+            check("MEDIA_BAD_REMOVAL broadcast", SEEN.contains(Intent.ACTION_MEDIA_BAD_REMOVAL + " " + path));
+            check("bad_removal callback", CALLBACKS.contains(uuid + " bad_removal"));
+        }
         check("volume gone", storage.getStorageVolumes().stream().noneMatch(v -> uuid.equals(v.getUuid())) && !MediaStore.getExternalVolumeNames(context).contains(media));
         check("callback on removal", CALLBACKS.contains(uuid + " removed"));
         check("link removed", !new File(path).exists());

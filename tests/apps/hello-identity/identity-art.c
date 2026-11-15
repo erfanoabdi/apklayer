@@ -66,6 +66,15 @@ static void ids(struct buf *b, JNIEnv *env, jobject ra, jobject rb, jobject f1, 
         jmethodID again = (*env)->GetStaticMethodID(env, adjacent, "a", "()V");
         put(b, "jmethodID.stable", "%d", again == a);
     } else (*env)->ExceptionClear(env);
+    /* the ids are usable as handed out: static and virtual calls through GetStaticMethodID/GetMethodID, ToReflectedMethod of FromReflectedMethod's id */
+    jclass integer = (*env)->FindClass(env, "java/lang/Integer"), string = (*env)->FindClass(env, "java/lang/String");
+    jmethodID parse = integer ? (*env)->GetStaticMethodID(env, integer, "parseInt", "(Ljava/lang/String;)I") : NULL;
+    jmethodID length = string ? (*env)->GetMethodID(env, string, "length", "()I") : NULL;
+    jstring forty_two = (*env)->NewStringUTF(env, "42");
+    jobject back = adjacent ? (*env)->ToReflectedMethod(env, adjacent, a, JNI_TRUE) : NULL;
+    put(b, "jmethodID.callThrough", "parseInt=%d length=%d toReflected=%d", parse ? (*env)->CallStaticIntMethod(env, integer, parse, forty_two) : -1,
+        length ? (*env)->CallIntMethod(env, forty_two, length) : -1, back != NULL);
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     method_fields(b, "artMethodAtID", ia, mods, NULL);
     /* a registered native method: ART keeps its JNI function in data_ */
     jclass main = (*env)->FindClass(env, "hello/identity/Main");

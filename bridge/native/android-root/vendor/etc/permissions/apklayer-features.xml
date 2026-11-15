@@ -2,6 +2,9 @@
 <!-- What an apklayer device declares (the vendor half of Android's feature list); only what the host layers really provide. -->
 <permissions>
     <feature name="android.hardware.touchscreen" />
+    <!-- the shell forwards every finger of wl_touch as a multi-pointer touch message (bridge/shell/touch.c) -->
+    <feature name="android.hardware.touchscreen.multitouch" />
+    <feature name="android.hardware.touchscreen.multitouch.distinct" />
     <feature name="android.hardware.faketouch" />
     <feature name="android.hardware.screen.landscape" />
     <feature name="android.hardware.screen.portrait" />

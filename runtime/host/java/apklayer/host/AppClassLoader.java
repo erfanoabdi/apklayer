@@ -141,6 +141,12 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         return name.startsWith("org.robolectric.") || name.startsWith("apklayer.") && !appHelper(name);
     }
 
+    /** Test apps (-Dapklayer.testClasses=a.B,c.D in APKLAYER_JOPTS) reach the named host classes by Class.forName; no app has the property. */
+    private static boolean testClass(String name) {
+        String list = System.getProperty("apklayer.testClasses");
+        return list != null && (',' + list + ',').contains(',' + name + ',');
+    }
+
     /** The converter's targets in the app's classes (DenyInstrument): resolved by the app's own loader. */
     private static boolean appHelper(String name) {
         return name.startsWith("apklayer.relocated.") || name.startsWith("apklayer.loader.") || switch (name) {
@@ -194,7 +200,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         if (name.startsWith("[")) return Class.forName(name.replace('/', '.'), false, definingLoader);  // ART's loaders answer array names (Chromium's JNI asks)
         name = name.replace('/', '.');  // ... and binary names with slashes (Paddleboat)
-        if (hiddenName(name) || (jdkOnly(name) || name.startsWith("apklayer.")) && byForName()) throw new ClassNotFoundException(name);  // not on Android's boot class path
+        if (!testClass(name) && (hiddenName(name) || (jdkOnly(name) || name.startsWith("apklayer.")) && byForName())) throw new ClassNotFoundException(name);  // not on Android's boot class path
         // No lock of ours is held while the parent loads: a thread in the sandbox's loadClass (holding its lock) may be defining an app class here through
         // apply, whose superclass then comes through this method; apply itself copes with two threads defining one class.
         Class<?> c = libraries == null || name.startsWith("java.") ? null : libraries.apply(name);
@@ -239,7 +245,21 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
     }
 
+    /** libcore's sun.misc.Cleaner (the JDK has none): apklayer.loader.ApklayerCleaner under that name. */
+    private static byte[] cleaner() throws java.io.IOException {
+        try (java.io.InputStream in = AppClassLoader.class.getResourceAsStream("/apklayer/loader/ApklayerCleaner.class")) {
+            org.objectweb.asm.ClassWriter out = new org.objectweb.asm.ClassWriter(0);
+            new org.objectweb.asm.ClassReader(in).accept(new org.objectweb.asm.commons.ClassRemapper(out,
+                    new org.objectweb.asm.commons.SimpleRemapper("apklayer/loader/ApklayerCleaner", "sun/misc/Cleaner")), 0);
+            return out.toByteArray();
+        }
+    }
+
     private Class<?> defineOwnClass(String name) throws ClassNotFoundException {
+        if (name.equals("sun.misc.Cleaner")) {
+            try { byte[] bytes = cleaner(); return (Class<?>) DEFINE.invoke(definingLoader, name, bytes, 0, bytes.length); }
+            catch (ReflectiveOperationException | java.io.IOException failure) { throw new ClassNotFoundException(name, failure); }
+        }
         URL source = super.findResource(name.replace('.', '/') + ".class");
         if (source == null) throw new ClassNotFoundException(name);
         try (java.io.InputStream input = source.openStream()) {

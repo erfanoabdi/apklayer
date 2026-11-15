@@ -1,0 +1,392 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: guest thread lifetime: a signal handler that attaches a thread no longer calls malloc; no stale locks in a forked child; no read of an unknown record
+
+The thread stress (tests/apps/hello-arm64/threads.c: 2000 threads created, joined from other threads, detached, pthread_exit, signalled while exiting, with a
+fork in between) hung with libberberis_arm64 aac5755a: a thread that got a guest signal (pthread_kill of a thread that was starting or exiting) sat in
+`__tls_get_module -> malloc` under the arena lock it already held. The signal handler's first access of the library's thread_local
+(g_handle_host_signal_depth) made the library's dynamic TLS block (the host's lazy __tls_get_addr, malloc 2.2 KB) while the interrupted code was in malloc.
+Everything a handler that attaches a thread runs is now free of malloc: the depth is a GuestThread member; AttachCurrentThread does not call
+pthread_getattr_np (glibc allocates a cpuset; and its attr was never destroyed) from a signal handler; the default signal actions' shared_ptr is made once
+(a control block allocates); the table of 0029/0038 (record -> host pthread_t) is a fixed array (no unordered_map/deque), and a thread attached only for a
+signal handler or a key destructor keeps no record. The child of a fork gets fresh locks for that table and the thread map (a lock another thread held at the
+fork stays locked for ever) and its record's tid (the guest's gettid() answered the parent's tid: tgkill(getpid(), gettid(), sig) in a child hit nothing). GuestPthreadToHost no longer reads the tid word of a pointer that is not a registered record (an evicted record's memory is
+unmapped: the read crashed).
+
+--- a/guest_os_primitives/guest_signal_handling.cc
++++ b/guest_os_primitives/guest_signal_handling.cc
+@@ -142,19 +142,29 @@
+ }
+ 
+ // region digitalis - nested-signal recursion depth tracking
+-// Thread-local count of how many HandleHostSignal frames are active on this
+-// thread right now. depth > 1 means a nested signal arrived while we were
++// The count of how many HandleHostSignal frames are active on this thread right now is the
++// thread's GuestThread::host_signal_depth(). depth > 1 means a nested signal arrived while we were
+ // already handling one (e.g. breakpad's signal handler itself faulted).
+ // Used purely for diagnostics — does not change recovery behaviour.
+-static thread_local int g_handle_host_signal_depth = 0;
++// apklayer patch (0039): it was a thread_local of this library. A library's TLS block is made lazily
++// by the host's __tls_get_addr (malloc) on a thread's first access: a signal that reached a thread
++// inside malloc (a new thread's first access, a pthread_kill of an exiting one) made that allocation
++// again under the arena lock the thread already held, and the thread hung for ever.
+ // endregion
+ 
+ // Can be interrupted by another HandleHostSignal!
+ void HandleHostSignal(int sig, siginfo_t* info, void* context) {
+   ucontext_t* ucontext = std::bit_cast<ucontext_t*>(context);
++
++  bool attached;
++  // apklayer patch (0039): this may run inside malloc: attaching must not call it (see AttachCurrentThread)
++  GuestThread* thread = AttachCurrentThread(false, &attached, /* from_signal_handler */ true);
+   // region digitalis
+-  ++g_handle_host_signal_depth;
+-  int depth = g_handle_host_signal_depth;
++  int depth = ++thread->host_signal_depth();
++  // A thread this signal attached is detached again before we return: its depth dies with it.
++  auto leave = [&] {
++    if (!attached) --thread->host_signal_depth();
++  };
+   // endregion
+   TRACE("Handle host signal %s (%d) at pc=%p si_addr=%p depth=%d",
+         strsignal(sig),
+@@ -163,9 +173,6 @@
+         info->si_addr,
+         depth);
+ 
+-  bool attached;
+-  GuestThread* thread = AttachCurrentThread(false, &attached);
+-
+   // If pending signals are enabled, just add this signal to currently pending.
+   // If pending signals are disabled, run handlers for currently pending signals
+   // and for this signal now. While running the handlers, enable nested signals
+@@ -194,7 +201,7 @@
+           TRACE("Skipping imprecise context recovery for non-fatal signal");
+           TRACE("Guest signal handler suspended, continue");
+           // region digitalis
+-          --g_handle_host_signal_depth;
++          leave();
+           // endregion
+           return;
+         }
+@@ -338,7 +345,7 @@
+         // If the raised signal is blocked we may need to return from the handler to unblock it.
+         TRACE("Detected return from HandleFatalSignal, continue");
+         // region digitalis
+-        --g_handle_host_signal_depth;
++        leave();
+         // endregion
+         return;
+       }
+@@ -346,7 +353,7 @@
+     }
+   }
+   // region digitalis
+-  --g_handle_host_signal_depth;
++  leave();
+   // endregion
+ }
+ 
+@@ -385,6 +392,7 @@
+ }
+ 
+ GuestSignalActionsTable* g_default_signal_actions;
++std::shared_ptr<GuestSignalActionsTable>* g_default_signal_actions_shared;  // apklayer patch (0039)
+ 
+ const GuestAddr kFatalGuestHandlerStub = ToGuestAddr(&kFatalGuestHandlerStub);
+ 
+@@ -413,6 +421,11 @@
+ 
+ void InitGuestSignalHandling() {
+   g_default_signal_actions = NewForever<GuestSignalActionsTable>();
++  // apklayer patch (0039): made once here: a shared_ptr with a deleter allocates, and SetDefaultSignalActionsTable runs when a signal
++  // attaches a thread (it may be inside malloc). A copy of this one only counts.
++  g_default_signal_actions_shared = NewForever<std::shared_ptr<GuestSignalActionsTable>>();
++  *g_default_signal_actions_shared =
++      std::shared_ptr<GuestSignalActionsTable>(g_default_signal_actions, [](auto) {});
+ 
+   // Let crash reporter memorize the original sigactions before we redefine them.
+   InitCrashReporter();
+@@ -448,8 +461,8 @@
+ void GuestThread::SetDefaultSignalActionsTable() {
+   CHECK(g_default_signal_actions);
+   // We need to initialize shared_ptr, but we don't want to attempt to delete the default
+-  // signal actions when guest thread terminates. Hence we specify a void deleter.
+-  signal_actions_ = std::shared_ptr<GuestSignalActionsTable>(g_default_signal_actions, [](auto) {});
++  // signal actions when guest thread terminates. Hence the one made at init has a void deleter.
++  signal_actions_ = *g_default_signal_actions_shared;
+ }
+ 
+ void GuestThread::CloneSignalActionsTableFrom(GuestSignalActionsTable* from_table) {
+--- a/guest_os_primitives/guest_thread.cc
++++ b/guest_os_primitives/guest_thread.cc
+@@ -18,9 +18,7 @@
+ 
+ #include <sys/mman.h>  // mprotect
+ #include <bit>
+-#include <deque>  // apklayer patch: exited records
+-#include <mutex>
+-#include <unordered_map>
++#include <mutex>  // apklayer patch: exited records
+ #include <cerrno>  // apklayer patch: WrapHostCallForGuestErrno
+ 
+ // region digitalis
+@@ -76,15 +74,62 @@
+ // pthread_create with it, and Gecko then joins that value. Once the thread had exited its records were unmapped and the address reused
+ // (Fennec's heap), so GuestPthreadToHost found no GuestThread and pthread_join waited forever on a garbage "tid" word. The records of
+ // exited threads now stay mapped (the newest kKeptExitedRecords of them) and name their host pthread_t.
++// apklayer patch (0039): the table is a fixed array, nothing here calls malloc: a signal handler that attaches a thread (and later
++// detaches it) uses it, and the thread may have been interrupted inside malloc, with its arena lock held (std::unordered_map and
++// std::deque hung such a thread; tests/apps/hello-arm64/threads.c).
+ constexpr size_t kKeptExitedRecords = 512;
++constexpr size_t kRecordSlotBits = 14;  // 16384 slots: the live threads' records and the kept ones; a full table registers nothing
++constexpr size_t kRecordSlots = size_t{1} << kRecordSlotBits;
++struct RecordSlot {
++  const void* record;  // nullptr: free
++  pthread_t host;
++};
+ struct ExitedRecords {
+   std::mutex mutex;
+-  std::unordered_map<const void*, pthread_t> host;
+-  std::deque<void*> order;
++  RecordSlot slots[kRecordSlots];     // open addressing, linear probing, no tombstones (EraseLocked shifts)
++  void* order[kKeptExitedRecords];    // ring of the exited records, oldest first
++  size_t order_head = 0;
++  size_t order_count = 0;
+ };
+-ExitedRecords* GetExitedRecords() {
+-  static auto* records = new ExitedRecords;
+-  return records;
++ExitedRecords g_exited_records;
++ExitedRecords* GetExitedRecords() { return &g_exited_records; }
++
++size_t RecordHash(const void* record) {
++  return static_cast<size_t>((reinterpret_cast<uintptr_t>(record) >> 12) * 0x9E3779B97F4A7C15ull >> (64 - kRecordSlotBits));
++}
++
++// All of these with `kept->mutex` held.
++RecordSlot* FindRecordLocked(ExitedRecords* kept, const void* record) {
++  for (size_t i = RecordHash(record), n = 0; n < kRecordSlots; i = (i + 1) & (kRecordSlots - 1), n++) {
++    if (kept->slots[i].record == record) return &kept->slots[i];
++    if (kept->slots[i].record == nullptr) return nullptr;
++  }
++  return nullptr;
++}
++
++void PutRecordLocked(ExitedRecords* kept, const void* record, pthread_t host) {
++  for (size_t i = RecordHash(record), n = 0; n < kRecordSlots; i = (i + 1) & (kRecordSlots - 1), n++) {
++    if (kept->slots[i].record == record || kept->slots[i].record == nullptr) {
++      kept->slots[i] = {record, host};
++      return;
++    }
++  }
++}
++
++void EraseRecordLocked(ExitedRecords* kept, const void* record) {
++  RecordSlot* found = FindRecordLocked(kept, record);
++  if (found == nullptr) return;
++  size_t i = found - kept->slots;
++  for (size_t j = i;;) {
++    j = (j + 1) & (kRecordSlots - 1);
++    if (kept->slots[j].record == nullptr) break;
++    size_t k = RecordHash(kept->slots[j].record);
++    // the entry at j stays when its home k lies cyclically in (i, j]; otherwise it moves into the hole at i
++    if (i <= j ? (i < k && k <= j) : (i < k || k <= j)) continue;
++    kept->slots[i] = kept->slots[j];
++    i = j;
++  }
++  kept->slots[i].record = nullptr;
+ }
+ #endif
+ 
+@@ -231,12 +276,20 @@
+   if (thread->glibc_host_records_ != nullptr) {  // apklayer patch: kept for GuestExitedRecordToHost
+     ExitedRecords* kept = GetExitedRecords();
+     std::lock_guard<std::mutex> lock(kept->mutex);
+-    kept->host[thread->glibc_host_records_] = thread->host_pthread_;
+-    kept->order.push_back(thread->glibc_host_records_);
+-    while (kept->order.size() > kKeptExitedRecords) {
+-      kept->host.erase(kept->order.front());
+-      MunmapOrDie(kept->order.front(), kGlibcHostRecordsSize);
+-      kept->order.pop_front();
++    if (thread->transient_records_) {  // attached by a signal handler or a key destructor, detached at its end: nobody can hold its record
++      EraseRecordLocked(kept, thread->glibc_host_records_);
++      MunmapOrDie(thread->glibc_host_records_, kGlibcHostRecordsSize);
++    } else {
++      PutRecordLocked(kept, thread->glibc_host_records_, thread->host_pthread_);
++      if (kept->order_count == kKeptExitedRecords) {
++        void* oldest = kept->order[kept->order_head];
++        EraseRecordLocked(kept, oldest);
++        MunmapOrDie(oldest, kGlibcHostRecordsSize);
++        kept->order_head = (kept->order_head + 1) % kKeptExitedRecords;
++        kept->order_count--;
++      }
++      kept->order[(kept->order_head + kept->order_count) % kKeptExitedRecords] = thread->glibc_host_records_;
++      kept->order_count++;
+     }
+   }
+   if (thread->scs_region_ != nullptr) {
+@@ -448,15 +501,30 @@
+ #if defined(__BIONIC__)
+   ExitedRecords* kept = GetExitedRecords();
+   std::lock_guard<std::mutex> lock(kept->mutex);
+-  auto it = kept->host.find(record);
+-  if (it == kept->host.end()) return false;
+-  *host = it->second;
++  RecordSlot* slot = FindRecordLocked(kept, record);
++  if (slot == nullptr) return false;
++  *host = slot->host;
+   return true;
+ #else
+   return false;
+ #endif
+ }
+ 
++void GuestRecordsResetAfterFork() {
++#if defined(__BIONIC__)
++  // The thread that held the lock may be another one: it does not exist in the child.
++  new (&GetExitedRecords()->mutex) std::mutex;
++#endif
++}
++
++void GuestThread::ResetRecordTidAfterFork() {
++#if defined(__BIONIC__)
++  // bionic's _Fork gets the child's tid written into its record by CLONE_CHILD_SETTID; the clone of a guest fork does not pass that address on
++  // (the guest's gettid() answered the parent's tid: tgkill(getpid(), gettid(), sig) of a child hit nothing).
++  if (glibc_host_records_ != nullptr) static_cast<pthread_internal_t*>(glibc_host_records_)->tid = GettidSyscall();
++#endif
++}
++
+ void* GuestThread::GlibcHostRecords() {
+ #if defined(__BIONIC__)
+   if (glibc_host_records_ == nullptr) {  // apklayer patch: zeroed, with the tid and bionic_tls pointer bionic's pthread_create sets
+@@ -466,7 +534,7 @@
+     {  // apklayer patch: known from the start, not only once the thread has exited (see GuestExitedRecordToHost)
+       ExitedRecords* kept = GetExitedRecords();
+       std::lock_guard<std::mutex> lock(kept->mutex);
+-      kept->host[glibc_host_records_] = host_pthread_;
++      PutRecordLocked(kept, glibc_host_records_, host_pthread_);
+     }
+     auto* thread = static_cast<pthread_internal_t*>(glibc_host_records_);
+     thread->tid = GettidSyscall();
+--- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
++++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
+@@ -61,6 +61,8 @@
+ 
+ // apklayer patch: the host pthread_t of a record that belonged to a thread that has exited (its records are kept for a while).
+ bool GuestExitedRecordToHost(const void* record, pthread_t* host);
++// apklayer patch (0039): in the child of a fork (a lock the records' table had when another thread forked stays locked for ever).
++void GuestRecordsResetAfterFork();
+ 
+ // ATTENTION: GuestThread object can only be used by the current thread!
+ class GuestThread {
+@@ -101,6 +103,13 @@
+     *guard_size = guard_size_;
+   }
+ 
++  // apklayer patch (0039): a thread attached only for a signal handler or a key destructor (and detached at its end) keeps no records.
++  void SetTransientRecords() { transient_records_ = true; }
++  // apklayer patch (0039): in the child of a fork the record still names the parent's tid (the guest's gettid() and pthread_self()->tid).
++  void ResetRecordTidAfterFork();
++  // apklayer patch (0039): the HandleHostSignal frames active on this thread (it was a thread_local, see there).
++  int& host_signal_depth() { return host_signal_depth_; }
++
+   const ThreadState* state() const { return state_; }
+   ThreadState* state() { return state_; }
+ 
+@@ -184,6 +193,9 @@
+   pid_t process_id_ = 0;
+   uint64_t serial_ = 0;
+   // endregion
++  // apklayer patch (0039): last, the other libraries (libberberis_proxy_libc ...) read the members above through inline accessors
++  bool transient_records_ = false;  // attached for a signal or a key destructor: the records go with the thread
++  int host_signal_depth_ = 0;
+ };
+ 
+ using GuestThreadExitListenerFn = void (*)(pid_t);
+--- a/guest_os_primitives/guest_thread_manager.cc
++++ b/guest_os_primitives/guest_thread_manager.cc
+@@ -94,6 +94,8 @@
+   // region digitalis
+   thread->SetProcessId(GetpidSyscall());
+   // endregion
++  GuestRecordsResetAfterFork();  // apklayer patch (0039)
++  thread->ResetRecordTidAfterFork();
+   GuestThreadMap::GetInstance()->ResetThreadTable(GettidSyscall(), thread);
+ #if defined(__BIONIC__)
+   // Force (host) bionic to update cached tid if necessary
+@@ -132,10 +134,10 @@
+   // apklayer patch: a record's tid finds its GuestThread (reading that word of a glibc struct pthread is harmless; the record
+   // pointer itself must then match).
+   if (thread != 0 && IsConfigFlagSet(kGlibcHostThreadIdHandoff)) {
+-    pthread_t exited;  // apklayer patch: a record of a thread that has exited (never read: its memory may have been reused)
+-    if (GuestExitedRecordToHost(reinterpret_cast<const void*>(thread), &exited)) return exited;
+-    GuestThread* guest = GuestThreadMap::GetInstance()->FindThread(reinterpret_cast<const pthread_internal_t*>(thread)->tid);
+-    if (guest != nullptr) guest->HostPthreadOf(reinterpret_cast<const void*>(thread), &thread);
++    // apklayer patch (0039): every record is in the table from its creation (0038), so a pointer that is not there is not read: it was
++    // a record whose thread was joined and whose record was unmapped (the old read of its tid word crashed), or it is no record.
++    pthread_t host;
++    if (GuestExitedRecordToHost(reinterpret_cast<const void*>(thread), &host)) return host;
+   }
+ #endif
+   return thread;
+@@ -203,7 +205,7 @@
+ // (ill-formed?) apks, so we issue a warning.
+ //
+ // ATTENTION: Can be interrupted!
+-GuestThread* AttachCurrentThread(bool register_dtor, bool* attached) {
++GuestThread* AttachCurrentThread(bool register_dtor, bool* attached, bool from_signal_handler) {
+   // The following code is not reentrant!
+   ScopedSignalBlocker signal_blocker;
+ 
+@@ -219,15 +221,21 @@
+   }
+ 
+   // Copy host stack size attributes.
+-  size_t stack_size;
+-  size_t guard_size;
+-  pthread_attr_t attr;
+-  CHECK_EQ(0, pthread_getattr_np(pthread_self(), &attr));
+-  CHECK_EQ(0, pthread_attr_getstacksize(&attr, &stack_size));
+-  CHECK_EQ(0, pthread_attr_getguardsize(&attr, &guard_size));
+-  thread = GuestThread::CreatePthread(nullptr, stack_size, guard_size);
++  // apklayer patch (0039): glibc's pthread_getattr_np allocates (cpuset) and the attr was never destroyed. From a signal handler (the
++  // thread may be inside malloc: its arena lock is held) the usual size of a host thread's stack is taken instead.
++  size_t stack_size = 1024 * 1024;
++  size_t guard_size = 4096;
++  if (!from_signal_handler) {
++    pthread_attr_t attr;
++    CHECK_EQ(0, pthread_getattr_np(pthread_self(), &attr));
++    CHECK_EQ(0, pthread_attr_getstacksize(&attr, &stack_size));
++    CHECK_EQ(0, pthread_attr_getguardsize(&attr, &guard_size));
++    pthread_attr_destroy(&attr);
++  }
++  thread =GuestThread::CreatePthread(nullptr, stack_size, guard_size);
+   CHECK(thread);
+ 
++  if (!register_dtor) thread->SetTransientRecords();  // apklayer patch (0039)
+   InsertCurrentThread(thread, register_dtor);
+   thread->InitStaticTls();
+ 
+--- a/guest_os_primitives/guest_thread_manager_impl.h
++++ b/guest_os_primitives/guest_thread_manager_impl.h
+@@ -21,7 +21,8 @@
+ 
+ namespace berberis {
+ 
+-GuestThread* AttachCurrentThread(bool register_dtor, bool* attached);
++// apklayer patch (0039): from_signal_handler: the thread may have been interrupted inside malloc, so nothing here may call it.
++GuestThread* AttachCurrentThread(bool register_dtor, bool* attached, bool from_signal_handler = false);
+ void DetachCurrentThread();
+ void InsertCurrentThread(GuestThread* thread, bool register_dtor);
+ 
+--- a/guest_os_primitives/guest_thread_map.cc
++++ b/guest_os_primitives/guest_thread_map.cc
+@@ -31,6 +31,8 @@
+ }
+ 
+ void GuestThreadMap::ResetThreadTable(pid_t tid, GuestThread* thread) {
++  // apklayer patch (0039): the child of a fork: another thread may have held the lock at the fork, and it is gone.
++  new (&mutex_) std::mutex;
+   std::lock_guard<std::mutex> lock(mutex_);
+   map_.clear();
+   map_[tid] = thread;

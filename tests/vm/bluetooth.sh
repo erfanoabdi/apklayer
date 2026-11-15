@@ -14,7 +14,16 @@ python3 -m dbusmock --template bluez5 --system >/dev/null 2>&1 & mock=$!
 trap 'bin/apklayer stop >/dev/null 2>&1; kill $mock $daemon 2>/dev/null' EXIT
 gdbus wait --system --timeout 10 org.bluez && python3 tests/vm/bluez-mock.py || { echo "FAIL: no mock BlueZ"; exit 1; }
 bin/apklayer stop >/dev/null 2>&1
-{ python3 -u tests/vm/answer-dialog.py text:1234 40 && python3 -u tests/vm/answer-dialog.py yes 20; } > $out.pin 2>&1 & answer=$!  # mock-pin's PIN, mock-compare's passkey
+# an app that ends with a server socket open: the hub ends its service's dispatcher (the record goes from BlueZ), and none is left
+APKLAYER_JOPTS="-Dapklayer.runms=20000 -Dbt.halt=1" bin/apklayer run hello.bluetooth > $out.halt 2>&1 || true
+grep -a "\[bt\] halt" $out.halt
+haltpid=$(sed -n 's/^\[bt\] halt listening pid=\([0-9]*\)$/\1/p' $out.halt)
+[ -n "$haltpid" ] || { echo "FAIL: the halting server app did not listen"; exit 1; }
+! pgrep -f "[b]luez.py serve .*apklayer-bt-$haltpid-" >/dev/null || { echo "FAIL: a server socket's dispatcher outlived its app"; pgrep -af "[b]luez.py serve .*apklayer-bt-$haltpid-"; exit 1; }
+grep -a "bluetooth: ended the service record" "$APKLY_STATE/hub.log"
+bin/apklayer stop >/dev/null 2>&1
+python3 -u tests/vm/answer-dialog.py text:1234 40 > $out.pin 2>&1 & answer=$!  # mock-pin's PIN, mock-compare's passkey (answered by the second one: it skips the first question)
+python3 -u tests/vm/answer-dialog.py yes 40 1 >> $out.pin 2>&1 & answer="$answer $!"
 APKLAYER_JOPTS="-Dapklayer.runms=30000" bin/apklayer run hello.bluetooth > $out 2>&1 || true
 kill $answer 2>/dev/null; cat $out.pin
 grep -a "\[bt\]\|bluetooth" $out
@@ -25,7 +34,7 @@ for want in "adapter state=12 enabled=true name=apklayer-mock address=02:00:00:0
         "read 00002a19-0000-1000-8000-00805f9b34fb value=42 status=0" "ccc written status=0" "notify 00002a19-0000-1000-8000-00805f9b34fb value=43" \
         "bond C0:FF:EE:00:00:01 10->11" "bond C0:FF:EE:00:00:01 11->12" "state 12->10 enabled=false" "state 10->12 enabled=true" \
         "rfcomm connected=true" "rfcomm read echo:ping" "rfcomm channel 3 failed read failed, socket might closed or timeout (ERR " \
-        "server accept timeout Try again" "server accepted 11:22:33:44:55:66 connected=true" "server client read got:hello" "server close woke accept socket closed" \
+        "server accept timeout Try again" "server accepted 11:22:33:44:55:66 connected=true" "server client read got:hello" "server several clients served=2" "pi-scan started=0" "pi-scan C0:FF:EE:00:00:01 type=1" "server close woke accept socket closed" \
         "rfcomm pipes left=0" "pairing-request AA:BB:CC:00:00:02 variant=0 key=-1" "setpin answered=true" "bond AA:BB:CC:00:00:02 11->12" \
         "bond AA:BB:CC:00:00:01 10->11" "bond AA:BB:CC:00:00:01 11->12" "pairing-request AA:BB:CC:00:00:03 variant=2 key=123456" "bond AA:BB:CC:00:00:03 11->12" "PASS"; do
     grep -aqF "[bt] $want" $out || { echo "FAIL: no '[bt] $want'"; exit 1; }

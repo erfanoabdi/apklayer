@@ -3,8 +3,11 @@
  * libapklayer_native.so, where HotSpot finds them by name; here they are bound with RegisterNatives from the runtime shim). */
 #include <jni.h>
 #include <jvmti.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <string.h>
 
 extern void Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *, jclass, jstring, jstring);
@@ -52,6 +55,17 @@ static jobjectArray loaded_classes(JNIEnv *env, jclass cls)
     return out;
 }
 
+/* SharedMemory.map with PROT_EXEC or PROT_NONE: the JDK maps a FileChannel read-only or read-write only, so the mapping's protection is changed afterwards (0 or errno). */
+static jint buffer_mprotect(JNIEnv *env, jclass cls, jobject buffer, jint prot)
+{
+    (void)cls;
+    uintptr_t page = (uintptr_t)sysconf(_SC_PAGESIZE), addr = (uintptr_t)(*env)->GetDirectBufferAddress(env, buffer);
+    jlong length = (*env)->GetDirectBufferCapacity(env, buffer);
+    if (!addr || length < 0) return EINVAL;
+    uintptr_t start = addr & ~(page - 1);
+    return mprotect((void *)start, (size_t)(addr + (uintptr_t)length - start), prot) == 0 ? 0 : errno;
+}
+
 int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
 {
     JNINativeMethod methods[] = {
@@ -66,6 +80,7 @@ int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
         {"setProcessName", "(Ljava/lang/String;)V", (void *)Java_apklayer_host_NativeLoader_setProcessName},
         {"receiveTarget", "(I)Ljava/lang/String;", (void *)Java_apklayer_host_NativeLoader_receiveTarget},
         {"mapOwnData", "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V", (void *)map_own_data},
+        {"mprotect", "(Ljava/nio/ByteBuffer;I)I", (void *)buffer_mprotect},
         {"loadedClasses", "()[Ljava/lang/Class;", (void *)loaded_classes},
     };
     if ((*env)->RegisterNatives(env, loader, methods, sizeof methods / sizeof *methods) != 0) {
@@ -151,7 +166,14 @@ static void throw_errno(JNIEnv *env, const char *function, int error)
     (*env)->Throw(env, (jthrowable)(*env)->NewObject(env, cls, init, name, error));
 }
 
-static void linux_close(JNIEnv *env, jobject self, jobject fd) { (void)self; if (close(fd_of(env, fd)) < 0) throw_errno(env, "close", errno); }
+static void linux_close(JNIEnv *env, jobject self, jobject fd)  /* as libcore's Linux_close: the descriptor is cleared first, so a second close cannot hit a reused number */
+{
+    (void)self;
+    if (!fd) return;
+    int n = fd_of(env, fd);
+    (*env)->SetIntField(env, fd, fd_field(env), -1);
+    if (n >= 0 && close(n) < 0) throw_errno(env, "close", errno);
+}
 static jobject linux_dup(JNIEnv *env, jobject self, jobject fd) { (void)self; int n = dup(fd_of(env, fd)); if (n < 0) { throw_errno(env, "dup", errno); return NULL; } return fd_make(env, n); }
 static jobject linux_dup2(JNIEnv *env, jobject self, jobject fd, jint to) { (void)self; int n = dup2(fd_of(env, fd), to); if (n < 0) { throw_errno(env, "dup2", errno); return NULL; } return fd_make(env, n); }
 static jint linux_fcntl_int(JNIEnv *env, jobject self, jobject fd, jint cmd, jint arg) { (void)self; int n = fcntl(fd_of(env, fd), cmd, arg); if (n < 0) throw_errno(env, "fcntl", errno); return n; }

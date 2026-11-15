@@ -28,6 +28,7 @@ public final class HubClient {
                 HubStartup.awaitDeath(found);
             }
         }
+        StartTrace.mark("hub registered (REGISTER done)");
         hub = found; endpoint = own; hubPid = own.hubPid();
         try { hub.linkToDeath(() -> { alive = false; hubDied(); }, 0); }
         catch (android.os.RemoteException failure) { throw new IllegalStateException("Hub disconnected during registration", failure); }
@@ -35,9 +36,13 @@ public final class HubClient {
         HubPermissionChecker.install();
         registerPackages(context);
         HubProviders_registerRemote(context);
+        StartTrace.mark("remote providers registered");
         android.os.Bundle settings = HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.HOST_SETTINGS, request -> {}, reply -> reply.readBundle(HubClient.class.getClassLoader()));
-        // on the main thread later (an early attachment runs inside the application's creation), ahead of the first launch (AppHost.run)
-        AppHost.beforeFirstLaunch(() -> AppHost.configurationChanged(HostConfiguration.update(settings)));
+        // as bindApplication's configuration: in place before Application.onCreate (ShadowHostInstrumentation.callApplicationOnCreate), with no change
+        // callback; an attachment from inside the application's creation (attachEarly) waits for that point. Else (a later attachment) on the main
+        // thread ahead of the first launch (AppHost.run). Play services kills its process on a language change it sees (LemonContext)
+        synchronized (HubClient.class) { unappliedSettings = settings; }
+        AppHost.beforeFirstLaunch(() -> { android.os.Bundle late = takeSettings(); if (late != null) AppHost.configurationChanged(HostConfiguration.update(late)); });
         HostInputMethods.install(context,HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
@@ -82,11 +87,13 @@ public final class HubClient {
         org.robolectric.shadows.ShadowPackageManager packageManager = org.robolectric.Shadows.shadowOf(context.getPackageManager());
         java.util.List<String> names = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.LIST_PACKAGES, request -> {}, reply -> reply.createStringArrayList());
         int count = 0;
+        StartTrace.mark("packages listed " + names.size());
         for (String name : names) {
             if (name.equals(context.getPackageName())) continue;
             try { if (registerPackage(packageManager, name)) count++; }
             catch (RuntimeException failure) { System.out.println("[apklayer] package " + name + " not registered: " + failure); }
         }
+        StartTrace.mark("packages registered");
         System.out.println("[apklayer] packages registered: " + count);
     }
 
@@ -193,6 +200,10 @@ public final class HubClient {
     void cancelNotification(String tag, int id, boolean all) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CANCEL, request -> { request.writeString(tag); request.writeInt(id); request.writeBoolean(all); }, reply -> null);
     }
+    /** The package whose isolated process (android:isolatedProcess) runs as this uid, null for none. */
+    String isolatedOwner(int uid) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ISOLATED_OWNER, request -> request.writeInt(uid), reply -> reply.readString());
+    }
     /** The app uid of another app's process (-1 when the hub does not know the pid). */
     int uidOf(int pid) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.UID_OF_PID, request -> request.writeInt(pid), reply -> reply.readInt());
@@ -257,6 +268,10 @@ public final class HubClient {
     int[] requestPermissions(String[] names) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.PERMISSIONS_REQUEST, request -> request.writeStringArray(names), reply -> reply.createIntArray());
     }
+    /** ACTION_APP_NOTIFICATION_SETTINGS: the hub's settings page for this app; waits until the person closed it. */
+    void notificationSettings() {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFICATION_SETTINGS, request -> {}, reply -> null);
+    }
     /** RoleManager's request intent: whether the person makes this app the role's holder; waits for the answer. */
     boolean requestRole(String role) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ROLE_REQUEST, request -> request.writeString(role), reply -> reply.readBoolean());
@@ -267,6 +282,12 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CONFIRM_CREDENTIAL, request -> { request.writeString(title); request.writeString(description); request.writeLong(challenge); },
                 reply -> reply.readBoolean());
     }
+    /** The app cancelled its BiometricPrompt: the hub closes the password dialog of this app's open confirmCredential. */
+    void cancelCredential() { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CANCEL_CREDENTIAL, request -> { }, reply -> null); }
+    /** StorageManager.unmount: whether the drive (volume id) is unmounted now (HubVolumes.eject). */
+    boolean ejectVolume(String id) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.EJECT_VOLUME, request -> request.writeString(id), reply -> reply.readBoolean());
+    }
     /** AudioManager.setMicrophoneMute: the mute in force after the request (HubCallAudio). */
     boolean microphoneMute(boolean on) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.MICROPHONE_MUTE, request -> request.writeBoolean(on), reply -> reply.readBoolean());
@@ -275,6 +296,8 @@ public final class HubClient {
     int audioMode(int mode) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_MODE, request -> request.writeInt(mode), reply -> reply.readInt());
     }
+    /** Whether this process plays or records now (AudioPlaybackConfiguration/AudioRecordingConfiguration of AudioService): the mode owner's rule (HubCallAudio). */
+    void audioActivity(boolean on) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_ACTIVITY, request -> request.writeBoolean(on), reply -> null); }
     /** setCommunicationDevice ({@code set}; null clears this app's choice) or only the read: the communication device in force, null for none. */
     android.media.AudioDeviceAttributes communicationDevice(boolean set, android.media.AudioDeviceAttributes device) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_COMMUNICATION_DEVICE, request -> { request.writeBoolean(set); request.writeTypedObject(device, 0); },
@@ -293,6 +316,16 @@ public final class HubClient {
     }
     void retryJob(int jobId, boolean systemStop) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_RETRY, request -> { request.writeInt(jobId); request.writeBoolean(systemStop); }, reply -> null); }
     void cancelJob(int jobId) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_CANCEL, request -> request.writeInt(jobId), reply -> null); }
+
+    private static android.os.Bundle unappliedSettings;  // the hub's settings from registration, until applied
+
+    private static synchronized android.os.Bundle takeSettings() { android.os.Bundle s = unappliedSettings; unappliedSettings = null; return s; }
+
+    /** The hub's settings before Application.onCreate (main thread), as the configuration bindApplication brings: the app starts with them, no callback. */
+    static void applySettingsBeforeOnCreate() {
+        android.os.Bundle settings = takeSettings();
+        if (settings != null) HostConfiguration.update(settings);
+    }
 
     static synchronized HubClient attach(Context context) {
         Context app = context.getApplicationContext();  // null while Application.attach runs (LoadedApk has no Application yet): the Application itself

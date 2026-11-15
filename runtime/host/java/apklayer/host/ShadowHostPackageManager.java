@@ -31,6 +31,22 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         return false;
     }
 
+    /** An isolated process's uid (android:isolatedProcess) belongs to the package it runs for, as PackageManagerService's mIsolatedOwners says. */
+    private static String isolatedOwner(int uid) {
+        if (!android.os.Process.isIsolated(uid) || !HubClient.connected()) return null;
+        return HubClient.current().isolatedOwner(uid);
+    }
+    @Implementation
+    protected String[] getPackagesForUid(int uid) {
+        String owner = isolatedOwner(uid);
+        return owner != null ? new String[] {owner} : super.getPackagesForUid(uid);
+    }
+    @Implementation
+    protected String getNameForUid(int uid) {
+        String owner = isolatedOwner(uid);
+        return owner != null ? owner : super.getNameForUid(uid);
+    }
+
     @Implementation
     protected boolean hasSigningCertificate(int uid, byte[] certificate, int type) {
         String[] packages = real.getPackagesForUid(uid);
@@ -117,6 +133,7 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
                 app.splitSourceDirs = app.splitPublicSourceDirs = java.util.Arrays.stream(splits).map(java.io.File::getPath).toArray(String[]::new);
             }
         }
+        if (app.sharedLibraryInfos == null && !app.packageName.equals(System.getProperty("apklayer.package"))) HostSharedLibraries.recordOther(app, apk);  // its own: HostSharedLibraries.record
         if (app.sourceDir != null) return;
         app.sourceDir = app.publicSourceDir = apk.getPath();
         if (app.nativeLibraryDir == null) app.nativeLibraryDir = new java.io.File(dir, "lib").getPath();
@@ -163,6 +180,21 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     protected android.content.pm.PackageInfo getPackageInfo(String packageName, PackageManager.PackageInfoFlags flags) throws PackageManager.NameNotFoundException {
         try { return signed(super.getPackageInfo(packageName, flags), flags.getValue()); }
         catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return signed(super.getPackageInfo(packageName, flags), flags.getValue()); }
+    }
+
+    /** Another app's ApplicationInfo with its paths and shared libraries (getPackageInfo's, for apps that ask for the info alone). */
+    @Implementation
+    protected android.content.pm.ApplicationInfo getApplicationInfo(String packageName, int flags) throws PackageManager.NameNotFoundException {
+        android.content.pm.ApplicationInfo info;
+        try { info = super.getApplicationInfo(packageName, flags); }
+        catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; info = super.getApplicationInfo(packageName, flags); }
+        installedPaths(info);
+        return info;
+    }
+
+    @Implementation(minSdk = android.os.Build.VERSION_CODES.TIRAMISU)
+    protected android.content.pm.ApplicationInfo getApplicationInfo(String packageName, PackageManager.ApplicationInfoFlags flags) throws PackageManager.NameNotFoundException {
+        return getApplicationInfo(packageName, (int) flags.getValue());
     }
 
     /** One user: the user's list is the installed one (Robolectric shadows only the plain call; the fake IPackageManager answered none to Settings' app list). */
