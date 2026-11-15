@@ -554,3 +554,7 @@ run = ["tests/vm/acediff.sh"]
 optional = true
 needs = ["com.termux"]
 run = ["export APKLAYER_SANDBOX=1; APKLAYER_JOPTS=-Dapklayer.runms=45000 bin/apklayer run com.termux >$APKLY_STATE/termux-boot.out 2>&1; bin/apklayer stop >/dev/null 2>&1; python3 -u tests/corpus/termux-sys.py && python3 -u tests/corpus/termux-exec.py && python3 -u tests/corpus/termux-env.py"]
+
+[resize-frame]  # a new frame of the new size reaches the compositor after every window resize, also in a burst (hello-input draws nothing by itself)
+apps = ["hello-input"]
+run = ["python3 -u tests/vm/resize-frame.py"]
