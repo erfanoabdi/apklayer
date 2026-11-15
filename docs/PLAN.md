@@ -103,3 +103,4 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - NFC, biometrics, game controllers, ModemManager telephony, screen capture portal.
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
 - Several phone instances as a product; a JRE for the Ubuntu Touch deb.
+- Google's own Play services (`setup --gapps`): signing in to an account. Check-in and the login page work (CHANGELOG 2026-11-15), but adding the account ends with `AddAccountTask: Failed to sign in SERVICE_UNAVAILABLE`: Play services' integrity token (PoTokenGenerator, DroidGuard and a keystore-signed token) is not produced ("Unable to generate a new integrity token", no underlying error). Checked: keystore attestation works (software KeyMint, chain of 3), DroidGuard runs without crashing. Getting past Google's integrity check is not pursued; Google sign-in goes through microG.
