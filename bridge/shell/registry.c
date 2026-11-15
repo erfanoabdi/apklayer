@@ -137,9 +137,11 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     } else if (!strcmp(iface, wl_shell_interface.name))
         wl_shell_global = wl_registry_bind(r, name, &wl_shell_interface, 1);
     else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
-        /* v5: pointer frame/axis events; every listener slot is filled. */
-        seat = wl_registry_bind(r, name, &wl_seat_interface, ver < 5 ? ver : 5);
+        /* v5: pointer frame/axis events; v8 (libwayland 1.21): axis_value120 of hi-res wheels; every listener slot is filled. */
+        uint32_t known = wl_seat_interface.version < 8 ? wl_seat_interface.version : 8;
+        seat = wl_registry_bind(r, name, &wl_seat_interface, ver < known ? ver : known);
         wl_seat_add_listener(seat, &seat_listener, NULL);
+        tablet_seat_try();
     } else if (!strcmp(iface, wl_output_interface.name)) {
         for (int i = 0; i < MAX_OUTPUTS; i++)
             if (!outs[i].o) {
@@ -155,6 +157,7 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         activation = wl_registry_bind(r, name, &xdg_activation_v1_interface, 1);
     else if (!strcmp(iface, zxdg_decoration_manager_v1_interface.name))
         deco_mgr = wl_registry_bind(r, name, &zxdg_decoration_manager_v1_interface, 1);
+    else tablet_bind(r, name, iface, ver);
 }
 static void registry_rm(void *d, struct wl_registry *r, uint32_t n)
 {

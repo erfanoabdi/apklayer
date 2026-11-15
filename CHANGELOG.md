@@ -4,6 +4,12 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 
+## 2026-11-15: Smooth wheel and stylus input (shell wl_pointer v8, zwp_tablet_v2)
+- `bridge/shell/pointer.c`: the seat is bound at v8 where libwayland has it (1.21); scroll = `axis_value120` (hi-res wheel, 1/120 notch) else `axis_discrete` else the continuous `axis` (10 per wheel notch, 15 per notch for `axis_source` finger), sent as MSG_SCROLL in notches *10000 (was *1000, whole notches only) plus the Android meta state (HorizontalScrollView turns Shift+wheel into horizontal itself). A touchpad's `axis_stop`: Android has no scroll fling, nothing to stop.
+- `bridge/shell/tablet.c` (new, MSG_TABLET 117): pen and eraser tools (type, proximity, down/up, motion, pressure, distance, tilt, rotation, slider, buttons, frame) -> `HostInput.pen`: SOURCE_STYLUS, TOOL_TYPE_STYLUS/ERASER, AXIS_PRESSURE/DISTANCE, AXIS_TILT and AXIS_ORIENTATION from the tilt angles as InputReader's TouchInputMapper does (the barrel rotation where there is no tilt; always also AXIS_GENERIC_1), BUTTON_STYLUS_PRIMARY/SECONDARY, ACTION_HOVER_*/DOWN/MOVE/UP. Slider and the tool's wheel are not delivered. Not run on real tablet hardware (none): the compositor side is by the protocol.
+- Test input steps `wheel:<dx>,<dy>[,hires][,finger][,shift]` and `pen:<x>,<y>,<pressure>[,<tilt_x>,<tilt_y>,<rotation>,<distance>,<buttons>,<tool>]|out`; hello.input prints the axes; new group `input-wheel-pen` (tests/vm/input-wheel-pen.py).
+
+
 ## 2026-11-15: Platform Class.getClassLoader/getResource (converter ABI 10)
 - An app's `String.class.getClassLoader()` / `Activity.class.getClassLoader()` is `java.lang.BootClassLoader` and `Object.class.getResource(..)` is null, as on Android (DenyInstrument -> `GuestLoaders`). identity-matrix and files pass on UTM. Not done: ArrayStoreException text, StackOverflow depth, main thread id 2 (JVM/ART limits, docs/ART-DEFERRED.md); direct-buffer `array()` write-back (docs/PATCHES.md says why).
 ## 2026-11-15: Sandbox: component hosts take the package's spare

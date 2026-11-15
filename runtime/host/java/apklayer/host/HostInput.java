@@ -106,19 +106,21 @@ final class HostInput {
             inject(click(now, ev[0], ev[1], ev[2]));
         } else if (ev[0] == 12) { // key (xkb): {12, action, android keycode, unicode, meta}
             hostKey(now, ev[1], ev[2], ev[3], ev[4]);
-        } else if (ev[0] == 13) { // wheel: {13, x, y, vscroll*1000, hscroll*1000}
+        } else if (ev[0] == 13) { // wheel: {13, x, y, vscroll*10000, hscroll*10000, meta}: notches, fractions for hi-res wheels and touchpads
             MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
             pp.id = 0;
             pp.toolType = MotionEvent.TOOL_TYPE_MOUSE;
             MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
             pc.x = ev[1];
             pc.y = ev[2];
-            pc.setAxisValue(MotionEvent.AXIS_VSCROLL, ev[3] / 1000f);
-            pc.setAxisValue(MotionEvent.AXIS_HSCROLL, ev[4] / 1000f);
+            pc.setAxisValue(MotionEvent.AXIS_VSCROLL, ev[3] / 10000f);
+            pc.setAxisValue(MotionEvent.AXIS_HSCROLL, ev[4] / 10000f);
             MotionEvent scroll = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1,
                     new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
-                    0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
+                    ev.length > 5 ? ev[5] : 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
             main.post(() -> HostWindows.dispatchToTopWindow(scroll));
+        } else if (ev[0] == 17) { // pen: {17, action, x, y, tool, buttons, pressure, distance, tilt x, tilt y, rotation, slider} (ShellClient)
+            pen(now, ev);
         } else if (ev[0] == 16) { // touch: {16, action, finger, x, y}
             touch(now, ev[1], ev[2], ev[3], ev[4]);
         } else if (ev[0] == 15) { // window state: {15, flags}
@@ -293,6 +295,53 @@ final class HostInput {
                     : MotionEvent.ACTION_POINTER_UP | (idx << MotionEvent.ACTION_POINTER_INDEX_SHIFT));
             fingers.remove(finger);
             pointerIds.remove(finger);
+        }
+    }
+
+    private long penDownTime;
+    private boolean penHover;
+
+    /**
+     * A stylus event as the InputReader makes it: pressure and distance 0..1, AXIS_TILT (0 upright, pi/2 flat) and AXIS_ORIENTATION (the
+     * direction of the tilt, -pi..pi, 0 = toward the top of the screen; the barrel's rotation where there is no tilt) from the tablet's
+     * tilt angles (TouchInputMapper), the barrel rotation also as AXIS_GENERIC_1. Touching events go through the input pipeline like touch,
+     * hovering ones to the window under the pen like a mouse's.
+     */
+    private void pen(long now, int[] ev) {
+        int action = ev[1];
+        MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
+        pp.id = 0;
+        pp.toolType = ev[4];
+        MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
+        pc.x = ev[2];
+        pc.y = ev[3];
+        pc.pressure = ev[6] / 10000f;
+        pc.size = 0f;
+        double tx = Math.toRadians(ev[8] / 100.0), ty = Math.toRadians(ev[9] / 100.0), rot = Math.toRadians(ev[10] / 100.0);
+        if (rot > Math.PI) rot -= 2 * Math.PI;
+        double tilt = Math.acos(Math.cos(tx) * Math.cos(ty));
+        pc.setAxisValue(MotionEvent.AXIS_DISTANCE, ev[7] / 10000f);
+        pc.setAxisValue(MotionEvent.AXIS_TILT, (float) tilt);
+        pc.setAxisValue(MotionEvent.AXIS_ORIENTATION, (float) (tilt != 0 ? Math.atan2(-Math.sin(tx), Math.sin(ty)) : rot));
+        pc.setAxisValue(MotionEvent.AXIS_GENERIC_1, (float) rot);
+        boolean hover = action >= MotionEvent.ACTION_HOVER_MOVE;
+        if (action == MotionEvent.ACTION_DOWN) penDownTime = now;
+        int act = action == MotionEvent.ACTION_HOVER_ENTER ? MotionEvent.ACTION_HOVER_MOVE : action;  // dispatchHover starts the stream with ENTER
+        MotionEvent e = MotionEvent.obtain(hover ? now : penDownTime, now, act, 1, new MotionEvent.PointerProperties[] {pp},
+                new MotionEvent.PointerCoords[] {pc}, 0, ev[5], 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_STYLUS, 0);
+        if (Boolean.getBoolean("apklayer.debugkeys"))
+            System.out.println("[apklayer] pen action=" + MotionEvent.actionToString(act) + " tool=" + ev[4] + " at " + ev[2] + "," + ev[3]);
+        if (hover) {
+            penHover = act != MotionEvent.ACTION_HOVER_EXIT;
+            main.post(() -> HostWindows.dispatchHover(e));
+        } else {
+            if (penHover && action == MotionEvent.ACTION_DOWN) {  // the hover ends where the pen touches
+                MotionEvent exit = MotionEvent.obtain(e);
+                exit.setAction(MotionEvent.ACTION_HOVER_EXIT);
+                main.post(() -> HostWindows.dispatchHover(exit));
+                penHover = false;
+            }
+            inject(e);
         }
     }
 

@@ -18,7 +18,7 @@ final class ShellClient {
     private static final int HELLO = 1, ATTACH_INPUT = 9, WINDOW_SIZE = 10;
     /** The title the display HAL gives its window (bridge/hals/graphics display, opened by the composer). */
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
-    private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106,
+    private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106, TABLET = 117,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
             DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
     private static final int WINDOW_ID = 1;
@@ -185,9 +185,15 @@ final class ShellClient {
                     input.add(new int[] {12, body.getInt(4), body.getInt(8), body.getInt(12),
                             body.getInt(16)});
                 } else if (type == SCROLL) {
-                    // {13, x, y, vscroll px, hscroll px}
+                    // {13, x, y, vscroll*10000, hscroll*10000, android meta}
                     input.add(new int[] {13, body.getInt(4), body.getInt(8), body.getInt(12),
-                            body.getInt(16)});
+                            body.getInt(16), len >= 24 ? body.getInt(20) : 0});
+                } else if (type == TABLET) {
+                    // {17, action, x, y, tool, buttons, pressure*10000, distance*10000, tilt x deg*100, tilt y deg*100, rotation deg*100, slider*10000}
+                    int[] ev = new int[12];
+                    ev[0] = 17;
+                    for (int i = 1; i < 12; i++) ev[i] = body.getInt(4 * i);
+                    input.add(ev);
                 } else if (type == CONFIGURE) {
                     // {14, w, h, scale*100, density dpi (0: 160 x scale), navigation bar px (0: none), output w, h px (0: unknown),
                     //  host keyboard px (0: none), mobile style}
