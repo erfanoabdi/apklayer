@@ -36,7 +36,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 ## Input / IME
 - KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): the manager Settings row for it is not compiled in any host build (build the manager once); pixel-check the light scheme; `haptic_feedback_enabled` is not modelled by the hub's vibrator.
 - Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); stylus slider and tool wheel are not delivered; AXIS_TILT/ORIENTATION follow a remembered InputReader formula, not a checked source.
-- Non-Latin input: map the xkb layout to the app's `LocaleList` and IME subtypes; RTL cursor, selection and bidi in an EditText; layout-switch hotkeys (Alt+Shift, Super+Space); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
+- Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
 - text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 

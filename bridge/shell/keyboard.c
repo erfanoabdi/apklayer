@@ -1,6 +1,7 @@
 /* Keyboard input: xkb translation to Android key events, key repeat. */
 #include "shell.h"
 #include <xkbcommon/xkbcommon-compose.h>
+#include <ctype.h>
 
 static struct xkb_context *xkb_ctx;
 static struct xkb_compose_state *compose;  /* dead keys and the Compose key (the locale's Compose table) */
@@ -77,6 +78,53 @@ uint32_t kb_android_meta(void)
  * (such a compositor's modifiers event carries no xkb masks). */
 static int kb_own_state;
 
+/* ---- the layout in use as a language tag (MSG_LAYOUT: the app's input method subtype) ---- */
+/* xkb names layouts by country; the language's tag where it differs. */
+static const char *const lang_of[][2] = { {"ara","ar"}, {"ir","fa"}, {"il","he"}, {"gr","el"}, {"jp","ja"}, {"cn","zh"}, {"kr","ko"}, {"ua","uk"},
+    {"cz","cs"}, {"dk","da"}, {"se","sv"}, {"gb","en"}, {"us","en"}, {"in","hi"}, {"ge","ka"}, {"am","hy"}, {"by","be"}, {"kz","kk"}, {"tw","zh-TW"} };
+/* The keymap's symbols name is "pc_us_ru_2_inet(evdev)_group(alt_shift_toggle)" (libxkbcommon writes "+" and ":" as "_"): the layouts are the pieces
+ * between "pc" and "inet", the group count following the second of a name ("ru:2"); a variant's "(...)" is dropped. */
+static int layout_tag(struct xkb_keymap *km, unsigned group, char *out, size_t n)
+{
+    char *str = km ? xkb_keymap_get_as_string(km, XKB_KEYMAP_FORMAT_TEXT_V1) : NULL;
+    char *sym = str ? strstr(str, "xkb_symbols \"") : NULL, *end;
+    if (!sym || !(end = strchr(sym += 13, '"'))) { free(str); return 0; }
+    *end = 0;
+    int depth = 0, ok = 0, inside = 0;
+    unsigned idx = 0;
+    char *o = sym;
+    for (char *in = sym; ; in++) {  /* without the (variants and options) */
+        if (*in == '(') depth++;
+        if (!depth && (*o++ = *in) == 0) break;
+        if (*in == ')') depth--;
+    }
+    for (char *piece = strtok(sym, "+_:"); piece && !ok; piece = strtok(NULL, "+_:")) {
+        if (!strcmp(piece, "inet")) break;
+        if (!strcmp(piece, "pc")) { inside = 1; continue; }
+        if (!inside || !isalpha((unsigned char)*piece) || idx++ != group) continue;
+        snprintf(out, n, "%s", piece);
+        for (size_t i = 0; i < sizeof lang_of / sizeof *lang_of; i++) if (!strcmp(piece, lang_of[i][0])) snprintf(out, n, "%s", lang_of[i][1]);
+        ok = 1;
+    }
+    free(str);
+    return ok;
+}
+static char layout_sent[16];
+/* Tells the focused app the language of the layout now active, when it changed (force: the window just got the focus). */
+static void layout_report(int force)
+{
+    char tag[16];
+    if (!keyboard_focus || !xkb_state || !layout_tag(xkb_keymap_g, xkb_state_serialize_layout(xkb_state, XKB_STATE_LAYOUT_EFFECTIVE), tag, sizeof tag)) return;
+    if (!force && !strcmp(tag, layout_sent)) return;
+    snprintf(layout_sent, sizeof layout_sent, "%s", tag);
+    char msg[4 + sizeof tag];
+    int32_t id = W_ID(keyboard_focus);
+    memcpy(msg, &id, 4);
+    memcpy(msg + 4, tag, strlen(tag));
+    send_bytes(W_TARGET(keyboard_focus), MSG_LAYOUT, msg, 4 + strlen(tag));
+    if (debug_input) fprintf(stderr, "[shell] layout %s\n", tag);
+}
+
 static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t fmt, int32_t fd, uint32_t sz)
 {
     (void)d; (void)k;
@@ -115,6 +163,7 @@ static void kb_enter(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surfa
 {
     (void)d; (void)k; (void)s; (void)keys;
     keyboard_focus = window_for_surface(sf);
+    layout_report(1);
     clipboard_push(keyboard_focus); /* the app sees what was copied elsewhere while it had no focus */
     if (debug_input) fprintf(stderr, "[shell] keyboard enter: %s\n", keyboard_focus ? "window" : "?");
 }
@@ -168,6 +217,7 @@ static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint3
     }
     key_event(key, down);
     if (kb_own_state && xkb_state && k) xkb_state_update_key(xkb_state, key + 8, down ? XKB_KEY_DOWN : XKB_KEY_UP);
+    layout_report(0);
     if (down && xkb_keymap_g && repeat_rate > 0 && xkb_keymap_key_repeats(xkb_keymap_g, key + 8)) {
         repeat_key = (int)key;
         repeat_next_ms = now_ms() + repeat_delay;
@@ -179,7 +229,7 @@ static void kb_mods(void *d, struct wl_keyboard *k, uint32_t s, uint32_t dm, uin
                     uint32_t km, uint32_t group)
 {
     (void)d; (void)k; (void)s;
-    if (xkb_state && !kb_own_state) xkb_state_update_mask(xkb_state, dm, lm, km, 0, 0, group);
+    if (xkb_state && !kb_own_state) { xkb_state_update_mask(xkb_state, dm, lm, km, 0, 0, group); layout_report(0); }
 }
 static void kb_repeat_info(void *d, struct wl_keyboard *k, int32_t rate, int32_t delay)
 { (void)d; (void)k; repeat_rate = rate; repeat_delay = delay; }
@@ -196,6 +246,7 @@ void keyboard_inject_key(struct window *w, uint32_t evdev, int down)
     keyboard_focus = w;
     if (xkb_state) xkb_state_update_key(xkb_state, evdev + 8, down ? XKB_KEY_DOWN : XKB_KEY_UP);
     kb_key(NULL, NULL, last_input_serial, 0, evdev, down ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
+    layout_report(0);
 }
 
 /* Test input: the keymap the injected keys go through, "layout[,layout2...][:variant[:options]]" (xkb names, as setxkbmap), e.g. "us,ru:,:grp:caps_toggle". */
@@ -212,6 +263,7 @@ int keyboard_inject_layout(const char *spec)
     if (xkb_keymap_g) xkb_keymap_unref(xkb_keymap_g);
     xkb_keymap_g = km;
     xkb_state = xkb_state_new(km);
+    layout_report(1);
     kb_own_state = 1;  /* the injected keys alone move this state (the seat's modifiers events would reset it) */
     return 0;
 }
