@@ -44,14 +44,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Storage: `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by); scoped storage does not see symlinks an app makes itself or `/proc/self/cwd`-relative opens.
 - Call audio: native-stream route needs a real AAudio/OpenSL test and per-client playback configs (today the audio policy's `isStreamActive`/`isSourceActive` is instance-wide).
 
-## Startup and memory
-- Measured on the X23: JVM max heap 1.39 GB (25% of RAM; the API says 256 MB), 700 MB live heap fine, instance PSS 605 MB with NewPipe idle, composer 24 MB, SurfaceFlinger 37 MB; first `apklayer setup` 63 s. After a runtime change `setup` says Installed but 9 apps stay marked stale (converter ABI) until launched or converted from the manager banner.
-- Quintus idle PSS: app JVM ~394 MB, hub ~249 MB, three spares ~235 MB each; composer 22 MB, SurfaceFlinger 38 MB (no ~80 MB GL context seen).
-- Measure the JVM heap limits on the phones (and an app with a live heap above 500 MB).
-- ~1 GB per app JVM on the Volla (UTM: idle PSS hub JVM 480-500 MB, spare JVM 280 MB; JVM flags already tuned); NewPipe ~21 s cold, ~12 s warm.
-- Composer GL context ~80 MB: measure on a phone while an app draws.
-- A PulseAudio-only sound server started later is used only from the next stack start (PipeWire is picked up per stream); needs an audio HAL hot-swap.
-
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
 
@@ -68,7 +60,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
 - Release: the first real tag run (`release.yml` fetch steps and tag-to-version handling), the Sailfish RPM job and the GitHub runners are unrun; the release guard (`tools/release/check-runtime.py`) was checked locally only; PackageKit/pkexec install untested. The debs built here lack the PulseAudio backend (`libpulse-dev` missing on both hosts); the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
-- First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 
 ## Manager
