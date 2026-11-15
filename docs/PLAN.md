@@ -28,8 +28,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- `tests/run camera` fails on main in `camera-portrait.py` (`SurfaceTexture.setDefaultBufferSize` NPE, then the shutter-timestamps check).
-- Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
+- Fossify Camera on Parallels is unchecked (no APK locally); Open Camera works on the MacBook camera. The `camera` group prints a harmless stray FAIL line from a test-app race (hello.camera recreates its activity).
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
 
 ## Input / IME
@@ -55,7 +54,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Sandbox (before it can be the default)
 - NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (nodes are 0666 on the tester PC, no `nvidia-modprobe`).
-- UTM VM: restore `~/prebuilts` (arm64 and common, joined) so the shared tree's `inst` symlinks resolve; each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
+- Each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
@@ -66,7 +65,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - amd64 release leg, release guard's first tag run, PackageKit/pkexec install: untested.
 - First command after install blocks ~75 s for runtime setup on a phone (10 s on Parallels with the parallel setup; the phone is not re-measured).
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
-- Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
 
 ## Manager
 - `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
