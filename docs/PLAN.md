@@ -111,4 +111,4 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Quintus: libGLES_meow crashes SurfaceFlinger on any new instance; needs `apklayer prop set ro.hardware.egl mali` (HALIUM.md).
 - Sailfish has no bash (busybox): phone tests must be POSIX sh or Python.
 - Share / Open with on the X23 is not driven through the UI by `phone-test.sh`.
-- Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).
+- Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
