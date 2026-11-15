@@ -102,16 +102,28 @@ static const struct binder_object_header *object_at(const struct binder_transact
     return n && at + n <= tr->data_size ? h : NULL;
 }
 
+static uint64_t pad8(uint64_t n) { return (n + 7) & ~(uint64_t)7; }
+
 static void marshal_transaction(struct wbuf *w, const uint8_t *cmd_and_tr, size_t psize, const struct binder_transaction_data *tr)
 {
     put(w, cmd_and_tr, sizeof(uint32_t) + psize);
-    uint32_t fds_before = w->nfds;
     uint64_t sg = 0, n = tr->offsets_size / sizeof(binder_size_t);
     for (uint64_t i = 0; i < n; i++) {
         const struct binder_object_header *h = object_at(tr, i);
+        if (h && h->type == BINDER_TYPE_PTR) sg += pad8(((const struct binder_buffer_object *)h)->length);
+    }
+    uint64_t payload = pad8(tr->data_size) + pad8(tr->offsets_size) + sg;
+    if (w->len + sizeof(struct bd_txn) <= w->cap && payload > w->cap - w->len - sizeof(struct bd_txn)) {
+        /* no receive area holds it either (protocol.h BD_TXN_TOO_LARGE): only this transaction fails, as on the kernel */
+        struct bd_txn x = {.flags = BD_TXN_TOO_LARGE};
+        put(w, &x, sizeof x);
+        return;
+    }
+    uint32_t fds_before = w->nfds;
+    for (uint64_t i = 0; i < n; i++) {
+        const struct binder_object_header *h = object_at(tr, i);
         if (!h) continue;  /* the daemon refuses the transaction */
-        if (h->type == BINDER_TYPE_PTR) sg += (((const struct binder_buffer_object *)h)->length + 7) & ~(uint64_t)7;
-        else if (h->type == BINDER_TYPE_FD) put_fd(w, ((const struct binder_fd_object *)h)->fd);
+        if (h->type == BINDER_TYPE_FD) put_fd(w, ((const struct binder_fd_object *)h)->fd);
         else if (h->type == BINDER_TYPE_FDA) {
             const struct binder_fd_array_object *fda = (const void *)h;
             const struct binder_object_header *ph = fda->parent < i ? object_at(tr, fda->parent) : NULL;

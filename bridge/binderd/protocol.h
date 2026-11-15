@@ -60,10 +60,14 @@ struct bd_fix {
 
 /* BC_TRANSACTION(_SG) and BC_REPLY(_SG) in the marshalled write stream: the command, the binder_transaction_data(_sg) as written, this, then the
  * data (padded to 8), the offsets (padded to 8) and the scatter-gather buffers of the BINDER_TYPE_PTR objects in offset order (each padded to 8).
- * The transaction's fds (BINDER_TYPE_FD, then each BINDER_TYPE_FDA's) come with the message, nfds of them, in object order. */
+ * The transaction's fds (BINDER_TYPE_FD, then each BINDER_TYPE_FDA's) come with the message, nfds of them, in object order.
+ * BD_TXN_TOO_LARGE: its payload did not fit in the shared buffer and is left out (nfds and sg_size 0): the daemon fails it as the kernel fails
+ * a transaction its receive area cannot hold (BR_FAILED_REPLY to the caller; for a reply, BR_TRANSACTION_COMPLETE to the replier), instead
+ * of failing the whole ioctl (libbinder aborts on that). Older routes sent 0 here. */
+#define BD_TXN_TOO_LARGE 1u
 struct bd_txn {
     uint32_t nfds;
-    uint32_t pad;
+    uint32_t flags; /* BD_TXN_* */
     uint64_t sg_size;
 };
 

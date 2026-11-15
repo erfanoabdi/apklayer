@@ -154,6 +154,10 @@ int Driver::writeCommands(Thread* t, const uint8_t* buf, size_t size, uint64_t* 
                 bd_txn x;
                 if (!take(buf, size, &pos, &x)) return -EFAULT;
                 const binder_transaction_data& tr = trs.transaction_data;
+                if (x.flags & BD_TXN_TOO_LARGE) {  // its payload was left out: it fails as one the receive area cannot hold
+                    transaction(t, tr, cmd == BC_REPLY || cmd == BC_REPLY_SG, 0, nullptr, nullptr, nullptr, 0, {});
+                    break;
+                }
                 size_t need = align8(tr.data_size) + align8(tr.offsets_size);
                 if (need < tr.data_size || size - pos < need || size - pos - need < x.sg_size || *fd_next + x.nfds > fds.size()) return -EFAULT;
                 const uint8_t* data = buf + pos;

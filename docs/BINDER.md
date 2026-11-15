@@ -56,7 +56,10 @@ message, more in follow-up one-byte messages). Bulk data never goes through a so
   marshalled into the shared buffer (the request only says how long it is): the write stream as is, except BC_TRANSACTION(_SG)/BC_REPLY(_SG),
   which are followed by a `bd_txn` header, the data, the offsets and the scatter-gather buffers (BINDER_TYPE_PTR objects, in offset order) copied
   out of the process, and their fds (BINDER_TYPE_FD, then each BINDER_TYPE_FDA's) attached to the request. The daemon copies the data from the
-  shared buffer straight into the target's receive area: two copies in all (the kernel makes one), none through a socket. A read is capped at
+  shared buffer straight into the target's receive area: two copies in all (the kernel makes one), none through a socket. A transaction too
+  large for the shared buffer (no receive area could hold it either) goes as its command and a `bd_txn` with `BD_TXN_TOO_LARGE`, no payload:
+  the daemon fails only it, as the kernel fails one its target's area cannot hold (BR_FAILED_REPLY to the caller, BR_TRANSACTION_COMPLETE to a
+  replier), and the ioctl succeeds; a failed ioctl makes libbinder abort (tests/native/binder-large.c). A read is capped at
   32 KiB per call so that its reply is one message (libbinder reads 256 bytes). The daemon never reads process memory (no `/proc/<pid>/mem`, no ptrace, no ancestry). It answers with
   `write_consumed` in marshalled bytes (the route maps it back command by command), the read bytes, the fds of the delivered transaction and
   their fixups.

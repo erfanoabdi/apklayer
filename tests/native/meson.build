@@ -37,6 +37,11 @@ if is_variable('apklayer_preload')
   test('etc-hidden', executable('etc-hidden-test', 'etc-hidden.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('dev-pts', executable('dev-pts-test', 'dev-pts.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('proc-mounts', executable('proc-mounts-test', 'proc-mounts.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
+  # the userspace binder with a transaction larger than the route's shared buffer: only that transaction fails (BR_FAILED_REPLY)
+  if is_variable('apklayer_binderd')
+    test('binder-large', executable('binder-large-test', 'binder-large.c', dependencies: [dependency('dl')]), args: [apklayer_binderd],
+      env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
+  endif
   test('own-data-spelling', executable('own-data-spelling-test', 'own-data-spelling.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   # needs its own cgroup scope (the filter judges processes by it): `systemd-run --user --scope meson test proc-leaks`; skipped (77) where every process shares one
   test('proc-leaks', executable('proc-leaks-test', 'proc-leaks.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
