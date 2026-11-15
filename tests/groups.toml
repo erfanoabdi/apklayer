@@ -652,3 +652,8 @@ run = ["tests/vm/sysapps-update.sh"]
 [setup-runtime-foreign]
 # a dev tree CLI must not relink a runtime another build owns (setup-runtime.sh refuses)
 run = ["tests/vm/setup-runtime-foreign.sh"]
+
+[gamepad]
+# game controllers (docs/GAMEPAD.md): a uinput Xbox 360 pad (needs sudo -n, /dev/uinput) through the shell's evdev reader and HostGamepad to hello-gamepad: hot-plug, sources, buttons, axes, hat, rumble
+apps = ["hello-gamepad"]
+run = ["python3 -u tests/vm/gamepad.py"]

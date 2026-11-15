@@ -80,8 +80,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Apps: a Godot 4 game, JW Library thumbnails, a NewPipe download.
 
 ## Parked (owner's decision)
-- NFC, biometrics, game controllers, ModemManager telephony, screen capture portal.
+- NFC (in progress), biometrics, ModemManager telephony, screen capture portal.
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
 - Several phone instances as a product; a JRE for the Ubuntu Touch deb.
 - Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
-
+- Game controllers (`docs/GAMEPAD.md`, group `gamepad`, tested with a uinput pad only): needs a real pad: udev permissions (uaccess/`input` group and the retry when they change), a real DS4/DualSense/Xbox pad over USB and Bluetooth (axis layout, rumble motors), Halium phones; limits: events go only to the focused window's app, no gyro/touchpad/LED/battery, one vibrator id per pad.

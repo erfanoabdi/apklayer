@@ -81,6 +81,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         snprintf(c->pkg, sizeof c->pkg, "%.*s", (int)(len - 4), (const char *)p + 4);
         fprintf(stderr, "[shell] %s (pid %d) connected\n", c->pkg, c->pid);
         send_msg(c, MSG_DISPLAY, &(int32_t){ output_refresh_mhz }, 1);
+        gamepad_client_hello(c);
         break;
     case MSG_WINDOW_CREATE: {
         if (len < 13 || len - 12 >= 1024) return;
@@ -168,6 +169,9 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         if (w) window_nav_layer(w);
         break;
     }
+    case MSG_PAD_RUMBLE:
+        gamepad_rumble(v, len);
+        break;
     case MSG_ACTIVATE:
         activate_message(p, len);
         break;
