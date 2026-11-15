@@ -273,7 +273,13 @@ static int mounts_filter(int fd, int cloexec)
     int shape = 0;  /* 1 mountinfo, 2 mounts */
     while (getline(&line, &cap, in) >= 0) {
         if (!shape) shape = line[0] >= '0' && line[0] <= '9' ? 1 : strncmp(line, "device ", 7) ? 2 : 3;
-        if (mounts_line_kept(line)) fputs(line, out);
+        if (!mounts_line_kept(line)) continue;
+        if (shape == 2) {  /* the two lines that name a desktop: devtmpfs "udev" (with the machine's RAM size) and the root disk (an nvme/sata ext4, rw, no seclabel) */
+            const char *sp = strchr(line, ' ');
+            if (!strncmp(line, "udev /dev devtmpfs ", 19)) { fputs("tmpfs /dev tmpfs rw,seclabel,nosuid,relatime,mode=755 0 0\n", out); continue; }
+            if (sp && !strncmp(sp, " / ", 3)) { fputs("/dev/block/dm-0 / ext4 ro,seclabel,relatime 0 0\n", out); continue; }
+        }
+        fputs(line, out);
     }
     /* Android's partitions (an Android 13 app's table: dm-verity system partitions, the ART/runtime apexes, /data, the FUSE storage) */
     static const struct { const char *point, *source, *type, *opts; } android[] = {
