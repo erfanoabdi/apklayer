@@ -12,6 +12,8 @@ static struct window *ime_window;           /* window whose field has the IME en
 static char *pending_commit, *pending_preedit;
 static int pending_before, pending_after;
 static uint32_t ti_serial;                  /* number of commit requests we made */
+static char *sur_text;                      /* the field's text as last sent to the compositor, with the cursor's byte offset: converts delete_surrounding_text */
+static size_t sur_cursor;
 
 static void apply_enabled(void);
 static void ti_enter(void *d, struct zwp_text_input_v3 *t, struct wl_surface *s)
@@ -59,7 +61,15 @@ void text_input_send(struct window *w, int before, int after, const char *commit
 static void ti_done(void *d, struct zwp_text_input_v3 *t, uint32_t serial)
 {
     (void)d; (void)t; (void)serial;
-    if (ime_window) text_input_send(ime_window, pending_before, pending_after, pending_commit, pending_preedit);
+    /* delete_surrounding_text counts UTF-8 bytes around the cursor, the host's InputConnection UTF-16 units (Cyrillic, Arabic: 2 bytes, 1 unit) */
+    int before = pending_before, after = pending_after;
+    if (sur_text) {
+        size_t len = strlen(sur_text), c = sur_cursor < len ? sur_cursor : len;
+        size_t from = (size_t)before < c ? c - (size_t)before : 0, to = c + (size_t)after < len ? c + (size_t)after : len;
+        before = utf8_units(sur_text, from, c);
+        after = utf8_units(sur_text, c, to);
+    }
+    if (ime_window) text_input_send(ime_window, before, after, pending_commit, pending_preedit);
     free(pending_commit); free(pending_preedit);
     pending_commit = pending_preedit = NULL;
     pending_before = pending_after = 0;
@@ -124,6 +134,9 @@ void text_input_surrounding(struct window *w, int cursor, int anchor, const char
     /* logged on receipt: the compositor may have moved the keyboard focus elsewhere (another window of the session), then nothing is forwarded */
     if (debug_input) fprintf(stderr, "[shell] text input surrounding cursor %d anchor %d of %zu bytes%s\n", c, a, len, w == ime_window ? "" : " (not forwarded: no input focus)");
     if (w != ime_window) { free(t); return; }
+    free(sur_text);
+    sur_text = strdup(t);
+    sur_cursor = (size_t)c;
     zwp_text_input_v3_set_surrounding_text(text_input, t, c, a);
     zwp_text_input_v3_set_text_change_cause(text_input, ZWP_TEXT_INPUT_V3_CHANGE_CAUSE_OTHER);
     zwp_text_input_v3_commit(text_input);

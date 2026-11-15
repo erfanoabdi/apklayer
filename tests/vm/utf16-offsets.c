@@ -13,5 +13,7 @@ int main(void)
     assert(utf16_to_byte(astral, strlen(astral), 4) == 6);  /* after z */
     assert(utf16_to_byte(astral, strlen(astral), 5) == 8);  /* the end */
     assert(utf16_to_byte(astral, strlen(astral), 99) == 8);  /* clamped */
+    const char *ru = "\xd0\xbf\xd1\x80";  /* Cyrillic: 2 bytes, 1 unit each (delete_surrounding_text counts bytes) */
+    assert(utf8_units(ru, 0, 2) == 1 && utf8_units(ru, 0, 4) == 2 && utf8_units(astral, 1, 5) == 2 && utf8_units(astral, 0, 8) == 5);
     return 0;
 }

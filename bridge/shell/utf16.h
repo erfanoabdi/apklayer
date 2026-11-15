@@ -10,3 +10,14 @@ static inline size_t utf16_to_byte(const char *t, size_t len, int units)
     }
     return i;
 }
+
+/* The UTF-16 units of the UTF-8 bytes t[from, to) (a 4-byte character is two units; a cut inside a character counts it once). */
+static inline int utf8_units(const char *t, size_t from, size_t to)
+{
+    int n = 0;
+    for (size_t i = from; i < to; i++) {
+        unsigned char c = (unsigned char)t[i];
+        if ((c & 0xc0) != 0x80) n += (c & 0xf8) == 0xf0 ? 2 : 1;
+    }
+    return n;
+}
