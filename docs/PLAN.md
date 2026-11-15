@@ -74,8 +74,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Parallels has an old `apklayerd` 0.3.4 that takes over hub starts. UTM's `~/prebuilts/common` is empty.
 
 ## Manager
-- Apps installed before 2026-11-04 need a reinstall for permissions.
-- `manager/tests/ui.sh` permission step is written but never run. Hardware page: no live GNSS/camera test.
+- `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
 - Vibrator: `composePwle` on HALs with PWLE capability instead of the 20 ms step fallback.
