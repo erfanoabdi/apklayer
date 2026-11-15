@@ -36,8 +36,9 @@ static EGLConfig choose(EGLDisplay dpy, EGLint surface_type)
 }
 
 /* What an NDK app that links libGLESv2 gets from the plain query functions (formats.c asks eglGetProcAddress instead): through Android's libGLESv2
- * glGetString goes to libEGL's egl_get_string_for_current_context, which bridge/native/android_stubs.c answers with 0. The extension-driven choices
- * of an engine that reads GL_EXTENSIONS this way are then made without extensions. */
+ * glGetString goes to libEGL's egl_get_string_for_current_context (bridge/native/android_stubs.c answers 0) and then to the context's table, or to
+ * libapklayer_gles (gles_filter.c, mapped for every app) which must answer in the window thread too: an engine that reads GL_EXTENSIONS this way
+ * chooses its colour and format paths from them. */
 #undef glGetString
 #undef glGetStringi
 #undef glGetIntegerv
