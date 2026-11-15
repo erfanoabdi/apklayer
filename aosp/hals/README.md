@@ -12,7 +12,7 @@ side translates Android calls and types; everything that touches the desktop liv
 | `camera` | `android.hardware.camera.provider` (AIDL V3, `internal/1`) | `camera/`: backends `fake` (bars, image, video file), `pipewire` | Goldfish's provider (`camera/goldfish/`, copied) with `BackendCamera`; `camera/services` runs cameraserver; `tests/run camera` |
 | `gnss` | `android.hardware.gnss` | GeoClue / gpsd | planned |
 | `vibrator` | `android.hardware.vibrator` | force feedback (evdev FF), logind haptics | planned |
-| `sensors` | `android.hardware.sensors` | iio-sensor-proxy / IIO | planned |
+| `sensors` | `android.hardware.sensors` | iio-sensor-proxy (orientation, light, proximity) | tested against a mock (hardware-host) |
 | `gnss` | `android.hardware.gnss` (AOSP's IGnss example, its fixes from a backend; `--client` feeds HostLocation's gps provider) | `gnss/`: fake (fixed point, GPX replay); GeoClue / gpsd next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
 | `vibrator` | `android.hardware.vibrator` (AOSP's IVibrator example plus a backend; the hub's `vibrator_manager` plays app vibrations on it) | `vibrator/`: fake (logs every command); feedbackd / evdev FF next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
 | `sensors` | `android.hardware.sensors` (AOSP's ISensors example with a backend's sensors); `sensors/services`: AOSP's SensorService as a stack process | `sensors/`: fake (fixed values); iio-sensor-proxy / sensorfw next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |

@@ -473,6 +473,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
             start("gatekeeperd", "libapklayer_gatekeeperd.so", {"/data/misc/gatekeeper"});
         }
     }
+    makeDirs(join(inst.dataDir, "apklayer"));
     unlink(join(inst.dataDir, "apklayer/sensor_features").c_str());  // the sensors HAL front writes it (HostSystemConfig's sensor features)
     for (const ProviderService& p : providers) {
         start(p.name, p.front, p.options, p.backend);
