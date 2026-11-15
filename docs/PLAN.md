@@ -12,7 +12,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- x86 PC: `system-apps` case `downloads` and `input` `ime-insets` fail (also unsandboxed).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize (Vulkan game window). Not reproduced on Parallels (`tests/run resize-frame` passes); needs the game window on the x86 PC (`RESIZE_PKG` picks the app); suspect `bridge/shell/vsync.c`'s single shared frame callback.
@@ -34,7 +33,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- NDK camera: the first `getCameraIdList` can be empty for ~200 ms after cameraserver's lazy start (check the Java path too).
+- NDK camera: the first `getCameraIdList` can be empty for ~200 ms because cameraserver publishes `media.camera` before its provider listed cameras. Fix: construct `CameraService` by hand in `aosp/hals/camera/services/Service.cpp`, wait for `getNumberOfCameras() > 0`, then `addService` (needs a ~/los24 build and a re-stage).
 - Portrait desktop monitor: the right camera mount degrees per monitor direction are unknown (no way to detect it).
 - Parallels' MacBook camera: first frame black. Retest Open Camera, Fossify Camera.
 - Halium: preview rotation, `getCallingUid`, rear-camera still, present fences.
