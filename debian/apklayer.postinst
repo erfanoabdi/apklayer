@@ -1,6 +1,7 @@
 #!/bin/sh
 # The per-app sandbox's host side (tools/host-setup/sandbox.sh for a source install): AppArmor's permission for apklayer's user namespaces where
-# AppArmor has userns rules (4.0: Ubuntu 23.10+, which restricts unprivileged user namespaces), the render nodes' new mode.
+# AppArmor has userns rules (4.0: Ubuntu 23.10+, which restricts unprivileged user namespaces), the render nodes' new mode, subordinate ids for users
+# without them. Idempotent: every upgrade runs it again.
 set -e
 if [ "$1" = configure ]; then
     if [ -e /etc/apparmor.d/abi/4.0 ]; then
@@ -8,6 +9,13 @@ if [ "$1" = configure ]; then
         if [ -d /sys/kernel/security/apparmor ] && command -v apparmor_parser >/dev/null; then
             apparmor_parser -r -T -W /etc/apparmor.d/apklayer || echo "apklayer: the AppArmor profile did not load; the sandbox needs it (sudo apparmor_parser -r /etc/apparmor.d/apklayer)" >&2
         fi
+    fi
+    # the sandbox's app uids come from the user's subordinate id range: a regular user without one gets 65536 ids (a no-op for users that have a range)
+    if command -v usermod >/dev/null; then
+        getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ {print $1}' | while read -r u; do
+            grep -q "^$u:" /etc/subuid 2>/dev/null || usermod --add-subuids 100000-165535 "$u" || true
+            grep -q "^$u:" /etc/subgid 2>/dev/null || usermod --add-subgids 100000-165535 "$u" || true
+        done
     fi
     if [ -d /run/udev ] && command -v udevadm >/dev/null; then
         udevadm control --reload || true

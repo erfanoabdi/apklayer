@@ -29,7 +29,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
 ## Camera
-- Fossify Camera on Parallels is unchecked (no APK locally); Open Camera works on the MacBook camera. The `camera` group prints a harmless stray FAIL line from a test-app race (hello.camera recreates its activity).
+- Fossify Camera on Parallels is unchecked (no APK locally); Open Camera works on the MacBook camera.
 - Halium camera: preview rotation needs a human check (preview and still agree on both phones; whether the picture is upright was not judged). `camera`/`media = device` work (libhidl 0005, `tools/halium/hidl-list.sh`). NewPipe playback with `media = device` is blocked by YouTube extraction ("Could not parse website") on the phones' network, not by the stack. The X23 `hello.camera` large still is cut by the landscape-to-portrait activity recreation (test-app race).
 
 ## Input / IME
@@ -56,8 +56,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
 
 ## Sandbox (before it can be the default)
-- NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes need a Debian-style box (nodes are 0666 on the tester PC, no `nvidia-modprobe`).
-- Each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once.
+- NVIDIA sandbox: the broker and `nvidia-modprobe` at 0660 and for missing nodes run only on a real Debian-style NVIDIA box (code read and the node-to-arguments table tested with a Debian node list; nodes are 0666 on the tester PC, no `nvidia-modprobe`).
+- Each tree running the sandbox group needs `sudo sh tools/host-setup/sandbox.sh b/cli/apklayer` once (idempotent; the deb's postinst does it for the packaged binary).
 - A release-candidate deb with the sandbox on for a day.
 
 ## Packaging and releases
