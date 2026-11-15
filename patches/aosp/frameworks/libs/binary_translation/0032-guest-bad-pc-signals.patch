@@ -1,0 +1,161 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: a bad guest pc raises what the hardware raises
+
+A guest branch (br/blr/ret, or a signal handler address) to an address with low bits set is a PC alignment fault on arm64: SIGBUS, si_code BUS_ADRALN,
+si_addr = the target. Berberis ran the rounded address or raised SIGSEGV. A pc on an unmapped page is SEGV_MAPERR (code 1), not SEGV_ACCERR (2); a mapped
+non-executable page stays ACCERR. IsPcExecutable declines a misaligned pc, berberis_HandleNoExec chooses signal and code (mincore tells unmapped from mapped).
+Module libberberis_arm64.
+
+diff --git a/guest_os_primitives/guest_signal_handling_arch.cc b/guest_os_primitives/guest_signal_handling_arch.cc
+--- a/guest_os_primitives/guest_signal_handling_arch.cc
++++ b/guest_os_primitives/guest_signal_handling_arch.cc
+@@ -21,9 +21,11 @@
+ 
+ // region digitalis
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++#include <sys/mman.h>
+ #include <sys/syscall.h>
+ #include <unistd.h>
+ 
++#include <cerrno>
+ #include <csignal>
+ 
+ #include "berberis/base/gettid.h"
+@@ -43,6 +45,31 @@
+ 
+ namespace berberis {
+ 
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++namespace {
++
++// apklayer patch (0032): terminate the thread with the default action of `sig`, as the kernel does when it cannot deliver a signal. Raw
++// syscalls: libc's sigaction would go through HotSpot's libjsig, which keeps its own handler and ends in a JVM crash report (SIGABRT).
++[[noreturn]] void DieWithDefaultAction(int sig) {
++  struct {
++    uintptr_t handler;
++    unsigned long flags;
++    uintptr_t restorer;
++    uint64_t mask;
++  } dfl{};
++  syscall(SYS_rt_sigaction, sig, &dfl, nullptr, sizeof(uint64_t));
++  uint64_t unblock = uint64_t{1} << (sig - 1);
++  syscall(SYS_rt_sigprocmask, SIG_UNBLOCK, &unblock, nullptr, sizeof(uint64_t));
++  syscall(__NR_tgkill, GetpidSyscall(), GettidSyscall(), sig);
++  for (;;) {
++    syscall(SYS_exit_group, 128 + sig);
++  }
++}
++
++}  // namespace
++#endif
++
++
+ void ProcessGuestSignal(GuestThread* thread, const Guest_sigaction* sa, Guest_siginfo_t* info) {
+   // ATTENTION: action mask is ADDED to currently blocked signals!
+   // Should be no-op if invoked from HandleHostSignal, as it must run under guest action mask!
+@@ -102,20 +129,17 @@ void ProcessGuestSignal(GuestThread* thread, const Guest_sigaction* sa, Guest_si
+   // SIGILL, deliver that to another misaligned handler, and livelock forever
+   // (the app "hangs at a black screen", pinning a CPU). Match hardware: take the
+   // signal's default action (terminate) instead of jumping into garbage.
+-  if ((static_cast<uint64_t>(sa->guest_sa_sigaction) & 3) != 0) {
++  // apklayer patch (0032): only for SIGBUS itself (blocked while its own handler runs, so the PC fault would repeat for ever; hardware kills the
++  // thread with SIGBUS then). Any other signal runs the handler: the dispatcher refuses the misaligned pc and raises SIGBUS/BUS_ADRALN
++  // (berberis_HandleNoExec), as the hardware's PC alignment fault does, and the guest's SIGBUS action decides (default: terminate with SIGBUS).
++  if ((static_cast<uint64_t>(sa->guest_sa_sigaction) & 3) != 0 && info->si_signo == SIGBUS) {
+     TRACE("berberis: guest signal %d handler=%p is misaligned (invalid ARM64 PC); "
+           "taking default action (terminate) instead of livelocking",
+           info->si_signo,
+           ToHostAddr<void>(sa->guest_sa_sigaction));
+     // Reset to the host default disposition and re-raise so the host kernel
+     // performs the default action for this signal (terminate + tombstone).
+-    struct sigaction dfl {};
+-    dfl.sa_handler = SIG_DFL;
+-    sigaction(info->si_signo, &dfl, nullptr);
+-    syscall(__NR_tgkill, GetpidSyscall(), GettidSyscall(), info->si_signo);
+-    // The re-raised signal fires once the ScopedSignalBlocker at the top of this
+-    // function unblocks it on return; nothing below should run.
+-    return;
++    DieWithDefaultAction(info->si_signo);  // apklayer patch (0032): raw syscalls, see the helper
+   }
+ #endif  // NATIVE_BRIDGE_GUEST_ARCH_ARM64
+   // endregion
+@@ -131,6 +155,29 @@ void ProcessGuestSignal(GuestThread* thread, const Guest_sigaction* sa, Guest_si
+   // handler's SP up, so the interrupted registers must be saved in that range.
+   CPUState& cpu = GetCPUState(*state);
+   GuestAddr ucontext_addr = AlignDown(GetStackRegister(cpu) - ctx.size(), 16);
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  // apklayer patch (0032): a signal frame that cannot be written (sp not mapped: ACE's wild sp, a handler without a usable stack) is what the kernel
++  // answers with a forced SIGSEGV carrying its default action (the thread dies with SIGSEGV, whatever handler the guest has); the memcpy below
++  // would fault in the runtime itself and end in the crash reporter (SIGABRT).
++  {
++    unsigned char vec;
++    const uintptr_t page = 4096;
++    uintptr_t low = static_cast<uintptr_t>(ucontext_addr) & ~(page - 1);
++    uintptr_t high = (static_cast<uintptr_t>(GetStackRegister(cpu)) - 1) & ~(page - 1);
++    int saved_errno = errno;
++    bool bad = false;
++    for (uintptr_t a = low; a <= high; a += page) {
++      if (mincore(reinterpret_cast<void*>(a), 1, &vec) != 0 && errno == ENOMEM) {
++        bad = true;
++        break;
++      }
++    }
++    errno = saved_errno;
++    if (bad) {
++      DieWithDefaultAction(SIGSEGV);
++    }
++  }
++#endif
+   memcpy(ToHostAddr<void>(ucontext_addr), ctx.ptr(), ctx.size());
+   SetStackRegister(cpu, ucontext_addr);
+   // endregion
+diff --git a/runtime/arm64/translator.cc b/runtime/arm64/translator.cc
+--- a/runtime/arm64/translator.cc
++++ b/runtime/arm64/translator.cc
+@@ -59,7 +59,8 @@ HostCodePiece InstallTranslated(MachineCode* machine_code,
+ // ARM64 instructions are always 4 bytes aligned.
+ std::tuple<bool, uint8_t> IsPcExecutable(GuestAddr pc, GuestMapShadow* guest_map_shadow) {
+   constexpr uint8_t kInsnSize = 4;
+-  if (!guest_map_shadow->IsExecutable(pc, kInsnSize)) {
++  // apklayer patch (0032): a pc with low bits set is a PC alignment fault (berberis_HandleNoExec raises SIGBUS), not code to run at the rounded address.
++  if ((pc & 3) != 0 || !guest_map_shadow->IsExecutable(pc, kInsnSize)) {
+     return {false, kInsnSize};
+   }
+   return {true, kInsnSize};
+diff --git a/runtime/runtime_library/runtime_library.cc b/runtime/runtime_library/runtime_library.cc
+--- a/runtime/runtime_library/runtime_library.cc
++++ b/runtime/runtime_library/runtime_library.cc
+@@ -16,8 +16,11 @@
+ 
+ #include "berberis/runtime_library/runtime_library.h"
+ 
++#include <sys/mman.h>
+ #include <sys/syscall.h>
+ 
++#include <cerrno>
++
+ #include "berberis/base/checks.h"
+ #include "berberis/base/tracing.h"
+ #include "berberis/guest_os_primitives/guest_thread_manager.h"
+@@ -65,7 +68,20 @@ extern "C" __attribute__((used, __visibility__("hidden"))) void berberis_HandleN
+   info.si_signo = SIGSEGV;
+   info.si_code = SEGV_ACCERR;
+   info.si_addr = ToHostAddr<void>(GetInsnAddr(cpu));
+-  syscall(SYS_rt_tgsigqueueinfo, GetpidSyscall(), GettidSyscall(), SIGSEGV, &info);
++  // apklayer patch (0032): what the hardware reports for a bad pc. A pc that is not 4-aligned (br/blr/ret to it, or a signal handler there)
++  // is SIGBUS/BUS_ADRALN with si_addr = the pc; an unmapped page is SEGV_MAPERR (only a mapped, non-executable one is SEGV_ACCERR).
++  if (GetInsnAddr(cpu) & 3) {
++    info.si_signo = SIGBUS;
++    info.si_code = BUS_ADRALN;
++  } else {
++    unsigned char vec;
++    int saved_errno = errno;
++    if (mincore(reinterpret_cast<void*>(GetInsnAddr(cpu) & ~uintptr_t{4095}), 1, &vec) != 0 && errno == ENOMEM) {
++      info.si_code = SEGV_MAPERR;
++    }
++    errno = saved_errno;
++  }
++  syscall(SYS_rt_tgsigqueueinfo, GetpidSyscall(), GettidSyscall(), info.si_signo, &info);
+ }
+ 
+ // Invalidate regions overlapping with the range. Could be pretty slow.
