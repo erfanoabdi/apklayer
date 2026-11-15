@@ -110,7 +110,15 @@ extern "C" int main(int, char**) {
     defaultServiceManager()->addService(String16("media.camera.proxy"), cameraProxy);
     if (defaultServiceManager()->checkService(String16("processinfo")) == nullptr)
         defaultServiceManager()->addService(String16("processinfo"), sp<ProcessInfo>::make());
-    CameraService::instantiate();
+    // publish media.camera only once the provider has listed its cameras (CameraService's own instantiate() publishes at once, and the first
+    // getCameraIdList of an NDK app could see none for ~200 ms); bounded, then published anyway (no camera provider)
+    auto cameraService = sp<CameraService>::make();
+    for (int i = 0; i < 100; i++) {
+        int32_t count = 0;
+        if (cameraService->getNumberOfCameras(hardware::ICameraService::CAMERA_TYPE_ALL, content::AttributionSourceState(), 0, &count).isOk() && count > 0) break;
+        usleep(50000);
+    }
+    defaultServiceManager()->addService(String16(CameraService::getServiceName()), cameraService, /*allowIsolated*/ true);
     // the foreground user, as CameraServiceProxy.java reports it at boot and on user switches: apps of other users are refused
     auto service = interface_cast<hardware::ICameraService>(defaultServiceManager()->checkService(String16("media.camera")));
     if (service == nullptr || !service->notifySystemEvent(hardware::ICameraService::EVENT_USER_SWITCHED, {0}).isOk()) return 1;
