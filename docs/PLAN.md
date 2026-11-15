@@ -19,10 +19,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
 
 ## PGR (Punishing: Gray Raven) and the anti-cheat
-- PGR dies after 31 s to 3 min under the x86 translator (Tencent ACE: its own wild jump after a page is made executable and signal handlers are set; CHANGELOG "ACE: what the runs of the day say"). Natively on the arm64 server it runs 90+ min.
-- Under Waydroid+houdini ACE starts its helpers `:GP7Service`/`:GP7Worker`; under apklayer never. Lead: `ActivityThread.getApplication()` from `JNI_OnLoad` is null on Android, but Robolectric returns an Application of package "android". Return null until the app's Application exists.
+- PGR (Tencent ACE) died at 105-144 s on half the runs: cause found, ACE's `/proc/self/root` virtual-app probe (fixed in `bridge/native/paths.c`; 31.7 min idle soak on the tester PC). Open: ship the rebuilt `libapklayer-preload.so` in the deb/bundle; run meson `path-layer` and `tests/run files`; play PGR into a gameplay scene on the tester PC (needs a test-input shell or an unlocked desktop).
 - Translator differences still open vs real arm64 (`tests/apps/hello-acediff`, `known-diffs.txt`): default NaN sign and FPCR.DN, fmax/fmin/fmls NaN operands, fused FRECPS/FRSQRTS, a guest signal with no guest handler ends in HotSpot's crash handler (SIGABRT). None explains ACE.
-- Next: a PGR run with `tools/ace/*.bt` on the tester PC (needs the tester's `default` instance or a free machine) to see what ACE reads before it decides; the unread ACE config files and `libanort.so`.
 - Home scene on NVIDIA: block noise on 3D models. Recheck with the lite-translate setting.
 
 ## Graphics

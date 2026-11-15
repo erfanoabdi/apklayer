@@ -633,6 +633,27 @@ static bool android_stub_path(char **path)
 
 static bool from_root(const char *r, char **path);
 
+/* apklayer patch: the path below a /proc/self/root (or /proc/thread-self/root, /proc/<own pid>/root) prefix, "//" collapsed; NULL for any other path. Android's
+ * root is the process's own, so "/proc/self/root//data/user/0/<pkg>/files" is "/data/user/0/<pkg>/files": Tencent ACE (PGR) stats both and takes a
+ * difference (the path layer served only the plain spelling, the other met the host's /data) for a virtual-app container, and its shutdown follows. */
+static const char *proc_root_rest(const char *p)
+{
+    char own[32];
+    if (!p || strncmp(p, "/proc/", 6)) return NULL;
+    p += 6;
+    snprintf(own, sizeof own, "%ld/root", (long)getpid());
+    size_t n = !strncmp(p, "self/root", 9) ? 9 : !strncmp(p, "thread-self/root", 16) ? 16 : !strncmp(p, own, strlen(own)) ? strlen(own) : 0;
+    if (!n || (p[n] && p[n] != '/')) return NULL;
+    p += n;
+    while (p[0] == '/' && p[1] == '/') p++;
+    return p[0] == '/' && strncmp(p, "/proc", 5) ? p : NULL;  /* /proc/self/root/proc/... is the hidden-process rules' */
+}
+
+static bool mapped_path(char **path)
+{
+    return binder_device(path) || android_stub_path(path) || storage_path(path) || own_data_path(path) || own_apk_path(path) || data_path(path) || linker_path(path);
+}
+
 bool apklayer_apply_path_overrides(char **path)
 {
     if (apklayer_proc_hidden(*path) || other_package_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
@@ -640,7 +661,11 @@ bool apklayer_apply_path_overrides(char **path)
         if (gone) { *path = gone; return true; }
     }
     if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
-    if (binder_device(path) || android_stub_path(path) || storage_path(path) || own_data_path(path) || own_apk_path(path) || data_path(path) || linker_path(path)) return true;
+    const char *below = proc_root_rest(*path);
+    char *plain = below ? strdup(below) : NULL;
+    if (plain && apklayer_apply_path_overrides(&plain)) { *path = plain; return true; }  /* plain does not start with /proc/self/root again: no loop */
+    free(plain);
+    if (mapped_path(path)) return true;
     /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */
     const char *own = own_env;
     return (own && own[0] && from_root(own, path)) || from_root(root(), path);
