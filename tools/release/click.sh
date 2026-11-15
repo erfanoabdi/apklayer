@@ -23,6 +23,9 @@ sh tools/release/jdk-image.sh "$java" "$root/usr/lib/apklayer/native"
 # the manager's entry, paths relative to the click (lomiri-app-launch runs it from there)
 sed -e 's#^Exec=.*#Exec=usr/bin/apklayer-manager#' -e 's#^Icon=.*#Icon=usr/share/icons/hicolor/scalable/apps/apklayer.svg#' -e '/^MimeType=/d' \
     data/apklayer-manager.desktop > "$root/apklayer.desktop"
+# the hidden "share" app (docs/HALIUM.md "Choosing and sharing files"): Share / Open with in other apps starts it (the manifest's content-hub hook names its peer file)
+sed -e 's#^Exec=.*#Exec=usr/bin/apklayer-manager --share#' -e 's#^Icon=.*#Icon=usr/share/icons/hicolor/scalable/apps/apklayer.svg#' data/apklayer-share.desktop > "$root/apklayer-share.desktop"
+cp data/content-hub-peer.json "$root/content-hub-peer.json"
 cp click/apklayer.apparmor "$root/"
 sed "s/@VERSION@/$version/" click/manifest.json > "$root/manifest.json"
 chmod 755 "$root"

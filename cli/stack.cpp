@@ -66,9 +66,10 @@ void stageManifest(const Instance& inst, const Layout& l, bool provided, const s
 void stageDeviceCodecXml(const Instance& inst) {
     const std::string own = join(inst.runtimeDir, "android-root/vendor/etc");
     makeDirs(own);
-    for (const std::string& f : listDir("/vendor/etc"))
+    const std::string host = "/proc/self/root/vendor/etc";  // the CLI runs under the path layer, which serves /vendor from the Android root: /proc/self/root is the host's (device_hals.cpp)
+    for (const std::string& f : listDir(host))
         if (f.rfind("media_codecs", 0) == 0 && f.size() > 4 && f.substr(f.size() - 4) == ".xml")
-            if (auto text = readFile(join("/vendor/etc", f))) writeFile(join(own, f), *text);
+            if (auto text = readFile(join(host, f))) writeFile(join(own, f), *text);
 }
 
 // graphics = device (a Halium device, docs/HALIUM.md): the instance's VINTF declares neither apklayer's AIDL allocator nor its mapper
