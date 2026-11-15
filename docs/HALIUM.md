@@ -472,7 +472,7 @@ What differs from Ubuntu Touch, and what changed:
   that stderr is muted for the lookups (it went into programs' output: Termux's `id -u 2>&1`). Termux installs its bootstrap and runs since
   2026-11-10 (CHANGELOG).
 - `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under
-  libdl_bio's constructor call); the instance runs with `apklayer prop set ro.hardware.egl mali`: SurfaceFlinger reports Mali-G68 MC4, OpenGL ES 3.2. Open.
+  libdl_bio's constructor call); cli/stack.cpp now writes `ro.hardware.egl mali` into the device's graphics props when the device says `meow` and `/vendor/lib64/egl/libGLES_mali.so` exists (no manual prop; SurfaceFlinger reports Mali-G68 MC4, OpenGL ES 3.2). The crash itself is not traced further (the layer's constructor jumps to an unmapped address; libGLES_android.so, which it names, is not on the device); Mali's own library is what meow wraps.
 - The prebuilts (75a684a6) carry libraries older than the Halium work of 2026-11-05: libhidlbase without libhidl 0002/0003 ("gralloc-mapper is missing",
   SurfaceFlinger aborted), libbinder without 0007 (AudioPolicyService refused the hub, uid 100000), libapklayer_vdisplay without the android_wlegl path
   (frames went as shm), libapklayer_cameraserver. The phone runs the tree's current outputs of these four; the lock and the prebuilts branch need them
@@ -516,8 +516,7 @@ weston's VNC backend stops repainting (no frame callbacks, no buffer releases) w
   `camera` (hello.camera lists cameras, none is FAIL), `sensors` (hello.hardware), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's
   orientation lock turns the shell's display; the lock is put back). It copies what it needs, removes it and the instance, and on the X23 wakes the phone
   with the PIN (`ut-unlock.sh on`: apps are stopped while it is locked; the sudo password is the PIN) and locks it again. The Quintus has to be unlocked
-  by hand (its lock code is not in `local.conf`; a wrong code shows "Incorrect security code", try nothing blindly). On the Quintus the instance gets
-  `ro.hardware.egl mali` (libGLES_meow crashes SurfaceFlinger, above); a fresh instance without it fails with "the Android services did not come up".
+  by hand (its lock code is not in `local.conf`; a wrong code shows "Incorrect security code", try nothing blindly). A fresh Quintus instance needs no prop (meow is mapped to mali, above).
 - Race `stop <package>` (CHANGELOG 2026-11-15): a launch that took the instance's spare was unknown to `stop <package>`, `info` and relaunch until its JVM
   renamed itself (seconds on a loaded phone); the run record names the process now. Group `spare-race` (UTM) holds the window with a stopped spare.
 - A keyboard inset for a turned window is not possible through the insets: Android's `InsetsSource.calculateArbitraryInsets` treats a non-floating IME

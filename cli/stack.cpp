@@ -331,6 +331,8 @@ static std::string deviceGraphicsProperties(const Instance& inst) {
         bool wanted = key == "ro.hardware.egl" || key == "ro.hardware.vulkan" || key == "ro.board.platform" || key == "ro.opengles.version";
         for (const char* prefix : {"ro.vendor.", "vendor.", "debug.mediatek."}) wanted = wanted || key.rfind(prefix, 0) == 0;
         if (!wanted || value.empty()) continue;
+        // MediaTek's EGL layer (libGLES_meow, a wrapper over Mali's) crashes SurfaceFlinger's dlopen under libdl_bio (docs/HALIUM.md): Mali's own does the work
+        if (key == "ro.hardware.egl" && value == "meow" && exists("/vendor/lib64/egl/libGLES_mali.so")) value = "mali";
         props += key + "=" + value + "\n";
         found.insert(key);
     }

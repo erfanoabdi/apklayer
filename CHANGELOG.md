@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: Quintus needs no `ro.hardware.egl mali` prop; Lipstick's pointer on the bar strip
+- `cli/stack.cpp` (deviceGraphicsProperties): a device's `ro.hardware.egl` `meow` (MediaTek's wrapper, crashes SurfaceFlinger's dlopen on the Quintus) becomes `mali` when libGLES_mali.so is in /vendor/lib64/egl. phone-checks.sh no longer sets the prop. Quintus, RPM 0.4.102 built here: `phone-test.sh sfos hello newpipe` on fresh instances: newpipe PASS, hello PASS (its first run, in the same command as newpipe's, FAILed once with no picture; rerun alone PASS).
+- `bridge/shell/pointer.c`: where the display composes the navigation bar (Lipstick, `nav.remote`), the pointer over the strip went to the app; hover is dropped there and a left press/release acts as a bar button (as touch.c does). Built, not exercised: the phone has no pointer.
 
 ## 2026-11-15: test tooling: ssh retry, incremental push, fractional-scale tolerance
 - `tests/lib/vm.py`: `ssh` repeats a call (up to 5 times) while ssh itself exits 255 (password hosts refuse about every other connection); `copy` and the push repeat the whole tar pipeline the same way (`tar_to`). A call with a stream on stdin is not repeated.
