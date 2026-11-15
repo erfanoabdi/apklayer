@@ -149,6 +149,11 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.webkit.WebStorage", HostPlainShadows.WebStorage.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewDatabase", HostPlainShadows.WebViewDatabase.class.getName()));
         }
+        if (HostNfc.present()) {  // a source of tags (HubNfc): the framework's NfcAdapter and tag technologies over its service
+            entries.add(Map.entry("android.nfc.NfcAdapter", HostPlainShadows.NfcAdapter.class.getName()));
+            entries.add(Map.entry("android.nfc.tech.BasicTagTechnology", HostPlainShadows.BasicTagTechnology.class.getName()));
+            entries.add(Map.entry("android.nfc.tech.IsoDep", HostPlainShadows.IsoDep.class.getName()));
+        }
         if (HostSensorShadows.declared()) {  // the stack runs SensorService over the sensors HAL (providers.toml)
             entries.add(Map.entry("android.hardware.SensorManager", HostSensorShadows.SensorManager.class.getName()));
             entries.add(Map.entry("android.hardware.SystemSensorManager", HostSensorShadows.SystemSensorManager.class.getName()));

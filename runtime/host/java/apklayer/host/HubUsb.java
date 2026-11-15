@@ -125,18 +125,22 @@ final class HubUsb {
     /** The package's device_filter resource: any usb-device element that matches (DeviceFilter, as UsbProfileGroupSettingsManager.packageMatchesLocked). */
     private boolean matches(String pkg, int xml, UsbDevice device) {
         try {
-            AssetManager assets = new AssetManager();
-            ApkAssets[] system = AssetManager.getSystem().getApkAssets();
-            ApkAssets[] all = java.util.Arrays.copyOf(system, system.length + 1);
-            all[system.length] = ApkAssets.loadFromPath(apps.resolve(pkg).resolve("base.apk").toString());
-            assets.setApkAssets(all, false);
-            Resources res = new Resources(assets, Resources.getSystem().getDisplayMetrics(), Resources.getSystem().getConfiguration());
-            try (XmlResourceParser parser = res.getXml(xml)) {
+            try (XmlResourceParser parser = xml(apps, pkg, xml)) {
                 for (int event = parser.next(); event != XmlPullParser.END_DOCUMENT; event = parser.next())
                     if (event == XmlPullParser.START_TAG && "usb-device".equals(parser.getName()) && DeviceFilter.read(parser).matches(device)) return true;
             }
         } catch (Exception unreadable) { System.out.println("[apklayer-hub] usb: device filter of " + pkg + " not readable: " + unreadable); }
         return false;
+    }
+
+    /** An XML resource of an installed package, read from its own APK over the system's assets (HubNfc's tech lists too). */
+    static XmlResourceParser xml(Path apps, String pkg, int xml) throws IOException {
+        AssetManager assets = new AssetManager();
+        ApkAssets[] system = AssetManager.getSystem().getApkAssets();
+        ApkAssets[] all = java.util.Arrays.copyOf(system, system.length + 1);
+        all[system.length] = ApkAssets.loadFromPath(apps.resolve(pkg).resolve("base.apk").toString());
+        assets.setApkAssets(all, false);
+        return new Resources(assets, Resources.getSystem().getDisplayMetrics(), Resources.getSystem().getConfiguration()).getXml(xml);
     }
 
     private static String name(UsbDevice device) {

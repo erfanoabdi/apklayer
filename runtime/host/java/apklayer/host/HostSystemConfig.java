@@ -75,6 +75,7 @@ final class HostSystemConfig {
         String[] adapters = new File("/sys/class/bluetooth").list();  // the host has a Bluetooth adapter: BlueZ through the hub (HubBluetooth)
         if (adapters != null && adapters.length > 0)
             config.features.addAll(java.util.List.of("android.hardware.bluetooth", "android.hardware.bluetooth_le"));
+        if (HostNfc.present()) config.features.add("android.hardware.nfc");  // an NFC source (HubNfc); no HCE
         if (HostCameraShadows.declared())  // the stack runs cameraserver over a camera HAL (providers.toml)
             config.features.addAll(java.util.List.of("android.hardware.camera", "android.hardware.camera.any"));
         try {  // the sensors HAL's list (aosp/hals/sensors/Service.cpp)

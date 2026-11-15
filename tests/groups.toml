@@ -129,6 +129,10 @@ optional = true
 apps = ["hello-bluetooth"]
 run = ["tests/vm/bluetooth.sh"]
 
+[nfc]  # NFC through the framework's NfcAdapter over the hub's "nfc" service, mock tags dropped into the instance's apklayer/nfc-mock (tests/vm/nfc.py, docs/NFC.md): reader mode, foreground dispatch, the three discovery intents, Type 2 and Type 4 tags
+apps = ["hello-nfc"]
+run = ["python3 -u tests/vm/nfc.py"]
+
 [hardware]
 # the hardware providers' fake backends (providers.toml): sensors, GNSS and vibrator over AIDL, then through Android's APIs
 apps = ["hello-hardware"]
