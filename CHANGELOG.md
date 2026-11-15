@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: bugs6 (webview cookie race, two merge breakages, Termux failed exec, Fennec x86 without onboarding prefs)
+- `webview` failed 3 of 4 reruns on the PC: the first `CookieManager.getCookie` after the page's `document.cookie` write returns null (the cookie reaches the browser store over its own pipe, not the one that carried the JS result); the second call sees it. hello-wvprobe asks again for up to 5 s: 4 of 4 pass (before: 1 of 4), `webview-input` passes.
+- Two HEAD breakages found while building a tree: `HubProtocol.EJECT_VOLUME` and `NOTIFICATION_SETTINGS` were both 64 (duplicate case label, the host jar did not compile; EJECT_VOLUME is 65), and `jni_trace.c` was missing from the native shim's sources in `bridge/native/meson.build` (`apklayer_jni_trace_install` undefined: every bridge app died at load).
+- Termux: `tests/corpus/termux-exec.py` types a missing absolute command, a script with a missing shebang interpreter and `sh -c 'exec /missing'` into real Termux (Parallels): all return to the prompt in 0.1 s, no hung `exit()`.
+- Fennec on the x86 PC, `gecko-page.py` (profile with the test's prefs): passes with and without `debug.apklayer.log=1` (4 of 4 each). The abort is the profile: without the onboarding prefs the Gecko parent dies about 45 s in (Breakpad's re-raised SIGSEGV, `si_code` SI_TKILL), also with the property off, and a second Gecko JVM (`--spare`) ends in `__nptl_deallocate_stack` (SEGV at 0x8, called from `pthread_join`). `BERBERIS_LOG_FREES=1` shows guest `libmegazord.so` freeing a pointer the guest already freed (quarantined, not the crash). Not solved: the parent's original fault is hidden behind Breakpad (no core: apport keeps the old `/var/crash` java file).
+
 ## 2026-11-15: libcore fstat(fd) is the real one; setup-runtime.sh 21 s -> 10 s
 - `Os.fstat(fd)` stats `/proc/self/fd/<fd>` (mode, size, uid real; EBADF for a closed one); `files` and `system-apps` (MediaProvider scan) pass with it on Parallels.
 - `tools/release/setup-runtime.sh`: jars patched one job per jar, the JDK image built beside the instrumenting, "1/3..3/3" progress lines. Fresh dir on Parallels (12 cores): 21 s -> 10 s; the 75 s on a phone is mostly the single PreInstrument JVM (cores) and jlink.
