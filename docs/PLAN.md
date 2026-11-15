@@ -23,7 +23,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 ## Graphics
 - Vulkan presentation untested on AMD.
 - OTR2 on the NVIDIA PC at 2448x1374: not measured (no APK on the tester PC; glbench there: 180 fps vsynced, 2.8k-4.9k fps unsynced while PGR renders). The ~30 fps was on the Intel PC.
-- Windows: KDE untested; `window-geometry` and `decoration` groups need uibench and sway.
+- Windows on KDE (tester PC, kwin 6.8, scale 2) pass, groups `kde-window` and `kde-output` included; needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
+- `fit_size` reserves 46 px (`DECOR_H`) also under server-side decorations: the first window is 542 px high where 588 would fit.
 - Lipstick: the pointer on the navigation-bar strip goes to the app.
 - Lomiri: no keyboard inset while the app is turned. Rerun camera-reload on the X23.
 - Sailfish keeps the letterbox; its rotation is unchecked.
@@ -85,6 +86,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Tests and tooling
 - `check-prebuilts.sh` does not catch stale `libvulkan.so`, `libapklayer_vulkan.so`, `vulkan.apklayer.so` (not in the lock; the tester PC's `~/apklayer-build/prebuilts` copy is ~25 libraries behind): add them to the lock.
+- `tests/run` pushes the whole tree each time (4-8 min over the tester PC's link): push changed files only.
 - UTM: delete `/etc/udev/rules.d/71-gpusel-vgem.rules` after its next reboot.
 
 ## Needs hardware or a person
