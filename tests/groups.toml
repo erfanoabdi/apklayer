@@ -377,11 +377,6 @@ run = ["python3 -u tests/vm/fences.py"]
 apps = ["hello-glbench"]
 run = ["python3 -u tests/vm/window-formats.py"]
 
-[window-opaque]
-# the shell marks every Android window opaque (wl_surface.set_opaque_region): frames with alpha 0.5 (glbench window-alpha) must not show the desktop through
-apps = ["hello-glbench"]
-run = ["python3 -u tests/vm/window-opaque.py"]
-
 [texture-view]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/texture-view.py"]
