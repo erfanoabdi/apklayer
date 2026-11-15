@@ -46,9 +46,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Lomiri greeter: only the first uinput tap registers.
 
 ## Permissions and Android rules
-- Shared libraries: HIDL libraries, `<uses-native-library>`, resources.
-- Storage: no scoped-storage rules; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
-- Every instance scans every drive.
+- Shared libraries: HIDL libraries; a native library's path in the app's linker namespace (`<uses-native-library>` itself works).
+- Storage: scoped storage hides other packages' `Android/data` and `Android/obb` only for the `/storage/emulated/0`, `/sdcard` and `/data/media/0` spellings; `UNMOUNTABLE` not sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by).
 - Call audio: oldest `MODE_IN_COMMUNICATION` requester wins.
 - Keystore: only pam_unix passwords.
 - libcore: `sun.misc.Cleaner`; SharedMemory `PROT_EXEC`/`PROT_NONE` (needs a JNI mprotect call and a native rebuild).
