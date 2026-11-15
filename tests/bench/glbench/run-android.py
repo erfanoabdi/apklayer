@@ -15,7 +15,7 @@ modes, scenes, seconds = (sys.argv[1:] + ['window,window-novsync', 'clear,fill,d
 intent = tempfile.NamedTemporaryFile('w', suffix='.properties', delete=False)
 intent.write('component=hello.glbench.Main\nextra.modes=%s\nextra.scenes=%s\nextra.seconds=%s\n' % (modes, scenes, seconds))
 intent.close()
-env = dict(os.environ, APKLAYER_INTENT_FILE=intent.name, APKLAYER_DISPLAY_WIDTH='800', APKLAYER_DISPLAY_HEIGHT='600')
+env = dict(os.environ, APKLAYER_INTENT_FILE=intent.name, APKLAYER_DISPLAY_WIDTH=os.environ.get('GLBENCH_W', '800'), APKLAYER_DISPLAY_HEIGHT=os.environ.get('GLBENCH_H', '600'))  # GLBENCH_W/H: the window's size
 env['APKLAYER_JOPTS'] = (env.get('APKLAYER_JOPTS', '') + ' -Dapklayer.runms=120000').strip()
 app = subprocess.Popen([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'run', 'hello.glbench'], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
 end = time.monotonic() + 120
