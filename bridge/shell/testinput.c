@@ -25,6 +25,7 @@ static int32_t inject(struct window *w, const int32_t *v, const char *text)
             if (windows[i].client && windows[i].configured) { windows[i].test_focus = 1; window_inject_configure(&windows[i], 0, 0, &windows[i] == w); }
         keyboard_inject_focus(w);
         return 0;
+    case TEST_LAYOUT: return keyboard_inject_layout(text);
     case TEST_KEY: keyboard_inject_key(w, (uint32_t)v[1], v[2]); return 0;
     case TEST_POINTER: pointer_inject(w, v[1], v[2], v[3]); return 0;
     case TEST_TOUCH: touch_inject(w, v[1], v[2], v[3]); return 0;

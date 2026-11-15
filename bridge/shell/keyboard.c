@@ -1,7 +1,10 @@
 /* Keyboard input: xkb translation to Android key events, key repeat. */
 #include "shell.h"
+#include <xkbcommon/xkbcommon-compose.h>
 
 static struct xkb_context *xkb_ctx;
+static struct xkb_compose_state *compose;  /* dead keys and the Compose key (the locale's Compose table) */
+static struct xkb_keymap *us_map;          /* the physical layout Android's keycodes name (Generic.kl): letters and digits by position under any layout */
 static struct xkb_keymap *xkb_keymap_g;
 static struct xkb_state *xkb_state;
 
@@ -43,6 +46,17 @@ static int32_t keysym_to_android(xkb_keysym_t sym, int32_t *uni)
     }
 }
 
+/* The Android keycode of the key at this evdev position as a US keyboard has it, for the keys whose character under the layout in use
+ * (Cyrillic, Arabic, Greek...) has none: shortcuts (Ctrl+С is Ctrl+C) and games read the position, as on Android. 0: no such key. */
+static int32_t physical_code(xkb_keycode_t kc)
+{
+    if (!us_map && xkb_ctx) us_map = xkb_keymap_new_from_names(xkb_ctx, &(struct xkb_rule_names){ .layout = "us" }, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    const xkb_keysym_t *syms;
+    int32_t uni;
+    if (!us_map || xkb_keymap_key_get_syms_by_level(us_map, kc, 0, 0, &syms) < 1) return 0;
+    return keysym_to_android(syms[0], &uni);
+}
+
 /* Android KeyEvent meta bits: SHIFT=1, ALT=2, CTRL=0x1000, META=0x10000. */
 uint32_t kb_android_meta(void)
 {
@@ -80,6 +94,14 @@ static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t fmt, int32_t fd, 
     kb_own_state = !km;
     /* no/empty keymap (Lipstick's Qt 5 compositor sends NO_KEYMAP): the default RMLVO keymap, as Qt clients do */
     if (!km && xkb_ctx) km = xkb_keymap_new_from_names(xkb_ctx, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    if (xkb_ctx && !compose) {
+        const char *loc = getenv("LC_ALL");
+        if (!loc || !*loc) loc = getenv("LC_CTYPE");
+        if (!loc || !*loc) loc = getenv("LANG");
+        if (!loc || !*loc || !strcmp(loc, "C") || !strcmp(loc, "POSIX")) loc = "en_US.UTF-8";
+        struct xkb_compose_table *table = xkb_compose_table_new_from_locale(xkb_ctx, loc, XKB_COMPOSE_COMPILE_NO_FLAGS);
+        if (table) { compose = xkb_compose_state_new(table, XKB_COMPOSE_STATE_NO_FLAGS); xkb_compose_table_unref(table); }
+    }
     fprintf(stderr, "[shell] xkb keymap loaded (format %u, %u bytes, %s)\n", fmt, sz,
             !km ? "FAILED" : kb_own_state ? "default" : "ok");
     if (!km) return; /* keep the previous keymap */
@@ -117,8 +139,20 @@ void key_event(uint32_t evdev, int down)
     int32_t code = keysym_to_android(sym, &uni);
     uint32_t meta = kb_android_meta();
     if (sym == XKB_KEY_Left && (meta & 0x02)) code = 4; /* Alt+Left = Back */
-    uni = (int32_t)xkb_state_key_get_utf32(xkb_state, kc); /* state-aware: shift, AltGr, dead keys */
+    uni = (int32_t)xkb_state_key_get_utf32(xkb_state, kc); /* state-aware: shift, AltGr */
+    if (down && compose) {                                 /* dead key + letter, Compose sequences: a key that starts one is not text yet */
+        xkb_compose_state_feed(compose, sym);
+        enum xkb_compose_status st = xkb_compose_state_get_status(compose);
+        if (st == XKB_COMPOSE_COMPOSING) return;
+        if (st == XKB_COMPOSE_CANCELLED) { xkb_compose_state_reset(compose); return; }
+        if (st == XKB_COMPOSE_COMPOSED) {
+            uni = (int32_t)xkb_keysym_to_utf32(xkb_compose_state_get_one_sym(compose));
+            code = 0;
+            xkb_compose_state_reset(compose);
+        }
+    }
     if (uni < 32 || uni == 127) uni = 0;                   /* control chars are not text */
+    if (!code && uni >= 128) code = physical_code(kc);     /* the host types the character unless a shortcut modifier is down (HostInput.hostKey) */
     int32_t v[5] = { W_ID(keyboard_focus), down ? 0 : 1, code, uni, (int32_t)meta };
     send_msg(W_TARGET(keyboard_focus), MSG_KEY, v, 5);
 }
@@ -162,4 +196,22 @@ void keyboard_inject_key(struct window *w, uint32_t evdev, int down)
     keyboard_focus = w;
     if (xkb_state) xkb_state_update_key(xkb_state, evdev + 8, down ? XKB_KEY_DOWN : XKB_KEY_UP);
     kb_key(NULL, NULL, last_input_serial, 0, evdev, down ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
+}
+
+/* Test input: the keymap the injected keys go through, "layout[,layout2...][:variant[:options]]" (xkb names, as setxkbmap), e.g. "us,ru:,:grp:caps_toggle". */
+int keyboard_inject_layout(const char *spec)
+{
+    if (!xkb_ctx) xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    char *copy = strdup(spec), *variant = strchr(copy, ':'), *options = NULL;
+    if (variant) { *variant++ = 0; options = strchr(variant, ':'); if (options) *options++ = 0; }
+    struct xkb_rule_names names = { .layout = copy, .variant = variant, .options = options };
+    struct xkb_keymap *km = xkb_ctx ? xkb_keymap_new_from_names(xkb_ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS) : NULL;
+    free(copy);
+    if (!km) return -3;
+    if (xkb_state) xkb_state_unref(xkb_state);
+    if (xkb_keymap_g) xkb_keymap_unref(xkb_keymap_g);
+    xkb_keymap_g = km;
+    xkb_state = xkb_state_new(km);
+    kb_own_state = 1;  /* the injected keys alone move this state (the seat's modifiers events would reset it) */
+    return 0;
 }
