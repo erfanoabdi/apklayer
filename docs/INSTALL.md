@@ -198,7 +198,8 @@ permissions close to others.
   3. The app's renderer: `APKLAYER_LOGCAT=1 apklayer run <package> 2>&1 | grep -m1 "GL version"`, once with `APKLAYER_SANDBOX=1` and once with 0.
      `llvmpipe` only sandboxed means NVIDIA's EGL did not start in the app's view and glvnd fell back to Mesa.
   4. `ls /dev/nvidia-modeset /dev/nvidia-uvm`: a node that does not exist yet is made by the setuid `nvidia-modprobe`, which the sandbox cannot run
-     (no new privileges); opening any GL app outside the sandbox once makes it.
+     (no new privileges): apklayerd's broker runs it for an app that asks for the missing node (`nvidia-modprobe` must be installed;
+     `grep broker apklayerd.log`); if it is not, opening any GL app outside the sandbox once makes the nodes.
   5. `env | grep -E "__EGL|VK_|LIBGL|GBM"` and `ls ~/.local/share/glvnd ~/.local/share/vulkan 2>/dev/null`: driver files in your home are bound into
      the app's view from these; a path elsewhere that is hidden (/tmp) is not.
 - Wrong paths: the CLI reads `~/.config/apklayer/env` for every variable not set in the environment; `bin/apklayer env` prints what it uses.

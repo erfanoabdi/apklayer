@@ -1,6 +1,7 @@
 #include "broker.h"
 #include "apps.h"
 #include "logs.h"
+#include "nvidia.h"
 #include "sandbox.h"
 
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <sys/xattr.h>
 #include <vector>
 #include <unistd.h>
@@ -29,6 +31,22 @@ std::string fdPath(int fd) {
 // AMD's compute (kfd), WSL's (dxg). Never a display's other devices (input, video capture, framebuffers).
 bool gpuNode(const std::string& p) {
     return p.rfind("/dev/dri/", 0) == 0 || p.rfind("/dev/nvidia", 0) == 0 || p == "/dev/kfd" || p == "/dev/dxg";
+}
+
+// A NVIDIA node the driver has not made yet: the setuid nvidia-modprobe makes it (an app cannot run it under no new privileges, cli/nvidia.h)
+bool makeNvidiaNode(const std::string& path) {
+    std::vector<std::string> args = nvidiaModprobeArgs(path);
+    if (args.empty()) return false;
+    pid_t pid = fork();
+    if (pid == 0) {
+        std::vector<char*> argv = {const_cast<char*>("nvidia-modprobe")};
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        execvp("nvidia-modprobe", argv.data());
+        _exit(127);
+    }
+    int st = 0;
+    return pid > 0 && waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0;
 }
 
 // The app of a namespace uid in this layout (uids are per package, the same in every instance)
@@ -101,6 +119,7 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
     struct stat st{};
     if (path.rfind("/dev/", 0) == 0) {
         fd = open(path.c_str(), base & ~(O_CREAT | O_EXCL | O_TRUNC));
+        if (fd < 0 && errno == ENOENT && makeNvidiaNode(path)) fd = open(path.c_str(), base & ~(O_CREAT | O_EXCL | O_TRUNC));
         if (fd < 0) return -errno;
         if (fstat(fd, &st) != 0 || !S_ISCHR(st.st_mode) || !gpuNode(fdPath(fd))) { close(fd); return -EACCES; }
     } else {
