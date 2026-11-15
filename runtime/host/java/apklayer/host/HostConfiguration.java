@@ -111,6 +111,8 @@ final class HostConfiguration {
         screen = bounds;
     }
 
+    private static android.graphics.Rect notifiedScreen;  // the screen the listeners last knew
+
     private static void apply() {
         StringBuilder extra = new StringBuilder();
         String locale = settings.getString("locale");
@@ -133,6 +135,11 @@ final class HostConfiguration {
             c.windowConfiguration.setMaxBounds(screen);
             c.seq = 0;  // unsequenced: always applied
             android.app.ResourcesManager.getInstance().applyConfigurationToResources(c, null);
+            if (notifiedScreen != null && !screen.equals(notifiedScreen)) {  // the screen changed (another output, a hotplug): DisplayListener.onDisplayChanged now
+                try { android.hardware.display.DisplayManagerGlobal.getInstance().handleDisplayChangeFromWindowManager(android.view.Display.DEFAULT_DISPLAY); }
+                catch (RuntimeException e) { System.out.println("[apklayer] display change not announced: " + e); }
+            }
+            notifiedScreen = new android.graphics.Rect(screen);
         }
         // not a qualifier, and the qualifiers' configuration leaves it undefined (0), which keeps the last one: set every time, 1 included
         RuntimeEnvironment.setFontScale(settings.getFloat("fontScale", 1f));

@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: windows: the app's screen is its output, output changes reach it at once, the mouse back button
+- Shell: `wl_surface.enter/leave` set `window.out` (geometry.c); `window_output()` (registry.c) gives that output's pixels and scale, else the largest. CONFIGURE's screen size and the integer-scale fallback follow it, so an app on the smaller of two outputs sees that one (`Display.getRealMetrics`). `window_display_changed` also sends a configure when the screen size changed (hotplug, mode change), not only on density/scale/bar changes; `registry_rm` clears `window.out` of a removed output.
+- Host: `HostConfiguration.apply` calls `DisplayManagerGlobal.handleDisplayChangeFromWindowManager` when the screen rect changed (Robolectric's `changeDisplay` alone delivered only onDisplayAdded): `DisplayListener.onDisplayChanged` at once.
+- Input: BTN_SIDE/BTN_BACK (mouse back button) sends KEYCODE_BACK (pointer.c); Alt+Left (keyboard.c) and Esc/Backspace (HostInput) already did.
+- Tests: `window-output` (headless GNOME Shell, virtual monitors 800x600 and 1280x800, test input `output:<n>`, then a real hotplug by Mutter's ApplyMonitorsConfig) and `input-inject` (steps `xclick`, Alt+Left, -Dhello.backlog) on Parallels (own tree): PASS. Not modelled: onDisplayAdded/Removed for a second Android display (apps have one default display).
+
 ## 2026-11-15: the NDK camera is Android's own libcamera2ndk (bridge/ndk/libcamera2ndk.c, the all-error stub, is gone)
 - The real library (frameworks/av/camera/ndk, `out/target/product/generic_arm64/system/lib64/libcamera2ndk.so` sha256 ae4092fb..., x86_64 fc2b471c...,
   unpatched) talks to the same cameraserver (`media.camera`) as camera2; its dependencies were staged already. Lock rows and deps/android-libs.list added.
