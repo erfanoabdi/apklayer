@@ -3,7 +3,7 @@
 prints its result lines, and stops the instance once it prints "glbench: done" (or after a 120 s budget, or 20 s without output).
 Run in the repo copy on the VM with the instance's environment (APKLAYER_INSTANCE, XDG_RUNTIME_DIR, WAYLAND_DISPLAY...):
   python3 tests/bench/glbench/run-android.py [modes] [scenes] [seconds]     modes: window,window-novsync; scenes: clear,fill,draws
-Extra JVM options (-Dapklayer.perf=true...) come from APKLAYER_JOPTS; GLBENCH_DUMP=<prefix> writes SurfaceFlinger's dumpsys at each mode's\nstart and at the end to <prefix>.N (GLBENCH_DUMP_ARGS: its arguments, e.g. --frametimeline -all); GLBENCH_SHOT=<prefix>: a screenshot after each scene, <prefix>.<mode>.<scene>.png."""
+Extra JVM options (-Dapklayer.perf=true...) come from APKLAYER_JOPTS; GLBENCH_DUMP=<prefix> writes SurfaceFlinger's dumpsys at each mode's\nstart and at the end to <prefix>.N (GLBENCH_DUMP_ARGS: its arguments, e.g. --frametimeline -all); GLBENCH_SHOT=<prefix>: a screenshot after each scene, <prefix>.<mode>.<scene>.png; GLBENCH_HOSTSHOT=<prefix> (command GLBENCH_HOSTCMD, default spectacle): the same of the desktop."""
 import os
 import selectors
 import subprocess
@@ -46,6 +46,9 @@ try:
                     # twice, the second kept: the next scene has just begun and the first capture can still show the last frame of this one
                     for _ in range(2):
                         subprocess.run([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'screenshot', 'hello.glbench', shot], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                if os.environ.get('GLBENCH_HOSTSHOT') and line.startswith('glbench: android') and 'fps=' in line:  # the desktop as the compositor shows it (a command, {out} the file)
+                    out = '%s.%s.png' % (os.environ['GLBENCH_HOSTSHOT'], '.'.join(line.split()[2:4]))
+                    subprocess.run(os.environ.get('GLBENCH_HOSTCMD', 'spectacle -b -n -f -o {out}').format(out=out), shell=True, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             if any('glbench: done' in l for l in text):
                 break
 finally:
