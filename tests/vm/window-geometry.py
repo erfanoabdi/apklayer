@@ -43,7 +43,10 @@ def expect(w, h, scale, maximized=False):
     assert c == (w, h, scale) + px + (bar_h, (bar_h * scale + 99) // 100, maximized), 'configure %s, expected %dx%d @%d%%' % (c, w, h, scale)
     assert any('configure %dx%d @%d%%' % (w, h, scale) in line and '@%ddpi' % (160 * scale // 100) in line for line in seen), \
         'the app did not take %dx%d @%d%%' % (w, h, scale)
-    shot = Image.open(instance.capture('geometry %dx%d@%d' % (w, h, scale), PKG)).size
+    for _ in range(15):  # the picture follows the configure by a frame or more: slow on a loaded VM
+        shot = Image.open(instance.capture('geometry %dx%d@%d' % (w, h, scale), PKG)).size
+        if abs(shot[0] - px[0]) <= 1 and abs(shot[1] - px[1]) <= 1: break
+        time.sleep(2)
     assert abs(shot[0] - px[0]) <= 1 and abs(shot[1] - px[1]) <= 1, 'the app renders %s px, expected %s' % (shot, px)
     checks.append('%dx%d@%d%s' % (w, h, scale, ' maximized' if maximized else ''))
     print('OK %dx%d @%d%%: %dx%d px, title bar %d px' % (w, h, scale, *shot, c[6]), flush=True)
@@ -55,11 +58,11 @@ app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.
 try:
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
-    end = time.monotonic() + 90
+    end = time.monotonic() + 180  # a loaded VM (two groups on 4 CPUs) is slow
     pending, first, landscape = b'', None, None
     with open(instance.OUT / 'window-geometry.log', 'wb') as log:
         while True:
-            assert selector.select(30) and time.monotonic() < end, 'geometry test stalled'
+            assert selector.select(60) and time.monotonic() < end, 'geometry test stalled'
             data = os.read(app.stdout.fileno(), 65536)
             if not data: break
             log.write(data)

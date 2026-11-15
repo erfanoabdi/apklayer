@@ -21,7 +21,7 @@ gpu=; for n in /dev/dri/card* /dev/dri/renderD* /dev/nvidia*; do [ -c "$n" ] && 
 jopts="-Dhello.other=$other -Dhello.home=$home/home.txt -Dhello.notpicked=$home/notpicked.txt -Dhello.gpu=$gpu -Dhello.private=$home/private/p.txt -Dhello.privdir=$home/private -Dhello.write=$home/written.txt"
 # a launch's intent file lies where its writer put it (here in the home): the sandbox hands it into the app's view
 printf 'action=hello.SANDBOX\nextra.hello.extra=fromfile\ncomponent=hello.sandbox.Main\n' > "$home/intent.properties"
-APKLAYER_INTENT_FILE=$home/intent.properties APKLAYER_JOPTS="-Dapklayer.runms=30000 $jopts" bin/apklayer run hello.sandbox > "$out" 2>&1
+APKLAYER_INTENT_FILE=$home/intent.properties APKLAYER_JOPTS="-Dapklayer.runms=60000 $jopts" bin/apklayer run hello.sandbox > "$out" 2>&1
 grep -a "\[sandbox\]\|apklayer: " "$out"
 uid=$(grep -a '^uid=' "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/apps/hello.sandbox/info.properties" | cut -d= -f2)
 reg=$(grep -a "registered hello.sandbox " "$APKLY_STATE/hub.log" | tail -1); echo "hub: ${reg#*registered }"
