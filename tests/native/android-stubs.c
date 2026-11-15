@@ -1,5 +1,5 @@
 /* Android's file existence in an app's view (paths.c desktop_root_path, android_stub_path): /usr, /home ... are ENOENT as exact directories (files below stay
- * for the host libraries), /data/local/tmp is an empty writable directory, /system/bin/app_process64 (and 32) an executable ELF; /data/dalvik-cache, /vendor/lib64, /dev/socket/zygote,
+ * for the host libraries), /data/local/tmp is the shell's directory (reachable, EACCES to write), /system/bin/app_process64 (and 32) an executable ELF; /data/dalvik-cache, /vendor/lib64, /dev/socket/zygote,
  * framework.jar and core-oj.jar exist as stand-ins. */
 #define _GNU_SOURCE
 #include <assert.h>
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     if (usr) assert(stat("/usr", &st) && errno == ENOENT);
     assert(stat("/usr/bin", &st) == 0 || !usr);  /* below the node stays */
     assert(stat("/lib64", &st) != 0 && errno == ENOENT);
-    assert(stat("/data/local/tmp", &st) == 0 && S_ISDIR(st.st_mode) && access("/data/local/tmp", W_OK) == 0);
+    assert(stat("/data/local/tmp", &st) == 0 && S_ISDIR(st.st_mode) && access("/data/local/tmp", W_OK) != 0 && errno == EACCES);  /* the shell's: reachable, not writable for an app */
     unsigned char magic[4];
     int fd = open("/system/bin/app_process64", O_RDONLY);
     assert(fd >= 0 && read(fd, magic, 4) == 4 && !memcmp(magic, "\177ELF", 4) && access("/system/bin/app_process64", X_OK) == 0);

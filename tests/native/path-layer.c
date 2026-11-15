@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/inotify.h>
+#include <sys/mman.h>
+#include <sys/statfs.h>
+#include <sys/statvfs.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/xattr.h>
@@ -124,6 +127,95 @@ int main(int argc, char **argv) {
         _exit(127);
     }
     assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    /* Android's answers for the probes an anti-cheat (Tencent ACE) or a virtual-app detector makes on the app's data directory: the same file under every spelling
+     * (plain, through /proc/<pid>/root, /proc/self/cwd, /proc/self/fd/N, openat, realpath) names one inode and the canonical /data/user/0/<pkg> */
+    {
+        int bad = 0;
+#define CK(c) CKS(c, "")
+#define CKS(c, what) do { if (!(c)) { fprintf(stderr, "probe disagrees with Android (line %d): %s %s\n", __LINE__, #c, what); bad++; } } while (0)
+        struct stat a, b, l;
+        struct statfs fa, fb;
+        struct statvfs va, vb;
+        char got[4096], pidroot[96], self[96];
+        const char *D = "/data/user/0/p.kg", *L = "/data/data/p.kg";
+        snprintf(pidroot, sizeof pidroot, "/proc/%d/root", getpid());
+        /* the fixed layout: /data/data is a link to /data/user/0 (a real directory) */
+        CK(lstat("/data/data", &l) == 0 && S_ISLNK(l.st_mode));
+        CK(readlink("/data/data", got, sizeof got) == 12 && !memcmp(got, "/data/user/0", 12));
+        CK(lstat("/data/user/0", &l) == 0 && S_ISDIR(l.st_mode) && lstat("/data/user_de/0", &l) == 0 && S_ISDIR(l.st_mode));
+        CK(lstat("/data/user", &l) == 0 && S_ISDIR(l.st_mode) && stat("/data/data", &l) == 0 && S_ISDIR(l.st_mode));
+        /* /sdcard -> /storage/self/primary -> /storage/emulated/0 */
+        assert(mkdir(in("emulated"), 0700) == 0 && mkdir(in("emulated/0"), 0700) == 0);
+        CK(lstat("/sdcard", &l) == 0 && S_ISLNK(l.st_mode) && readlink("/sdcard", got, sizeof got) == 21 && !memcmp(got, "/storage/self/primary", 21));
+        CK(lstat("/storage/self/primary", &l) == 0 && S_ISLNK(l.st_mode) && readlink("/storage/self/primary", got, sizeof got) == 19 && !memcmp(got, "/storage/emulated/0", 19));
+        CK(stat("/sdcard", &l) == 0 && S_ISDIR(l.st_mode) && stat("/storage/emulated/0", &a) == 0 && l.st_ino == a.st_ino && l.st_dev == a.st_dev);
+        /* one inode under every spelling */
+        char viapid[160];
+        snprintf(viapid, sizeof viapid, "%s//data/user/0/p.kg/files", pidroot);
+        const char *spell[] = { "/data/data/p.kg/files", "/data/user/0/p.kg/files", "/proc/self/root//data/user/0/p.kg/files", "/proc/self/root/data/data/p.kg/files",
+                                "/proc/thread-self/root//data/data/p.kg/files", viapid, "/data/user/0/p.kg/../p.kg/files", "/data//user/./0/p.kg/files" };
+        CK(stat(spell[0], &a) == 0);
+        for (size_t i = 1; i < sizeof spell / sizeof *spell; i++) { CKS(stat(spell[i], &b) == 0 && a.st_ino == b.st_ino && a.st_dev == b.st_dev, spell[i]); }
+        for (size_t i = 0; i < sizeof spell / sizeof *spell; i++) { CKS(lstat(spell[i], &b) == 0 && S_ISDIR(b.st_mode) && a.st_ino == b.st_ino && access(spell[i], R_OK | W_OK | X_OK) == 0, spell[i]); }
+        CK(stat(D, &b) == 0 && stat(L, &a) == 0 && a.st_ino == b.st_ino && a.st_dev == b.st_dev && a.st_uid == b.st_uid && lstat(L, &l) == 0 && S_ISDIR(l.st_mode));
+        CK(fstatat(AT_FDCWD, "/proc/self/root//data/user/0/p.kg", &b, AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(b.st_mode));
+        CK(syscall(SYS_newfstatat, AT_FDCWD, "/proc/self/root//data/user/0/p.kg/files", &b, 0) == 0);
+        CK(statfs(L, &fa) == 0 && statfs(D, &fb) == 0 && !memcmp(&fa.f_fsid, &fb.f_fsid, sizeof fa.f_fsid) && statvfs(L, &va) == 0 && statvfs(D, &vb) == 0 && va.f_fsid == vb.f_fsid);
+        CK(statfs("/proc/self/root//data/user/0/p.kg", &fb) == 0 && !memcmp(&fa.f_fsid, &fb.f_fsid, sizeof fa.f_fsid));
+        /* canonical names */
+        CKS(realpath(L, got) && !strcmp(got, D), got);
+        CK(realpath("/proc/self/root//data/data/p.kg/files", got) && !strcmp(got, "/data/user/0/p.kg/files"));
+        CK(realpath("/data/data", got) && !strcmp(got, "/data/user/0"));
+        CK(realpath("/sdcard", got) && !strcmp(got, "/storage/emulated/0"));
+        /* the descriptor of an open directory, openat, and the working directory */
+        int dfd = open(L, O_RDONLY | O_DIRECTORY);
+        snprintf(self, sizeof self, "/proc/self/fd/%d", dfd);
+        CK(dfd >= 0 && readlink(self, got, sizeof got) == (ssize_t)strlen(D) && !memcmp(got, D, strlen(D)));
+        snprintf(self, sizeof self, "/proc/self/fd/%d/files", dfd);
+        CK(stat(self, &b) == 0 && stat("/data/user/0/p.kg/files", &a) == 0 && a.st_ino == b.st_ino);
+        int ffd = openat(dfd, "files", O_RDONLY | O_DIRECTORY);
+        CK(ffd >= 0 && fstat(ffd, &b) == 0 && b.st_ino == a.st_ino && fstatat(dfd, "files", &b, AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(b.st_mode));
+        snprintf(self, sizeof self, "/proc/self/fd/%d", ffd);
+        CK(readlink(self, got, sizeof got) == 23 && !memcmp(got, "/data/user/0/p.kg/files", 23));
+        close(ffd);
+        char *cwd0 = getcwd(NULL, 0);
+        CK(chdir(L) == 0 && getcwd(got, sizeof got) && !strcmp(got, D));
+        CK(readlink("/proc/self/cwd", got, sizeof got) == (ssize_t)strlen(D) && !memcmp(got, D, strlen(D)));
+        CK(stat("/proc/self/cwd/files", &b) == 0 && stat("files", &a) == 0 && a.st_ino == b.st_ino && stat("/data/user/0/p.kg/files", &l) == 0 && l.st_ino == b.st_ino);
+        CKS(realpath(".", got) && !strcmp(got, D), got);
+        assert(chdir(cwd0) == 0);
+        free(cwd0);
+        close(dfd);
+        /* the app's file in /proc/self/maps under Android's name, not the host's */
+        {
+            int mf = open("/data/user/0/p.kg/files/mapped", O_CREAT | O_RDWR, 0600);
+            assert(mf >= 0 && ftruncate(mf, 4096) == 0);
+            void *m = mmap(NULL, 4096, PROT_READ, MAP_SHARED, mf, 0);
+            char line[4096];
+            int named = 0, host = 0;
+            FILE *maps = fopen("/proc/self/maps", "r");
+            while (maps && fgets(line, sizeof line, maps)) { named |= strstr(line, "/data/user/0/p.kg/files/mapped") != NULL; host |= strstr(line, tmpl) != NULL; }
+            if (maps) fclose(maps);
+            CK(m != MAP_FAILED && named && !host);
+            munmap(m, 4096);
+            close(mf);
+        }
+        /* not here: the owner of the data directory against /proc/self/status's Uid (the app uid): stat's ids are shown as the app's by bionic_translation's libc (0056)
+         * and raw_syscall.c's guest stat, not by this glibc-level layer; and "/proc/self/cwd/.." after a chdir into the data directory is the host's parent (a kernel path) */
+        /* another package's data: not listable, not reachable */
+        {
+            DIR *top = opendir("/data/user/0");
+            int others = 0;
+            for (struct dirent *e; top && (e = readdir(top));) if (e->d_name[0] != '.' && strcmp(e->d_name, "p.kg")) others++;
+            if (top) closedir(top);
+            CK(!others);
+            CK(stat("/data/user/0/other", &a) != 0 && stat("/data/user/0/p.kg/../other", &a) != 0 &&stat("/proc/self/root//data/user/0/other", &a) != 0 && opendir("/data/data/other") == NULL);
+        }
+        /* /data/local/tmp is the shell's: an app may reach it and not write there */
+        CK(access("/data/local/tmp", F_OK) == 0 && access("/data/local/tmp", W_OK) != 0 && open("/data/local/tmp/probe", O_CREAT | O_WRONLY, 0600) < 0 && errno == EACCES);
+        unlink("/data/local/tmp/probe");
+        assert(!bad);
+    }
     /* /proc as an app sees it (paths.c apklayer_proc_pid_hidden): processes of another cgroup (init, the desktop) are gone from stat and readdir,
      * its own and /proc/self stay. Skipped where every process shares one cgroup (a container). */
     {
