@@ -75,7 +75,10 @@ final class HubVpnNet {
             String p = six ? "ipv6." : "ipv4.";
             if (!servers.isEmpty() && !only(spec.addresses(), six).isEmpty()) {
                 add.addAll(List.of(p + "dns", String.join(",", servers)));
-                if (!spec.search().isEmpty()) add.addAll(List.of(p + "dns-search", String.join(",", spec.search())));
+                // NetworkManager hands a link's servers to systemd-resolved only with a domain: the app's search domains, and "~." (every name) when the VPN takes everything
+                List<String> domains = new ArrayList<>(spec.search());
+                if (spec.everything()) domains.add("~.");
+                if (!domains.isEmpty()) add.addAll(List.of(p + "dns-search", String.join(",", domains)));
                 if (spec.everything()) add.addAll(List.of(p + "dns-priority", "-1"));  // the VPN's resolver alone, as Android's
             }
         }

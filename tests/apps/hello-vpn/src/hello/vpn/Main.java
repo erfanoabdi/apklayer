@@ -64,7 +64,8 @@ public final class Main extends Activity {
         System.out.println("[vpn] established");
         if (phase.equals("default")) {
             for (int i = 0; i < 40 && !vpnNetwork(); i++) Thread.sleep(250);
-            require(vpnNetwork(), "the active network is not the VPN");
+            ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+            require(vpnNetwork(), "the active network is not the VPN: " + cm.getActiveNetwork() + " " + cm.getNetworkCapabilities(cm.getActiveNetwork()) + " " + cm.getActiveNetworkInfo());
             System.out.println("[vpn] active network is the VPN");
             probe("unprotected", false);
             probe("protected", true);

@@ -89,6 +89,7 @@ final class HostNetwork {
                 NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING, NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED, NetworkCapabilities.NET_CAPABILITY_FOREGROUND,
                 NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED,
                 NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED /* NetworkRequest.Builder asks for it by default (API 31): without it no request is satisfied (WorkManager's network constraint) */}) caps.addCapability(c);
+        if (transport == NetworkCapabilities.TRANSPORT_VPN) caps.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN);  // a new NetworkCapabilities has it by default
         return caps;
     }
 

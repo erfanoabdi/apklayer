@@ -59,8 +59,9 @@ int vpnCommand(const Layout& l, const Instance& inst, const std::vector<std::str
     call.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "call", "apklayer.instance", "68", "apklayer.IInstanceHub", "s16", "disconnect"};
     call.env = nativeEnv(l, inst).env;
     call.logFile = join(inst.logs(), "vpn.log");
-    if (runAndWait(call) != 0) die("the hub did not take the call (see " + call.logFile + ")");
-    printf("VPN disconnected\n");
+    int status = runAndWait(call);  // the boolean reply is the exit status: 1 when a VPN ended
+    if (status != 0 && status != 1) die("the hub did not take the call (see " + call.logFile + ")");
+    printf(status == 1 ? "VPN disconnected\n" : "no VPN\n");
     return 0;
 }
 

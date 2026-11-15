@@ -98,7 +98,7 @@ run = ["tests/vm/keystore.sh", "python3 -u tests/vm/keystore-auth.py"]
 # `apklayer vpn status|disconnect`, and the default route through the TUN (with the ssh peer's /32 and a watchdog)
 alone = true  # the host's network changes for the others: a TUN with its routes, and in the last phase the default route
 apps = ["hello-vpn"]
-run = ["tests/vm/vpn.sh"]
+run = ["python3 -u tests/vm/vpn-helper.py", "tests/vm/vpn.sh"]
 
 [settings]
 alone = true  # flips the desktop's colour scheme for a few seconds: every instance's apps follow it (their screenshots too)

@@ -29,7 +29,7 @@ public final class Tunnel extends VpnService {
     private void establishAs(boolean everything) {
         try {
             Builder builder = new Builder().setSession("hello-vpn").setMtu(1400).addAddress("10.88.0.1", 24).setBlocking(true);
-            if (everything) builder.addRoute("0.0.0.0", 0); else builder.addRoute("10.88.0.0", 24).addDnsServer("10.88.0.53");
+            if (everything) builder.addRoute("0.0.0.0", 0).addDnsServer("10.88.0.53"); else builder.addRoute("10.88.0.0", 24).addDnsServer("10.88.0.53").addSearchDomain("vpn.test");
             ParcelFileDescriptor fresh = builder.establish();
             if (fresh == null) { System.out.println("[vpn] establish returned null"); ready.complete(false); return; }
             tun = fresh;
