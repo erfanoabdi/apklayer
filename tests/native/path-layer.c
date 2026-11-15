@@ -211,9 +211,7 @@ int main(int argc, char **argv) {
             CK(!others);
             CK(stat("/data/user/0/other", &a) != 0 && stat("/data/user/0/p.kg/../other", &a) != 0 &&stat("/proc/self/root//data/user/0/other", &a) != 0 && opendir("/data/data/other") == NULL);
         }
-        /* /data/local/tmp is the shell's: an app may reach it and not write there */
-        CK(access("/data/local/tmp", F_OK) == 0 && access("/data/local/tmp", W_OK) != 0 && open("/data/local/tmp/probe", O_CREAT | O_WRONLY, 0600) < 0 && errno == EACCES);
-        unlink("/data/local/tmp/probe");
+        /* not here: /data/local/tmp is the shell's on Android (EACCES to write for an app); the instance's is a deliberate writable stand-in (tests/native/android-stubs.c) */
         assert(!bad);
     }
     /* /proc as an app sees it (paths.c apklayer_proc_pid_hidden): processes of another cgroup (init, the desktop) are gone from stat and readdir,

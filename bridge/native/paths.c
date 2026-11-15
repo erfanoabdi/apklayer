@@ -661,8 +661,6 @@ static bool android_stub_path(char **path)
     if (local) {
         snprintf(dir, sizeof dir, "%s/local/tmp", data);
         syscall(SYS_mkdirat, AT_FDCWD, dir, 0771);
-        /* Android's is the shell's (drwxrwx--x): an app may reach what is in it and cannot create, list or write (EACCES); here the owner has x only */
-        if (data_filter_active()) syscall(SYS_fchmodat, AT_FDCWD, dir, 0111);
         return false;  /* data_path maps it */
     }
     snprintf(file, sizeof file, "%s/%s", data, stand_ins[found].file);

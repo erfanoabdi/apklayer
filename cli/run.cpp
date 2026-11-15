@@ -36,8 +36,7 @@ const char* kSystemProcessPackage = "com.android.providers.settings";  // runs i
 void webviewSandboxOff(const Instance& inst) {
     const std::string text = "webview --no-sandbox --disable-seccomp-filter-sandbox\n";
     std::string own = join(inst.dataDir, "local/tmp/webview-command-line");
-    // an app's path layer keeps this directory unwritable for the app (Android's shell-owned /data/local/tmp): writable again for this write
-    if (readFile(own) != text) { makeDirs(dirName(own)); ::chmod(dirName(own).c_str(), 0755); writeFile(own, text); }
+    if (readFile(own) != text) { makeDirs(dirName(own)); writeFile(own, text); }
 }
 
 // The title of a launch's window (its virtual display's): identifies instance and launch. Cut to the host display HAL's title limit.
