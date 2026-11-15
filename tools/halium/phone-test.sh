@@ -4,7 +4,7 @@
 # apps (the apks of $APKLAYER_APKS, default the repo's build/; tests/apps/build.sh builds them) into a scratch directory, runs phone-checks.sh there in an
 # instance of its own (ptest), prints PASS/FAIL per group, removes what it made (scratch, instance) and, on ut, locks the phone again when it woke it.
 # Groups: hello newpipe providers hidl camera sensors race (both), rotate (sfos). ut: the screen is woken and the PIN typed (ut-unlock.sh; apps are stopped while the
-# phone is locked). sfos: unlock the phone by hand first (its lock code is not in local.conf; sf-unlock.sh takes it on stdin).
+# phone is locked). sfos: unlock the phone first: `sed -n 's/^SAILFISH_LOCK=//p' tests/vm/local.conf | ssh root@<phone> 'sh sf-unlock.sh <dir>'` (sf-unlock.sh, touch.py in <dir>).
 set -u
 os=${1:-}; shift || true
 [ -n "$os" ] && [ $# -gt 0 ] || { sed -n '2,8p' "$0" >&2; exit 2; }
