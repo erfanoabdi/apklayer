@@ -35,6 +35,11 @@ std::string chosenFile(const Result& chooser);
 // the .apk files in ~/Downloads, ~/Documents and the home folder (not their subfolders), newest first, at most `limit`: the install dialog's
 // list when there is no file chooser at all
 std::vector<std::string> findApks(size_t limit);
+// "ACCESS_FINE_LOCATION" or "android.permission.ACCESS_FINE_LOCATION" -> "Access fine location"
+std::string permTitle(const std::string& name);
+// `apklayer inspect` output (package, version, label, perm lines) as the install dialog shows it: detail "package · version", permissions "Asks for: A, B, ... and N more"
+struct Preview { std::string label, detail, permissions; };
+Preview parsePreview(const std::string& out);
 // a Content Hub import (~/.cache/<app>/HubIncoming/<n>/<file>, file-chooser.py): its folder removed once the file was used; others untouched
 void dropImported(const std::string& path);
 // `providers set <domain> <backend> key=value...` (options with an empty value left out: the backend's default), `providers unset <domain>` for backend ""

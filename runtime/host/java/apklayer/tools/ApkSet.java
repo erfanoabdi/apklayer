@@ -88,7 +88,7 @@ public final class ApkSet {
     }
 
     /** The APKs of an archive a device would install: a bundletool set's splits (not its standalone alternatives), else every APK at the root. */
-    private static List<ZipEntry> bundleApks(ZipFile zip) {
+    static List<ZipEntry> bundleApks(ZipFile zip) {
         List<ZipEntry> all = Collections.list(zip.entries()).stream().filter(e -> !e.isDirectory() && e.getName().endsWith(".apk")).map(e -> (ZipEntry) e).toList();
         List<ZipEntry> splits = all.stream().filter(e -> e.getName().startsWith("splits/") || e.getName().startsWith("asset-slices/")).toList();
         if (!splits.isEmpty()) return splits;
@@ -99,7 +99,7 @@ public final class ApkSet {
         return root;
     }
 
-    private static void fail(String message) {
+    static void fail(String message) {
         System.err.println("apklayer: " + message);
         System.exit(1);
     }
@@ -142,7 +142,7 @@ public final class ApkSet {
         return null;
     }
 
-    private static List<String> strings(ByteBuffer b, int at) {
+    static List<String> strings(ByteBuffer b, int at) {
         int count = b.getInt(at + 8), flags = b.getInt(at + 16), start = at + b.getInt(at + 20);
         boolean utf8 = (flags & 0x100) != 0;
         List<String> out = new ArrayList<>(count);

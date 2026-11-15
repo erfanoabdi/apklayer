@@ -20,6 +20,9 @@ static bool hasRow(const Rows& rows, const std::string& first, size_t col = 0, c
 int main(int argc, char** argv) {
     const char* instance = getenv("APKLAYER_INSTANCE");
     if (argc != 2 || !instance || std::string(instance) == "default") { fputs("usage: APKLAYER_INSTANCE=<not default> backend-test <app.apk>\n", stderr); return 2; }
+    Preview pv = parsePreview("package\tp.q\nversion\t1.2\nlabel\tApp\nperm\tandroid.permission.ACCESS_FINE_LOCATION\nperm\tandroid.permission.INTERNET\n");
+    CHECK(pv.label == "App" && pv.detail == "p.q \u00b7 1.2" && pv.permissions == "Asks for: Access fine location, Internet", "the install preview's rows");
+    CHECK(parsePreview("package\tp.q\nlabel\tApp\n").permissions == "Asks for no permissions", "a preview without permissions");
     Cli cli(Cli::locate());
     cli.instance = instance;
     printf("cli %s, instance %s\n", cli.exe().c_str(), instance);

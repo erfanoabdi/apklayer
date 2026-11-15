@@ -8,7 +8,9 @@ Two directions, both through the desktop's own mechanisms (freedesktop shared-mi
 `.xapk`, `.apkm`, which `data/apklayer-mime.xml` defines (`application/x-android-apks|xapk|apkm`, subclasses of zip), and `Exec=apklayer-manager %F`.
 Opening one in GNOME Files, Dolphin or `xdg-open` starts the manager (one process for all the files a file manager selects) with its install
 dialog filled in with the first file; Install converts and installs (`apklayer install`, which takes the split formats), the busy overlay is the progress,
-and the dialog of the new app offers Open. A second selected file follows the first one's install.
+and the dialog of the new app offers Open. The dialog first shows the app's name, icon, version and permissions, read from the file's manifest without converting it
+(`apklayer inspect <file> <icon.png>`, `apklayer.tools.ApkPreview`; a label or icon that needs more than a plain string or a PNG in resources.arsc falls back to the package name
+and no icon). A second selected file follows the first one's install.
 
 Packaging: meson installs the entry and `mime/packages/apklayer.xml`; the deb and rpm scripts run `update-mime-database` and `update-desktop-database`
 (dpkg's triggers do it too); the Flatpak exports the entry and the mime package under its app id; `manager/install-desktop.sh` does the same in
@@ -42,7 +44,10 @@ ones is pruned) and the app starts (or is told, if it runs: `onNewIntent`, the r
 launches (`APKLAYER_INTENT_FILE`). `HostOpenedFiles` (registered in every app JVM) serves exactly that Uri: read only, `OpenableColumns`
 (`_display_name`, `_size`), `getType`. The app never sees the host path or the folder.
 
-Limits: not under the per-app sandbox yet (the app's data is its uid's; `open` says so); one file per launch (a file manager that selects several
+Under the per-app sandbox the app's data is its uid's and out of the user's reach, so the copy lies in the app's own tmp (`<instance>/tmp/sandbox-<uid>/opened/<token>/`, its `java.io.tmpdir`; the folder 0711,
+the files 0644; `HostOpenedFiles` looks in both places). Other apps do not see that folder.
+
+Limits: one file per launch (a file manager that selects several
 runs the handler once per file, `%f`, and each reaches the running app in `onNewIntent`); the copy is whole (a very large file takes its time).
 
 ## Tests
