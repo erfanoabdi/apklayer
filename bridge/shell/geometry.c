@@ -25,7 +25,7 @@ static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, 
         }
         return;
     }
-    int maxw = aw * 85 / 100, maxh = ah * 85 / 100 - DECOR_H;
+    int maxw = aw * 85 / 100, maxh = ah * 85 / 100 - (w->ssd ? 0 : DECOR_H);  /* a compositor-drawn bar is outside our window geometry */
     *fw = lw; *fh = lh;
     if (maxw <= 0 || maxh <= 0 || lw <= 0 || lh <= 0 || (!grow && lw <= maxw && lh <= maxh)) return;
     if ((long)lw * maxh > (long)lh * maxw) { *fw = maxw; *fh = (int)((long)lh * maxw / lw); }

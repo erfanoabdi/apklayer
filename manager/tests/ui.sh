@@ -70,6 +70,11 @@ if [ -z "${APKLAYER_BINDER:-}" ]; then  # the Hardware page's binder switch (the
     "$cli" binder | grep -q "^binder	userspace	instance$" || { echo "FAIL the Hardware page did not choose the userspace binder again"; exit 1; }
     echo "ok   the binder chosen through the Hardware page (and the kernel's setup command shown when its devices are missing)"
 fi
+# the Properties page's navigation-bar row (navbar auto|on|off): "On" is stored in the instance's settings
+"$m" --screenshot "$shots/ui-10-navbar.png" --size 1100x900 --page 2 --click On --wait-refresh 1
+"$cli" settings | grep -qx "navbar	on" || { echo "FAIL the navigation bar row did not set navbar on"; exit 1; }
+"$cli" settings set navbar auto >/dev/null
+echo "ok   the navigation bar setting through the Properties page"
 "$cli" stop >/dev/null
 echo "PASS manager UI"
 "$(dirname "${BASH_SOURCE[0]}")/ui-updater.sh" "$@"

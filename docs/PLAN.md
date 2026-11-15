@@ -25,7 +25,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 ## Graphics
 - Vulkan presentation untested on AMD.
 - KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
-- `fit_size` reserves 46 px (`DECOR_H`) also under server-side decorations: the first window is 542 px high where 588 would fit.
 - Lipstick: a mouse over the navigation-bar strip (pointer.c `in_remote_strip`) is the bar's since 2026-11-15; needs a human check (no pointer device on the phone to try it).
 - Sailfish keeps the letterbox; its rotation is unchecked.
 
@@ -34,7 +33,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Halium camera: preview rotation needs a human check (preview and still agree on both phones; whether the picture is upright was not judged). `camera`/`media = device` work (libhidl 0005, `tools/halium/hidl-list.sh`). NewPipe playback with `media = device` is blocked by YouTube extraction ("Could not parse website") on the phones' network, not by the stack. The X23 `hello.camera` large still is cut by the landscape-to-portrait activity recreation (test-app race).
 
 ## Input / IME
-- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): the manager Settings row for it is not compiled in any host build (build the manager once); pixel-check the light scheme; `haptic_feedback_enabled` is not modelled by the hub's vibrator.
+- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): pixel-check the light scheme; `haptic_feedback_enabled` is not modelled by the hub's vibrator.
 - Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); stylus slider and tool wheel are not delivered; AXIS_TILT/ORIENTATION follow a remembered InputReader formula, not a checked source.
 - Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `KeyEvent.getUnicodeChar()` for non-Latin keys in apps that read key events.
 - text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own).
@@ -73,7 +72,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - System-app reinstall on runtime change: unchecked on a real upgrade or phone.
 
 ## Manager
-- `manager/tests/ui-updater.sh` (called at the end of `ui.sh`) fails on the UTM VM, also on the unmodified manager: first-run labels not found at the 100 ms input time, and the VM's codename `resolute` has no package in the release fixture.
 
 ## Hardware
 - Sailfish phone: needs a person for the Maliit-hide check, a finger on the keypad and the lock code; Maliit's sideways keyboard in a landscape app; the manager's own text field has no keyboard under Lipstick (Slint has no Maliit client); sensorfw rotation by physically turning the phone; Bluetooth, scoped storage not run.
@@ -110,3 +108,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Sailfish has no bash (busybox): phone tests must be POSIX sh or Python.
 - Share / Open with on the X23 is not driven through the UI by `phone-test.sh`.
 - Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
+- Manager UI test (`manager/tests/ui.sh`) on the UTM VM: step "the new instance is not listed" fails (`--wait-refresh 1` returns on a refresh before the instance exists; same race kind as the first-run one), so the Properties navbar step after it is only checked on its own; `ui-updater.sh` needs an installed package's CLI (`APKLAYER_CLI`), none is on the VM: never run there end to end.
+
+- Manager `ui.sh` on the UTM VM fails at "the new instance is not listed" (`--wait-refresh 1` returns before the instance exists).
+- `manager/tests/ui-updater.sh` needs an installed package's CLI (`APKLAYER_CLI`); never run end to end: run once on the tester PC or a VM with the deb.
+- `kde-window` cannot run on the UTM VM (no KWin; `tests/lib/kwin.py` journalctl cursor parse fails): run it on the KDE PC to cover the SSD first-window size.
