@@ -70,7 +70,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Native bridge (x86_64)
 - Diagnostics: `tools/ace/` (bpftrace on the translator and glibc, `pgr-netcut.sh`); translator notes in `docs/X86_64.md`.
-- Fennec on x86: a guest `libmegazord` double free is quarantined (not a crash).
+- Fennec on x86: `gecko-page.py` crashes in a fresh PC tree built from main (SEGV at libxul+0x3e88716 right after the GPU service bind), with aac5755a and 4444f699; it passed on 2026-11-15 before several merges (a regression to bisect). A guest `libmegazord` double free is quarantined.
+- Translator: ops on a stale joined `pthread_t` should answer ESRCH; a guest fault without a guest handler still goes to HotSpot's handler.
 - No translation cache across starts.
 - Telegram has no x86_64 FOSS APK to test.
 - The guest JVM finds the host's `libjsig`: watch for a later SIGSEGV handler.
