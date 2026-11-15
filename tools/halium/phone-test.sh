@@ -30,6 +30,6 @@ if [ $os = ut ]; then
 fi
 ssh "A=$A R=$R bash $R/phone-checks.sh $os $*"; rc=$?
 [ $woke = 1 ] && echo "ut-lock: $(ssh "bash $R/ut-unlock.sh off $R")"
-ssh "APKLAYER_INSTANCE=ptest $A stop >/dev/null 2>&1; APKLAYER_INSTANCE=ptest $A instance remove ptest >/dev/null 2>&1; rm -rf $R"
+ssh "APKLAYER_INSTANCE=ptest $A stop >/dev/null 2>&1; APKLAYER_INSTANCE=ptest $A instance remove ptest >/dev/null 2>&1; pkill -f '[-]-instance ptest ' >/dev/null 2>&1; rm -rf $R"  # a delayed app-spare outlives stop and blocks the next race run
 echo "phone-test $os: $([ $rc = 0 ] && echo PASS || echo FAIL)"
 exit $rc
