@@ -12,13 +12,10 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- `webview` group fails in 3 of 4 runs on the PC at baseline (cookie assert).
 - UTM cold start has silent gaps of 3-6 s with idle CPU after "hub registered" (around `HostProviders`/`HostLocation`): `input` and `identity-matrix` fail 3 of 3 runs there, also at commit 52787c75.
 - The app log cap (256 MB, `APKLAYER_APP_LOG_CAP`) is not strict: a few lines from a writer other than the launcher's pipe arrive after the cap note.
-- `system-apps` `location`: mode 3, network false (fails unsandboxed too).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
-- Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
-- Termux: a failed exec in a forked child may still hang in `exit()` (fix untested in Termux itself).
+- Fennec on x86 with a profile lacking the test prefs: the Gecko parent aborts ~45 s in (Breakpad hides the first fault; a spare JVM ends in `pthread_join` SEGV at 0x8; guest `libmegazord` double free is quarantined). `debug.apklayer.log` is not the cause.
 - Ubuntu Touch: relaunching a running app starts a pointless shell (needs the phone).
 - FCL: no new frame after a window resize.
 - Phone with the deb: `HubStartup.connect` hangs in `pingBinder` after 4-5 NewPipe launches.
@@ -86,14 +83,12 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - Modules: `dl_iterate_phdr` lists 279 of 320 (arm64); the staged graphics stack (libEGL, libGLESv*, libvulkan) stalls the app at start when loaded eagerly. libc exports `bionic_*` names: `libc.so` is the mapping itself, so a stand-in with Android's names cannot be the same file.
 - x86: `HWCAP2` is 0, exe/AT_EXECFN `/system/bin/arm64/app_process64` (the translator names its guest program; needs a change in its tree), `dladdr` names, `/proc/net/unix` (EACCES for the translated guest only; readable on arm64 and for the host user; cause not found).
 - Process attributes: main thread id; property count 231 of 635 (Waydroid's full list is not in `tests/identity/results`).
-- `environment` group: `JNI_CreateJavaVM` and `JNI_GetDefaultJavaVMInitArgs` report "no symbol" on Parallels (2 checks fail).
 - Java: `String.class.getClassLoader()`, `Object.class.getResource`, ArrayStoreException text, StackOverflow depth, main thread id 2.
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with the INSTALL.md checklist.
 - Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
-- `system-apps` `location` fails (also unsandboxed).
 - Shared spare, cold component hosts.
 - Isolated processes run as the app uid. Design: own uid (AID_ISOLATED 99000+) in the userns map, a view kind in `sandbox-exec`, caller uid to package in the hub.
 
