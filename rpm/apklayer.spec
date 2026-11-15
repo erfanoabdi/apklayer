@@ -95,6 +95,8 @@ sed -i -e 's|^Icon=.*|Icon=%{_datadir}/icons/hicolor/256x256/apps/apklayer.png|'
 # the Lomiri content hub peer is Ubuntu Touch's
 rm -f %{buildroot}%{_datadir}/applications/apklayer-share.desktop
 rm -rf %{buildroot}%{_datadir}/lomiri-content-hub
+# no link of the package may dangle or point into the build root (libjavacore.so did)
+APKLAYER_BUILD_ROOT=%{_builddir} sh tools/check-runtime-links.sh %{buildroot}
 
 %post
 systemctl daemon-reload >/dev/null 2>&1 || :

@@ -24,7 +24,7 @@ done
 art="$native/android-root/apex/com.android.art"
 if [ -L "$art" ] && [ ! -e "$art/lib64/libjavacore.so" ] && [ -e "$native/android-libs/libjavacore.so" ]; then
     src="$(readlink "$art")" && rm "$art" && mkdir -p "$art/lib64" && for f in "$src"/lib64/*; do ln -sfn "$f" "$art/lib64/"; done
-    ln -sfn "$native/android-libs/libjavacore.so" "$art/lib64/libjavacore.so"
+    ln -sfn ../../../../android-libs/libjavacore.so "$art/lib64/libjavacore.so"  # relative: the runtime dir may move
 fi
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
 echo "apklayer: 1/3 patching the framework jars" >&2
