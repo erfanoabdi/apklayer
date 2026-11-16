@@ -111,6 +111,7 @@ static const struct { const char *name; uint64_t (*f)(uint64_t, int, int); const
 #include "cases_wide.inc"
 };
 extern int kernels_run(int n, const char *pre, const char *verbose);
+extern int threads_run(void);
 
 extern char __start_nd_marks[], __stop_nd_marks[];
 static char cfg[256];
@@ -131,8 +132,6 @@ static int wanted(const char *name, const char *pre) {  /* pre: comma separated 
 }
 static sigjmp_buf jb; static volatile int armed;
 static void on_sig(int s) { if (armed) siglongjmp(jb, s); signal(s, SIG_DFL); raise(s); }
-static volatile int idcode;
-static void on_id(int s, siginfo_t *si, void *u) { (void)s; (void)u; idcode = si->si_code; siglongjmp(jb, 1); }
 int neondiff_run(void) {
   char nb[16], pb[200], vb[120]; const char *ns = opt("n", nb, sizeof nb), *pre = opt("pre", pb, sizeof pb), *ver = opt("v", vb, sizeof vb);
   int n = ns ? atoi(ns) : 1000; { char fb[20]; const char *fm = opt("fm", fb, sizeof fb); if (fm) fpsr_mask = strtoull(fm, 0, 16); fm = opt("fpcr", fb, sizeof fb); if (fm) nd_fpcr = !strcmp(fm, "mix") ? 1ull << 63 : strtoull(fm, 0, 16);  /* mix: FZ, DN and RMode of every run from the random NZCV bits */ }
@@ -151,10 +150,7 @@ int neondiff_run(void) {
     if (sg) fprintf(stderr, "[nd] %s SIG%d\n", T[i].name, sg); else fprintf(stderr, "[nd] %s %016llx\n", T[i].name, (unsigned long long)h); fflush(stderr);
   }
   kernels_run(n, pre, ver);
-  /* which translator build ran: an undefined instruction's si_code is ILL_ILLOPC (1) with patch 0060 (Nov 14+), SI_TKILL (-6) before; last, a guest SIGILL may keep later regions from gearing up */
-  struct sigaction sa; memset(&sa, 0, sizeof sa); sa.sa_sigaction = on_id; sa.sa_flags = SA_SIGINFO | SA_NODEFER; sigaction(SIGILL, &sa, 0);
-  if (!sigsetjmp(jb, 1)) __asm__ volatile(".inst 0x00000000");
-  fprintf(stderr, "[id] sigill si_code=%d\n", idcode); fflush(stderr);
+  if (strstr(cfg, "thr")) threads_run();
   return 0;
 }
 #if defined(__ANDROID__) && !defined(NEONDIFF_MAIN)
