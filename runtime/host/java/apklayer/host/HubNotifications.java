@@ -62,7 +62,7 @@ final class HubNotifications {
         if (!icon.isEmpty()) hints.put("image-path", icon);
         int popup = desktop.show(pkg, record.desktopId, icon, summary, body, actions, hints);
         synchronized (posted) { record.desktopId = popup; }
-        System.out.println("[apklayer-hub] notification popup=" + popup + " " + shell);
+        System.out.println("[apklayer-hub] notification popup=" + popup);  // tests/vm/hub.py and push.py read the id after "popup=": nothing may follow it
     }
 
     private static boolean silentChannel(String pkg, String channelId) {
@@ -131,7 +131,7 @@ final class HubNotifications {
         System.out.println("[apklayer-hub] popup " + id + " closed by the desktop, reason " + reason);
         Key[] key = new Key[1];
         Posted record = byDesktop(id, key);
-        if (record == null || reason != DISMISSED_BY_USER || System.currentTimeMillis() - record.clickedAt < 3000) return;
+        if (record == null || reason != DISMISSED_BY_USER || System.currentTimeMillis() - record.clickedAt < 500) return;
         synchronized (posted) { posted.remove(key[0]); }
         System.out.println("[apklayer-hub] notification dismissed " + key[0]);
         fire(record.notification.deleteIntent);
