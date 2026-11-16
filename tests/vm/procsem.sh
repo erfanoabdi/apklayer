@@ -24,7 +24,7 @@ for p in ('/proc/self/maps', '/proc/self/smaps', '/proc/self/numa_maps', '/proc/
     for op in ('lseek(END 0)', 'lseek(DATA 0)'):
         if not g(op).startswith('-1|22'): bad.append(p + ' ' + op + ' ' + g(op))
     if not g('svc-lseek(END 0)').startswith('-22'): bad.append(p + ' svc-lseek ' + g('svc-lseek(END 0)'))
-    for op in ('read(65536)', 'svc-read(65536)', 'read(1M)', 'readv(10,4096,10)'):
+    for op in ('read(65536)', 'svc-read(65536)', 'read(1M)'):
         n = int(g(op).split('|')[0] or 0)
         if not 0 < n <= 4095: bad.append(p + ' ' + op + ' returned ' + str(n))
     m = re.search(r'max=(\d+) .*badend=(\d+) badstart=(\d+)', g('loop4096'))

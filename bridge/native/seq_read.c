@@ -2,7 +2,7 @@
  * memfd "[guest /proc/self/maps]") read like the kernel's seq_file: a read returns whole records, at most 4095 bytes (a record that does not fit in it
  * grows the buffer), whatever the count; fstat says size 0 and lseek(SEEK_END/DATA/HOLE) fails with EINVAL. A memfd returns the full count, cut in the
  * middle of a line, with a size: a reader that sizes its buffer for the page a real read never exceeds (ACE's malloc(4096) slots) overruns it.
- * Reached only through the preload's syscall(): what the translator runs for the guest's read, pread64, readv, preadv, lseek, fstat, close.
+ * (readv/preadv of one buffer too; of several buffers the kernel fills across fills). Reached only through the preload's syscall(): what the translator runs for the guest's read, pread64, readv, preadv, lseek, fstat, close.
  * shortcut: x86_64 hosts only (a native arm64 app's libc does not call syscall()); a chunk start that is not remembered is found at most 8 KB back. */
 #define _GNU_SOURCE
 #if defined(__x86_64__)
@@ -123,17 +123,15 @@ int apklayer_seq_syscall(long nr, const long *a, long *r)
         int vec = nr == SYS_readv || nr == SYS_preadv, at = nr == SYS_pread64 || nr == SYS_preadv;
         long pos = at ? a[3] : raw(SYS_lseek, fd, 0, SEEK_CUR, 0, 0, 0);
         if (pos < 0 || (unsigned long)pos > UINT32_MAX) return 0;
-        long ioc = vec ? a[2] : 0, end = chunk_end(fd, pos);
-        struct iovec iov[32];
+        long end = chunk_end(fd, pos);
+        struct iovec iov;
         unsigned long want = a[2];
-        if (vec) {
-            const struct iovec *in = (const struct iovec *)a[1];
-            if (ioc < 1 || ioc > 32) return 0;
-            for (long i = 0, left = limit(end, pos, ~0UL >> 1); i < ioc; i++) {
-                iov[i].iov_base = in[i].iov_base; iov[i].iov_len = in[i].iov_len < (size_t)left ? in[i].iov_len : (size_t)left; left -= iov[i].iov_len;
-            }
+        if (vec) {  /* the kernel fills a vector of several buffers across fills (measured on 6.8 and 7.0: readv(10,4096,10) returns 4116); one buffer is a plain read */
+            if (a[2] != 1) return 0;
+            iov = *(const struct iovec *)a[1];
+            iov.iov_len = limit(end, pos, iov.iov_len);
         } else want = limit(end, pos, want);
-        *r = raw(nr, a[0], vec ? (long)iov : a[1], vec ? a[2] : (long)want, a[3], a[4], a[5]);
+        *r = raw(nr, a[0], vec ? (long)&iov : a[1], vec ? a[2] : (long)want, a[3], a[4], a[5]);
         if (*r > 0 && !at && pos + *r == end) next_chunk[fd] = (uint32_t)(pos + *r);
         return 1;
     }
