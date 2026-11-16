@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-16: PGR death found: the preload's pthread_create trampoline (agent H)
+- Native arm64 on AWS with main self-aborts PGR 20-30 s after launch, deb 0.4.18 survives (alive to 100 s). Bisecting the preload (`libapklayer-preload.so`) by commit and by variant: commit 1b0169f5 (`bridge/native/vma_names.c`, `[anon:stack_and_tls:<tid>]` thread-stack names and scudo regions) is the first bad one; a HEAD preload with `pthread_create` passed straight through survives 4/4 (55 s and 100 s limits), deb's preload in main survives 3/3; trampoline only (no names, no scudo) still dies. Everything else tried (properties, hwservicemanager, apex/art files, converter ABI) does nothing.
+- Fix: `vma_names.c` removed from the preload (stack/scudo names gone; `tests/native/proc-views.c` expects none). To verify: translated runs on the tester PC and the native control on AWS.
+
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 

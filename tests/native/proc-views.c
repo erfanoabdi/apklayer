@@ -68,7 +68,8 @@ int main(void)
                              {"MyGameThread", "MyGameThread"}};
     for (size_t i = 0; i < sizeof probes / sizeof *probes; i++) pthread_create(&probes[i].id, NULL, named, (void *)probes[i].thread);
     usleep(300000);
-    /* the thread stacks and the allocator's regions carry Android's names in an app (vma_names.c), none in a service */
+    /* no thread-stack or allocator names: they needed a pthread_create trampoline in the preload (vma_names.c, removed 2026-11-16), and the extra thread
+     * start frame made Punishing: Gray Raven's anti-cheat abort the game 20-30 s after launch (native arm64 on AWS too) */
     int stacks = 0, primary = 0, secondary = 0;
     FILE *maps = fopen("/proc/self/maps", "r");
     assert(maps);
@@ -79,7 +80,7 @@ int main(void)
         secondary |= strstr(line, "[anon:scudo:secondary]") != NULL;
     }
     fclose(maps);
-    int named_vmas = getenv("APKLAYER_OWN_DATA") != NULL;  /* any app process, whatever the view */
+    int named_vmas = 0;
     assert(stacks == named_vmas && primary == named_vmas && secondary == named_vmas);
     char names[sizeof probes / sizeof *probes][64];
     int seen = 0;
