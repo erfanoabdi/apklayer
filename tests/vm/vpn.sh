@@ -60,6 +60,7 @@ printf '%s' "$status" | grep -aq "^VPN	hello.vpn	hello-vpn	since .*	tunapk[0-9a-
 if=$(vpniface)
 ip -d link show "$if" | grep -q "tun type tun.* user $(id -un)" || fail "$if is not a TUN owned by $(id -un): $(ip -d link show "$if")"
 ip -4 addr show dev "$if" | grep -q "inet 10.88.0.1/24" || fail "no address on $if"
+for _ in $(seq 20); do ip route show 10.88.0.0/24 | grep -q "dev $if.*static" && break; sleep 0.25; done  # the routes come after the app's first protect() or 1.5 s (HubVpn.lateRoutes)
 ip route show 10.88.0.0/24 | grep -q "dev $if" || fail "no route to 10.88.0.0/24 on $if"
 [ "$(ip route show default)" = "$(printf '%s\n' "$routes" | grep '^default')" ] || fail "the default route changed: $(ip route show default)"
 [ "$(nmconn)" = 1 ] || fail "NetworkManager has no connection of the VPN"

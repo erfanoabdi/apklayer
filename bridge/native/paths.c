@@ -291,6 +291,17 @@ static bool own_data_path(char **path)
     return false;
 }
 
+/* The app's own data prefixes as plain strings (raw_syscall.c's libc-free handler maps /data/data/<pkg> with them): false before the process knows its package. */
+bool apklayer_own_data_paths(char *pkg, size_t pn, char *dir, size_t dn, char *device, size_t vn)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!o || !o->dir || !o->device || strlen(o->pkg) >= pn || strlen(o->dir) >= dn || strlen(o->device) >= vn) return false;
+    strcpy(pkg, o->pkg);
+    strcpy(dir, o->dir);
+    strcpy(device, o->device);
+    return true;
+}
+
 /* The app's installed code under Android's spelling: /data/app/~~<tag>/<pkg>-<tag>/base.apk, split_<name>.apk, lib/<abi>/<lib>.so (Android 11+; the tag is random there
  * and any here). The installer keeps base.apk, the splits and a flat lib/ in <dataHome>/apklayer/apps/<pkg>, so this maps the first two as they are and lib/<abi>/x
  * to lib/x. Only the app's own package. Always on: no other file has such a name; whether the app is shown these spellings (ApplicationInfo.sourceDir, nativeLibraryDir)

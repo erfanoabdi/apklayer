@@ -25,9 +25,16 @@ app: protect(socket) --hub VPN op "protect" (HubProtocol 68)--> guard: setsockop
   and the more specific halves win, so removing the TUN restores everything, and the machine's LAN routes (more specific than /1) stay reachable. (Android
   would send LAN traffic through the VPN too; here it does not. Deliberate: safer.)
 - **protect()**: the guard binds the socket to the interface the host's own traffic left by when the VPN was established (the lowest-metric default route that
-  is not a VPN): `SO_BINDTODEVICE` is allowed without root since Linux 5.7. Only the VPN's owner may protect. `SO_MARK` needs `CAP_NET_ADMIN` and is not used.
-  A bound socket's route lookup is restricted to that interface (so loopback and LAN addresses of other interfaces are not reachable from a protected socket;
-  WireGuard/OpenVPN protect only their tunnel sockets to the server).
+  is not a VPN): `SO_BINDTODEVICE` is allowed without root since Linux 5.7 (once per socket: a socket protected twice, as OpenVPN does, is accepted when it is bound
+  to that interface already). Only the VPN's owner (or, before `establish()`, an app the person agreed to) may protect. `SO_MARK` needs `CAP_NET_ADMIN` and is not
+  used. A bound socket's route lookup is restricted to that interface (so loopback and LAN addresses of other interfaces are not reachable from a protected socket;
+  WireGuard/OpenVPN protect only their tunnel sockets to the server). **Before `establish()`** (OpenVPN protects its transport socket first, then its `/1` routes would
+  take the connection): the first such call starts `apklayer vpn-guard --protect-only` (the protect server alone, bound to the interface of that moment); the VPN's own
+  guard takes the socket path over at `establish()`, and the routes then come with the device.
+- **Late routes** (NetworkManager path): an app that protects only *after* `establish()` (WireGuard's Go library creates and uses its socket in `wgTurnOn`, protects it
+  right after) sent its first handshake datagram into its own tunnel (lost; WireGuard retries after 5 s: a handshake took 5 to 10 s). When no protect() came before
+  `establish()`, the connection comes up without its routes and `HubVpn.lateRoutes` installs them (`nmcli device modify <if> ipv4.routes ...`, a live reapply) after the
+  owner's first successful protect(), or after 1.5 s for an app that never protects. The pkexec helper path makes its routes with the device (not deferred).
 - **Lifetime**: the VPN ends with the owner's descriptor. The guard watches the TUN's carrier over netlink (`RTMGRP_LINK`): when the last descriptor closes
   (the app closed it, was killed or crashed) it runs the teardown (`nmcli connection delete`) and tells the hub, which ends the VPN. If the hub dies, the
   guard's stdin closes and it tears down too; `apklayer stop` and the next hub's start run `apklayer vpn sweep` (deletes the instance's `apklayer-vpn-<id>-*`
@@ -74,6 +81,13 @@ an unattended TUN with routes for another process. **Ubuntu Touch** has NetworkM
 
 ## Tests
 
+Local-peer WireGuard (`tests/vm/vpn-wireguard-local-peer.py`, Mac side, after `tests/run vpn`; not a group: it needs a second LAN host with `wg` and passwordless sudo,
+`APKLY_VPN_PEER`, default the owner's PC): the real WireGuard APK on the VM against a throwaway `wgapk0` peer with fresh keys, switched on through the app's UI
+(`tests/vm/vpn-wireguard.py`): established with the default `RAW_SYSCALL_VIEW` (no hand-made directory; the Go library's UAPI socket `cache/wireguard/<ifname>.sock` is made at the mapped path), the peer answers through the TUN, the peer's first handshake is
+under a second after `establish()` (a lost first datagram costs 5 s), and a connection deleted with `nmcli` revokes the app. OpenVPN for Android against a local
+`openvpn` server (TLS, TCP, certificates made with `openssl`, `redirect-gateway def1`; the profile imported with `apklayer open de.blinkt.openvpn x.ovpn`) was driven by
+hand with scripted input: protect() before `establish()` succeeds, TLS completes, "Initialization Sequence Completed" (see Untested for its data channel).
+
 `tests/run vpn` (group `vpn`, alone: it changes the host's network) runs `tests/vm/vpn.sh` with `tests/apps/hello-vpn` (an echo tunnel: ICMP echo and UDP):
 unit (real device owned by the user, address, route, ping and UDP from the host answered by the app, resolver, status, disconnect/onRevoke, device and
 connection gone), crash (the app killed), default route (guarded: ssh peer `/32`, 60 s watchdog; the active network is the VPN, an unprotected datagram goes into
@@ -90,7 +104,9 @@ the TUN and a `protect()`ed one does not, `ip route` identical afterwards). The 
 ## Untested / needs a person
 
 - The hub's pkexec path (`HubVpnNet.viaHelper`: only the helper binary was run, as root through `sudo`, never from the hub through pkexec).
-- Real VPN apps (2026-11-16, UTM VM, scripted input): WireGuard 1.0.20260102 (import from file, toggle) establishes against a WireGuard peer that answers (a local one: handshake, ping through the tunnel, host routes, manager disconnect with onRevoke, device and connection gone); with the owner's config the server never answered. OpenVPN for Android 0.7.41 starts, connects over TCP and does TLS with the owner's server, which then wants an OAuth2 web login (no tunnel). Open: `protect()` before `establish()`, the first WireGuard handshake through the TUN, Go raw syscalls at Android paths (PLAN).
+- Real VPN apps (2026-11-16, UTM VM, scripted input): WireGuard 1.0.20260102 (import from file, toggle) establishes against a WireGuard peer that answers (a local one: handshake, ping through the tunnel, host routes, manager disconnect with onRevoke, device and connection gone); with the owner's config the server never answered. OpenVPN for Android 0.7.41 starts, connects over TCP and does TLS with the owner's server, which then wants an OAuth2 web login (no tunnel). Fixed since: `protect()` before `establish()`, the first WireGuard handshake through the TUN, Go raw syscalls at Android paths (raw_syscall.c: libc-free answers for mkdirat/unlinkat/bind/connect/inotify_add_watch and /proc/sys opens), an outside-deleted connection (see above). Open: OpenVPN's data channel (below).
+- OpenVPN for Android's data channel (2026-11-16, local server): TLS completes and the app reports "Initialization Sequence Completed", but its `libovpnexec` child sits
+  in `ppoll` on one descriptor and never reads the TUN (the TUN's packets queue up unread; the server sees no traffic). Cause unknown, not tried with `APKLAYER_RAW_SYSCALL_VIEW=off` (PLAN).
 - The pkexec dialog on a real desktop (the helper's logic is tested as root through `sudo -n` with `PKEXEC_UID`).
 - A real VPN provider end to end; Sailfish; KDE/Lomiri polkit agents; the default-route case against a working VPN resolver (the test checks that
   resolved lists the app's DNS as the default route, not that names resolve through it).
