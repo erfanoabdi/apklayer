@@ -1,10 +1,9 @@
 #!/bin/bash
-# Writes ace-fsdiff.bt (next to this script) for this host's arch: tools/ace/mk-fsdiff.sh; use with EXTRA_BT=ace-fsdiff.bt pgr-timeline.sh
+# Writes ace-fsdiff.bt (next to this script) for this host's arch; use it with EXTRA_BT=ace-fsdiff.bt tools/ace/pgr-timeline.sh
 H=$(cd "$(dirname "$0")" && pwd)
-or() { local s= i; for i in "$@"; do s="${s:+$s || }args->id == $i"; done; echo "$s"; }
-eqs() { local s= i; for i in "$@"; do s="${s:+$s || @nr[tid] == }$i"; done; echo "$s"; }
-case "$(uname -m)" in
- aarch64) I1="56 437 48 439 79 291 78"; I0="43 8 9"; GD=61; ST="79"; OP="56 437"; MO=16;;
- *)       I1="257 437 269 439 262 332 267"; I0="2 21 4 6 89 137 191 192"; GD=217; ST="4 6 262"; OP="2 257 437"; MO=24;;
-esac
-sed -e "s/@IDS1@/$(or $I1)/" -e "s/@IDS0@/$(or $I0)/" "$H/ace-fsdiff.bt.in" > "$H/ace-fsdiff.bt"
+L="openat:filename openat2:filename faccessat:filename faccessat2:filename newfstatat:filename statx:filename readlinkat:pathname statfs:pathname getxattr:pathname lgetxattr:pathname mknodat:filename mkdirat:pathname unlinkat:pathname renameat:oldname renameat2:oldname symlinkat:newname linkat:newname utimensat:filename fchmodat:filename truncate:path"
+[ "$(uname -m)" = aarch64 ] || L="$L open:filename access:filename newstat:filename newlstat:filename readlink:path mknod:filename mkdir:pathname unlink:pathname rename:oldname creat:pathname chmod:filename"
+{ cat "$H/ace-fsdiff.bt.in"
+  for e in $L; do n=${e%%:*}; a=${e##*:}
+    echo "tracepoint:syscalls:sys_enter_$n / @g[pid] / { \$k = str(args->$a); @c[\"$n\", \$k]++; if (@c[\"$n\", \$k] <= 10) { @pr[tid] = 1; printf(\"P %lu %d $n %s\\t%s\\n\", nsecs, tid, \$k, comm); } }"
+  done; [ "$(uname -m)" = aarch64 ] || cat "$H/ace-fsdiff-guest.bt.in"; } > "$H/ace-fsdiff.bt"
