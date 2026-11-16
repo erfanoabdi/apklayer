@@ -3,6 +3,23 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: PGR maps_view=arm64 A/B (patch 0051): no effect
+
+- `pgrshared`, one locked batch, mode forced to `lite-translate-or-interpret` in overrides.prop for the batch, lib `383d5a48` swapped in by rename and `985ec9c9` restored; interleaved, EXIT seconds (true death):
+
+| run | maps_view off | maps_view=arm64 (no [vsyscall]/[vvar_vclock], x86-named file anonymous) |
+|---|---|---|
+| 1 | 35.4 | 36.1 |
+| 2 | 33.9 | 32.8 |
+| 3 | 34.2 | 33.9 |
+| 4 | 33.2 | 23.1 (SIGABRT) |
+| 5 | 35.8 | 29.2 |
+| 6 | 36.1 | 35.3 |
+| 7 | 33.6 | 33.2 |
+| 8 | 31.5 | 35.3 |
+
+- 16 of 16 die at 23-36 s; the two x86-only maps tells are not the trigger. Not tried (held on the lead's order until the native-control and report-block agents answer): hiding the host-sized unnamed regions, an arm64-like address layout (x86_64 user space stops at 47 bits).
+
 ## 2026-11-16: PGR maps view knob (patch 0051), build log
 
 - Build log (`gsi_x86_64 userdebug`, incremental, blocking `flock ~/los24-build.lock`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: served maps carry x86_64-only tells (`[vsyscall]`, `[vvar_vclock]`, a lib named `*-x86_64-android.so`); edit: kernel_api/open_emulation.cc only. `berberis.maps_view=arm64` (BERBERIS_MAPS_VIEW) drops those two lines and anonymises x86-named files; default off (a combined build changes nothing).
