@@ -118,7 +118,8 @@ export component UpdateBanner {
                     progress: Backend.update-progress;
                     indeterminate: Backend.update-progress < 0;
                 }
-                HorizontalLayout {
+                // not an empty layout while updating (no button): it took the card's whole free height on the phone (the banner grew to half the screen)
+                if !Backend.updating || Backend.update-notes-url != "" : HorizontalLayout {
                     alignment: end;
                     spacing: MaterialStyleMetrics.spacing_8;
                     if Backend.update-notes-url != "" : TextButton { text: "What's new"; clicked => { Backend.open-notes(); } }
