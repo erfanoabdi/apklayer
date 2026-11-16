@@ -194,13 +194,13 @@ diff --git a/runtime_primitives/interpret_helpers_arm64.cc b/runtime_primitives/
 -#ifdef __GLIBC__
 -  // Our old 2.17 glibc has a bug resulting in raise() failing after any CLONE_VM.
 -  // Work around by calling tgkill directly.
-+  // apklayer patch (0060): knob berberis.sigill_code (env BERBERIS_SIGILL_CODE) = "kernel": the architectural siginfo of an undefined
++  // apklayer patch (0060): knob berberis.sigill_code (env BERBERIS_SIGILL_CODE; default on, "off" = the old tgkill): the architectural siginfo of an undefined
 +  // instruction (ILL_ILLOPC, si_addr = the instruction), not tgkill's SI_TKILL with the sender's pid/uid in the union; a guest SIGILL
 +  // handler (an anti-emulation probe: udf, an unallocated encoding, a privileged mrs) reads si_code. Sending kernel-style siginfo to
 +  // oneself is permitted.
 +  static const bool kernel_siginfo = [] {
 +    ConfigStr knob("BERBERIS_SIGILL_CODE", "berberis.sigill_code");
-+    return knob.get() != nullptr && knob.get()[0] == 'k';
++    return knob.get() == nullptr || knob.get()[0] != 'o';  // default ON (hello-isa and acediff identical to hardware); "off" = the old tgkill
 +  }();
    pid_t pid = syscall(__NR_getpid);
    pid_t tid = syscall(__NR_gettid);
