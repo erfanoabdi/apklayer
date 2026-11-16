@@ -81,7 +81,10 @@ public final class DelegateLastClassLoader extends PathClassLoader {
 
         // Next, check whether the class in question is present in the boot classpath.
         try {
-            return bootLoader().loadClass(name);  // apklayer patch: Object.class.getClassLoader() in libcore
+            Class<?> boot = bootLoader().loadClass(name);  // apklayer patch: Object.class.getClassLoader() in libcore
+            // apklayer patch: the sandbox behind our boot loader also holds the app's own classes (defined by a dex loader): on a device those are
+            // not on the boot class path, so a delegate-last loader defines its own copy.
+            if (!(boot.getClassLoader() instanceof BaseDexClassLoader)) return boot;
         } catch (ClassNotFoundException ignored) {
         }
 
