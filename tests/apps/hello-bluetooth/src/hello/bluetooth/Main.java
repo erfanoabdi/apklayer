@@ -164,7 +164,7 @@ public final class Main extends Activity {
                 peer.getOutputStream().write(("got:" + new String(got, 0, Math.max(n, 0), StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8));
                 client.join();
             }
-            // several clients of one server socket at once: the second connects while the first is still connected and unserved; both are accepted, then served
+            // several clients of one server socket at once: both connect together (each its own BlueZ helper registering the client profile of one UUID), neither accepted yet; then both are accepted and served
             int[] served = {0};
             Thread[] many = new Thread[2];
             BluetoothSocket[] peers = new BluetoothSocket[2];
@@ -176,7 +176,9 @@ public final class Main extends Activity {
                         if (socket.getInputStream().read(new byte[64]) > 0) synchronized (served) { served[0]++; }
                     } catch (IOException failed) { log("server many client failed " + failed); }
                 });
-                many[i].start();
+            }
+            for (Thread t : many) t.start();
+            for (int i = 0; i < many.length; i++) {
                 try { peers[i] = server.accept(8000); } catch (IOException failed) { log("server many accept failed " + failed.getMessage()); }
             }
             for (BluetoothSocket peer : peers) {

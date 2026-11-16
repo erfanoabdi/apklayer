@@ -12,6 +12,8 @@ inline constexpr int kInstallIncompatible = 3, kInstallDowngrade = 4, kInstallUn
 inline constexpr int kUninstallUsedLibrary = 8;
 std::string installApp(const Layout& layout, const Instance& instance, const std::vector<std::string>& apks, bool allowDowngrade = false, bool system = false,
                        const std::string& installer = "");
+// `inspect <file> <icon.png>`: tab-separated package, version, label and perm lines of an APK or archive, its icon written to the second path; nothing is converted or installed (apklayer.tools.ApkPreview).
+int previewApk(const Layout& layout, const std::string& file, const std::string& iconOut);
 // `reconvert <package> | --all-stale`: install again from the kept base.apk and splits (data, uid, system mark kept); a failing app keeps its old
 // install and the others still convert (exit status 1 names the failed ones)
 int reconvert(const Layout& layout, const Instance& instance, const std::string& target);

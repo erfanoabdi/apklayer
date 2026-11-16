@@ -106,6 +106,41 @@
         .build
         .toplevel
         .drvPath;
+
+      # the same again with the sandbox on: that path has its own assertions, and the subordinate
+      # id ranges it hands out are only correct when no two users share one
+      sandboxConfig =
+        (lib.nixosSystem {
+          modules = [
+            ./nix/nixos-module.nix
+            {
+              programs.apklayer = {
+                enable = true;
+                package = packages.apklayer;
+                manager = packages.apklayer-manager;
+                sandbox = {
+                  enable = true;
+                  users = ["alice" "bob"];
+                };
+              };
+
+              # sandbox.users are given their ids as part of their own declaration
+              users.users = {
+                alice.isNormalUser = true;
+                bob.isNormalUser = true;
+              };
+
+              nixpkgs.hostPlatform = system;
+              boot.isContainer = true;
+              system.stateVersion = "25.05";
+            }
+          ];
+        })
+        .config;
+
+      sandboxStarts =
+        map (name: (builtins.head sandboxConfig.users.users.${name}.subUidRanges).startUid)
+        ["alice" "bob"];
     in {
       inherit (packages) apklayer apklayer-manager;
 
@@ -120,6 +155,14 @@
       nixos-module =
         builtins.seq evaluated
         (pkgs.runCommand "apklayer-nixos-module" {} "touch \"$out\"");
+
+      nixos-module-sandbox =
+        builtins.seq sandboxConfig.system.build.toplevel.drvPath
+        (
+          if lib.length (lib.unique sandboxStarts) == lib.length sandboxStarts
+          then pkgs.runCommand "apklayer-nixos-module-sandbox" {} "touch \"$out\""
+          else throw "programs.apklayer.sandbox.users share a subordinate id range (${toString sandboxStarts}): each user needs their own"
+        );
     };
 
     makeFormatter = pkgs: pkgs.alejandra;

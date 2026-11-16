@@ -25,7 +25,8 @@ host = dict(os.environ, XDG_RUNTIME_DIR=str(run_dir))
 for k in ('DISPLAY', 'WAYLAND_DISPLAY'): host.pop(k, None)
 bus = subprocess.run(['dbus-daemon', '--session', '--fork', '--print-address=1', '--print-pid=1'], env=host, capture_output=True, text=True, check=True).stdout.split()
 host.update(DBUS_SESSION_BUS_ADDRESS=bus[0], WAYLAND_DISPLAY=str(run_dir / 'kdenest'))
-os.environ.update(DBUS_SESSION_BUS_ADDRESS=bus[0])  # kwin.py's qdbus6 calls
+os.environ.update(DBUS_SESSION_BUS_ADDRESS=bus[0])  # kwin.py's qdbus calls
+kwin.LOG, kwin.ENV = run_dir / 'kwin.log', dict(host, QT_QPA_PLATFORM='wayland')  # this KWin's log and kscreen-doctor environment
 OUTPUTS = {'Virtual-0': 200, 'Virtual-1': 100}
 TICK = 3500
 STEPS = 4
@@ -54,15 +55,15 @@ def step(n):
         current.append(info['output'])
         on_output(current[0], 'the window opens on an output, at its scale')
         other = [o for o in OUTPUTS if o != current[0]][0]
-        kwin.act(PKG, 'workspace.sendClientToScreen(w, workspace.screens.filter(function (o) { return o.name == "%s"; })[0]);' % other, instance.OUT)
+        kwin.send_to_output(PKG, other, instance.OUT)
         current.append(other)
     elif n == 2:
         on_output(current[1], 'moved to the other output: its scale')
-        out = subprocess.run(['kscreen-doctor', 'output.%s.disable' % current[1]], env=host, capture_output=True, text=True)
+        out = subprocess.run(['kscreen-doctor', 'output.%s.disable' % current[1]], env=kwin.ENV, capture_output=True, text=True)
         case('hotplug: the output goes', out.returncode == 0, out.stderr[-300:])
     elif n == 3:
         on_output(current[0], 'its output disabled: the window and its scale move to the remaining output')
-        subprocess.run(['kscreen-doctor', 'output.%s.enable' % current[1]], env=host, capture_output=True)
+        subprocess.run(['kscreen-doctor', 'output.%s.enable' % current[1]], env=kwin.ENV, capture_output=True)
 
 
 instance.stop()
@@ -73,7 +74,7 @@ app = None
 try:
     assert subprocess.run(['gdbus', 'wait', '--session', '--timeout', '20', 'org.kde.KWin'], env=host).returncode == 0, 'KWin did not start: ' + (run_dir / 'kwin.log').read_text()[-800:]
     for name, scale in OUTPUTS.items():
-        out = subprocess.run(['kscreen-doctor', 'output.%s.scale.%d' % (name, scale // 100)], env=host, capture_output=True, text=True)
+        out = subprocess.run(['kscreen-doctor', 'output.%s.scale.%d' % (name, scale // 100)], env=kwin.ENV, capture_output=True, text=True)
         assert out.returncode == 0, 'kscreen-doctor: ' + out.stdout[-300:] + out.stderr[-300:]
     app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     selector = selectors.DefaultSelector()

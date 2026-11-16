@@ -1,0 +1,42 @@
+--- a/services/audiopolicy/service/AudioPolicyService.cpp	2026-11-16 01:02:52
++++ b/services/audiopolicy/service/AudioPolicyService.cpp	2026-11-16 02:13:30
+@@ -1508,6 +1508,39 @@
+         }
+     }
+ 
++    // apklayer patch: the call audio activity AudioService gets from its PlaybackActivityMonitor and RecordingActivityMonitor (apklayer runs no
++    // AudioService): the request has a uid and a pid, the reply bit 0 = a started voice communication player, bit 1 = a started, unsilenced
++    // VOICE_COMMUNICATION recorder of that uid, or of that pid: a native client's attribution carries the stack's uid (AID_SYSTEM), not its app's, so
++    // the pid names it. A private transaction code, outside the AIDL's, for the system uid only.
++    if (code == 0x00fffff0 /* apklayer: call audio activity of a uid/pid */) {
++        if (!isAudioServerOrSystemServerUid(IPCThreadState::self()->getCallingUid())) return PERMISSION_DENIED;
++        int32_t uid = 0, pid = 0;
++        if (status_t status = data.readInt32(&uid); status != NO_ERROR) return status;
++        if (status_t status = data.readInt32(&pid); status != NO_ERROR) return status;
++        const auto mine = [&](const AttributionSourceState& source) {
++            return source.pid == pid || (source.uid == uid && uid != AID_SYSTEM);
++        };
++        int32_t active = 0;
++        audio_utils::lock_guard _l(mMutex);
++        for (size_t i = 0; i < mAudioPlaybackClients.size(); i++) {
++            const sp<AudioPlaybackClient>& client = mAudioPlaybackClients.valueAt(i);
++            ALOGD("call audio activity: playback client uid %d pid %d usage %d active %d", client->attributionSource.uid,
++                  client->attributionSource.pid, client->attributes.usage, client->active);
++            if (client->active && mine(client->attributionSource) &&
++                (client->attributes.usage == AUDIO_USAGE_VOICE_COMMUNICATION ||
++                 client->attributes.usage == AUDIO_USAGE_VOICE_COMMUNICATION_SIGNALLING)) active |= 1;
++        }
++        for (size_t i = 0; i < mAudioRecordClients.size(); i++) {
++            const sp<AudioRecordClient>& client = mAudioRecordClients[i];
++            ALOGD("call audio activity: record client uid %d pid %d source %d active %d silenced %d", client->attributionSource.uid,
++                  client->attributionSource.pid, client->attributes.source, client->active, client->silenced);
++            if (client->active && !client->silenced && mine(client->attributionSource) &&
++                client->attributes.source == AUDIO_SOURCE_VOICE_COMMUNICATION) active |= 2;
++        }
++        ALOGI("call audio activity: uid %d pid %d -> %d", uid, pid, active);
++        return reply->writeInt32(active);
++    }
++
+     return BnAudioPolicyService::onTransact(code, data, reply, flags);
+ }
+ 

@@ -129,6 +129,10 @@ optional = true
 apps = ["hello-bluetooth"]
 run = ["tests/vm/bluetooth.sh"]
 
+[nfc]  # NFC through the framework's NfcAdapter over the hub's "nfc" service, mock tags dropped into the instance's apklayer/nfc-mock (tests/vm/nfc.py, docs/NFC.md): reader mode, foreground dispatch, the three discovery intents, Type 2 and Type 4 tags
+apps = ["hello-nfc"]
+run = ["python3 -u tests/vm/nfc.py"]
+
 [hardware]
 # the hardware providers' fake backends (providers.toml): sensors, GNSS and vibrator over AIDL, then through Android's APIs
 apps = ["hello-hardware"]
@@ -149,10 +153,16 @@ run = ["tests/vm/plugins.sh"]
 apps = ["hello-gps", "hello-gps2"]
 run = ["tests/vm/gnss.sh"]
 
-[usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach, permission dialog, transfers
-apps = ["hello-usb"]
+[usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach (one chooser for hello.usb and hello.usb2), permission dialog, transfers
+apps = ["hello-usb", "hello-usb2"]
 run = ["tests/vm/usb.py"]
 alone = true  # one usbip virtual device controller: usb and usb-serial take turns
+
+[usb-sandbox]  # the same with the per-app sandbox: the apps' uids cannot open the node, the hub opens it and hands the descriptor over (HubUsb.open)
+optional = true  # needs tools/host-setup/sandbox.sh once
+apps = ["hello-usb", "hello-usb2"]
+run = ["USB_SANDBOX=1 tests/vm/usb.py"]
+alone = true
 
 [usb-serial]  # the serial gadget (CDC ACM) held by the host's cdc_acm: claimed with force, line coding, a line each way (tests/vm/usb-serial.py)
 apps = ["hello-usb"]
@@ -175,6 +185,19 @@ apps = ["hello-files"]
 needs = ["com.android.externalstorage", "com.android.providers.media.module"]  # the storage provider it queries; VOLUMES=1 reads MediaStore
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
 run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh", "SCOPED=1 tests/vm/files.sh", "LIBCORE=1 tests/vm/files.sh"]
+
+# The same allowlist, read from <data>/apklayer/google-apps/etc instead -- where `setup --gapps` keeps Google's (cli/gapps.cpp), since a package
+# build serves the runtime tree read-only and nothing is copied there any more. Run sandboxed (the tmpfs over <data>/apklayer, cli/sandbox.cpp,
+# hides the directory from the app's own JVM). Checked 2026-11-16: it passes with the bind removed too, because the provider's check is the hub's,
+# outside the sandbox: it proves the hub reads the allowlist from the data home, not the bind. The empty app directory is the Services Framework marker
+# gappsEtcDir looks for; every reader of appsDir skips a directory without info.properties.
+[files-gapps-etc]
+optional = true  # sandboxed: needs tools/host-setup/sandbox.sh once, as the sandbox group
+apps = ["hello-files"]
+needs = ["com.android.externalstorage", "com.android.providers.media.module"]
+setup = ["""d=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer; mkdir -p "$d/google-apps/etc/permissions" "$d/apps/com.google.android.gsf"; printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > "$d/google-apps/etc/permissions/apklayer-test-hello-files.xml"; rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml"""]
+# the marker and the allowlist are the test's: removed afterwards, or the data home would count as having Google's apps installed
+run = ["APKLAYER_SANDBOX=1 tests/vm/files.sh; r=$?; d=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer; rm -f $d/google-apps/etc/permissions/apklayer-test-hello-files.xml; rmdir $d/apps/com.google.android.gsf $d/google-apps/etc/permissions $d/google-apps/etc $d/google-apps 2>/dev/null; exit $r"]
 
 [volumes]  # a vfat loop image mounted at /media/<user>/<label> and removed while hello-files runs (root: sudo -n, or sudo -A with SUDO_ASKPASS)
 apps = ["hello-files"]
@@ -338,6 +361,20 @@ needs = ["com.android.test.uibench"]
 optional = true
 run = ["python3 -u tests/vm/kde-window.py"]
 
+[kde-scales]
+# kde-window and kde-interact on the desktop session's own output at 100%, 150% and 200% (kscreen-doctor), the display's scale put back afterwards
+needs = ["com.android.test.uibench"]
+optional = true
+alone = true
+run = ["python3 -u tests/vm/kde-scales.py"]
+
+[kde-interact]
+# real pointer and keys (uinput) on the session's KWin: title bar move, edge and corner resize, Alt+F8, drag-to-edge snap (tile, maximize), F11; the shell follows KWin's geometry
+needs = ["com.android.test.uibench"]
+optional = true
+alone = true
+run = ["python3 -u tests/vm/kde-interact.py"]
+
 [kde-output]
 # two outputs of different scale under a KWin of its own (kwin_wayland --virtual): the window moves between them, one is disabled; the scale follows
 needs = ["com.android.test.uibench"]
@@ -386,6 +423,14 @@ run = ["b/bridge/hals/graphics/vulkan-select-test real"]
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)
 run = ["python3 -u tests/vm/gpu-select.py"]
+
+[gpu-multi]
+# iGPU + dGPU: the instance on each hardware GPU (APKLAYER_GPU), the compositor's own and the others (mixed: LINEAR window buffers imported across GPUs):
+# gpu-smoke, gles1 and vulkan-present on each; skipped on a host with one GPU
+apps = ["hello-vulkan", "hello-gles1"]
+needs = ["com.android.test.uibench"]
+alone = true
+run = ["python3 -u tests/vm/gpu-multi.py"]
 
 [gpu-window]
 needs = ["com.android.test.uibench"]
@@ -491,6 +536,17 @@ apps = ["hello-native-audio"]
 alone = true
 run = ["python3 -u tests/vm/native-audio.py late"]
 
+[audio-uid]
+# per-uid call audio: a native (AAudio, OpenSL ES) voice communication player of one app keeps the call mode against a later, silent requester (patches/aosp/frameworks/av/0004)
+apps = ["hello-native-aaudio", "hello-native-aaudio2"]
+alone = true
+run = ["python3 -u tests/vm/audio-uid.py"]
+
+[audio-backend-swap]
+# the HAL's backend table: a stack started with no sound server (PipeWire backend) uses a PulseAudio-only server started later, per stream
+alone = true
+run = ["python3 -u tests/vm/audio-swap.py"]
+
 [audio-aidl]
 alone = true
 run = ["tests/vm/audio-host.sh aidl"]
@@ -571,6 +627,7 @@ run = ["tests/vm/newpipe-media.sh"]
 [sandbox]
 optional = true  # needs tools/host-setup/sandbox.sh once (uidmap, subordinate ids, the AppArmor profile, render nodes)
 apps = ["hello-sandbox"]
+needs = ["com.android.providers.settings"]  # the isolated service's Settings.Secure read (SSAID) goes to the real SettingsProvider
 run = ["tests/vm/sandbox.sh", "g++ -std=c++20 tests/native/nvidia-modprobe.cpp -o /tmp/nvidia-modprobe-$APKLAYER_INSTANCE && /tmp/nvidia-modprobe-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/nvidia-modprobe-$APKLAYER_INSTANCE; exit $r"]  # the second: the NVIDIA node -> nvidia-modprobe arguments of the broker
 
 [otr2-probe]
@@ -646,3 +703,8 @@ run = ["tests/vm/sysapps-update.sh"]
 [setup-runtime-foreign]
 # a dev tree CLI must not relink a runtime another build owns (setup-runtime.sh refuses)
 run = ["tests/vm/setup-runtime-foreign.sh"]
+
+[gamepad]
+# game controllers (docs/GAMEPAD.md): a uinput Xbox 360 pad (needs sudo -n, /dev/uinput) through the shell's evdev reader and HostGamepad to hello-gamepad: hot-plug, sources, buttons, axes, hat, rumble
+apps = ["hello-gamepad"]
+run = ["python3 -u tests/vm/gamepad.py"]

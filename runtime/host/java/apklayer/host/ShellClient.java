@@ -20,7 +20,7 @@ final class ShellClient {
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106, TABLET = 117,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
-            LAYOUT = 118, DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
+            LAYOUT = 118, PAD_DEVICE = 119, PAD_EVENT = 120, PAD_RUMBLE = 19, DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
     private static final int WINDOW_ID = 1;
 
     private final SocketChannel channel;
@@ -126,6 +126,15 @@ final class ShellClient {
         }
     }
 
+    /** A gamepad's rumble (InputDevice.getVibratorManager): strong and weak motor 0..65535 for ms (0: stop). */
+    void sendPadRumble(int dev, int strong, int weak, int ms) {
+        try {
+            send(PAD_RUMBLE, buf(16).putInt(dev).putInt(strong).putInt(weak).putInt(ms));
+        } catch (IOException e) {
+            // shell gone: the read loop notices
+        }
+    }
+
     /** The app goes fullscreen (hides the status bar) or leaves it: the shell asks the compositor for a fullscreen window. */
     void sendFullscreen(boolean on) {
         try {
@@ -200,6 +209,21 @@ final class ShellClient {
                     int[] ev = new int[13];
                     ev[0] = 17;
                     for (int i = 1; i < 13; i++) ev[i] = body.getInt(4 * i);
+                    input.add(ev);
+                } else if (type == PAD_DEVICE) {
+                    // {18, dev, added, vendor, product, version, naxes, rumble, {code, min, max, flat, value}[naxes], name bytes...}
+                    byte[] raw = body.array();
+                    int added = len >= 8 ? body.getInt(4) : 0, naxes = added != 0 ? body.getInt(20) : 0, names = added != 0 ? 28 + 20 * naxes : len;
+                    int[] ev = new int[(added != 0 ? 8 + 5 * naxes : 3) + Math.max(0, len - names)];
+                    ev[0] = 18;
+                    for (int i = 1; i < (added != 0 ? 8 + 5 * naxes : 3); i++) ev[i] = body.getInt(4 * (i - 1));
+                    for (int i = names; i < len; i++) ev[(added != 0 ? 8 + 5 * naxes : 3) + i - names] = raw[i] & 0xff;
+                    input.add(ev);
+                } else if (type == PAD_EVENT) {
+                    // {19, dev, {evdev type, code, value}*}
+                    int[] ev = new int[1 + len / 4];
+                    ev[0] = 19;
+                    for (int i = 1; i < ev.length; i++) ev[i] = body.getInt(4 * (i - 1));
                     input.add(ev);
                 } else if (type == CONFIGURE) {
                     // {14, w, h, scale*100, density dpi (0: 160 x scale), navigation bar px (0: none), output w, h px (0: unknown),

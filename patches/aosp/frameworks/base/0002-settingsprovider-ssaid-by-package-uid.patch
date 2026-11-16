@@ -1,0 +1,23 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: SettingsProvider: SSAID lookup keyed by the package uid
+
+The lookup used the caller uid (99000+ for an isolated process) but generateSsaidLocked stores under the
+app uid: once the entry existed, a second request regenerated the value, insertSettingLocked changed
+nothing and "Ssaid settings not accessible" was thrown. Key both by callingPkg.applicationInfo.uid.
+Against frameworks/base 653be4a9d2b0 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java b/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java
+index 8ddd1673ea15..730608a51be0 100644
+--- a/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java
++++ b/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java
+@@ -1823,8 +1823,8 @@ public class SettingsProvider extends ContentProvider {
+     @GuardedBy("mLock")
+     private Setting getSsaidSettingLocked(PackageInfo callingPkg, int owningUserId) {
+         // Get uid of caller (key) used to store ssaid value
+-        String name = Integer.toString(
+-                UserHandle.getUid(owningUserId, UserHandle.getAppId(Binder.getCallingUid())));
++        // apklayer patch: the app's uid, the key generateSsaidLocked stores under; an isolated process (uid 99000+) would look up another key
++        String name = Integer.toString(callingPkg.applicationInfo.uid);
+ 
+         if (DEBUG) {
+             Slog.v(LOG_TAG, "getSsaidSettingLocked(" + name + "," + owningUserId + ")");

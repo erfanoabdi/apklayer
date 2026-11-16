@@ -33,6 +33,7 @@ using namespace apklayer;
 namespace {
 int usage() {
     fputs("usage: apklayer [--instance ID] <command>\n"
+          "  inspect <file> <icon.png>                         what an install would add: package, version, label, permissions (icon written to the path)\n"
           "  install [-d] [--system] [--installer <pkg>] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
@@ -141,6 +142,7 @@ int main(int argc, char** argv) {
         installApp(layout, inst, std::vector<std::string>(args.begin() + first, args.end()), downgrade, system, installer);
         return 0;
     }
+    if (cmd == "inspect" && n == 3) return previewApk(layout, args[1], args[2]);
     if (cmd == "setup") return setupCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "reconvert" && n == 2) return reconvert(layout, inst, args[1]);
     if (cmd == "run" && n == 2) {

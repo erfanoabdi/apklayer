@@ -26,6 +26,10 @@ final class HostPlainShadows {
     @Implements(className = "android.webkit.WebStorage", isInAndroidSdk = false) public static final class WebStorage {}
     @Implements(className = "android.webkit.WebViewDatabase", isInAndroidSdk = false) public static final class WebViewDatabase {}
     /** The framework's vibrator over the instance's (absent) vibrator_manager service: hasVibrator() is false on a desktop, where Robolectric's said true. */
+    /** NfcAdapter over the instance's "nfc" service (HubNfc), not Robolectric's fake adapter: reader mode, foreground dispatch and the tag technologies run the framework's code. */
+    @Implements(className = "android.nfc.NfcAdapter", isInAndroidSdk = false) public static final class NfcAdapter {}
+    @Implements(className = "android.nfc.tech.BasicTagTechnology", isInAndroidSdk = false) public static final class BasicTagTechnology {}  // connect, close and checkConnected of the framework, not Robolectric's flags
+    @Implements(className = "android.nfc.tech.IsoDep", isInAndroidSdk = false) public static final class IsoDep {}  // transceive through the tag's service, not a canned queue
     @Implements(className = "android.os.Vibrator", isInAndroidSdk = false) public static final class Vibrator {}
     @Implements(className = "android.os.SystemVibrator", isInAndroidSdk = false) public static final class SystemVibrator {}
     /** HIDL's Java side (docs/HIDL.md): libandroid_runtime's HwBinder/HwParcel/HwBlob natives (registered by bridge/native/binder_runtime.c) instead of Robolectric's no-ops. */

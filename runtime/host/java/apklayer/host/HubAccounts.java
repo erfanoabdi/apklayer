@@ -145,13 +145,16 @@ final class HubAccounts extends IAccountManager.Stub {
                 synchronized (this) { if (service == null || called) return; called = true; }
                 try {
                     call.run(IAccountAuthenticator.Stub.asInterface(service), new IAccountAuthenticatorResponse.Stub() {
+                        private final java.util.concurrent.atomic.AtomicBoolean answered = new java.util.concurrent.atomic.AtomicBoolean();
+                        // AccountManagerService.Session.getResponseAndClose: the client gets one answer; a second onResult/onError of the authenticator is dropped
                         @Override public void onResult(Bundle result) {
+                            if (answered.getAndSet(true)) return;
                             if (result != null && onResult != null) onResult.accept(result);
                             reply(response, result);
                             done();
                         }
                         @Override public void onRequestContinued() { /* the authenticator answers later */ }
-                        @Override public void onError(int code, String message) { error(response, code, message); done(); }
+                        @Override public void onError(int code, String message) { if (answered.getAndSet(true)) return; error(response, code, message); done(); }
                     });
                 } catch (RemoteException | RuntimeException failure) {
                     error(response, AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "authenticator of " + type + ": " + failure);

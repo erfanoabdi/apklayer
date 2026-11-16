@@ -22,6 +22,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 | `permissions` | `APKLAYER_PERMISSIONS` | ask | grant: every runtime permission an app requests is granted without the prompt | yes |
 | `proc-view` | `APKLAYER_PROC_VIEW` | app | host: /proc as the host has it, not only the app's own processes | yes |
 | `etc-view` | `APKLAYER_ETC_VIEW` | app | host: the host's /etc | yes |
+| `cpufreq-view` | `APKLAYER_CPUFREQ_VIEW` | app | host: the host's /sys/devices/system/cpu/cpu<N>/cpufreq and cpu_capacity files (x86_64 hosts: apps see none by default) | yes |
 | `pts-view` | `APKLAYER_PTS_VIEW` | app | host: all of the host's terminals | yes |
 | `raw-syscall-view` | `APKLAYER_RAW_SYSCALL_VIEW` | on | off: an app's own system calls see the host's /proc, /etc and identity | yes |
 | `webview-provider` | `APKLAYER_WEBVIEW_PROVIDER` | Chromium when installed | none, or the package of a provider | yes |
@@ -51,15 +52,16 @@ Read where they are needed; set them for one command (`APKLAYER_RUNTIME_DEBUG=1 
 | `APKLAYER_PRESENT_FENCE` | `gpu`: no sync object for presents (HAL tests) |
 | `APKLAYER_CDS` | `off`: no class data sharing archive (a corrupt archive) |
 | `APKLAYER_GST_AMC` | keep the Android-MediaCodec GStreamer elements on Halium |
+| `APKLAYER_COMPOSITOR_GPU` | the compositor's GPU (id or render node), where its dmabuf feedback names none (a nested or virtual KWin) |
 | `APKLAYER_GPU` | the instance's GPU for one command (the persistent choice is `apklayer gpu set`) |
 | `APKLAYER_BOOT_BROADCASTS`, `APKLAYER_MEDIA_WATCHES` | `0`/a package: BOOT_COMPLETED receivers; the hub's inotify budget |
 | `APKLAYER_DISPLAY_WIDTH`, `_HEIGHT`, `_DPI` | the virtual display (720x1280, 320 dpi) |
 | `APKLAYER_UNSTRIPPED` | a directory of unstripped libraries for `tools/debug/symbolize-trace.py` |
-| `-Dapklayer.perf`, `.runms`, `.debugkeys`, `.debugwheel`, `.runtimetrace`, `.rawtraces`, `.traceroots`, `.tracebind`, `.tracestart`, `.threads`, `.tracewindows` | JVM-side traces and the run time of a test launch (through the `jvm-options` setting) |
+| `-Dapklayer.perf`, `.runms`, `.debugkeys`, `.debugwheel`, `.runtimetrace`, `.rawtraces`, `.traceroots`, `.tracebind`, `.tracestart`, `.traceuncaught` (every exception reaching the default uncaught handler, printed before the app's own handler, which may end the process: Play services), `.threads`, `.tracewindows` | JVM-side traces and the run time of a test launch (through the `jvm-options` setting) |
 
 ## Test only
 
-`APKLAYER_TEST_INPUT` (the shell takes injected input), `APKLAYER_OUTPUT_MM`, `APKLAYER_OUTPUT_PX` (a simulated phone output), `APKLAYER_SUBSURFACES`
+`APKLAYER_INPUT_DIR` (the shell's gamepad scan and watch directory, default `/dev/input`; docs/GAMEPAD.md), `APKLAYER_TEST_INPUT` (the shell takes injected input), `APKLAYER_OUTPUT_MM`, `APKLAYER_OUTPUT_PX` (a simulated phone output), `APKLAYER_SUBSURFACES`
 (a compositor without subsurfaces), `APKLAYER_PICKER`, `APKLAYER_CHOOSER` (stand-ins for the file dialog and the app chooser),
 `APKLAYER_GEOCLUE_PROBE`, `APKLAYER_PLUGIN_PATH` (a plugin under development), `APKLAYER_RELEASES_URL`, `APKLAYER_RUNTIME_BUNDLE`,
 `APKLAYER_MICROG_INDEX`, `APKLAYER_FDROID_INDEX` (offline and local setup sources). Set by `tests/` and `tools/`; `tests/` use the debug

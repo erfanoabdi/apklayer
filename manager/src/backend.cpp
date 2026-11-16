@@ -21,6 +21,17 @@ std::string Cli::locate() {
     ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
     if (n > 0) {
         std::string dir(exe, n);
+        // a click is installed as /opt/click.ubuntu.com/<name>/<version>/ and its update removes the old version's directory, under
+        // this very (still running) manager: the CLI is taken through the click's `current` link, which the update moves (an update's restart, probe and
+        // the add-on lists used the deleted path and failed, 2026-11-16)
+        static const std::string click = "/opt/click.ubuntu.com/";
+        if (dir.rfind(click, 0) == 0) {
+            size_t name = dir.find('/', click.size());
+            if (name != std::string::npos) {
+                std::string current = dir.substr(0, name) + "/current/usr/bin/apklayer";
+                if (access(current.c_str(), X_OK) == 0) return current;
+            }
+        }
         for (size_t slash; (slash = dir.rfind('/')) != std::string::npos && slash > 0;) {
             dir.resize(slash);
             if (access((dir + "/bin/apklayer").c_str(), X_OK) == 0) return dir + "/bin/apklayer";
@@ -80,6 +91,30 @@ int Cli::runLines(const std::vector<std::string>& args, const std::function<void
     std::promise<int> done;
     streamLines(argv, false, onLine, [&done](int status) { done.set_value(status); });
     return done.get_future().get();
+}
+
+std::string permTitle(const std::string& name) {
+    std::string title = name.substr(name.rfind('.') + 1);
+    for (size_t i = 0; i < title.size(); i++)
+        title[i] = title[i] == '_' ? ' ' : static_cast<char>(i == 0 ? toupper(static_cast<unsigned char>(title[i])) : tolower(static_cast<unsigned char>(title[i])));
+    return title;
+}
+
+Preview parsePreview(const std::string& out) {
+    std::string name, version, list;
+    Preview p;
+    size_t perms = 0;
+    for (const auto& row : parseRows(out)) {
+        if (row.size() < 2) continue;
+        if (row[0] == "package") name = row[1];
+        else if (row[0] == "version") version = row[1];
+        else if (row[0] == "label") p.label = row[1];
+        else if (row[0] == "perm" && perms++ < 12) list += (perms > 1 ? ", " : "") + permTitle(row[1]);
+    }
+    if (perms > 12) list += ", and " + std::to_string(perms - 12) + " more";
+    p.detail = name + (version.empty() ? "" : " \u00b7 " + version);
+    p.permissions = perms == 0 ? "Asks for no permissions" : "Asks for: " + list;
+    return p;
 }
 
 std::string chosenFile(const Result& chooser) {

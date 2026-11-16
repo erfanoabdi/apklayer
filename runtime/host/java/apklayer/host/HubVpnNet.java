@@ -24,7 +24,15 @@ final class HubVpnNet {
     record Spec(String ifname, String connection, int uid, int mtu, List<String> addresses, List<String> routes, List<String> dns, List<String> search, boolean everything) {}
 
     /** The VPN made: how, the command the guard runs to remove it ({@code teardown}, empty for the helper, which ends with its pipe). */
-    record Made(String how, List<String> teardown, Process helper) {
+    record Made(String how, List<String> teardown, Process helper, List<String> lateRoutes) {
+        /** The routes of a VPN made with {@code deferRoutes}: installed now (the owner protected its transport socket, or its grace ran out). */
+        void installRoutes() throws IOException {
+            if (lateRoutes.isEmpty()) return;
+            int[] status = new int[1];
+            String out = run(status, lateRoutes);
+            if (status[0] != 0) throw new IOException(out);
+        }
+
         void close() {
             if (helper == null) return;
             try { helper.getOutputStream().close(); } catch (IOException ignored) { /* gone */ }
@@ -49,9 +57,11 @@ final class HubVpnNet {
         return out;
     }
 
-    static Made create(Spec spec) throws IOException {
+    /** {@code deferRoutes}: NetworkManager's connection comes up without the routes (Made.installRoutes adds them): an app that protects its transport socket only
+     *  after establish() (WireGuard's Go library sends its first handshake datagram before) must not have that first datagram go into its own tunnel. */
+    static Made create(Spec spec, boolean deferRoutes) throws IOException {
         String why;
-        try { return viaNetworkManager(spec); } catch (IOException failure) { why = failure.getMessage(); }
+        try { return viaNetworkManager(spec, deferRoutes); } catch (IOException failure) { why = failure.getMessage(); }
         System.out.println("[apklayer-hub] vpn: NetworkManager: " + why);
         Path helper = Path.of(System.getProperty("apklayer.cli")).resolveSibling("apklayer-vpn-helper");
         if (!Files.isExecutable(helper)) throw new IOException("no NetworkManager (" + why + ") and no polkit helper at " + helper);
@@ -59,7 +69,7 @@ final class HubVpnNet {
         catch (IOException failure) { throw new IOException("NetworkManager: " + why + "; polkit helper: " + failure.getMessage(), failure); }
     }
 
-    private static Made viaNetworkManager(Spec spec) throws IOException {
+    private static Made viaNetworkManager(Spec spec, boolean deferRoutes) throws IOException {
         List<String> add = new ArrayList<>(List.of("nmcli", "--wait", "15", "connection", "add", "save", "no", "type", "tun", "con-name", spec.connection(), "ifname", spec.ifname(),
                 "autoconnect", "no", "mode", "tun", "owner", String.valueOf(spec.uid())));
         List<String> a4 = only(spec.addresses(), false), a6 = only(spec.addresses(), true);
@@ -67,8 +77,10 @@ final class HubVpnNet {
         if (!a4.isEmpty()) add.addAll(List.of("ipv4.addresses", String.join(",", a4), "ipv4.route-metric", "50"));
         if (!a6.isEmpty()) add.addAll(List.of("ipv6.addresses", String.join(",", a6), "ipv6.route-metric", "50"));
         List<String> r4 = only(spec.routes(), false), r6 = only(spec.routes(), true);
-        if (!r4.isEmpty() && !a4.isEmpty()) add.addAll(List.of("ipv4.routes", String.join(",", r4)));
-        if (!r6.isEmpty() && !a6.isEmpty()) add.addAll(List.of("ipv6.routes", String.join(",", r6)));
+        List<String> late = new ArrayList<>();
+        if (!r4.isEmpty() && !a4.isEmpty()) (deferRoutes ? late : add).addAll(List.of("ipv4.routes", String.join(",", r4)));
+        if (!r6.isEmpty() && !a6.isEmpty()) (deferRoutes ? late : add).addAll(List.of("ipv6.routes", String.join(",", r6)));
+        if (!late.isEmpty()) late.addAll(0, List.of("nmcli", "--wait", "15", "device", "modify", spec.ifname()));  // a live reapply of the device's connection
         for (boolean six : new boolean[] {false, true}) {
             List<String> servers = new ArrayList<>();
             for (String d : spec.dns()) if ((d.indexOf(':') >= 0) == six) servers.add(d);
@@ -88,7 +100,7 @@ final class HubVpnNet {
         List<String> delete = List.of("nmcli", "connection", "delete", "id", spec.connection());
         out = run(status, List.of("nmcli", "--wait", "15", "connection", "up", "id", spec.connection()));
         if (status[0] != 0) { run(status, delete); throw new IOException(out); }
-        return new Made("NetworkManager", delete, null);
+        return new Made("NetworkManager", delete, null, late);
     }
 
     /** `pkexec apklayer-vpn-helper`: the spec on its stdin, "ready" back; it removes everything when its stdin closes. The device's owner is the caller (PKEXEC_UID). */
@@ -111,6 +123,6 @@ final class HubVpnNet {
         Thread drain = new Thread(() -> { try { while (out.readLine() != null) { /* the helper's notes */ } } catch (IOException ended) { /* gone */ } }, "hub-vpn-helper");
         drain.setDaemon(true);
         drain.start();
-        return new Made("pkexec helper", List.of(), process);
+        return new Made("pkexec helper", List.of(), process, List.of());  // its routes are made with the device: not deferred
     }
 }

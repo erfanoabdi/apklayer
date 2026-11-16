@@ -54,6 +54,8 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.drm.DrmManagerClient", ShadowHostDrmManagerClient.class.getName()),
                 Map.entry("android.app.StatsManager", ShadowHostStatsManager.class.getName()),
                 Map.entry("android.net.Network", ShadowHostNetwork.class.getName()),
+                Map.entry("android.view.KeyEvent", ShadowHostKeyEvent.class.getName()),  // getDevice(): the device of the event's id (gamepads, docs/GAMEPAD.md)
+                Map.entry("android.view.MotionEvent", ShadowHostMotionEvent.class.getName()),
                 Map.entry("android.app.PendingIntent", ShadowHostRealPendingIntent.class.getName()),
                 Map.entry("android.app.Service", ShadowHostService.class.getName()),
                 Map.entry("android.app.IntentService", ShadowHostIntentService.class.getName()),  // its shadow must be a ShadowHostService (stopSelf)
@@ -146,6 +148,11 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.webkit.CookieManager", HostPlainShadows.CookieManager.class.getName()));
             entries.add(Map.entry("android.webkit.WebStorage", HostPlainShadows.WebStorage.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewDatabase", HostPlainShadows.WebViewDatabase.class.getName()));
+        }
+        if (HostNfc.present()) {  // a source of tags (HubNfc): the framework's NfcAdapter and tag technologies over its service
+            entries.add(Map.entry("android.nfc.NfcAdapter", HostPlainShadows.NfcAdapter.class.getName()));
+            entries.add(Map.entry("android.nfc.tech.BasicTagTechnology", HostPlainShadows.BasicTagTechnology.class.getName()));
+            entries.add(Map.entry("android.nfc.tech.IsoDep", HostPlainShadows.IsoDep.class.getName()));
         }
         if (HostSensorShadows.declared()) {  // the stack runs SensorService over the sensors HAL (providers.toml)
             entries.add(Map.entry("android.hardware.SensorManager", HostSensorShadows.SensorManager.class.getName()));

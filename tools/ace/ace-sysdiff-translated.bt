@@ -1,0 +1,20 @@
+// Every guest syscall (arm64 number from the guest's x8, a0-a2 from x0-x2, the guest's x0 after) of the game process for its first 38 s,
+// translated x86_64. Pair: ace-sysdiff-native.bt (same line format). @BRIDGE@ = the runtime's libberberis_arm64.so (tools/ace/pgr-timeline.sh sets it).
+// ThreadState: x0 at +0, x8 at +0x40 (the RunGuestSyscall use of ace-proxy.bt). The guest's memory is the process's own, so str() reads a guest path.
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0 = nsecs; }
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+/ @g[pid] && (*(uint64 *)(arg0 + 0x40) == 56 || *(uint64 *)(arg0 + 0x40) == 48 || *(uint64 *)(arg0 + 0x40) == 78 || *(uint64 *)(arg0 + 0x40) == 79 || *(uint64 *)(arg0 + 0x40) == 35 || *(uint64 *)(arg0 + 0x40) == 34 || *(uint64 *)(arg0 + 0x40) == 291) /
+{
+  @st[tid] = (uint64)arg0;
+  printf("E %lu %d %d %lx %lx %lx %s\n", (nsecs - @t0) / 1000000, tid, *(uint64 *)(arg0 + 0x40), *(uint64 *)(arg0), *(uint64 *)(arg0 + 8), *(uint64 *)(arg0 + 0x10), str(*(uint64 *)(arg0 + 8)));
+}
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+/ @g[pid] && !(*(uint64 *)(arg0 + 0x40) == 56 || *(uint64 *)(arg0 + 0x40) == 48 || *(uint64 *)(arg0 + 0x40) == 78 || *(uint64 *)(arg0 + 0x40) == 79 || *(uint64 *)(arg0 + 0x40) == 35 || *(uint64 *)(arg0 + 0x40) == 34 || *(uint64 *)(arg0 + 0x40) == 291) /
+{
+  @st[tid] = (uint64)arg0;
+  printf("E %lu %d %d %lx %lx %lx\n", (nsecs - @t0) / 1000000, tid, *(uint64 *)(arg0 + 0x40), *(uint64 *)(arg0), *(uint64 *)(arg0 + 8), *(uint64 *)(arg0 + 0x10));
+  if (nsecs - @t0 > 38000000000) { exit(); }
+}
+uretprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE / @g[pid] && @st[tid] /
+{ printf("X %d %d\n", tid, *(int64 *)(@st[tid])); }

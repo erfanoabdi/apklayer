@@ -1,0 +1,34 @@
+// True timeline of the game process (native arm64 and translated x86_64 alike): ACE's file touches, every SEGV/BUS/ILL/FPE/TRAP/ABRT/KILL
+// signal generated for it (real faults: code > 0; sent by a process: code <= 0) with the kernel's si_addr, and the end of the process.
+// Times: ms since the game's first libanogs.so open (t0), so runs compare. Run by tools/ace/pgr-timeline.sh (@FAULT@ = the kernel's fault-signal function).
+// The core_pattern must not write a core (the end of a process then waits for the dump): the driver sets it for the run.
+// Uses BPFTRACE_MAX_STRLEN=200 (set by the driver) so paths are whole.
+
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] /
+{ @g[pid] = 1; @t0 = nsecs; printf("0 T0 %d tid %d %s\n", pid, tid, str(args->filename)); }
+
+tracepoint:syscalls:sys_enter_openat / @g[pid] / { printf("%lu F %d open fl %x %s\n", (nsecs - @t0) / 1000000, tid, args->flags, str(args->filename)); }
+tracepoint:syscalls:sys_enter_faccessat / @g[pid] / { printf("%lu F %d access %s\n", (nsecs - @t0) / 1000000, tid, str(args->filename)); }
+tracepoint:syscalls:sys_enter_mkdirat / @g[pid] / { printf("%lu F %d mkdir %s\n", (nsecs - @t0) / 1000000, tid, str(args->pathname)); }
+tracepoint:syscalls:sys_enter_unlinkat / @g[pid] / { printf("%lu F %d unlink %s\n", (nsecs - @t0) / 1000000, tid, str(args->pathname)); }
+
+// the kernel's own fault signals: si_addr is the faulting address
+@FAULT@
+/ @g[pid] /
+{ printf("%lu FAULT tid %d %s sig %d code %d addr 0x%lx\n", (nsecs - @t0) / 1000000, tid, comm, arg0, arg1, arg2); }
+
+tracepoint:signal:signal_generate
+/ @g[pid] && (args->sig == 11 || args->sig == 7 || args->sig == 4 || args->sig == 5 || args->sig == 6 || args->sig == 8 || args->sig == 9) /
+{ printf("%lu SIG sig %d code %d from tid %d (%s) to tid %d (%s)\n", (nsecs - @t0) / 1000000, args->sig, args->code, tid, comm, args->pid, args->comm); }
+
+// a signal a thread sends itself (the translator's tgkill/rt_tgsigqueueinfo of an emulated fault, or ACE): the siginfo it passes
+tracepoint:syscalls:sys_enter_rt_tgsigqueueinfo / @g[pid] && (args->sig == 11 || args->sig == 7 || args->sig == 4 || args->sig == 5 || args->sig == 6 || args->sig == 8) /
+{ printf("%lu RTSQ tid %d sig %d si_code %d si_addr 0x%lx\n", (nsecs - @t0) / 1000000, tid, args->sig, *(int32 *)((uint64)args->uinfo + 8), *(uint64 *)((uint64)args->uinfo + 16)); }
+tracepoint:syscalls:sys_enter_tgkill / @g[pid] && (args->sig == 11 || args->sig == 7 || args->sig == 4 || args->sig == 5 || args->sig == 6 || args->sig == 8) /
+{ printf("%lu TGKILL tid %d -> %d sig %d\n", (nsecs - @t0) / 1000000, tid, args->pid, args->sig); }
+tracepoint:syscalls:sys_enter_sigaltstack / @g[pid] / { printf("%lu SIGALTSTACK tid %d\n", (nsecs - @t0) / 1000000, tid); }
+
+tracepoint:sched:sched_process_exit / @g[pid] && pid == tid /
+{ printf("%lu EXIT %d %s\n", (nsecs - @t0) / 1000000, pid, comm); }
+
+BEGIN { printf("READY\n"); }

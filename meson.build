@@ -125,8 +125,8 @@ endif
 subdir('tests/native')
 
 # what the CLI reads from its root (the source tree, or <prefix>/share/apklayer installed: cli/layout.cpp)
-install_data('tools/release/versions', install_dir: share_dir)
-install_data('tools/sysapps.list', 'tools/release/setup-runtime.sh', 'tools/release/jdk-image.sh', 'tools/release/gapps.sh', install_dir: share_dir / 'tools')
+install_data('tools/release/versions', 'data/downloads.json', install_dir: share_dir)  # downloads.json: docs/DOWNLOADS.md
+install_data('tools/sysapps.list', 'tools/release/setup-runtime.sh', 'tools/release/jdk-image.sh', 'tools/release/StripHashes.java', 'tools/release/gapps.sh', install_dir: share_dir / 'tools')
 install_subdir('tools/host-setup', install_dir: share_dir / 'tools')
 install_data('runtime/host/jvm.args', install_dir: share_dir / 'runtime/host')
 install_data('bridge/native/apklayer.prop', 'bridge/native/bionic_translation.cfg', install_dir: share_dir / 'bridge/native')

@@ -21,6 +21,8 @@
 #include <string.h>
 #include <sys/auxv.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
 #include <pthread.h>
 #include <sys/wait.h>

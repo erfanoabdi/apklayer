@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <optional>
@@ -169,10 +170,17 @@ public:
         b.set_status(info(s.status));
         auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
         gpuIds_.clear();
-        int chosen = -1;
-        for (const auto& r : s.gpus) {  // id, node, driver, vendor:device, compositor, instance, name (the first row: the header)
+        int chosen = 0;  // "Automatic" (the desktop's GPU) unless a row says the instance's choice is explicit
+        if (s.gpus.size() > 2) {  // the header and two GPUs: the menu shows only where there is a choice
+            gpuIds_.push_back("");
+            MenuItem a;
+            a.text = "Automatic (the desktop's GPU)";
+            a.enabled = true;
+            gpus->push_back(a);
+        }
+        for (const auto& r : s.gpus) {  // id, node, driver, vendor:device, compositor, instance, name, choice (the first row: the header)
             if (field(r, 0) == "id") continue;
-            if (field(r, 5) == "yes") chosen = static_cast<int>(gpuIds_.size());
+            if (field(r, 7) == "yes") chosen = static_cast<int>(gpuIds_.size());
             gpuIds_.push_back(field(r, 0));
             MenuItem m;
             m.text = slint::SharedString(field(r, 6));
@@ -201,6 +209,8 @@ public:
 
     std::map<std::string, std::string> appModes_;
     std::function<void()> applied;  // the screenshot mode's event: a refresh begun after the scripted input reached the window
+    std::function<void()> previewed;  // and --wait-preview's: the install dialog's preview is shown (or failed)
+    bool previewDone = false;
     int started = 0, floor = 0;  // refreshes begun; those begun before the input (floor) are not the input's result (a load still running at start came back first)
 
     void refresh() {
@@ -261,9 +271,7 @@ private:
         std::vector<PermEntry> runtime, other;
         for (const auto& r : rows) {
             PermEntry e;
-            std::string name = field(r, 0), level = field(r, 1), granted = field(r, 2), title = name.substr(name.rfind('.') + 1);
-            for (size_t i = 0; i < title.size(); i++)
-                title[i] = title[i] == '_' ? ' ' : static_cast<char>(i == 0 ? toupper(static_cast<unsigned char>(title[i])) : tolower(static_cast<unsigned char>(title[i])));
+            std::string name = field(r, 0), level = field(r, 1), granted = field(r, 2), title = manager::permTitle(name);
             e.name = slint::SharedString(name);
             e.title = slint::SharedString(title);
             e.runtime = level == "dangerous";
@@ -310,6 +318,28 @@ public:
     void openFiles(std::vector<std::string> files) {
         queue_ = std::move(files);
         nextFile();
+    }
+
+    // the install dialog's name, icon and permissions of the file (`apklayer inspect`: read from its manifest, nothing converted); the dialog shows them once they are for its path
+    void preview(const std::string& path) {
+        ui_->global<Backend>().set_preview_for("");
+        if (path.empty() || access(path.c_str(), R_OK) != 0) return;
+        static int serial = 0;  // one icon file per request: two quick ones do not share it
+        std::string icon = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") + "/apklayer-preview-" + std::to_string(getpid()) + "-" + std::to_string(++serial) + ".png";
+        later([cli = cli_, path, icon] { unlink(icon.c_str()); return cli.run({"inspect", path, icon}); }, [this, path, icon](const Result& r) {
+            auto& b = ui_->global<Backend>();
+            if (r.status == 0) {
+                manager::Preview p = manager::parsePreview(r.out);
+                b.set_preview_icon(access(icon.c_str(), R_OK) == 0 ? slint::Image::load_from_path(slint::SharedString(icon)) : slint::Image());
+                b.set_preview_label(slint::SharedString(p.label));
+                b.set_preview_detail(slint::SharedString(p.detail));
+                b.set_preview_permissions(slint::SharedString(p.permissions));
+                b.set_preview_for(slint::SharedString(path));
+            }
+            unlink(icon.c_str());
+            previewDone = true;
+            if (previewed) previewed();
+        });
     }
 
     // the install dialog's file: the chooser (file-chooser.py: the portal, else Content Hub) for "open"; "import" receives an .apk shared to
@@ -359,6 +389,7 @@ private:
         b.on_refresh([this] { refresh(); });
         // a Content Hub import (Ubuntu Touch) is a copy for this install: dropped once installed
         b.on_install_path([this](slint::SharedString path) { std::string p(path); action("Installing", {"install", p}, "", [p] { manager::dropImported(p); }, [this](const Result& r) { installed(r); }); });
+        b.on_preview_path([this](slint::SharedString path) { preview(std::string(path)); });
         b.on_install_chooser([this] { chooseApk("open"); });
         b.on_open_app([this](slint::SharedString pkg) {
             std::string p(pkg);
@@ -458,7 +489,7 @@ private:
             b.set_busy(true);
             b.set_busy_text("Changing the GPU");
             // the choice applies from the stack's next start: stop it, the next app launch starts it on the new GPU
-            later([cli = cli_, id = gpuIds_[i]] { Result r = cli.run({"gpu", "set", id}); if (r.status == 0) cli.run({"stop"}); return r; },
+            later([cli = cli_, id = gpuIds_[i]] { Result r = id.empty() ? cli.run({"gpu", "unset"}) : cli.run({"gpu", "set", id}); if (r.status == 0) cli.run({"stop"}); return r; },
                   [this](const Result& r) { ui_->global<Backend>().set_busy(false); message(summary(r)); refresh(); });
         });
         b.on_set_binder([this](bool kernel) {
@@ -512,6 +543,9 @@ static void lomiriScale() {
 }
 
 int main(int argc, char** argv) {
+    // Lomiri starts a click's app in the click's own version directory, which its update removes under the running manager: every program the
+    // manager then ran (the CLI's JVM: "Could not determine current working directory") failed (the X23, 2026-11-16)
+    if (char cwd[4096]; getcwd(cwd, sizeof cwd) && strncmp(cwd, "/opt/click.ubuntu.com/", 22) == 0) { const char* home = getenv("HOME"); if (chdir(home && *home ? home : "/") != 0) perror("chdir"); }
     lomiriScale();
     Cli cli(Cli::locate());
     if (const char* id = getenv("APKLAYER_INSTANCE"); id && *id) cli.instance = id;
@@ -519,7 +553,7 @@ int main(int argc, char** argv) {
     std::string shot, app, dialog;
     std::vector<std::string> input, expect;
     int width = 0, height = 0, page = 0, scroll = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
-    bool firstRun = false, share = false;
+    bool firstRun = false, share = false, waitPreview = false;
     std::vector<std::string> files;  // opened with the manager from the desktop
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -534,11 +568,12 @@ int main(int argc, char** argv) {
         else if (a == "--dark" || a == "--light") dark = a == "--dark";
         else if ((a == "--click" || a == "--type") && more) input.push_back(argv[++i]);
         else if (a == "--wait-refresh" && more) waitRefreshes = atoi(argv[++i]);
+        else if (a == "--wait-preview") waitPreview = true;
         else if (a == "--expect" && more) expect.push_back(argv[++i]);
         else if (a == "--first-run") firstRun = true;
         else if (a == "--share") share = true;
         else if (a[0] != '-') files.push_back(a);  // .apk, .apks, .xapk, .apkm files of the desktop's open (the entry's %F): the install dialog
-        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
+        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--wait-preview] [--expect LABEL]...]\n"); return 2; }
     }
     // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry). Lomiri gives the window to the app its
     // app id names: started as apklayer-share (--share) it must say so, or Lomiri counts that app windowless and suspends it
@@ -596,9 +631,10 @@ int main(int argc, char** argv) {
             else target->set_accessible_value(slint::SharedString(text));
             printf("apklayer-manager: %s %s\n", eq == std::string::npos ? "pressed" : "typed into", label.c_str());
         }
-        if (waitRefreshes == 0) { settled(); return; }
+        if (waitPreview) { if (m.previewDone) settled(); else m.previewed = settled; }  // the file's preview, which may be shown before this timer
+        if (waitRefreshes == 0 && !waitPreview) { settled(); return; }
         // the picture after the actions' own events (an app's start, a finished uninstall) reached the window, not after a guessed delay
-        m.applied = [&] { if (++refreshes == waitRefreshes) settled(); };
+        if (waitRefreshes > 0) m.applied = [&] { if (++refreshes == waitRefreshes) settled(); };
         slint::Timer::single_shot(std::chrono::minutes(3), [] { fputs("apklayer-manager: the refresh never came\n", stderr); slint::quit_event_loop(); });
     });
     slint::run_event_loop();

@@ -8,11 +8,11 @@ audio_inc = include_directories('include', '../include')
 audio_libs = []  # the first one built: the HAL tests link it
 if audio_backend in ['auto', 'pipewire'] and pipewire.found()
   audio_libs += shared_library('apklayer-audio-pipewire', 'audio.c', 'capture.c', 'probe.c',
-    include_directories: audio_inc, dependencies: [pipewire, dependency('threads')], install: true, install_dir: native_dir)
+    include_directories: audio_inc, dependencies: [pipewire, dependency('threads')], link_args: '-Wl,-Bsymbolic', install: true, install_dir: native_dir)
 endif
 if audio_backend in ['auto', 'pulse'] and pulse.found()
   audio_libs += shared_library('apklayer-audio-pulse', 'pulse.c', 'probe.c', c_args: '-DAPKLAYER_AUDIO_PULSE',
-    include_directories: audio_inc, dependencies: [pulse, dependency('threads')], install: true, install_dir: native_dir)
+    include_directories: audio_inc, dependencies: [pulse, dependency('threads')], link_args: '-Wl,-Bsymbolic', install: true, install_dir: native_dir)
 endif
 if audio_libs.length() > 0
   executable('audio-test', '../../../tests/hals/audio-test.c',

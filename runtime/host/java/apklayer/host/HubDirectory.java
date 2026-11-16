@@ -127,6 +127,7 @@ final class HubDirectory extends Binder {
     HubProviders providers() { return providers; }
     HubServiceBindings bindings() { return bindings; }
     HubVpn vpn() { return vpn; }
+    HubPendingIntents pendingIntents() { return pendingIntents; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }
     /** The installer finished its work: a hub that lost its last app meanwhile (an installer that updated itself) ends as it would have. */
@@ -640,6 +641,10 @@ final class HubDirectory extends Binder {
             case HubProtocol.USB_PERMISSION -> {
                 Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
+            }
+            case HubProtocol.USB_OPEN -> {
+                Peer caller = caller(); String device = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeTypedObject(usb.open(caller.name(), device), android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
             }
             case HubProtocol.PERMISSIONS_REQUEST -> {
                 Peer caller = caller(); String[] names = request.createStringArray(); request.enforceNoDataAvail();

@@ -1,6 +1,7 @@
 #include "open.h"
 
 #include <ctime>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "apps.h"
@@ -44,15 +45,19 @@ int openCommand(const Layout& l, const Instance& inst, const std::vector<std::st
     if (args.size() == 1) return runApp(l, inst, package, RunMode::App);
     std::string path = realPath(args[1]);
     if (path.empty() || !exists(path) || isDir(path)) die("no such file: " + args[1]);
-    if (sandboxOn()) die("apklayer open: the app sandbox owns the app's data (a copy for it is not written yet)");
     std::string token = sha256Text(path + std::to_string(getpid()) + std::to_string(time(nullptr))).substr(0, 16), root = join(appDataDir(l, inst, package), "app/cache/opened");  // the app's getCacheDir() (its data link "app", AppEnvironment.persistDataDirs)
+    // under the sandbox the app's data is its own uid's and out of the user's reach, so the copy lies in the app's private tmp (its java.io.tmpdir: the
+    // instance's tmp/sandbox-<uid>, which the app's view shows as the instance's tmp; HostOpenedFiles reads both): the folders 0711, the files 0644 for its uid
+    if (sandboxOn()) root = join(inst.tmpDir(), "sandbox-" + property(join(appDir(l, package), "info.properties"), "uid") + "/opened");
     makeDirs(root);
+    if (sandboxOn()) chmod(root.c_str(), 0711);
     // a day of them stays (an app may keep the Uri for a while); the cache is the app's own and clear-data removes it
     sh({"find", root, "-mindepth", "1", "-maxdepth", "1", "-mtime", "+1", "-exec", "rm", "-rf", "{}", "+"});
     makeDirs(join(root, token));
     if (sh({"cp", "--reflink=auto", path, join(root, token + "/data")}) != 0) die("cannot copy " + path);
     std::string type = mimeOf(path);
     writeFile(join(root, token + "/type"), type + "\n");
+    if (sandboxOn()) for (const char* f : {"", "/data", "/type"}) chmod(join(root, token + f).c_str(), *f ? 0644 : 0755);
     std::string intent = join(inst.tmpDir(), "open-" + std::to_string(getpid()) + ".properties");
     makeDirs(inst.tmpDir());
     // Properties of apklayer.host.HostApps: action, type, data, flags (FLAG_GRANT_READ_URI_PERMISSION)

@@ -84,11 +84,26 @@ static const char *const lang_of[][2] = { {"ara","ar"}, {"ir","fa"}, {"il","he"}
     {"cz","cs"}, {"dk","da"}, {"se","sv"}, {"gb","en"}, {"us","en"}, {"in","hi"}, {"ge","ka"}, {"am","hy"}, {"by","be"}, {"kz","kk"}, {"tw","zh-TW"} };
 /* The keymap's symbols name is "pc_us_ru_2_inet(evdev)_group(alt_shift_toggle)" (libxkbcommon writes "+" and ":" as "_"): the layouts are the pieces
  * between "pc" and "inet", the group count following the second of a name ("ru:2"); a variant's "(...)" is dropped. */
+/* libxkbcommon before 1.7 (Ubuntu 24.04) names every compiled symbols section "(unnamed)": the layout's own name ("Russian", "English (US)") then. */
+static const char *const lang_name[][2] = { {"Arabic","ar"}, {"Armenian","hy"}, {"Belarusian","be"}, {"Bengali","bn"}, {"Bulgarian","bg"}, {"Chinese","zh"},
+    {"Croatian","hr"}, {"Czech","cs"}, {"Danish","da"}, {"Dutch","nl"}, {"English","en"}, {"Finnish","fi"}, {"French","fr"}, {"Georgian","ka"}, {"German","de"},
+    {"Greek","el"}, {"Hebrew","he"}, {"Hindi","hi"}, {"Hungarian","hu"}, {"Indian","hi"}, {"Italian","it"}, {"Japanese","ja"}, {"Kazakh","kk"}, {"Korean","ko"},
+    {"Norwegian","nb"}, {"Persian","fa"}, {"Polish","pl"}, {"Portuguese","pt"}, {"Romanian","ro"}, {"Russian","ru"}, {"Serbian","sr"}, {"Spanish","es"},
+    {"Swedish","sv"}, {"Thai","th"}, {"Turkish","tr"}, {"Ukrainian","uk"}, {"Urdu","ur"}, {"Vietnamese","vi"} };
+static int layout_tag_by_name(struct xkb_keymap *km, unsigned group, char *out, size_t n)
+{
+    const char *name = km && group < xkb_keymap_num_layouts(km) ? xkb_keymap_layout_get_name(km, group) : NULL;
+    for (size_t i = 0; name && i < sizeof lang_name / sizeof *lang_name; i++) {
+        size_t len = strlen(lang_name[i][0]);
+        if (!strncmp(name, lang_name[i][0], len) && (!name[len] || name[len] == ' ')) { snprintf(out, n, "%s", lang_name[i][1]); return 1; }
+    }
+    return 0;
+}
 static int layout_tag(struct xkb_keymap *km, unsigned group, char *out, size_t n)
 {
     char *str = km ? xkb_keymap_get_as_string(km, XKB_KEYMAP_FORMAT_TEXT_V1) : NULL;
     char *sym = str ? strstr(str, "xkb_symbols \"") : NULL, *end;
-    if (!sym || !(end = strchr(sym += 13, '"'))) { free(str); return 0; }
+    if (!sym || !(end = strchr(sym += 13, '"'))) { free(str); return layout_tag_by_name(km, group, out, n); }
     *end = 0;
     int depth = 0, ok = 0, inside = 0;
     unsigned idx = 0;
@@ -107,7 +122,7 @@ static int layout_tag(struct xkb_keymap *km, unsigned group, char *out, size_t n
         ok = 1;
     }
     free(str);
-    return ok;
+    return ok || layout_tag_by_name(km, group, out, n);
 }
 static char layout_sent[16];
 /* Tells the focused app the language of the layout now active, when it changed (force: the window just got the focus). */

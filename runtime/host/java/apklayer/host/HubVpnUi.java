@@ -51,8 +51,8 @@ final class HubVpnUi {
     }
 
     void show(String owner, String session) {
-        popup = desktop.show("Android System", popup, "VPN is active", "Session: " + session + " (" + HubInstaller.labelOf(owner, owner) + ")",
-                List.of("disconnect", "Disconnect"));
+        popup = desktop.show("Android System", popup, "", "VPN is active", "Session: " + session + " (" + HubInstaller.labelOf(owner, owner) + ")",
+                List.of("disconnect", "Disconnect"), java.util.Map.of());
     }
 
     void hide() {

@@ -269,6 +269,11 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_PERMISSION, request -> { request.writeString(device); request.writeBoolean(ask); }, reply -> reply.readBoolean());
     }
 
+    /** UsbManager.openDevice: the node the hub opened for the caller (it holds the permission), null without it or access. */
+    android.os.ParcelFileDescriptor usbOpen(String device) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_OPEN, request -> request.writeString(device), reply -> reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR));
+    }
+
     /** Activity.requestPermissions: per name HostRuntimePermissions' GRANTED, DENIED_ONCE or DENIED; waits for the person's answers. */
     int[] requestPermissions(String[] names) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.PERMISSIONS_REQUEST, request -> request.writeStringArray(names), reply -> reply.createIntArray());

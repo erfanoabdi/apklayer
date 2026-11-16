@@ -1,0 +1,127 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: the guest's maps and map_files name no translator memfd and no arm64 directory
+
+PGR's anti-cheat (Tencent ACE) reads /proc/self/maps and readlinks every /proc/self/map_files entry. What the guest got (bpftrace on its raw
+openat/read/readlinkat, tester PC): /memfd:child (deleted) (the translator's 64 MB guest-memory windows, memfd_backed_mmap.cc, 47 lines), /memfd:main,
+Mesa's /memfd:/.glXXXXXX, libnative_bridge_vdso.so, and the system libraries as /system/lib64/arm64/libc.so, /system/bin/arm64/... (a device has
+/system/lib64/libX.so and bionic at /apex/com.android.runtime/lib64/bionic/). Now: those memfds and the vdso are host-only (anonymous in maps, ENOENT
+in map_files and its listing); lines and map_files links drop the arm64/ directory; libc, libm and libdl are spelled at the runtime apex.
+/proc/self/fd links are left alone (the guest linker's config matches them). BERBERIS_SHOW_HOST_MAPS keeps the old views. Module libberberis_arm64.
+
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -63,6 +63,12 @@
+       strncmp(name, "/memfd:exec", 11) == 0) {  // the code cache (exec_region_anonymous.cc)
+     return true;
+   }
++  // apklayer patch (0043): the translator's other memfds (memfd_backed_mmap.cc: "main" and "child" are its 64 MB guest-memory windows, 47
++  // of them in PGR's maps), Mesa's /memfd:/.glXXXXXX and the guest vdso: no device has them, and ACE read all of them.
++  if (strncmp(name, "/memfd:child", 12) == 0 || strncmp(name, "/memfd:main", 11) == 0 || strncmp(name, "/memfd:/.", 9) == 0 ||
++      strstr(name, "libnative_bridge_vdso.so") != nullptr) {
++    return true;
++  }
+   static constexpr const char* kHostDirs[] = {"/usr/", "/lib/", "/lib64/", "/etc/", "/var/", "/opt/", "/snap/",
+                                              "/run/", "/tmp/", "/nix/"};
+   for (const char* dir : kHostDirs) {
+@@ -158,6 +164,32 @@
+   return !show_host_maps && ReadOwnMapFilesLink(dirfd, path, target, sizeof(target)) && IsHostOnlyLinkTarget(target);
+ }
+ 
++ssize_t SpellMapFilesLinkForGuest(int dirfd, const char* path, char* buf, ssize_t n, size_t size) {
++  static const bool show_host_maps = berberis::HostGetenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  if (n <= 0 || path == nullptr || show_host_maps) return n;
++  static constexpr const char* kArchDirs[] = {"/system/lib64/arm64/", "/system/bin/arm64/"};
++  for (const char* dir : kArchDirs) {
++    const size_t k = strlen(dir);
++    if (static_cast<size_t>(n) < k || memcmp(buf, dir, k) != 0) continue;
++    const bool own = path[0] == '/' ? strstr(path, "/map_files/") != nullptr
++                                    : (strchr(path, '/') == nullptr && dirfd != AT_FDCWD && IsProcSelfMapFilesDir(dirfd));
++    if (!own) return n;
++    // bionic's own three libraries are at the runtime apex on a device
++    static constexpr char kBionic[] = "/apex/com.android.runtime/lib64/bionic/";
++    const char* file = buf + k;
++    const size_t rest = static_cast<size_t>(n) - k;
++    if (dir[8] == 'l' && ((rest == 7 && (memcmp(file, "libc.so", 7) == 0 || memcmp(file, "libm.so", 7) == 0)) || (rest == 8 && memcmp(file, "libdl.so", 8) == 0)) &&
++        sizeof(kBionic) - 1 + rest <= size) {
++      memmove(buf + sizeof(kBionic) - 1, file, rest);
++      memcpy(buf, kBionic, sizeof(kBionic) - 1);
++      return static_cast<ssize_t>(sizeof(kBionic) - 1 + rest);
++    }
++    memmove(buf + k - 6, buf + k, rest);  // drops "arm64/"
++    return n - 6;
++  }
++  return n;
++}
++
+ // apklayer patch (0016): the path layer's (apklayer-preload, first in symbol lookup) test whether /proc/<pid> is a process the app does not
+ // see (another cgroup: Android's hidepid view); null without the preload.
+ static bool IsHiddenProcPid(const char* name) {
+@@ -408,6 +440,28 @@
+           snprintf(anonymous_buf, sizeof(anonymous_buf), " %.4s 00000000 00:00 0", rest);
+           cur_line.resize(prot_offset - 1);
+           cur_line.append(anonymous_buf);
++        } else {
++          // apklayer patch (0043): the guest's system libraries live in an arm64 directory of the host's Android root (and /system/bin);
++          // a device has /system/lib64/libc.so, not /system/lib64/arm64/libc.so.
++          static constexpr const char* kBionicLibs[] = {"/system/lib64/arm64/libc.so", "/system/lib64/arm64/libm.so",
++                                                       "/system/lib64/arm64/libdl.so"};
++          static constexpr const char* kArchDirs[] = {"/system/lib64/arm64/", "/system/bin/arm64/"};
++          bool done = false;
++          for (const char* lib : kBionicLibs) {  // bionic's own libraries are at the runtime apex on a device
++            size_t pos = cur_line.find(lib);
++            if (pos != ArenaString::npos && cur_line.size() == pos + strlen(lib)) {
++              cur_line.replace(pos, strlen("/system/lib64/arm64/"), "/apex/com.android.runtime/lib64/bionic/");
++              done = true;
++              break;
++            }
++          }
++          for (const char* dir : kArchDirs) {
++            size_t pos = done ? ArenaString::npos : cur_line.find(dir);
++            if (pos != ArenaString::npos) {
++              cur_line.erase(pos + strlen(dir) - 6, 6);
++              break;
++            }
++          }
+         }
+       }
+     }
+diff --git a/kernel_api/unistd_emulation.cc b/kernel_api/unistd_emulation.cc
+--- a/kernel_api/unistd_emulation.cc
++++ b/kernel_api/unistd_emulation.cc
+@@ -19,6 +19,7 @@
+ #include <fcntl.h>  // AT_FDCWD, AT_SYMLINK_NOFOLLOW
+ 
+ #include <cerrno>
++#include <cstdio>   // snprintf (apklayer patch 0043)
+ #include <cstring>  // memcpy
+ 
+ #include "berberis/kernel_api/main_executable_real_path_emulation.h"
+@@ -33,7 +34,14 @@
+   }
+   const char* real_path = TryReadLinkToMainExecutableRealPath(path);
+   if (!real_path) {
+-    return readlinkat(dirfd, path, buf, buf_size);
++    return SpellMapFilesLinkForGuest(dirfd, path, buf, readlinkat(dirfd, path, buf, buf_size), buf_size);  // apklayer patch (0043)
++  }
++  // apklayer patch (0043): a device's app_process64 is /system/bin/app_process64, not in the host's arm64 directory
++  static constexpr char kArchBin[] = "/system/bin/arm64/";
++  static thread_local char spelled[4096];
++  if (strncmp(real_path, kArchBin, sizeof(kArchBin) - 1) == 0 &&
++      snprintf(spelled, sizeof spelled, "/system/bin/%s", real_path + sizeof(kArchBin) - 1) < static_cast<int>(sizeof spelled)) {
++    real_path = spelled;
+   }
+   // readlink have quite unusual semantic WRT handling of buffer length.  readlink should not add
+   // terminating null byte if it doesn't fit in the buffer, so can't use strlcpy. readlink should
+diff --git a/kernel_api/include/berberis/kernel_api/open_emulation.h b/kernel_api/include/berberis/kernel_api/open_emulation.h
+--- a/kernel_api/include/berberis/kernel_api/open_emulation.h
++++ b/kernel_api/include/berberis/kernel_api/open_emulation.h
+@@ -42,6 +42,8 @@
+ // apklayer patch (0014): the guest's /proc/self/map_files leaves out the host's own files (see IsHostOnlyMappedFile).
+ bool IsHostOnlyMappedFile(const char* name, unsigned dev, unsigned long inode);
+ bool IsHiddenProcSelfMapFilesEntry(int dirfd, const char* path);
++// apklayer patch (0043): the link of a map_files entry names a system library without the host's arm64 directory (as the guest's maps do).
++ssize_t SpellMapFilesLinkForGuest(int dirfd, const char* path, char* buf, ssize_t n, size_t size);
+ long GetDents64ForGuest(int fd, void* dirp, size_t count);
+ void CloseEmulatedProcSelfMapsFileDescriptor(int fd);
+ 

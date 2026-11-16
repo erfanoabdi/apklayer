@@ -13,7 +13,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
 #include <sys/time.h>
@@ -416,6 +419,25 @@ char *mkdtemp(char *path) {
     if (m_alloc) { size_t lp = strlen(path), lm = strlen(m); if (lp >= 6 && lm >= 6) memcpy(path + lp - 6, m + lm - 6, 6); free(m); }
     return r ? path : NULL;
 }
+
+/* An AF_UNIX address with a file path goes through the path layer as open() does (apklayer patch: an app's LocalSocket in /data/data/<pkg>/cache,
+ * OpenVPN's management socket, WireGuard's UAPI socket). True with `out` and `len` set when the path was an Android one that maps (and fits). */
+bool apklayer_unix_address(const struct sockaddr *a, socklen_t *len, struct sockaddr_un *out)
+{
+    size_t head = offsetof(struct sockaddr_un, sun_path);
+    if (!a || *len <= head + 1 || a->sa_family != AF_UNIX || ((const struct sockaddr_un *)a)->sun_path[0] != '/') return false;
+    char path[sizeof out->sun_path + 1], *m = path;
+    size_t n = strnlen(((const struct sockaddr_un *)a)->sun_path, *len - head);
+    if (n >= sizeof path) return false;
+    memcpy(path, ((const struct sockaddr_un *)a)->sun_path, n);
+    path[n] = 0;
+    bool alloc = apklayer_apply_path_overrides(&m), ok = strlen(m) < sizeof out->sun_path;
+    if (ok) { memset(out, 0, sizeof *out); out->sun_family = AF_UNIX; strcpy(out->sun_path, m); *len = (socklen_t)(head + strlen(m) + 1); }
+    if (alloc) free(m);
+    return ok;
+}
+int bind(int fd, const struct sockaddr *a, socklen_t len) { struct sockaddr_un u; if (apklayer_unix_address(a, &len, &u)) a = (const struct sockaddr *)&u; return ((int (*)(int, const struct sockaddr *, socklen_t))REAL(bind))(fd, a, len); }
+int connect(int fd, const struct sockaddr *a, socklen_t len) { struct sockaddr_un u; if (apklayer_unix_address(a, &len, &u)) a = (const struct sockaddr *)&u; return ((int (*)(int, const struct sockaddr *, socklen_t))REAL(connect))(fd, a, len); }
 
 /* Raw syscall() with a path: a native bridge's kernel emulation (Berberis) runs a guest's stat, access, readlink ... as the host syscall, so a
  * translated library's Android paths (its linker's /system/etc/ld.config.arm64.txt) reach the path layer only here. The *at forms with an

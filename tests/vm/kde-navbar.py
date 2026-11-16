@@ -31,7 +31,9 @@ for k in ('DISPLAY', 'WAYLAND_DISPLAY'): host.pop(k, None)
 for k in ('XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME'): host[k] = str(run_dir / k.lower())  # KWin remembers outputs' scale and windows' state: every run starts clean
 bus = subprocess.run(['dbus-daemon', '--session', '--fork', '--print-address=1', '--print-pid=1'], env=host, capture_output=True, text=True, check=True).stdout.split()
 host.update(DBUS_SESSION_BUS_ADDRESS=bus[0], WAYLAND_DISPLAY=str(run_dir / 'kdenest'))
-os.environ.update(DBUS_SESSION_BUS_ADDRESS=bus[0])  # kwin.py's qdbus6 calls
+host["KWIN_SCREENSHOT_NO_PERMISSION_CHECKS"] = "1"  # spectacle may capture this KWin (5.27 refuses a process its desktop file does not name)
+os.environ.update(DBUS_SESSION_BUS_ADDRESS=bus[0])  # kwin.py's qdbus calls
+kwin.LOG, kwin.ENV = run_dir / 'kwin.log', dict(host, QT_QPA_PLATFORM='wayland')  # this KWin's log and kscreen-doctor environment
 TICK = 3500
 NAV = 48  # logical pixels (navbar.h: Android's 48 dp at the density 160 x scale)
 ENV = dict(instance.ENV, WAYLAND_DISPLAY=host['WAYLAND_DISPLAY'])
@@ -116,6 +118,19 @@ def pixel_case(name, shot_name, want_bar=True):
     case(name, ok, 'bottom %s, Back region extreme %s, above the bar %s' % (bar, icon, above))
 
 
+def title_case(name):
+    """KWin's own title bar (Breeze) in the picture it composes: bar rows above the client area, filled with a colour that is neither the backdrop nor the app's content."""
+    info = kw()
+    img = shot(name)
+    if img is None: return case(name + ' (screenshot)', False, 'no capture of the virtual output')
+    f = img.width / info['outputGeometry'][2]
+    fx, fy, fw, fh = info['frame']
+    bar = info['client'][1] - fy
+    px = lambda lx, ly: img.getpixel((min(img.width - 1, int(lx * f)), min(img.height - 1, int(ly * f))))
+    title, content, outside = px(fx + fw // 4, fy + bar // 2), px(fx + fw // 4, info['client'][1] + bar), px(fx - 20, fy + bar // 2)
+    case(name, 15 <= bar <= 60 and title not in (outside, content) and sum(title) > 600, 'title bar %d logical, its colour %s, the content below %s, the backdrop %s' % (bar, title, content, outside))
+
+
 def check_start():
     info, c = kw(), cfg()
     log = shell_log()
@@ -125,6 +140,7 @@ def check_start():
     case('the app is told the bar as its inset: %d logical = %d px @%d%%' % (NAV, NAV * c['scale'] // 100, c['scale']), c['nav'] == NAV and c['nav_px'] == (NAV * c['scale'] + 50) // 100, str(c))
     steps['float'] = c
     pixel_case('the bar is drawn: its colour at the bottom, the Back triangle in its region', 'start')
+    title_case('the title bar is KWin\'s: a light bar above the content, not our own')
     steps['back_before'] = click_back_region(c)  # Back
 
 
@@ -200,6 +216,19 @@ def check_scaled_clicked():
     case('Back works at that scale', backs() == steps['back_before'] + 1, 'Back count %d -> %d' % (steps['back_before'], backs()))
 
 
+def scheme_step(name, want):
+    """`settings set night`: the bar's colours in the picture KWin composes are the scheme's (light #f4f4f4 with dark icons, dark black with light icons), live."""
+    def check():
+        p = pixels('scheme-' + name)
+        if p is None: return case('%s scheme: the bar in the picture (screenshot)' % name, False, 'no capture of the virtual output')
+        bar, icon, above = p
+        light = want[0] > 128
+        case('%s scheme: the bar is %s, the Back icon %s' % (name, want, 'darker' if light else 'lighter'), bar == want and (sum(icon) < sum(bar) - 150 if light else sum(icon) > sum(bar) + 150),
+             'bar %s, icon %s, above %s; shell: %s' % (bar, icon, above, [l.split('] ', 1)[-1] for l in shell_log().splitlines() if 'navigation bar' in l][-1:]))
+    check.__name__ = 'check_scheme_' + name
+    return check
+
+
 def check_no_border():
     info, c = kw(), cfg()
     csd = c['bar'] == 46
@@ -248,7 +277,7 @@ SEQUENCE = [  # (what happens at this tick, the check at the next one)
     ('w.fullScreen = false;', check_unfullscreen),
     ('workspace.slotWindowQuickTileLeft();', check_tiled),
     ('', check_tiled_clicked),
-    ('w.tile = null;', lambda: None),
+    ('untile(w);', lambda: None),
     ('w.setMaximize(false, false);', lambda: None),
     ('scale:1.5', scale_step(150)),
     ('', check_scaled_clicked),
@@ -257,6 +286,9 @@ SEQUENCE = [  # (what happens at this tick, the check at the next one)
     ('scale:3', scale_step(300)),
     ('', check_scaled_clicked),
     ('scale:1', lambda: None),
+    ('set:night:no', scheme_step('light', (244, 244, 244))),
+    ('set:night:yes', scheme_step('dark', (0, 0, 0))),
+    ('unset:night', lambda: None),
     ('w.noBorder = true;', check_no_border),
     ('w.noBorder = false;', check_border),
     ('set:navbar:off', check_off),
@@ -271,7 +303,7 @@ ENV['APKLAYER_DEBUG_INPUT'] = '1'
 
 def do(action):
     if action.startswith('scale:'):
-        out = subprocess.run(['kscreen-doctor', 'output.Virtual-0.scale.' + action[6:]], env=host, capture_output=True, text=True)
+        out = subprocess.run(['kscreen-doctor', 'output.Virtual-0.scale.' + action[6:]], env=kwin.ENV, capture_output=True, text=True)
         assert out.returncode == 0, 'kscreen-doctor: ' + out.stdout[-300:] + out.stderr[-300:]
     elif action.startswith('set:') or action.startswith('unset:'):
         assert settings(*action.split(':')).returncode == 0, action
