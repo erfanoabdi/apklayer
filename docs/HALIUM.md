@@ -208,7 +208,7 @@ bus's click service installs for the user, no password):
 gdbus call --system -d com.lomiri.click -o /com/lomiri/click -m com.lomiri.click.Install /home/phablet/apklayer.erfanoabdi_<version>_arm64.click
 ```
 Then open Apklayer from the drawer (the manager runs `apklayer setup`: the runtime bundle into `~/.local/share/apklayer`, providers, system apps,
-the always-on `ut` instance). The click brings its own Java (a JDK 21 image with class data sharing); nothing else from the rootfs beyond the image's
+the always-on `ut` instance). The click brings its own Java (a JDK 25 image from 0.4.120 on, 21 before; with the AOT cache / class data sharing); nothing else from the rootfs beyond the image's
 own packages (`zip` is not needed: setup uses the image's `jar`). The CLI for a terminal: `/opt/click.ubuntu.com/apklayer.erfanoabdi/current/usr/bin/apklayer`
 (an alias is handy). Remove: `gdbus call --system -d com.lomiri.click -o /com/lomiri/click -m com.lomiri.click.Remove apklayer.erfanoabdi`
 (the data in `~/.local/share/apklayer` stays; `apklayer remove-all --yes` first removes it, the launchers and units too).
@@ -406,8 +406,8 @@ come from Sailfish's own repositories (zypper in the container). Toolchain: gcc 
 `~/.cache/apklayer/sailfish`, the Java libraries come from `~/.cache/apklayer/deps` when present. The container is `--rm` (nothing keeps running);
 `docker rmi apklayer-sailfish-build:5.0.0.62` frees the image. CI: job `sailfish` in `.github/workflows/release.yml` (the `*.aarch64.rpm` release assets).
 
-RPMs (`rpm/*.spec`): `apklayer` (meson `--prefix=/usr -Dandroid_runtime=false`, like debian/rules, and apklayer-manager, below) and `apklayer-devel`, plus what Sailfish 5.0's repositories and Chum lack: `temurin-21-jdk` (Adoptium's aarch64 JDK, built against glibc 2.17,
-repackaged unchanged at `/usr/lib/jvm/temurin-21-jdk`: building OpenJDK from source in the target is hours of work for the same bits),
+RPMs (`rpm/*.spec`): `apklayer` (meson `--prefix=/usr -Dandroid_runtime=false`, like debian/rules, and apklayer-manager, below) and `apklayer-devel`, plus what Sailfish 5.0's repositories and Chum lack: `temurin-25-jdk` (Adoptium's aarch64 JDK 25.0.5+8, runs on the Quintus' glibc 2.30 (checked),
+repackaged unchanged at `/usr/lib/jvm/temurin-25-jdk`; `rpm/temurin-21-jdk.spec` stays for a 21 build, `findJava` takes 25 first and the apklayer RPM requires either: building OpenJDK from source in the target is hours of work for the same bits),
 `libmd`, `libbsd`, `libunwind` (built from source). Sailfish-specific changes the tree needed: libdl linked explicitly (glibc < 2.34), linux_compat.h
 for the new mount API and pidfd_open, SYS_statx, bionic_translation compat patches (no `Elf64_Relr`, gcc 10's `-std=c++20`), and the runtime
 bundle unpacked as `zstd -dc | tar -x` (BusyBox tar has no `--zstd`; gnu-tar conflicts with busybox-symlinks-tar).
@@ -429,7 +429,7 @@ through invoker, it shows the Apps list of the `ut` instance with the installed 
 reach it (an app's page, the Instances page). No keyboard input in it (Lipstick has no text-input protocol), no clipboard. The RPM grows from
 ~2.5 to 9.0 MB (libslint_cpp 13 MB unpacked).
 
-Install (root): `pkcon install-local apklayer-*.aarch64.rpm temurin-21-jdk-*.rpm libbsd-*.rpm libmd-*.rpm libunwind-*.rpm` (unsigned local RPMs; zstd and
+Install (root): `pkcon install-local apklayer-*.aarch64.rpm temurin-25-jdk-*.rpm libbsd-*.rpm libmd-*.rpm libunwind-*.rpm` (unsigned local RPMs; zstd and
 elfutils-libelf come from Jolla's repositories); `apklayer-binder.service` starts. As defaultuser: `apklayer setup` (no wget on Sailfish: `--bundle
 <apklayer-runtime-arm64-*.tar.zst>`). Space (2026-11-09): the Quintus' home is on the 6.8 GB system partition (`/dev/mapper/system_a`), `/userdata`
 (ext4, exec allowed, 225 GB) is separate, and a runtime takes ~1.6 GB per version (an update holds two plus the bundle). The RPM's `%post`
