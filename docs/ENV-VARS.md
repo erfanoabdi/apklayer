@@ -54,6 +54,7 @@ Read where they are needed; set them for one command (`APKLAYER_RUNTIME_DEBUG=1 
 | `APKLAYER_GST_AMC` | keep the Android-MediaCodec GStreamer elements on Halium |
 | `APKLAYER_COMPOSITOR_GPU` | the compositor's GPU (id or render node), where its dmabuf feedback names none (a nested or virtual KWin) |
 | `APKLAYER_GPU` | the instance's GPU for one command (the persistent choice is `apklayer gpu set`) |
+| `APKLAYER_VULKAN_TEXTURE_EMULATION` | ASTC/ETC2 emulation of the Vulkan HAL on a device without them (TextureEmulation.cpp): `0` off, `force` on every device (group `vulkan-textures`) |
 | `APKLAYER_BOOT_BROADCASTS`, `APKLAYER_MEDIA_WATCHES` | `0`/a package: BOOT_COMPLETED receivers; the hub's inotify budget |
 | `APKLAYER_DISPLAY_WIDTH`, `_HEIGHT`, `_DPI` | the virtual display (720x1280, 320 dpi) |
 | `APKLAYER_UNSTRIPPED` | a directory of unstripped libraries for `tools/debug/symbolize-trace.py` |

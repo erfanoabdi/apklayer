@@ -24,4 +24,10 @@ vulkan_dep = dependency('vulkan', required: false)
 if vulkan_dep.found()
   executable('vulkan-select-test', '../../../tests/hals/vulkan-select-test.cpp', override_options: ['b_ndebug=false'],
     include_directories: include_directories('../../../tests/hals/include'), dependencies: [vulkan_dep, dependency('dl')])
+  # ASTC/ETC2 emulation of the HAL (TextureEmulation.cpp, gfxstream's decoder) on the host's GPU
+  vk_hal = '../../../aosp/hals/graphics/vulkan/'
+  executable('vulkan-textures-test', ['../../../tests/hals/vulkan-textures-test.cpp', vk_hal + 'TextureEmulation.cpp', vk_hal + 'TextureCommands.cpp',
+      vk_hal + 'gfxstream/vulkan/emulated_textures/compressed_image_info.cpp', vk_hal + 'gfxstream/vulkan/emulated_textures/gpu_decompression_pipeline.cpp'],
+    include_directories: include_directories(vk_hal + 'gfxstream'), cpp_args: ['-Wno-missing-field-initializers', '-Wno-unused-parameter'],
+    override_options: ['cpp_std=c++20'], dependencies: [vulkan_dep, dependency('dl')])
 endif
