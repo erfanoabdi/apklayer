@@ -1,0 +1,35 @@
+// PGR's network calls (any thread of the game process, from its first openat): socket, connect (AF_INET dest ip:port, ret), sendto/sendmsg/recvfrom/recvmsg
+// sizes + returns, fd -> destination. Line shape "<ms> <KIND> <tid> ...". Run via pgr-timeline.sh EXTRA_BT=ace-net.bt (@BRIDGE@/@FAULT@ unused).
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0 = nsecs; }
+tracepoint:syscalls:sys_enter_socket / @g[pid] / { @s[tid] = args->family * 1000 + args->type; }
+tracepoint:syscalls:sys_exit_socket / @g[pid] && @s[tid] / { printf("%lu SOCKET %d fam/type %d fd %d\n", (nsecs - @t0) / 1000000, tid, @s[tid], args->ret); delete(@s[tid]); }
+tracepoint:syscalls:sys_enter_connect / @g[pid] && *(uint16 *)args->uservaddr == 2 /
+{ @cf[tid] = args->fd; @cd[tid] = ntop(*(uint32 *)((uint64)args->uservaddr + 4)); @cp[tid] = ((uint64)*(uint8 *)((uint64)args->uservaddr + 2) << 8) | *(uint8 *)((uint64)args->uservaddr + 3); }
+tracepoint:syscalls:sys_enter_connect / @g[pid] && *(uint16 *)args->uservaddr == 10 /
+{ @cf[tid] = args->fd; @cd[tid] = ntop(0); @cp[tid] = ((uint64)*(uint8 *)((uint64)args->uservaddr + 2) << 8) | *(uint8 *)((uint64)args->uservaddr + 3);
+  printf("%lu CONNECT6 %d fd %d port %lu addrhi %lx addrlo %lx\n", (nsecs - @t0) / 1000000, tid, args->fd, @cp[tid], *(uint64 *)((uint64)args->uservaddr + 8), *(uint64 *)((uint64)args->uservaddr + 16)); }
+tracepoint:syscalls:sys_exit_connect / @g[pid] && @cf[tid] /
+{ printf("%lu CONNECT %d fd %d %s:%lu ret %d\n", (nsecs - @t0) / 1000000, tid, @cf[tid], @cd[tid], @cp[tid], args->ret); @dst[pid, @cf[tid]] = @cd[tid]; @dpt[pid, @cf[tid]] = @cp[tid]; delete(@cf[tid]); }
+tracepoint:syscalls:sys_enter_sendto / @g[pid] / { @sf[tid] = args->fd; @sl[tid] = args->len; }
+tracepoint:syscalls:sys_exit_sendto / @g[pid] && @sf[tid] / { printf("%lu SENDTO %d fd %d len %lu ret %d dst %s:%lu\n", (nsecs - @t0) / 1000000, tid, @sf[tid], @sl[tid], args->ret, @dst[pid, @sf[tid]], @dpt[pid, @sf[tid]]); delete(@sf[tid]); }
+tracepoint:syscalls:sys_enter_recvfrom / @g[pid] / { @rf[tid] = args->fd; @rl[tid] = args->size; }
+tracepoint:syscalls:sys_exit_recvfrom / @g[pid] && @rf[tid] / { printf("%lu RECVFROM %d fd %d buf %lu ret %d dst %s:%lu\n", (nsecs - @t0) / 1000000, tid, @rf[tid], @rl[tid], args->ret, @dst[pid, @rf[tid]], @dpt[pid, @rf[tid]]); delete(@rf[tid]); }
+tracepoint:syscalls:sys_enter_sendmsg / @g[pid] / { @mf[tid] = args->fd; }
+tracepoint:syscalls:sys_exit_sendmsg / @g[pid] && @mf[tid] / { printf("%lu SENDMSG %d fd %d ret %d dst %s:%lu\n", (nsecs - @t0) / 1000000, tid, @mf[tid], args->ret, @dst[pid, @mf[tid]], @dpt[pid, @mf[tid]]); delete(@mf[tid]); }
+tracepoint:syscalls:sys_enter_recvmsg / @g[pid] / { @nf[tid] = args->fd; }
+tracepoint:syscalls:sys_exit_recvmsg / @g[pid] && @nf[tid] / { printf("%lu RECVMSG %d fd %d ret %d dst %s:%lu\n", (nsecs - @t0) / 1000000, tid, @nf[tid], args->ret, @dst[pid, @nf[tid]], @dpt[pid, @nf[tid]]); delete(@nf[tid]); }
+tracepoint:syscalls:sys_enter_close / @g[pid] / { delete(@dst[pid, args->fd]); delete(@dpt[pid, args->fd]); }
+// the net thread (the one that connects to :10012): every syscall it makes from there on (nr, a0-a2, return), to compare a normal run with a rejected one
+tracepoint:syscalls:sys_enter_connect / @g[pid] && *(uint16 *)args->uservaddr == 2 && (((uint64)*(uint8 *)((uint64)args->uservaddr + 2) << 8) | *(uint8 *)((uint64)args->uservaddr + 3)) == 10012 /
+{ @nt[tid] = 1; printf("%lu NT %d connect-10012\n", (nsecs - @t0) / 1000000, tid); }
+// the storm (signal frames and probes: 14 rt_sigprocmask, 15 rt_sigreturn, 27 mincore, 39 getpid, 186 gettid, 202 futex, 297 rt_tgsigqueueinfo) is only counted (@cnt, printed at the end):
+// printing it floods the disk (9 M lines in 1 s) and the run no longer dies
+tracepoint:raw_syscalls:sys_enter / @nt[tid] / { @cnt[args->id] = count(); }
+tracepoint:raw_syscalls:sys_enter / @nt[tid] && args->id != 14 && args->id != 15 && args->id != 27 && args->id != 39 && args->id != 186 && args->id != 202 && args->id != 297 /
+{ printf("%lu NTSYS %d nr %d a0 %lx a1 %lx a2 %lx a3 %lx a4 %lx a5 %lx\n", (nsecs - @t0) / 1000000, tid, args->id, args->args[0], args->args[1], args->args[2], args->args[3], args->args[4], args->args[5]); }
+tracepoint:raw_syscalls:sys_exit / @nt[tid] && args->id != 14 && args->id != 15 && args->id != 27 && args->id != 39 && args->id != 186 && args->id != 202 && args->id != 297 /
+{ printf("%lu NTRET %d nr %d ret %d\n", (nsecs - @t0) / 1000000, tid, args->id, args->ret); }
+tracepoint:syscalls:sys_enter_write / @nt[tid] && args->fd == 2 / { printf("%lu NTWRITE %d len %lu %s\n", (nsecs - @t0) / 1000000, tid, args->count, str(args->buf, 150)); }
+tracepoint:sched:sched_process_exit / @g[pid] && pid == tid / { printf("%lu EXIT %d\n", (nsecs - @t0) / 1000000, pid); }
+BEGIN { printf("READY\n"); }
+END { clear(@g); clear(@s); clear(@cf); clear(@cd); clear(@cp); clear(@dst); clear(@dpt); clear(@sf); clear(@sl); clear(@rf); clear(@rl); clear(@mf); clear(@nf); clear(@nt); clear(@t0); }
