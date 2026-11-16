@@ -255,7 +255,11 @@ static std::string keystoreDir(const Instance& inst) {
 // What Android's init derives at boot (property_service.cpp): the fingerprint (and the build's display id, flavor, description) of the product the instance presents (bridge/native/apklayer.prop over
 // the tree's build.prop, whose own fingerprint names the GSI's "generic" product) and the ABI lists of this machine's CPU. Set before the files
 // are loaded: ro.* is write-once, so these win and every reader (natives, apklayer.host.HostBuild) sees one device.
-static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std::vector<std::string>& files) {
+static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std::vector<std::string>& files, const std::string& overrides) {
+    // an instance override (`apklayer prop set`) of a CPU/bridge identity value wins: ro.* is write-once and these are set before the files load
+    auto setIdentity = [&](const char* name, const char* value) {
+        if (property(overrides, name).empty()) setProperty(l, ne, name, value);
+    };
     auto get = [&](const char* key) {
         for (const std::string& f : files)
             if (std::string v = property(f, key); !v.empty()) return v;
@@ -275,7 +279,7 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     std::string abis64 = std::string(kAbi) + (bridge ? std::string(",") + kBridgeAbi : "");
     std::string abis = abis64 + (*kAbi32 ? std::string(",") + kAbi32 : "");
     if (bridge) {
-        setProperty(l, ne, "ro.dalvik.vm.native.bridge", "libndk_translation.so");  // AOSP's bridge name, what an app sees (the loader takes the real library from -Dapklayer.nativebridge, not this property)
+        setIdentity("ro.dalvik.vm.native.bridge", "libndk_translation.so");  // AOSP's bridge name, what an app sees (the loader takes the real library from -Dapklayer.nativebridge, not this property)
         setProperty(l, ne, "ro.berberis.flags", "glibc-host-thread-id-handoff");  // bionic_translation's thread slots are glibc's (native_bridge.c)
     }
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
@@ -302,10 +306,10 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
         unsigned major = 0, minor = 0;
         if (sscanf(it->second.c_str(), "%u.%u", &major, &minor) == 2) setProperty(l, ne, "ro.opengles.version", std::to_string(major << 16 | minor).c_str());
     }
-    setProperty(l, ne, "ro.product.cpu.abi", kAbi);
-    setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
-    setProperty(l, ne, "ro.product.cpu.abilist64", abis64.c_str());
-    setProperty(l, ne, "ro.product.cpu.abilist32", kAbi32);
+    setIdentity("ro.product.cpu.abi", kAbi);
+    setIdentity("ro.product.cpu.abilist", abis.c_str());
+    setIdentity("ro.product.cpu.abilist64", abis64.c_str());
+    setIdentity("ro.product.cpu.abilist32", kAbi32);
 }
 
 // graphics = device: the device's properties its vendor libraries read, as a prop file loaded before apklayer.prop (ro.* is write-once, so the
@@ -365,7 +369,7 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
         writeFile(file, "media.c2.hal.selection=hidl\ndebug.stagefright.c2-poolmask=327680\n");
         propFiles.push_back(file);
     }
-    setDerivedProperties(l, ne, propFiles);
+    setDerivedProperties(l, ne, propFiles, exists(inst.propOverrides()) ? inst.propOverrides() : std::string());
     Spawn prop;
     prop.argv = {join(n, "bin/aprop"), "load"};
     prop.argv.insert(prop.argv.end(), propFiles.begin(), propFiles.end());
