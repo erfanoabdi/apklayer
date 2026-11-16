@@ -1,0 +1,79 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] the GL strings an arm64 guest reads (GL_VENDOR, GL_RENDERER, GL_VERSION) follow properties
+
+A game on a PC reads "NVIDIA GeForce RTX 5060 Ti/PCIe/SSE2" / "OpenGL ES 3.2 NVIDIA 615.71.09" where a phone says "Adreno (TM) 620"; Unity's SystemInfo.graphicsDevice* and Tencent ACE read the same strings. With berberis.gl.vendor, berberis.gl.renderer and berberis.gl.version (properties, or BERBERIS_GL_VENDOR/RENDERER/VERSION) the named string is the guest's answer to glGetString; unset: the host driver's own. A named override of the upstream glGetString trampoline through the chained override registry (REGISTER_DIGITALIS_EXTRA_TRAMPOLINE_OVERRIDES, libGLESv2.so and libGLESv3.so), so the proxy's wrapping stays. New file apklayer_gl_strings.cc, Android.bp. Module libberberis_arm64.
+
+diff --git a/android_api/digitalis_extra_proxy/Android.bp b/android_api/digitalis_extra_proxy/Android.bp
+--- a/android_api/digitalis_extra_proxy/Android.bp
++++ b/android_api/digitalis_extra_proxy/Android.bp
+@@ -73,6 +73,7 @@
+         "digitalis_extra_libcamera2ndk_trampolines.cc",
+         "digitalis_extra_libegl_trampolines.cc",
+         "digitalis_extra_libglesv2_trampolines.cc",
++        "apklayer_gl_strings.cc",  // apklayer patch (0046)
+         "digitalis_extra_libnativewindow_trampolines.cc",
+         "digitalis_extra_libvulkan_trampolines.cc",
+         "digitalis_extra_libwebviewchromium_plat_support_trampolines.cc",
+diff --git a/android_api/digitalis_extra_proxy/apklayer_gl_strings.cc b/android_api/digitalis_extra_proxy/apklayer_gl_strings.cc
+--- /dev/null
++++ b/android_api/digitalis_extra_proxy/apklayer_gl_strings.cc
+@@ -0,0 +1,59 @@
++// apklayer patch (0046): the GL strings an arm64 guest reads (glGetString GL_VENDOR, GL_RENDERER, GL_VERSION) as a device's driver gives them.
++//
++// The guest's GLES calls reach the host driver, so a game on a PC reads "NVIDIA GeForce RTX 5060 Ti/PCIe/SSE2" / "OpenGL ES 3.2 NVIDIA 615.71.09"
++// where a phone says "Adreno (TM) 620" / "OpenGL ES 3.2 V@0502.0 (...)". An anti-cheat reads them too (Unity's SystemInfo.graphicsDeviceName/
++// Vendor/Version are the same calls). With `berberis.gl.vendor`, `berberis.gl.renderer` and `berberis.gl.version` (properties, or BERBERIS_GL_VENDOR,
++// BERBERIS_GL_RENDERER, BERBERIS_GL_VERSION in the environment) the named string is the guest's answer; unset: the host driver's own. Chained after the
++// upstream glGetString trampoline (a named override: the proxy's own wrapping stays), registered for libGLESv2.so and libGLESv3.so.
++
++#if defined(__x86_64__)
++
++#include <cstdint>
++
++#include "berberis/base/config_globals.h"
++#include "berberis/guest_abi/function_wrappers.h"
++#include "berberis/guest_abi/guest_params.h"
++#include "berberis/proxy_loader/proxy_library_builder.h"
++#include "berberis/runtime_primitives/host_code.h"
++
++#include "register_extra_trampolines.h"
++
++namespace berberis {
++namespace {
++
++using PFN_glGetString = const uint8_t* (*)(uint32_t);
++
++constexpr uint32_t kGlVendor = 0x1F00;
++constexpr uint32_t kGlRenderer = 0x1F01;
++constexpr uint32_t kGlVersion = 0x1F02;
++
++void DoApklayerGlGetString(HostCode callee, ProcessState* state) {
++  const auto* chain = static_cast<const ChainedTrampoline*>(callee);
++  static ConfigStr vendor("BERBERIS_GL_VENDOR", "berberis.gl.vendor");
++  static ConfigStr renderer("BERBERIS_GL_RENDERER", "berberis.gl.renderer");
++  static ConfigStr version("BERBERIS_GL_VERSION", "berberis.gl.version");
++
++  // The name is the first argument and x0 the return: read it before the upstream trampoline overwrites the register.
++  auto [name] = GuestParamsValues<PFN_glGetString>(state);
++  chain->marshal_and_call(chain->thunk, state);
++
++  const char* replacement = name == kGlVendor ? vendor.get() : name == kGlRenderer ? renderer.get() : name == kGlVersion ? version.get() : nullptr;
++  if (replacement == nullptr || replacement[0] == '\0') return;
++  auto&& [ret] = GuestReturnReference<PFN_glGetString>(state);
++  if (ret != nullptr) ret = reinterpret_cast<const uint8_t*>(replacement);
++}
++
++const KnownTrampoline kApklayerGlesV2Overrides[] = {
++    {"glGetString", DoApklayerGlGetString, nullptr},
++};
++const KnownTrampoline kApklayerGlesV3Overrides[] = {
++    {"glGetString", DoApklayerGlGetString, nullptr},
++};
++
++REGISTER_DIGITALIS_EXTRA_TRAMPOLINE_OVERRIDES("libGLESv2.so", kApklayerGlesV2Overrides)
++REGISTER_DIGITALIS_EXTRA_TRAMPOLINE_OVERRIDES("libGLESv3.so", kApklayerGlesV3Overrides)
++
++}  // namespace
++}  // namespace berberis
++
++#endif  // defined(__x86_64__)
