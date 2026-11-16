@@ -1,16 +1,17 @@
 From: apklayer <noreply@apklayer.invalid>
 Subject: [PATCH] apklayer patch: interpreter branch trace (BERBERIS_TRACE_BB)
 
-PGR control-flow differential: per guest thread varint trace of taken branches into one module (default libanogs.so), svc records, register dumps at listed offsets. Off without BERBERIS_TRACE_BB. Module libberberis_arm64.
+PGR control-flow differential: per guest thread varint trace of taken branches into one module (default libanogs.so), svc records with args and results, AES ring, sendto/recvfrom dumps, register dumps at listed offsets and at host faults. Off without BERBERIS_TRACE_BB. Module libberberis_arm64.
 
 --- a/cpu_emulation/interpreter/arm64/interpreter-main.cc
 +++ b/cpu_emulation/interpreter/arm64/interpreter-main.cc
-@@ -16,6 +16,17 @@
+@@ -16,6 +16,18 @@
  
  #include "berberis/interpreter/arm64/interpreter.h"
  
 +#include <fcntl.h>
 +#include <sys/syscall.h>
++#include <sys/uio.h>
 +#include <time.h>
 +#include <unistd.h>
 +
@@ -23,7 +24,7 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
  #include "berberis/decoder/arm64/decoder.h"
  #include "berberis/decoder/arm64/semantics_player.h"
  #include "berberis/guest_state/guest_addr.h"
-@@ -30,6 +41,156 @@
+@@ -30,6 +42,286 @@
  
  namespace berberis {
  
@@ -63,11 +64,20 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
 +  }();
 +  return cfg;
 +}
-+uint64_t g_lo = 0, g_hi = 0;  // module range (racy but monotone: written once found)
++int g_ndump[8];  // dumps taken per listed pc (capped at 20)
++uint64_t g_lo = 0, g_hi = 0;  // lowest start / highest end of the module's mappings (racy but monotone)
++struct Rng { uint64_t a, b; };
++Rng g_rng[64];
++int g_nrng = 0;  // mappings of the module (copies and chunks); each rescan rewrites <dir>/maps-<pid>.txt
 +struct BbThread {
 +  int fd = -1;
 +  uint64_t last_tgt = 0, n = 0, any = 0;
 +  uint32_t len = 0;
++  bool after_svc = false;
++  uint32_t aes_n = 0;       // AES ring: the last 512 AESE/AESD (Vd, Vn) of this thread
++  bool want_ring = false;   // dump the ring at the next svc (after a recvfrom: the reply's AESD)
++  uint64_t rx_ptr = 0, rx_len = 0;
++  __uint128_t aes[512][2];
 +  uint8_t buf[32768];
 +};
 +thread_local BbThread t_bb;
@@ -76,18 +86,33 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
 +  FILE* f = fopen("/proc/self/maps", "r");
 +  if (!f) return;
 +  char line[1024];
++  Rng r[64];
++  int n = 0;
 +  uint64_t lo = ~0ULL, hi = 0;
++  char text[16384];
++  size_t tl = 0;
 +  while (fgets(line, sizeof line, f)) {
 +    if (!strstr(line, Cfg().module)) continue;
 +    uint64_t a = strtoull(line, nullptr, 16), b = strtoull(strchr(line, '-') + 1, nullptr, 16);
++    if (n < 64) r[n++] = {a, b};
 +    if (a < lo) lo = a;
 +    if (b > hi) hi = b;
++    size_t l = strlen(line);
++    if (tl + l < sizeof text) { memcpy(text + tl, line, l); tl += l; }
 +  }
 +  fclose(f);
-+  if (hi) {
-+    g_hi = hi;
-+    g_lo = lo;
++  if (!hi) return;
++  bool changed = n != g_nrng || memcmp(r, g_rng, n * sizeof(Rng)) != 0;
++  if (changed) {
++    char path[256];
++    snprintf(path, sizeof path, "%s/maps-%d.txt", Cfg().dir, getpid());
++    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
++    if (fd >= 0) { (void)!write(fd, text, tl); close(fd); }
 +  }
++  memcpy(g_rng, r, n * sizeof(Rng));
++  g_nrng = n;
++  g_lo = lo;
++  g_hi = hi;
 +}
 +void Flush(BbThread& t) {
 +  for (uint32_t o = 0; o < t.len;) {
@@ -124,17 +149,40 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
 +    Stamp(t);
 +  }
 +}
-+inline bool In(uint64_t a) { return Cfg().all || (a >= g_lo && a < g_hi); }
++void DumpMem(BbThread& t, uint64_t ptr, uint64_t len);
++inline bool In(uint64_t a) {
++  if (Cfg().all) return true;
++  if (a < g_lo || a >= g_hi) return false;
++  for (int i = 0; i < g_nrng; i++)
++    if (a >= g_rng[i].a && a < g_rng[i].b) return true;
++  return false;
++}
 +// Called after each interpreted insn: pc before, state after.
 +void BbAfter(ThreadState* state, uint64_t pc, uint8_t insn_len) {
 +  BbThread& t = t_bb;
 +  if (t.fd == -2) return;
++  if (t.after_svc) {  // the svc's result: a type-3 record with x8 = 0xffff and x0 = the return value
++    t.after_svc = false;
++    Put(t, (0xffffULL << 2) | 3);
++    Put(t, state->cpu.x[0]);
++    Put(t, 0);
++    Put(t, 0);
++    if (t.rx_ptr) {
++      int64_t got = int64_t(state->cpu.x[0]);
++      if (got > 0 && uint64_t(got) <= t.rx_len) {
++        DumpMem(t, t.rx_ptr, got);
++        t.want_ring = true;
++      }
++      t.rx_ptr = 0;
++    }
++  }
 +  uint64_t tgt = state->cpu.insn_addr;
 +  if (tgt == pc + insn_len) return;
 +  if (!g_hi && !Cfg().all) {
 +    if ((++t.any & 0xffff) == 1) FindRange();
 +    return;
 +  }
++  if (g_hi && (++t.any & 0xffffff) == 0) FindRange();
 +  if (!In(pc) && !In(tgt)) return;
 +  EnsureOpen(t);
 +  if (t.fd < 0) return;
@@ -145,22 +193,96 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
 +  if ((++t.n & 0xffff) == 0) Stamp(t);
 +  if ((t.n & 0xff) == 0) Flush(t);
 +}
++void PutRaw(BbThread& t, const void* p, size_t n) {
++  while (n) {
++    if (t.len == sizeof t.buf) Flush(t);
++    size_t k = sizeof t.buf - t.len < n ? sizeof t.buf - t.len : n;
++    memcpy(t.buf + t.len, p, k);
++    t.len += k;
++    p = static_cast<const char*>(p) + k;
++    n -= k;
++  }
++}
++// Type-3 records with x8 = 0xfffe (AES ring: count, then count x (Vd, Vn) of 16 bytes) and 0xfffd (memory: len, bytes).
++void DumpAes(BbThread& t) {
++  uint32_t n = t.aes_n < 512 ? t.aes_n : 512;
++  if (t.len > sizeof t.buf - 64) Flush(t);
++  Put(t, (0xfffeULL << 2) | 3);
++  Put(t, n);
++  uint32_t first = t.aes_n - n;
++  for (uint32_t i = 0; i < n; i++) PutRaw(t, t.aes[(first + i) & 511], 32);
++  t.aes_n = 0;
++  Flush(t);
++}
++void DumpMem(BbThread& t, uint64_t ptr, uint64_t len) {
++  if (len > 65536) len = 65536;
++  if (t.len > sizeof t.buf - 64) Flush(t);
++  Put(t, (0xfffdULL << 2) | 3);
++  Put(t, len);
++  PutRaw(t, reinterpret_cast<const void*>(ptr), len);
++  Flush(t);
++}
++// A memory region around a sent packet, read with process_vm_readv (unmapped pages skipped): type 3, x8 = 0xfffc: base, len, bytes.
++// The report's plaintext (and the heap/stack around its buffer) is searched offline for what the report says about the device.
++void DumpRegion(BbThread& t, uint64_t base, uint64_t len) {
++  static thread_local uint8_t tmp[4096];
++  if (t.len > sizeof t.buf - 64) Flush(t);
++  Put(t, (0xfffcULL << 2) | 3);
++  Put(t, base);
++  Put(t, len);
++  for (uint64_t o = 0; o < len; o += sizeof tmp) {
++    size_t n = len - o < sizeof tmp ? len - o : sizeof tmp;
++    iovec l{tmp, n}, r{reinterpret_cast<void*>(base + o), n};
++    ssize_t got = process_vm_readv(getpid(), &l, 1, &r, 1, 0);
++    if (got != ssize_t(n)) memset(tmp, 0, n);
++    PutRaw(t, tmp, n);
++  }
++  Flush(t);
++}
 +// Before an insn at pc: an svc in a traced thread is recorded (type 3: x8, x0) and flushed, so the last syscalls survive a death.
 +void BbSvc(ThreadState* state, uint64_t pc) {
 +  BbThread& t = t_bb;
 +  if (t.fd < 0) return;
-+  if ((*reinterpret_cast<const uint32_t*>(pc) & 0xffe0001fu) != 0xd4000001u) return;
++  uint32_t insn = *reinterpret_cast<const uint32_t*>(pc);
++  if ((insn & 0xffffe000u) == 0x4e284000u && ((insn >> 12) & 1) <= 1 && ((insn >> 10) & 3) == 2) {  // AESE / AESD
++    unsigned rd = insn & 31, rn = (insn >> 5) & 31;
++    t.aes[t.aes_n & 511][0] = state->cpu.v[rd];
++    t.aes[t.aes_n & 511][1] = state->cpu.v[rn];
++    t.aes_n++;
++    return;
++  }
++  if ((insn & 0xffe0001fu) != 0xd4000001u) return;
++  if (t.want_ring) { t.want_ring = false; DumpAes(t); }
++  if (state->cpu.x[8] == 206) {  // sendto: the AES ring so far and the sent bytes
++    DumpAes(t);
++    DumpMem(t, state->cpu.x[1], state->cpu.x[2]);
++    if (state->cpu.x[2] > 200) {  // the report: the heap around the sent buffer and the stack
++      uint64_t b = state->cpu.x[1] & ~0xfffULL;
++      DumpRegion(t, b - 0x8000, 0x10000);
++      DumpRegion(t, state->cpu.sp, 0x4000);
++    }
++  } else if (state->cpu.x[8] == 207) {  // recvfrom: the buffer is read after the call
++    t.rx_ptr = state->cpu.x[1];
++    t.rx_len = state->cpu.x[2];
++  }
 +  if (t.len > sizeof t.buf - 64) Flush(t);
 +  Put(t, (state->cpu.x[8] << 2) | 3);
 +  Put(t, state->cpu.x[0]);
++  Put(t, state->cpu.x[1]);
++  Put(t, state->cpu.x[2]);
 +  Flush(t);
++  t.after_svc = true;
 +}
 +// Before an insn at pc: dump registers at a listed pc.
++void BbDumpRegs(ThreadState* state, uint64_t pc);
 +void BbDump(ThreadState* state, uint64_t pc) {
 +  const BbCfg& c = Cfg();
 +  if (!g_hi) return;
-+  for (int i = 0; i < c.ndump; i++) {
-+    if (pc != g_lo + c.dump[i]) continue;
++  for (int i = 0; i < c.ndump; i++)
++    if (pc == g_lo + c.dump[i] && g_ndump[i]++ < 20) BbDumpRegs(state, pc);
++}
++void BbDumpRegs(ThreadState* state, uint64_t pc) {
++  {
 +    BbThread& t = t_bb;
 +    EnsureOpen(t);
 +    if (t.fd < 0) return;
@@ -175,12 +297,21 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
 +    Flush(t);
 +  }
 +}
++// A signal pending at the top of the loop (a host fault queued by HandleHostSignal): registers, at most 50 per process.
++void BbPending(ThreadState* state, uint64_t pc) {
++  static int n = 0;
++  if (t_bb.fd >= 0 && n++ < 50) BbDumpRegs(state, pc);
++}
++// A memory fault in a traced thread: registers of the faulting insn (type 2, pc = the insn).
++void BbFault(ThreadState* state, uint64_t pc) {
++  if (t_bb.fd >= 0) BbDumpRegs(state, pc);
++}
 +}  // namespace
 +
  void InitInterpreter() {
    AddFaultyMemoryAccessRecoveryCode();
  }
-@@ -49,14 +210,20 @@
+@@ -49,18 +341,29 @@
    Interpreter interpreter(state);
    SemanticsPlayer sem_player(&interpreter);
    Decoder decoder(&sem_player);
@@ -188,7 +319,12 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
  
    for (int i = 0; i < max_insns; i++) {
      GuestAddr pc = state->cpu.insn_addr;
-     if (pc == 0 || ArePendingSignalsPresent(*state)) break;
+-    if (pc == 0 || ArePendingSignalsPresent(*state)) break;
++    if (pc == 0) break;
++    if (ArePendingSignalsPresent(*state)) {
++      if (trace_on) BbPending(state, pc);
++      break;
++    }
  
 +    if (trace_on) {
 +      BbSvc(state, pc);
@@ -201,3 +337,8 @@ PGR control-flow differential: per guest thread varint trace of taken branches i
  
      // If a memory fault occurred, HandleHostSignal queued it as pending.
      // Break so ExecuteGuest can deliver the signal to the guest handler.
+     if (interpreter.HasException()) {
++      if (trace_on) BbFault(state, pc);
+       break;
+     }
+ 
