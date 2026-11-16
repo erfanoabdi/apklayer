@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-16: PGR heap-size A/B (NVIDIA PC, pgrshared): the JVM's 8 GB heap reservation is not the trigger
+- The guest maps of a translated PGR show 8 GB and 6.7 GB unnamed rw-p regions (native: none that size); the 8 GB one is the JVM's default max heap (1/4 of 31 GB). `APKLAYER_JOPTS=-Xmx2g` (a JVM option: part of the launch key, so a cold JVM), deb 0.4.19, lite mode, `-Dapklayer.runms=75000`, interleaved, no sudo here (no bpftrace true death: wall seconds of `apklayer run`, ~8 s of start-up included): baseline 81 (alive at the cap), 57; -Xmx2g 33, 28. No survivor with the small heap: not the cause.
+- How a run ends without bpftrace: `apklayer run` returns 0 either way; the game's death shows as the hub's `relaunch <pkg>` line, then the stack ends ("the instance hub ended" in the app log) and Play services' processes abort in libbinder (SIGABRT cores of com.google.android.gms in coredumpctl): consequences, not a second crash.
+
 ## 2026-11-16: lite translation is the default
 - `bridge/native/apklayer.prop` sets `berberis.mode=lite-translate-or-interpret` for every instance (the heavy tier drew PGR's home-scene noise); `apklayer prop set berberis.mode.<package> two-gear` gives one app upstream's two-gear mode back, BERBERIS_MODE still wins. Mode names checked in the 0.4.19 libberberis_arm64.so (`two-gear`, `lite-translate-or-interpret`, `interpret-only`).
 - Manager: the lite switch shows the app's effective mode (its own berberis.mode.<package>, else berberis.mode); off sets the app to `two-gear`, on to lite. Not built or run here (no build tree on this PC); no translated run with the new default yet.
