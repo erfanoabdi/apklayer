@@ -72,6 +72,6 @@ def main():
     for k in sorted(set.intersection(*tper) - set(N)): print(k, sorted(T[k]), TC.get(k), sorted(COMM.get(k, ()))[:3])
     print('\n== counts: same key, mean call counts differ > 3x (native/translated)')
     for k in sorted(set(NC) & set(TC)):
-        n = sum(NC[k]) / len(NC[k]); t = sum(TC[k]) / len(TC[k])
+        n = sum(NC[k]) / len(nper); t = (sum(TC[k]) if isinstance(TC[k], list) else TC[k]) / len(tper)  # mean over ALL runs of a side (a run without the key counts 0)
         if max(n, t) >= 10 and (n > 3 * t or t > 3 * n): print(k, '%.0f / %.0f' % (n, t))
 main()
