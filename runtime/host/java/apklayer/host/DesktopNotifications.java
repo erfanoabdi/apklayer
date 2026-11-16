@@ -30,14 +30,39 @@ final class DesktopNotifications {
         return builder;
     }
 
-    /** The popup's id (0 when the desktop has no notification service); {@code actions} is key, label, key, label... */
-    int show(String app, int replaces, String summary, String body, List<String> actions) {
+    private static String server;
+
+    /** Which shell answers: "lipstick" (Sailfish), "lomiri" (Ubuntu Touch) or "other" (GNOME, KDE...); asked once. */
+    static synchronized String shell() {
+        if (server != null) return server;
+        String found = "other";  // not kept when the service did not answer (the shell is still starting): asked again at the next notification
+        try {
+            Process process = tool("gdbus", "call", "--session", "--dest", SERVICE, "--object-path", PATH, "--method", SERVICE + ".GetServerInformation").start();
+            String out = new String(process.getInputStream().readAllBytes()).toLowerCase();
+            process.waitFor();
+            if (out.contains("lipstick")) found = "lipstick"; else if (out.contains("lomiri")) found = "lomiri";
+            if (out.startsWith("(")) server = found;
+        } catch (IOException | InterruptedException failure) { /* no service: show() answers 0 */ }
+        return found;
+    }
+
+    private static String variant(Object value) {
+        if (value instanceof Boolean || value instanceof Double) return "<" + value + ">";
+        if (value instanceof Integer) return "<int32 " + value + ">";
+        if (value instanceof Byte) return "<byte " + value + ">";
+        return "<" + quote(String.valueOf(value)) + ">";
+    }
+
+    /** The popup's id (0 when the desktop has no notification service); {@code actions} is key, label, key, label...; {@code hints} the Notify hints (Boolean, Integer, Byte, Double or String values). */
+    int show(String app, int replaces, String icon, String summary, String body, List<String> actions, java.util.Map<String, Object> hints) {
         List<String> quoted = new ArrayList<>();
         for (String action : actions) quoted.add(quote(action));
+        List<String> hintList = new ArrayList<>();
+        for (java.util.Map.Entry<String, Object> hint : hints.entrySet()) hintList.add(quote(hint.getKey()) + ": " + variant(hint.getValue()));
         try {
             startMonitor();
             Process process = tool("gdbus", "call", "--session", "--dest", SERVICE, "--object-path", PATH, "--method", SERVICE + ".Notify", quote(app), String.valueOf(replaces),
-                    quote(""), quote(summary), quote(body), "[" + String.join(",", quoted) + "]", "{}", "int32 -1").start();
+                    quote(icon), quote(summary), quote(body), "[" + String.join(",", quoted) + "]", "{" + String.join(",", hintList) + "}", "int32 -1").start();
             String out = new String(process.getInputStream().readAllBytes());
             process.waitFor();
             Matcher id = Pattern.compile("uint32 (\\d+)").matcher(out);

@@ -81,3 +81,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Several phone instances as a product; a JRE for the Ubuntu Touch deb.
 - Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
 - Game controllers (`docs/GAMEPAD.md`, group `gamepad`, tested with a uinput pad only): needs a real pad: udev permissions (uaccess/`input` group and the retry when they change), a real DS4/DualSense/Xbox pad over USB and Bluetooth (axis layout, rumble motors), Halium phones; limits: events go only to the focused window's app, no gyro/touchpad/LED/battery, one vibrator id per pad.
+
+## Notifications on the phones (2026-11-16)
+- PLAN: Lomiri (X23) drops every org.freedesktop.Notifications notification within ~30 ms (docs: CHANGELOG 2026-11-16); find why (Lomiri's notifyplugin `pruneExpired`/QML, a setting, or a clock/zone problem) or deliver through the click Postal/`com.lomiri.Postal` route; until then no popup, tap, action or dismiss can be checked on Lomiri.
+- PLAN: Lipstick: delete intent on a swipe-away and the action buttons (`x-nemo-remote-action-*` or the expanded banner) are not driven by phone-test; group/summary stacking and a real foreground-service entry in the events list need a human look at the events view.
+- PLAN: the phones carry the old host classes until the next click/RPM (0.4.104 and 0.4.103); rerun `phone-test.sh sfos notify` and `ut notify` after installing.
