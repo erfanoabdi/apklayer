@@ -18,6 +18,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <sys/inotify.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -34,6 +35,33 @@ static long (*raw_)(long, long, long, long, long, long);
 static void *thread_main(void *arg)
 {
     *(long *)arg = raw(SYS_getuid, 0, 0, 0, 0);
+    return NULL;
+}
+
+/* a Go runtime's raw mkdirat/bind/connect/unlinkat/inotify_add_watch at the app's Android data path: answered by the handler's libc-free path (raw_syscall.c
+ * fast_syscall), on the main thread and on another one */
+static void *data_path_calls(void *arg)
+{
+    (void)arg;
+    mkdir("/tmp/hello.raw", 0700); mkdir("/tmp/hello.raw/app", 0700);
+    struct stat sb;
+    long made = raw(SYS_mkdirat, AT_FDCWD, (long)"/data/data/hello.raw/rawdir", 0700, 0);
+    assert(made == 0 && stat("/tmp/hello.raw/app/rawdir", &sb) == 0 && S_ISDIR(sb.st_mode));
+    struct sockaddr_un un = { .sun_family = AF_UNIX };
+    strcpy(un.sun_path, "/data/data/hello.raw/rawdir/s");
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(raw(SYS_bind, sock, (long)&un, sizeof un, 0) == 0 && stat("/tmp/hello.raw/app/rawdir/s", &sb) == 0 && S_ISSOCK(sb.st_mode));
+    assert(raw(SYS_listen, sock, 1, 0, 0) == 0);
+    int peer = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(raw(SYS_connect, peer, (long)&un, sizeof un, 0) == 0);  /* by the Android name too */
+    struct sockaddr_in in = { .sin_family = AF_INET, .sin_port = htons(1) };
+    int tcp = socket(AF_INET, SOCK_STREAM, 0);
+    assert(raw(SYS_connect, tcp, (long)&in, sizeof in, 0) == -ECONNREFUSED);  /* anything else is the kernel's */
+    int ifd = inotify_init1(0);
+    assert(raw(SYS_inotify_add_watch, ifd, (long)"/data/data/hello.raw/rawdir", IN_ATTRIB | IN_DELETE_SELF, 0) >= 0);  /* WireGuard's UAPI socket watch */
+    close(ifd); close(tcp); close(peer); close(sock);
+    assert(raw(SYS_unlinkat, AT_FDCWD, (long)"/data/data/hello.raw/rawdir/s", 0, 0) == 0);
+    assert(raw(SYS_unlinkat, AT_FDCWD, (long)"/data/data/hello.raw/rawdir", AT_REMOVEDIR, 0) == 0 && stat("/tmp/hello.raw/app/rawdir", &sb) != 0);
     return NULL;
 }
 
@@ -94,28 +122,12 @@ int main(int argc, char **argv)
     assert(fd >= 0);
     close(fd);
 
-    /* a Go runtime's raw mkdirat/bind/unlinkat at the app's Android data path (seccomp user notification, not a signal handler: it works on any thread) */
+    data_path_calls(NULL);
     {
-        mkdir("/tmp/hello.raw", 0700); mkdir("/tmp/hello.raw/app", 0700);
-        struct stat sb;
-        long made = raw(SYS_mkdirat, AT_FDCWD, (long)"/data/data/hello.raw/rawdir", 0700, 0);
-        printf("raw mkdirat: %ld\n", made);
-        assert(made == 0 && stat("/tmp/hello.raw/app/rawdir", &sb) == 0 && S_ISDIR(sb.st_mode));
-        struct sockaddr_un un = { .sun_family = AF_UNIX };
-        strcpy(un.sun_path, "/data/data/hello.raw/rawdir/s");
-        int sock = socket(AF_UNIX, SOCK_STREAM, 0);
-        assert(raw(SYS_bind, sock, (long)&un, sizeof un, 0) == 0 && stat("/tmp/hello.raw/app/rawdir/s", &sb) == 0 && S_ISSOCK(sb.st_mode));
-        assert(raw(SYS_listen, sock, 1, 0, 0) == 0);
-        int peer = socket(AF_UNIX, SOCK_STREAM, 0);
-        assert(raw(SYS_connect, peer, (long)&un, sizeof un, 0) == 0);  /* by the Android name too */
-        struct sockaddr_in in = { .sin_family = AF_INET, .sin_port = htons(1) };
-        int tcp = socket(AF_INET, SOCK_STREAM, 0);
-        assert(raw(SYS_connect, tcp, (long)&in, sizeof in, 0) == -ECONNREFUSED);  /* anything else is the kernel's */
-        close(tcp); close(peer); close(sock);
-        assert(raw(SYS_unlinkat, AT_FDCWD, (long)"/data/data/hello.raw/rawdir/s", 0, 0) == 0);
-        assert(raw(SYS_unlinkat, AT_FDCWD, (long)"/data/data/hello.raw/rawdir", AT_REMOVEDIR, 0) == 0 && stat("/tmp/hello.raw/app/rawdir", &sb) != 0);
-        puts("raw mkdirat/bind/connect/unlinkat at an Android data path: mapped");
+        pthread_t t;
+        assert(!pthread_create(&t, NULL, data_path_calls, NULL) && !pthread_join(t, NULL));  /* ... and from another thread */
     }
+    puts("raw mkdirat/bind/connect/inotify/unlinkat at an Android data path: mapped, main thread and another");
 
     /* statx / newfstatat: the owner of a file the host user owns reads as the app; uname nodename; SIGSYS never blocked */
     {

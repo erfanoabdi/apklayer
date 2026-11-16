@@ -83,7 +83,7 @@ an unattended TUN with routes for another process. **Ubuntu Touch** has NetworkM
 
 Local-peer WireGuard (`tests/vm/vpn-wireguard-local-peer.py`, Mac side, after `tests/run vpn`; not a group: it needs a second LAN host with `wg` and passwordless sudo,
 `APKLY_VPN_PEER`, default the owner's PC): the real WireGuard APK on the VM against a throwaway `wgapk0` peer with fresh keys, switched on through the app's UI
-(`tests/vm/vpn-wireguard.py`): established with the default `RAW_SYSCALL_VIEW` (no hand-made directory), the peer answers through the TUN, the peer's first handshake is
+(`tests/vm/vpn-wireguard.py`): established with the default `RAW_SYSCALL_VIEW` (no hand-made directory; the Go library's UAPI socket `cache/wireguard/<ifname>.sock` is made at the mapped path), the peer answers through the TUN, the peer's first handshake is
 under a second after `establish()` (a lost first datagram costs 5 s), and a connection deleted with `nmcli` revokes the app. OpenVPN for Android against a local
 `openvpn` server (TLS, TCP, certificates made with `openssl`, `redirect-gateway def1`; the profile imported with `apklayer open de.blinkt.openvpn x.ovpn`) was driven by
 hand with scripted input: protect() before `establish()` succeeds, TLS completes, "Initialization Sequence Completed" (see Untested for its data channel).
@@ -104,9 +104,9 @@ the TUN and a `protect()`ed one does not, `ip route` identical afterwards). The 
 ## Untested / needs a person
 
 - The hub's pkexec path (`HubVpnNet.viaHelper`: only the helper binary was run, as root through `sudo`, never from the hub through pkexec).
-- Real VPN apps (2026-11-16, UTM VM, scripted input): WireGuard 1.0.20260102 (import from file, toggle) establishes against a WireGuard peer that answers (a local one: handshake, ping through the tunnel, host routes, manager disconnect with onRevoke, device and connection gone); with the owner's config the server never answered. OpenVPN for Android 0.7.41 starts, connects over TCP and does TLS with the owner's server, which then wants an OAuth2 web login (no tunnel). Fixed since: `protect()` before `establish()`, the first WireGuard handshake through the TUN, Go raw syscalls at Android paths, an outside-deleted connection (see above). Open: OpenVPN's data channel (below).
+- Real VPN apps (2026-11-16, UTM VM, scripted input): WireGuard 1.0.20260102 (import from file, toggle) establishes against a WireGuard peer that answers (a local one: handshake, ping through the tunnel, host routes, manager disconnect with onRevoke, device and connection gone); with the owner's config the server never answered. OpenVPN for Android 0.7.41 starts, connects over TCP and does TLS with the owner's server, which then wants an OAuth2 web login (no tunnel). Fixed since: `protect()` before `establish()`, the first WireGuard handshake through the TUN, Go raw syscalls at Android paths (raw_syscall.c: libc-free answers for mkdirat/unlinkat/bind/connect/inotify_add_watch and /proc/sys opens), an outside-deleted connection (see above). Open: OpenVPN's data channel (below).
 - OpenVPN for Android's data channel (2026-11-16, local server): TLS completes and the app reports "Initialization Sequence Completed", but its `libovpnexec` child sits
-  in `ppoll` on one descriptor and never reads the TUN (the TUN's packets queue up unread; the server sees no traffic). Not looked at further (PLAN).
+  in `ppoll` on one descriptor and never reads the TUN (the TUN's packets queue up unread; the server sees no traffic). Cause unknown, not tried with `APKLAYER_RAW_SYSCALL_VIEW=off` (PLAN).
 - The pkexec dialog on a real desktop (the helper's logic is tested as root through `sudo -n` with `PKEXEC_UID`).
 - A real VPN provider end to end; Sailfish; KDE/Lomiri polkit agents; the default-route case against a working VPN resolver (the test checks that
   resolved lists the app's DNS as the default route, not that names resolve through it).

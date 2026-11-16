@@ -33,6 +33,7 @@ def until(test, seconds, step=0.25):
 def fail(why):
     print('FAIL', why)
     print(sh('grep -a "vpn" %s/hub.log | grep -v "VPN_STATUS\\|notification" | tail -12' % state))
+    print(sh('grep -av "view\\|Resources\\|apklayer.egl\\|^$\\|Click this" %s/app-%s.log | tail -40 | cut -c1-240' % (state, PKG)))
     sys.exit(1)
 
 
@@ -56,6 +57,13 @@ until(lambda: sh('ip route show 0.0.0.0/1').count(iface), 5) or fail('no 0.0.0.0
 '128.0.0.0/1 dev ' + iface in sh('ip route') or fail('no 128.0.0.0/1 route through ' + iface)
 until(lambda: ' 0% packet loss' in sh('ping -c 2 -i 0.3 -W 3 ' + peer + ' | grep -a packets'), 12) or fail('the peer %s does not answer through the tunnel' % peer)
 print('ping through the tunnel ok')
+data = sh("bin/apklayer info %s | awk -F'\\t' '$1==\"dataDir\" {print $2}'" % PKG)
+# the Go library's own mkdirat of cache/wireguard and its UAPI socket (bind) at /data/data/<pkg>: only mapped when raw mkdirat/bind/inotify_add_watch are
+sock = '%s/app/cache/wireguard/%s.sock' % (data, iface)  # named after the interface
+until(lambda: os.path.exists(sock), 5) or fail('the Go library made no UAPI socket at ' + sock)
+log = open(state + '/app-%s.log' % PKG, errors='replace').read()
+'UAPIOpen' not in log and 'UAPIListen' not in log or fail('the Go library failed at its UAPI socket: ' + '; '.join(l for l in log.splitlines() if 'UAPI' in l)[:300])
+print('UAPI socket made through the raw syscalls')
 connection = sh('XDG_RUNTIME_DIR=/run/user/$(id -u) systemd-run --user --pipe --wait -q nmcli -t -f NAME connection show | grep "^apklayer-vpn-"')
 connection or fail('no NetworkManager connection of the VPN')
 subprocess.run('XDG_RUNTIME_DIR=/run/user/$(id -u) systemd-run --user --pipe --wait -q nmcli connection delete id ' + connection, shell=True, capture_output=True)

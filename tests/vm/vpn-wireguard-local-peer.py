@@ -58,7 +58,7 @@ try:
     on_vm('bin/apklayer stop >/dev/null 2>&1; d=%s/app/files; mkdir -p $d && umask 077 && cat > $d/localpeer.conf' % data.group(1), input=conf, capture_output=True)
     on_vm('XDG_RUNTIME_DIR=/run/user/$(id -u) systemd-run --user --on-active=200 --unit=vpn-wg-watchdog sh -c "nmcli connection delete id apklayer-vpn-$APKLAYER_INSTANCE-a; '
           'nmcli connection delete id apklayer-vpn-$APKLAYER_INSTANCE-b" >/dev/null 2>&1', capture_output=True)
-    run = on_vm('python3 -u tests/vm/vpn-wireguard.py 10.99.0.1 2>&1 | grep -av "^\\[apklayer\\] view\\|^INJECT"', capture_output=True)
+    run = on_vm(os.environ.get('VPN_TEST_ENV', '') + ' python3 -u tests/vm/vpn-wireguard.py 10.99.0.1 2>&1 | grep -av "^\\[apklayer\\] view\\|^INJECT"', capture_output=True)
     print(run.stdout.strip())
     est = re.search(r'ESTABLISHED (\d+)', run.stdout)
     assert run.returncode == 0 and 'PASS vpn-wireguard' in run.stdout and est, 'the VM side failed'
