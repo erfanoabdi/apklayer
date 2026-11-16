@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: PGR timing lead: counter knobs in the interpreter (patch 0048), build log
+
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock -n ~/los24-build.lock`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: A/B showed the environment is not the verdict input; `mrs cntvct_el0` is the one operation the translated code runs 290x slower than native (58 ns vs 0.2 ns; always the interpreter, nothing inlines it) and its frequency (19.2 MHz) is not the AWS host's (1 GHz, back-to-back delta 20 ticks). Edit: cpu_emulation/interpreter/arm64/interpreter.h only: env/props `BERBERIS_TIMER_SCALE` (`berberis.timer_scale`: ticks k times slower), `BERBERIS_CNTFRQ` (`berberis.cntfrq`), `BERBERIS_COUNT_MRS=1` (stderr line per guest pc at every power-of-two read count).
+
 ## 2026-11-16: PGR: the environment is not the cause (native with real Google apps survives, translated with microG and nothing else dies)
 
 - Private data homes on both hosts (own XDG_DATA_HOME/STATE/CONFIG/RUNTIME, the compositor socket by absolute WAYLAND_DISPLAY, pipewire/pulse symlinked), so the owner's instances and the shared apps dir were not touched; `tools/ace/pgr-timeline.sh` now finds the instance under `$XDG_DATA_HOME`. Every run: ACE files reset, core dumps off, true death time (EXIT line of the bpftrace timeline, seconds after the game's first open).
