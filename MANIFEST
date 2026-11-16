@@ -32,3 +32,4 @@ x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e300
 2026-11-14 Conscrypt: libjavacrypto and libssl (arm64 and x86_64) for the AndroidOpenSSL provider, from the LineageOS tree builds logged in main CHANGELOG; hashes are the lock rows of main 04753d62.
 
 2026-11-14 x86_64 proxy libc: libberberis_proxy_libc b0b0dc48 (the whole patch series 0001-0028 rebuilt on the Mac, 10:20; invalid-free check 0006, the quarantine diagnostics 0026 and the main-heap diagnostic 0027 are in it; the 2026-11-12 copy 6724ec9f had none of them: PGR died in glibc's `free(): invalid pointer` after ~35 s). libberberis_arm64 unchanged (a12caa15, 0028).
+2026-11-16: arm64 (0f3ebb72) and x86_64 (18459ae7) libhidlbase with libhidl 0006 (get(IServiceManager) of the host-forwarding stand-in answers the instance's own manager) from the gsi_arm64 and gsi_x86_64 incremental builds of 2026-11-16
