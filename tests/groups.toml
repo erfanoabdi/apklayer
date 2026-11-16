@@ -600,6 +600,7 @@ run = ["tests/vm/newpipe-media.sh"]
 [sandbox]
 optional = true  # needs tools/host-setup/sandbox.sh once (uidmap, subordinate ids, the AppArmor profile, render nodes)
 apps = ["hello-sandbox"]
+needs = ["com.android.providers.settings"]  # the isolated service's Settings.Secure read (SSAID) goes to the real SettingsProvider
 run = ["tests/vm/sandbox.sh", "g++ -std=c++20 tests/native/nvidia-modprobe.cpp -o /tmp/nvidia-modprobe-$APKLAYER_INSTANCE && /tmp/nvidia-modprobe-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/nvidia-modprobe-$APKLAYER_INSTANCE; exit $r"]  # the second: the NVIDIA node -> nvidia-modprobe arguments of the broker
 
 [otr2-probe]
