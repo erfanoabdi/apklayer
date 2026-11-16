@@ -1,0 +1,56 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] BRK raises SIGTRAP with the architectural siginfo (TRAP_BRKPT, si_addr = the BRK)
+
+Idea and code shape from Teto (github.com/denialwm/teto, branch droidloom, commit 558c400f "Support ARM64 breakpoint siginfo...", Doctor Logix / the Droidloom Authors, Apache-2.0); only the siginfo part (its ptrace regset part is not taken). BreakpointInsn sent SIGTRAP with tgkill, so a guest SIGTRAP handler saw si_code SI_TKILL and the sender's pid/uid where hardware gives TRAP_BRKPT with si_addr = the BRK (an anti-debug probe that executes BRK and checks the siginfo told translation from a device). It now sends the kernel-style siginfo to its own thread with rt_tgsigqueueinfo; ConvertHostSiginfoToGuest no longer overwrites a SIGTRAP's si_addr (a signal a process sent keeps its sender fields). Because a BRK now has si_code > 0, 0040's no-guest-handler case also takes SIGTRAP (default action ends the process, as before; never HotSpot's own fault). Module libberberis_arm64.
+
+diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/guest_signal_handling.cc
+--- a/guest_os_primitives/guest_signal_handling.cc
++++ b/guest_os_primitives/guest_signal_handling.cc
+@@ -382,11 +382,8 @@
+ void ConvertHostSiginfoToGuest(siginfo_t* signal_info, const ThreadState* state) {
+   switch (signal_info->si_signo) {
+     case SIGILL:
+-    // region digitalis - BRK raises a synchronous SIGTRAP; like SIGILL/SIGFPE
+-    // its faulting address is the current guest instruction (the BRK), which a
+-    // guest breakpoint/sanitizer handler reads to recover the BRK immediate.
+-    case SIGTRAP:
+-    // endregion
++    // Teto 558c400f, apklayer patch (0045): SIGTRAP keeps its siginfo: BreakpointInsn supplies si_code TRAP_BRKPT and
++    // si_addr = the BRK; a signal sent by a process keeps its si_pid/si_uid/si_value.
+     case SIGFPE:
+       signal_info->si_addr = ToHostAddr<void>(GetInsnAddr(GetCPUState(*state)));
+       break;
+@@ -638,7 +635,7 @@
+       // apklayer patch (0040): a signal some process sent (kill, raise, tgkill, sigqueue: si_code <= 0) that the guest has no handler for
+       // ends the process with that signal, as on hardware; HandleFatalSignal would run HotSpot's handler, which prints a JVM crash
+       // report and ends with SIGABRT. Faults (si_code > 0) go on to HandleFatalSignal: HotSpot's own faults are among them.
+-      if (signal_info->si_code <= 0) {
++      if (signal_info->si_code <= 0 || signal_info->si_signo == SIGTRAP) {  // (0045) a BRK has TRAP_BRKPT, is never HotSpot's
+         int signo = signal_info->si_signo;
+         pending_signals_.FreeSignal(signal_info);
+         GuestDieWithDefaultAction(signo);
+diff --git a/runtime_primitives/interpret_helpers_arm64.cc b/runtime_primitives/interpret_helpers_arm64.cc
+--- a/runtime_primitives/interpret_helpers_arm64.cc
++++ b/runtime_primitives/interpret_helpers_arm64.cc
+@@ -58,13 +58,16 @@
+   uint32_t code;
+   memcpy(&code, addr, sizeof(code));
+   TRACE("BRK arm64 instruction 0x%" PRIx32 " at %p -> SIGTRAP", code, addr);
+-#ifdef __GLIBC__
++  // Teto 558c400f, apklayer patch (0045): the architectural siginfo (TRAP_BRKPT, si_addr = the BRK), not tgkill's SI_TKILL with
++  // a sender's ids in the union where a guest handler (an anti-debug probe) reads the breakpoint address. Sending kernel-style
++  // siginfo to oneself is permitted.
+   pid_t pid = syscall(__NR_getpid);
+   pid_t tid = syscall(__NR_gettid);
+-  syscall(SYS_tgkill, pid, tid, SIGTRAP);
+-#else
+-  raise(SIGTRAP);
+-#endif
++  siginfo_t info{};
++  info.si_signo = SIGTRAP;
++  info.si_code = TRAP_BRKPT;
++  info.si_addr = ToHostAddr<void>(pc);
++  CHECK_EQ(syscall(__NR_rt_tgsigqueueinfo, pid, tid, SIGTRAP, &info), 0);
+ }
+ 
+ }  // namespace berberis
