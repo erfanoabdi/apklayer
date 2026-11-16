@@ -2,11 +2,10 @@ From: apklayer <noreply@apklayer.invalid>
 Subject: [PATCH] the GL strings an arm64 guest reads (GL_VENDOR, GL_RENDERER, GL_VERSION) follow properties
 
 A game on a PC reads "NVIDIA GeForce RTX 5060 Ti/PCIe/SSE2" / "OpenGL ES 3.2 NVIDIA 615.71.09" where a phone says "Adreno (TM) 620"; Unity's SystemInfo.graphicsDevice* and Tencent ACE read the same strings. With berberis.gl.vendor, berberis.gl.renderer and berberis.gl.version (properties, or BERBERIS_GL_VENDOR/RENDERER/VERSION) the named string is the guest's answer to glGetString; unset: the host driver's own. A named override of the upstream glGetString trampoline through the chained override registry (REGISTER_DIGITALIS_EXTRA_TRAMPOLINE_OVERRIDES, libGLESv2.so and libGLESv3.so), so the proxy's wrapping stays. New file apklayer_gl_strings.cc, Android.bp. Module libberberis_arm64.
-
 diff --git a/android_api/digitalis_extra_proxy/Android.bp b/android_api/digitalis_extra_proxy/Android.bp
 --- a/android_api/digitalis_extra_proxy/Android.bp
 +++ b/android_api/digitalis_extra_proxy/Android.bp
-@@ -73,6 +73,7 @@
+@@ -73,6 +73,7 @@ cc_library_static {
          "digitalis_extra_libcamera2ndk_trampolines.cc",
          "digitalis_extra_libegl_trampolines.cc",
          "digitalis_extra_libglesv2_trampolines.cc",
@@ -15,6 +14,7 @@ diff --git a/android_api/digitalis_extra_proxy/Android.bp b/android_api/digitali
          "digitalis_extra_libvulkan_trampolines.cc",
          "digitalis_extra_libwebviewchromium_plat_support_trampolines.cc",
 diff --git a/android_api/digitalis_extra_proxy/apklayer_gl_strings.cc b/android_api/digitalis_extra_proxy/apklayer_gl_strings.cc
+new file mode 100644
 --- /dev/null
 +++ b/android_api/digitalis_extra_proxy/apklayer_gl_strings.cc
 @@ -0,0 +1,59 @@

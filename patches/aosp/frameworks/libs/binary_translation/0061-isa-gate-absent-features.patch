@@ -1,79 +1,7 @@
 From: apklayer <noreply@apklayer.invalid>
 Subject: [PATCH] ISA gate: instructions of features the claimed CPU lacks are undefined, ID registers as a real Linux view (knob berberis.isa_gate=a76)
-
-diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
---- a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
-+++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
-@@ -18,6 +18,7 @@
- #define BERBERIS_DECODER_ARM64_DECODER_H_
- 
- #include <climits>
-+#include "berberis/decoder/arm64/absent_features.h"  // apklayer patch (0061)
- #include <cstdint>
- #include <cstring>
- #include <type_traits>
-@@ -1979,6 +1980,11 @@
-   // ARM64 top-level encoding groups are determined by bits [28:25] (op0).
-   //
-   void DecodeInstruction() {
-+    // apklayer patch (0061): instructions the claimed CPU lacks are undefined (absent_features.h)
-+    if (IsAbsentFeatureInsn(code_)) {
-+      Undefined();
-+      return;
-+    }
-     uint8_t op0 = GetBits<25, 4>();
- 
-     switch (op0) {
-diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
---- a/cpu_emulation/interpreter/arm64/interpreter.h
-+++ b/cpu_emulation/interpreter/arm64/interpreter.h
-@@ -610,6 +610,10 @@
-         return 0x410FD034ULL;
-       case Decoder::SystemReg::kRndr:
-       case Decoder::SystemReg::kRndrrs: {
-+        if (IsaGate()) {  // apklayer patch (0061): FEAT_RNG is not in the claimed CPU
-+          Undefined();
-+          return 0;
-+        }
-         // RNDR / RNDRRS (FEAT_RNG): return a 64-bit random value and report
-         // success. The architecture has these reads update PSTATE.NZCV — all
-         // clear (0b0000) on success, so a host that always has entropy clears
-@@ -659,6 +663,18 @@
-         // apklayer patch: the rest of the AArch64 ID register space (op0=3, op1=0, CRn=0, CRm 0..7) reads as 0, as the kernel's
-         // TID3 trap returns for feature fields it sanitises to "not implemented" - never an undefined-instruction fault.
-         if (IsAArch64IdReg(sysreg)) {
-+          if (IsaGate()) {  // apklayer patch (0061): the visible fields a real Linux kernel's mrs emulation gives (3 arm64 hosts measured)
-+            const uint16_t enc = static_cast<uint16_t>(sysreg);
-+            const unsigned crm = (enc >> 3) & 0xf;
-+            const unsigned op2 = enc & 0x7;
-+            if (crm == 1) {  // the AArch32 feature registers (id_pfr0, id_dfr0, id_mmfr*): not readable on an AArch64-only view
-+              Undefined();
-+              return 0;
-+            }
-+            if (crm == 7 && op2 == 0) return 0x00000111ff000000ULL;  // ID_AA64MMFR0_EL1
-+            if (crm == 7 && op2 == 2) return 0x0000000100000000ULL;  // ID_AA64MMFR2_EL1
-+            if (crm == 5 && op2 == 0) return 6;                       // ID_AA64DFR0_EL1: DebugVer v8.2
-+          }
-           return 0;
-         }
-         Undefined();
-@@ -666,6 +682,15 @@
-     }
-   }
- 
-+  // apklayer patch (0061): berberis.isa_gate=a76 (shared with the decoder's absent-feature table)
-+  static bool IsaGate() {
-+    static const bool on = [] {
-+      ConfigStr knob("BERBERIS_ISA_GATE", "berberis.isa_gate");
-+      return knob.get() != nullptr && knob.get()[0] == 'a';
-+    }();
-+    return on;
-+  }
-+
-   // apklayer patch: true for the AArch64 ID register encoding space (MRS Xt, S3_0_C0_CRm_op2 with CRm in 0..7), whose EL0 reads a
-   // real kernel always answers (sanitised or 0), never with SIGILL.
-   static bool IsAArch64IdReg(Decoder::SystemReg sysreg) {
 diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_features.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_features.h
+new file mode 100644
 --- /dev/null
 +++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_features.h
 @@ -0,0 +1,283 @@
@@ -360,3 +288,75 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +}  // namespace berberis
 +
 +#endif  // BERBERIS_DECODER_ARM64_ABSENT_FEATURES_H_
+diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+--- a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
++++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+@@ -18,6 +18,7 @@
+ #define BERBERIS_DECODER_ARM64_DECODER_H_
+ 
+ #include <climits>
++#include "berberis/decoder/arm64/absent_features.h"  // apklayer patch (0061)
+ #include <cstdint>
+ #include <cstring>
+ #include <type_traits>
+@@ -1979,6 +1980,11 @@ class Decoder {
+   // ARM64 top-level encoding groups are determined by bits [28:25] (op0).
+   //
+   void DecodeInstruction() {
++    // apklayer patch (0061): instructions the claimed CPU lacks are undefined (absent_features.h)
++    if (IsAbsentFeatureInsn(code_)) {
++      Undefined();
++      return;
++    }
+     uint8_t op0 = GetBits<25, 4>();
+ 
+     switch (op0) {
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -610,6 +610,10 @@ class Interpreter {
+         return 0x410FD034ULL;
+       case Decoder::SystemReg::kRndr:
+       case Decoder::SystemReg::kRndrrs: {
++        if (IsaGate()) {  // apklayer patch (0061): FEAT_RNG is not in the claimed CPU
++          Undefined();
++          return 0;
++        }
+         // RNDR / RNDRRS (FEAT_RNG): return a 64-bit random value and report
+         // success. The architecture has these reads update PSTATE.NZCV — all
+         // clear (0b0000) on success, so a host that always has entropy clears
+@@ -659,6 +663,18 @@ class Interpreter {
+         // apklayer patch: the rest of the AArch64 ID register space (op0=3, op1=0, CRn=0, CRm 0..7) reads as 0, as the kernel's
+         // TID3 trap returns for feature fields it sanitises to "not implemented" - never an undefined-instruction fault.
+         if (IsAArch64IdReg(sysreg)) {
++          if (IsaGate()) {  // apklayer patch (0061): the visible fields a real Linux kernel's mrs emulation gives (3 arm64 hosts measured)
++            const uint16_t enc = static_cast<uint16_t>(sysreg);
++            const unsigned crm = (enc >> 3) & 0xf;
++            const unsigned op2 = enc & 0x7;
++            if (crm == 1) {  // the AArch32 feature registers (id_pfr0, id_dfr0, id_mmfr*): not readable on an AArch64-only view
++              Undefined();
++              return 0;
++            }
++            if (crm == 7 && op2 == 0) return 0x00000111ff000000ULL;  // ID_AA64MMFR0_EL1
++            if (crm == 7 && op2 == 2) return 0x0000000100000000ULL;  // ID_AA64MMFR2_EL1
++            if (crm == 5 && op2 == 0) return 6;                       // ID_AA64DFR0_EL1: DebugVer v8.2
++          }
+           return 0;
+         }
+         Undefined();
+@@ -666,6 +682,15 @@ class Interpreter {
+     }
+   }
+ 
++  // apklayer patch (0061): berberis.isa_gate=a76 (shared with the decoder's absent-feature table)
++  static bool IsaGate() {
++    static const bool on = [] {
++      ConfigStr knob("BERBERIS_ISA_GATE", "berberis.isa_gate");
++      return knob.get() != nullptr && knob.get()[0] == 'a';
++    }();
++    return on;
++  }
++
+   // apklayer patch: true for the AArch64 ID register encoding space (MRS Xt, S3_0_C0_CRm_op2 with CRm in 0..7), whose EL0 reads a
+   // real kernel always answers (sanitised or 0), never with SIGILL.
+   static bool IsAArch64IdReg(Decoder::SystemReg sysreg) {

@@ -2,7 +2,7 @@ From: apklayer <noreply@apklayer.invalid>
 Subject: [PATCH] apklayer patch: CNTVCT/CNTFRQ debug knobs (timer scale, cntfrq, per-pc read count)
 
 Env or props BERBERIS_TIMER_SCALE (berberis.timer_scale), BERBERIS_CNTFRQ (berberis.cntfrq), BERBERIS_COUNT_MRS (berberis.count_mrs); defaults change nothing. Module libberberis_arm64.
-
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
 --- a/cpu_emulation/interpreter/arm64/interpreter.h
 +++ b/cpu_emulation/interpreter/arm64/interpreter.h
 @@ -20,6 +20,7 @@
@@ -13,12 +13,10 @@ Env or props BERBERIS_TIMER_SCALE (berberis.timer_scale), BERBERIS_CNTFRQ (berbe
  #include <cstdlib>
  #include <cstring>
  #include <limits>
-@@ -521,6 +522,42 @@
-     CHECK(!exception_raised_);
-     BreakpointInsn(GetInsnAddr());
+@@ -523,6 +524,42 @@ class Interpreter {
      exception_raised_ = true;
-+  }
-+
+   }
+ 
 +  // apklayer patch (0048): debug knobs of the generic counter (env BERBERIS_TIMER_SCALE / BERBERIS_CNTFRQ / BERBERIS_COUNT_MRS, or the props).
 +  struct TimerKnobsT {
 +    uint64_t frq = 19200000ULL;
@@ -53,10 +51,12 @@ Env or props BERBERIS_TIMER_SCALE (berberis.timer_scale), BERBERIS_CNTFRQ (berbe
 +        return;
 +      }
 +    }
-   }
- 
++  }
++
    Register Mrs(Decoder::SystemReg sysreg) {
-@@ -586,20 +623,21 @@
+     CHECK(!exception_raised_);
+     switch (sysreg) {
+@@ -586,20 +623,21 @@ class Interpreter {
        case Decoder::SystemReg::kCntfrqEl0:
          // Counter frequency: 19.2 MHz, the de-facto Android generic-timer rate.
          // CNTVCT/CNTPCT below are scaled to match, so cntvct/cntfrq = seconds.
@@ -81,5 +81,5 @@ Env or props BERBERIS_TIMER_SCALE (berberis.timer_scale), BERBERIS_CNTFRQ (berbe
 +        if (k.count) CountMrs(state_->cpu.insn_addr, ns);
 +        return static_cast<Register>((static_cast<__uint128_t>(ns) * k.frq) / 1000000000ULL / k.scale);
        }
-       // apklayer patch: the AArch64 feature ID registers. A real Linux kernel traps every EL0 read of this space and returns a
-       // sanitised value (0 for anything the hardware lacks), so an app that probes CPU features never SIGILLs there; the three
+       default:
+         Undefined();

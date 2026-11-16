@@ -2,7 +2,27 @@ From: apklayer <noreply@apklayer.invalid>
 Subject: [PATCH] the guest's kernel identity: /proc/version, /proc/sys/kernel/arch, uname release and version
 
 /proc/version names the host's compiler ("x86_64-linux-gnu-gcc") and /proc/sys/kernel/arch says "x86_64" while the guest's uname says aarch64 (Unity's SystemInfo.processorType read "x86-64" under translation on the tester PC and "ARM64" on the aarch64 host). The guest's open of /proc/version gets the host's text with x86_64/amd64 spelled aarch64/arm64, or, with berberis.kernel.release and berberis.kernel.version set (properties, or BERBERIS_KERNEL_RELEASE/VERSION), a device kernel's "Linux version <release> (android-build@abfarm-release-rbe-64) (Android clang version 12.0.5) <version>"; /proc/sys/kernel/arch is "aarch64"; /proc/sys/kernel/osrelease and version are the properties when set; uname's release and version follow them. BERBERIS_SHOW_HOST_MAPS turns it off. kernel_api/open_emulation.cc (OpenKernelIdentityForGuest), arm64/syscall_emulation.cc. Module libberberis_arm64.
-
+diff --git a/kernel_api/arm64/syscall_emulation.cc b/kernel_api/arm64/syscall_emulation.cc
+--- a/kernel_api/arm64/syscall_emulation.cc
++++ b/kernel_api/arm64/syscall_emulation.cc
+@@ -422,6 +422,17 @@ void RunGuestSyscall(ThreadState* state) {
+     if (r == 0) {
+       strncpy(uts.machine, "aarch64", sizeof(uts.machine) - 1);
+       uts.machine[sizeof(uts.machine) - 1] = '\0';
++      // apklayer patch (0047): a device kernel's release and build string, when the properties name them (open_emulation.cc /proc/version)
++      static ConfigStr kernel_release("BERBERIS_KERNEL_RELEASE", "berberis.kernel.release");
++      static ConfigStr kernel_version("BERBERIS_KERNEL_VERSION", "berberis.kernel.version");
++      if (kernel_release.get() != nullptr && kernel_release.get()[0] != '\0') {
++        strncpy(uts.release, kernel_release.get(), sizeof(uts.release) - 1);
++        uts.release[sizeof(uts.release) - 1] = '\0';
++      }
++      if (kernel_version.get() != nullptr && kernel_version.get()[0] != '\0') {
++        strncpy(uts.version, kernel_version.get(), sizeof(uts.version) - 1);
++        uts.version[sizeof(uts.version) - 1] = '\0';
++      }
+       *ToHostAddr<struct utsname>(state->cpu.x[0]) = uts;
+       state->cpu.x[0] = 0;
+     } else {
 diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 --- a/kernel_api/open_emulation.cc
 +++ b/kernel_api/open_emulation.cc
@@ -13,8 +33,8 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 +#include <sys/utsname.h>  // apklayer patch (0047)
  #include <unistd.h>
  
- #include <cerrno>
-@@ -38,6 +39,7 @@
+ #include <cstdint>
+@@ -37,6 +38,7 @@
  #include "berberis/base/arena_map.h"
  #include "berberis/base/arena_string.h"
  #include "berberis/base/arena_vector.h"
@@ -22,7 +42,7 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
  #include "berberis/base/checks.h"
  #include "berberis/base/fd.h"
  #include "berberis/base/forever_alloc.h"
-@@ -669,6 +671,58 @@
+@@ -668,6 +670,58 @@ int OpenAttrCurrentForGuest() {
    return mem_fd;
  }
  
@@ -81,7 +101,7 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
  // In zygote this is not needed because native bridge is mounting
  // /proc/cpuinfo to point to the emulated version. But for executables
  // this does not happen and they end up reading host cpuinfo.
-@@ -829,6 +883,9 @@
+@@ -828,6 +882,9 @@ int OpenatForGuest(int dirfd, const char* path, int guest_flags, mode_t mode) {
      }
      return OpenAttrCurrentForGuest();
    }
@@ -91,24 +111,3 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
    if (IsProcSelfMaps(path, host_flags, "/proc/self/status")) {  // apklayer patch (0017): /proc/<own pid>/status is the same inode
      return OpenatProcSelfStatusForGuest(dirfd, host_flags, mode);
    }
-diff --git a/kernel_api/arm64/syscall_emulation.cc b/kernel_api/arm64/syscall_emulation.cc
---- a/kernel_api/arm64/syscall_emulation.cc
-+++ b/kernel_api/arm64/syscall_emulation.cc
-@@ -422,6 +422,17 @@
-     if (r == 0) {
-       strncpy(uts.machine, "aarch64", sizeof(uts.machine) - 1);
-       uts.machine[sizeof(uts.machine) - 1] = '\0';
-+      // apklayer patch (0047): a device kernel's release and build string, when the properties name them (open_emulation.cc /proc/version)
-+      static ConfigStr kernel_release("BERBERIS_KERNEL_RELEASE", "berberis.kernel.release");
-+      static ConfigStr kernel_version("BERBERIS_KERNEL_VERSION", "berberis.kernel.version");
-+      if (kernel_release.get() != nullptr && kernel_release.get()[0] != '\0') {
-+        strncpy(uts.release, kernel_release.get(), sizeof(uts.release) - 1);
-+        uts.release[sizeof(uts.release) - 1] = '\0';
-+      }
-+      if (kernel_version.get() != nullptr && kernel_version.get()[0] != '\0') {
-+        strncpy(uts.version, kernel_version.get(), sizeof(uts.version) - 1);
-+        uts.version[sizeof(uts.version) - 1] = '\0';
-+      }
-       *ToHostAddr<struct utsname>(state->cpu.x[0]) = uts;
-       state->cpu.x[0] = 0;
-     } else {

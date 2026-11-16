@@ -14,7 +14,103 @@ Not done (shortcut, acediff known-diffs "inv ", "dn ", "nn ", default-NaN, vsqrt
 NEGATIVE default NaN; translated code ignores FPCR.DN (only the interpreter honours it, and the translators translate almost everything); two NaN operands of different kinds
 (quiet first, signalling second) give x86's first operand; translated FMSUB/FNMADD/FNMSUB/FMLS-by-element keep a NaN operand's sign. Upgrade: a fix-up after each such
 operation (about 5 instructions) or a bail while FPCR.DN is set. Module libberberis_arm64.
-
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -6511,6 +6511,54 @@ HeavyOptimizerFrontend::FpRegister HeavyOptimizerFrontend::EmitArmFpMinMax(FpReg
+                                                                            bool is_max,
+                                                                            bool is_nm,
+                                                                            bool is_double) {
++  // apklayer patch (0041): the Arm NaN result (see lite_translator_fp_dataproc.inc EmitArmFpMinMax): m_a = the NaN to return, sel = the lanes it replaces.
++  FpRegister m_a = AllocTempSimdReg();
++  FpRegister m_b = AllocTempSimdReg();
++  FpRegister q = AllocZeroedSimdReg();
++  FpRegister s1 = AllocTempSimdReg();
++  FpRegister s2 = AllocTempSimdReg();
++  FpRegister sel = AllocTempSimdReg();
++  auto mv = [&](FpRegister d, FpRegister s) { GenRaw<x86_64::MovdqaXRegXReg>(d.machine_reg(), s.machine_reg()); };
++  auto unord = [&](FpRegister d, FpRegister s) {
++    if (is_double) GenRaw<x86_64::CmpunordpdXRegXReg>(d.machine_reg(), s.machine_reg());
++    else GenRaw<x86_64::CmpunordpsXRegXReg>(d.machine_reg(), s.machine_reg());
++  };
++  GenRaw<x86_64::PcmpeqdXRegXReg>(q.machine_reg(), q.machine_reg());  // the quiet bit: 0x00400000 / 0x0008000000000000
++  if (is_double) {
++    GenRaw<x86_64::PsllqXRegImm>(q.machine_reg(), int8_t{63});
++    GenRaw<x86_64::PsrlqXRegImm>(q.machine_reg(), int8_t{12});
++  } else {
++    GenRaw<x86_64::PslldXRegImm>(q.machine_reg(), int8_t{31});
++    GenRaw<x86_64::PsrldXRegImm>(q.machine_reg(), int8_t{9});
++  }
++  mv(m_a, n); unord(m_a, m_a);  // a is NaN
++  mv(m_b, m); unord(m_b, m_b);  // b is NaN
++  auto snan = [&](FpRegister s, FpRegister v, FpRegister nan_mask) {  // NaN with the quiet bit clear
++    mv(s, v);
++    GenRaw<x86_64::PandXRegXReg>(s.machine_reg(), q.machine_reg());
++    GenRaw<x86_64::PcmpeqdXRegXReg>(s.machine_reg(), q.machine_reg());
++    if (is_double) GenRaw<x86_64::PshufdXRegXRegImm>(s.machine_reg(), s.machine_reg(), int8_t{static_cast<int8_t>(0xF5)});
++    GenRaw<x86_64::PandnXRegXReg>(s.machine_reg(), nan_mask.machine_reg());
++  };
++  snan(s1, n, m_a);
++  snan(s2, m, m_b);
++  if (!is_nm) {
++    mv(sel, m_a);
++    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_b.machine_reg());
++  } else {
++    mv(sel, s1);
++    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), s2.machine_reg());
++    GenRaw<x86_64::PandXRegXReg>(m_b.machine_reg(), m_a.machine_reg());
++    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_b.machine_reg());  // a signalling NaN, or both NaN
++  }
++  mv(m_b, s2);
++  GenRaw<x86_64::PandnXRegXReg>(m_b.machine_reg(), m_a.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(s1.machine_reg(), m_b.machine_reg());  // s1: a is the NaN to return
++  mv(m_a, s1);
++  GenRaw<x86_64::PandXRegXReg>(m_a.machine_reg(), n.machine_reg());
++  GenRaw<x86_64::PandnXRegXReg>(s1.machine_reg(), m.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(m_a.machine_reg(), s1.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(m_a.machine_reg(), q.machine_reg());  // quieted
+   // FMAX: negate both inputs so the shared FMIN lowering computes it; the
+   // per-lane sign mask (all-ones << 31/63) is XORed in now and, after the
+   // MIN, XORed back out of the result.
+@@ -6583,7 +6631,10 @@ HeavyOptimizerFrontend::FpRegister HeavyOptimizerFrontend::EmitArmFpMinMax(FpReg
+   if (is_max) {
+     GenRaw<x86_64::PxorXRegXReg>(result.machine_reg(), sign_mask.machine_reg());
+   }
+-  return result;
++  GenRaw<x86_64::PandXRegXReg>(m_a.machine_reg(), sel.machine_reg());  // the Arm NaN where there is one
++  GenRaw<x86_64::PandnXRegXReg>(sel.machine_reg(), result.machine_reg());
++  GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_a.machine_reg());
++  return sel;
+ }
+ 
+ // AdvSIMD three-same INTEGER ops that lower to a single packed SSE2/SSE4.1
+@@ -7069,6 +7120,8 @@ void HeavyOptimizerFrontend::AdvSimdThreeSame(const Decoder::AdvSimdThreeSameArg
+   // .2S/.4S/.2D reach here. Requires host FMA — bail if absent.
+   if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlaV ||
+       args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) {
++    // apklayer patch (0041): FMLS: Arm negates a NaN operand before the fused multiply-add; the interpreter has that (interpreter/arm64/arm_nan.h).
++    if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) { UndefinedReturningVoid(); return; }
+     if (!host_platform::kHasFMA) {
+       UndefinedReturningVoid();
+       return;
+@@ -7573,6 +7626,8 @@ void HeavyOptimizerFrontend::AdvSimdThreeSame(const Decoder::AdvSimdThreeSameArg
+   // the decoder rejects the reserved sz=1&&!Q (.1D) shape.
+   if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFrecpsV ||
+       args.opcode == Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV) {
++    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
++    if (true) { UndefinedReturningVoid(); return; }
+     if (args.is_fp16 || !host_platform::kHasFMA) {
+       UndefinedReturningVoid();
+       return;
+@@ -13001,6 +13056,8 @@ void HeavyOptimizerFrontend::AdvSimdScalarThreeSame(const Decoder::AdvSimdScalar
+   // (is_fp16) bails to lite (owned by the FP16 slice; matches AdvSimdScalarPairwise).
+   if (args.opcode == ScOp::kFabd || args.opcode == ScOp::kFmulx ||
+       args.opcode == ScOp::kFrecps || args.opcode == ScOp::kFrsqrts) {
++    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
++    if (args.opcode == ScOp::kFrecps || args.opcode == ScOp::kFrsqrts) { UndefinedReturningVoid(); return; }
+     if (args.is_fp16) {
+       // FP16 scalar: only FMULX is covered here via the F16C round-trip (widen
+       // Vn.h[0]/Vm.h[0] to FP32 lane 0 with upper lanes +0.0, apply the packed
 diff --git a/cpu_emulation/interpreter/arm64/arm_nan.h b/cpu_emulation/interpreter/arm64/arm_nan.h
 new file mode 100644
 --- /dev/null
@@ -185,7 +281,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
  
  #include "berberis/base/bit_util.h"
  #include "berberis/base/checks.h"
-@@ -3619,16 +3620,16 @@
+@@ -3587,16 +3588,16 @@ class Interpreter {
        float result;
        if (!o1 && !o0) {
          // FMADD: Rd = Ra + (Rn * Rm)
@@ -206,7 +302,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
        }
        state_->cpu.v[rd] = 0;
        memcpy(&state_->cpu.v[rd], &result, 4);
-@@ -3640,13 +3641,13 @@
+@@ -3608,13 +3609,13 @@ class Interpreter {
        memcpy(&fa, &state_->cpu.v[ra], 8);
        double result;
        if (!o1 && !o0) {
@@ -224,7 +320,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
        }
        state_->cpu.v[rd] = 0;
        memcpy(&state_->cpu.v[rd], &result, 8);
-@@ -3660,20 +3661,20 @@
+@@ -3628,20 +3629,20 @@ class Interpreter {
        memcpy(&bn, &state_->cpu.v[rn], 2);
        memcpy(&bm, &state_->cpu.v[rm], 2);
        memcpy(&ba, &state_->cpu.v[ra], 2);
@@ -254,7 +350,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
        state_->cpu.v[rd] = 0;
        memcpy(&state_->cpu.v[rd], &result_bits, 2);
      } else {
-@@ -5135,7 +5136,7 @@
+@@ -5103,7 +5104,7 @@ class Interpreter {
        case Decoder::AdvSimdThreeSameOpcode::kFminnmpV: {
          auto reduce_f = [&](float a, float b) -> float {
            switch (args.opcode) {
@@ -263,7 +359,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
              case Decoder::AdvSimdThreeSameOpcode::kFmaxpV:   return FmaxScalar<float>(a, b);
              case Decoder::AdvSimdThreeSameOpcode::kFminpV:   return FminScalar<float>(a, b);
              case Decoder::AdvSimdThreeSameOpcode::kFmaxnmpV: return FmaxnmScalar<float>(a, b);
-@@ -5144,7 +5145,7 @@
+@@ -5112,7 +5113,7 @@ class Interpreter {
          };
          auto reduce_d = [&](double a, double b) -> double {
            switch (args.opcode) {
@@ -272,7 +368,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
              case Decoder::AdvSimdThreeSameOpcode::kFmaxpV:   return FmaxScalar<double>(a, b);
              case Decoder::AdvSimdThreeSameOpcode::kFminpV:   return FminScalar<double>(a, b);
              case Decoder::AdvSimdThreeSameOpcode::kFmaxnmpV: return FmaxnmScalar<double>(a, b);
-@@ -5237,28 +5238,24 @@
+@@ -5205,28 +5206,24 @@ class Interpreter {
              uint16_t rh;
              switch (args.opcode) {
                case Decoder::AdvSimdThreeSameOpcode::kFaddV:
@@ -307,7 +403,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                  break;
                }
                case Decoder::AdvSimdThreeSameOpcode::kFmaxV:
-@@ -5285,7 +5282,7 @@
+@@ -5253,7 +5250,7 @@ class Interpreter {
                  rh = (std::fabs(a) > std::fabs(b)) ? uint16_t{0xFFFF} : uint16_t{0};
                  break;
                case Decoder::AdvSimdThreeSameOpcode::kFabdV:
@@ -316,7 +412,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                // FP16 vector FRECPS / FRSQRTS via FP32.
                case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
                  rh = FpSingleToHalf(FrecpsScalar<float>(a, b)); break;
-@@ -5307,16 +5304,16 @@
+@@ -5275,16 +5272,16 @@ class Interpreter {
              memcpy(&b, reinterpret_cast<const uint8_t*>(&src_m) + i * 8, 8);
              memcpy(&d, reinterpret_cast<const uint8_t*>(&dst) + i * 8, 8);
              switch (args.opcode) {
@@ -338,7 +434,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                // FMAX/FMIN/FMAXNM/FMINNM: see FmaxScalar/FminScalar helpers for
                // NaN propagation and +0/-0 sign disambiguation.
                case Decoder::AdvSimdThreeSameOpcode::kFmaxV:
-@@ -5327,7 +5324,7 @@
+@@ -5295,7 +5292,7 @@ class Interpreter {
                  r = FmaxnmScalar<double>(a, b); break;
                case Decoder::AdvSimdThreeSameOpcode::kFminnmV:
                  r = FminnmScalar<double>(a, b); break;
@@ -347,7 +443,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                // FP compare: result is all-ones (bit pattern) on TRUE, zero on FALSE.
                case Decoder::AdvSimdThreeSameOpcode::kFcmeqV: {
                  uint64_t bits = (a == b) ? ~uint64_t{0} : 0;
-@@ -5350,7 +5347,7 @@
+@@ -5318,7 +5315,7 @@ class Interpreter {
                  memcpy(&r, &bits, 8); break;
                }
                case Decoder::AdvSimdThreeSameOpcode::kFabdV:
@@ -356,7 +452,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
                  r = FrecpsScalar<double>(a, b); break;
                case Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV:
-@@ -5364,15 +5361,15 @@
+@@ -5332,15 +5329,15 @@ class Interpreter {
              memcpy(&b, reinterpret_cast<const uint8_t*>(&src_m) + i * 4, 4);
              memcpy(&d, reinterpret_cast<const uint8_t*>(&dst) + i * 4, 4);
              switch (args.opcode) {
@@ -377,7 +473,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                case Decoder::AdvSimdThreeSameOpcode::kFmaxV:
                  r = FmaxScalar<float>(a, b); break;
                case Decoder::AdvSimdThreeSameOpcode::kFminV:
-@@ -5381,7 +5378,7 @@
+@@ -5349,7 +5346,7 @@ class Interpreter {
                  r = FmaxnmScalar<float>(a, b); break;
                case Decoder::AdvSimdThreeSameOpcode::kFminnmV:
                  r = FminnmScalar<float>(a, b); break;
@@ -386,7 +482,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                case Decoder::AdvSimdThreeSameOpcode::kFcmeqV: {
                  uint32_t bits = (a == b) ? 0xFFFFFFFFu : 0;
                  memcpy(&r, &bits, 4); break;
-@@ -5403,7 +5400,7 @@
+@@ -5371,7 +5368,7 @@ class Interpreter {
                  memcpy(&r, &bits, 4); break;
                }
                case Decoder::AdvSimdThreeSameOpcode::kFabdV:
@@ -395,7 +491,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
                  r = FrecpsScalar<float>(a, b); break;
                case Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV:
-@@ -5472,7 +5469,7 @@
+@@ -5440,7 +5437,7 @@ class Interpreter {
            result = -src;
            break;
          case 0b000011:  // FSQRT
@@ -404,7 +500,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
            break;
          case 0b000101: {  // FCVT Dd, Sn (single -> double)
            double d = static_cast<double>(src);
-@@ -5543,7 +5540,7 @@
+@@ -5511,7 +5508,7 @@ class Interpreter {
            result = -src;
            break;
          case 0b000011:  // FSQRT
@@ -413,7 +509,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
            break;
          case 0b000100: {  // FCVT Sd, Dn (double -> single)
            float f = static_cast<float>(src);
-@@ -5641,7 +5638,7 @@
+@@ -5609,7 +5606,7 @@ class Interpreter {
            break;
          case 0b000011: {  // FSQRT Hd, Hn
            float f = FpHalfToSingle(bits);
@@ -422,7 +518,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
            break;
          }
          case 0b001000: {  // FRINTN
-@@ -5706,10 +5703,10 @@
+@@ -5674,10 +5671,10 @@ class Interpreter {
        float result;
  
        switch (opcode) {
@@ -437,7 +533,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
          // ARM FMAX differs from libm fmax in NaN handling
          // (any-NaN -> default NaN, not other-operand) and in +0/-0
          // disambiguation. See FmaxScalar/FminScalar/etc.
-@@ -5717,7 +5714,7 @@
+@@ -5685,7 +5682,7 @@ class Interpreter {
          case 0b0101: result = FminScalar<float>(src_n, src_m); break;    // FMIN
          case 0b0110: result = FmaxnmScalar<float>(src_n, src_m); break;  // FMAXNM
          case 0b0111: result = FminnmScalar<float>(src_n, src_m); break;  // FMINNM
@@ -446,7 +542,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
          default: Undefined(); return;
        }
  
-@@ -5731,16 +5728,16 @@
+@@ -5699,16 +5696,16 @@ class Interpreter {
        double result;
  
        switch (opcode) {
@@ -468,7 +564,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
          default: Undefined(); return;
        }
  
-@@ -5759,16 +5756,16 @@
+@@ -5727,16 +5724,16 @@ class Interpreter {
        float result;
  
        switch (opcode) {
@@ -490,7 +586,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
          default: Undefined(); return;
        }
  
-@@ -6272,7 +6269,7 @@
+@@ -6240,7 +6237,7 @@ class Interpreter {
                break;
              }
              case Decoder::AdvSimdScalarThreeSameOpcode::kFabd:
@@ -499,7 +595,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                break;
              case Decoder::AdvSimdScalarThreeSameOpcode::kFcmeq:
                r16 = (a == b) ? uint16_t{0xFFFF} : uint16_t{0};
-@@ -6315,7 +6312,7 @@
+@@ -6283,7 +6280,7 @@ class Interpreter {
            uint64_t r64;
            switch (args.opcode) {
              case Decoder::AdvSimdScalarThreeSameOpcode::kFabd: {
@@ -508,7 +604,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                memcpy(&r64, &d, sizeof(r64));
                break;
              }
-@@ -6354,7 +6351,7 @@
+@@ -6322,7 +6319,7 @@ class Interpreter {
            uint32_t r32;
            switch (args.opcode) {
              case Decoder::AdvSimdScalarThreeSameOpcode::kFabd: {
@@ -517,7 +613,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                memcpy(&r32, &f, sizeof(r32));
                break;
              }
-@@ -6800,7 +6797,7 @@
+@@ -6768,7 +6765,7 @@ class Interpreter {
            float f;
            switch (args.opcode) {
              case Decoder::AdvSimdScalarPairwiseOpcode::kFaddpScalar:
@@ -526,7 +622,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                break;
              case Decoder::AdvSimdScalarPairwiseOpcode::kFmaxpScalar:
                f = FmaxScalar<float>(a, b); break;
-@@ -6824,7 +6821,7 @@
+@@ -6792,7 +6789,7 @@ class Interpreter {
            memcpy(&b, &hi, 8);
            switch (args.opcode) {
              case Decoder::AdvSimdScalarPairwiseOpcode::kFaddpScalar:
@@ -535,7 +631,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                break;
              case Decoder::AdvSimdScalarPairwiseOpcode::kFmaxpScalar:
                d = FmaxScalar<double>(a, b); break;
-@@ -6847,7 +6844,7 @@
+@@ -6815,7 +6812,7 @@ class Interpreter {
            memcpy(&b, &b_bits, 4);
            switch (args.opcode) {
              case Decoder::AdvSimdScalarPairwiseOpcode::kFaddpScalar:
@@ -544,7 +640,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
                break;
              case Decoder::AdvSimdScalarPairwiseOpcode::kFmaxpScalar:
                f = FmaxScalar<float>(a, b); break;
-@@ -7671,7 +7668,8 @@
+@@ -7639,7 +7636,8 @@ class Interpreter {
            for (uint8_t i = 0; i < fp_count; i++) {
              uint16_t h;
              memcpy(&h, reinterpret_cast<const uint8_t*>(&src) + i * 2, 2);
@@ -554,7 +650,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
              memcpy(reinterpret_cast<uint8_t*>(&result) + i * 2, &rh, 2);
            }
            break;
-@@ -7682,12 +7680,12 @@
+@@ -7650,12 +7648,12 @@ class Interpreter {
            if (fp_esize == 4) {
              float f;
              memcpy(&f, reinterpret_cast<const uint8_t*>(&src) + i * 4, 4);
@@ -569,7 +665,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
              memcpy(reinterpret_cast<uint8_t*>(&result) + i * 8, &r, 8);
            }
          }
-@@ -8564,21 +8562,15 @@
+@@ -8532,21 +8530,15 @@ class Interpreter {
          float r;
          switch (args.opcode) {
            case Decoder::AdvSimdVecXIdxOpcode::kFmla: {
@@ -594,7 +690,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
              break;
            case Decoder::AdvSimdVecXIdxOpcode::kFmulx:
              r = FmulxScalar<float>(n, m_indexed);
-@@ -8606,19 +8598,19 @@
+@@ -8574,19 +8566,19 @@ class Interpreter {
            case Decoder::AdvSimdVecXIdxOpcode::kFmla: {
              float dst;
              memcpy(&dst, reinterpret_cast<uint8_t*>(&result) + i * 4, 4);
@@ -617,7 +713,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
              memcpy(reinterpret_cast<uint8_t*>(&result) + i * 4, &r, 4);
              break;
            }
-@@ -8646,19 +8638,19 @@
+@@ -8614,19 +8606,19 @@ class Interpreter {
            case Decoder::AdvSimdVecXIdxOpcode::kFmla: {
              double dst;
              memcpy(&dst, reinterpret_cast<uint8_t*>(&result) + i * 8, 8);
@@ -640,7 +736,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
              memcpy(reinterpret_cast<uint8_t*>(&result) + i * 8, &r, 8);
              break;
            }
-@@ -8847,20 +8839,14 @@
+@@ -8815,20 +8807,14 @@ class Interpreter {
            rh = FpSingleToHalf(FmulxScalar<float>(a, b));
            break;
          case Op::kFmul:
@@ -664,7 +760,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
            break;
          }
          default:
-@@ -8885,13 +8871,13 @@
+@@ -8853,13 +8839,13 @@ class Interpreter {
            r = FmulxScalar<double>(n_lane, m_lane);
            break;
          case Op::kFmul:
@@ -681,7 +777,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
            break;
          default:
            Undefined();
-@@ -8911,13 +8897,13 @@
+@@ -8879,13 +8865,13 @@ class Interpreter {
            r = FmulxScalar<float>(n_lane, m_lane);
            break;
          case Op::kFmul:
@@ -698,7 +794,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
            break;
          default:
            Undefined();
-@@ -10205,14 +10191,30 @@
+@@ -10173,14 +10159,30 @@ class Interpreter {
    // the (zero * infinity) saturation case is replaced by ±2.0 (sign = sign of
    // a XOR sign of b), per ARM ARM C7.2.149 FMULX.  Standard FP NaN
    // propagation otherwise.
@@ -731,7 +827,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
    }
  
    // FRECPS scalar semantics: (2.0 - a*b), used as a Newton-Raphson refinement
-@@ -10222,15 +10224,8 @@
+@@ -10190,15 +10192,8 @@ class Interpreter {
    //     (unsigned — unlike FMULX which preserves XOR sign)
    //   - otherwise: FPRecipStepFused = FMA(-a, b, 2.0)  (single rounding)
    template <typename FpType>
@@ -749,7 +845,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
    }
  
    // FRSQRTS scalar semantics: (3.0 - a*b)/2, used as a Newton-Raphson
-@@ -10242,15 +10237,8 @@
+@@ -10210,15 +10205,8 @@ class Interpreter {
    //     non-denormals; for denormals the divide-by-two is also exact in IEEE
    //     binary FP)
    template <typename FpType>
@@ -767,7 +863,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
    }
  
    // FMAX / FMIN / FMAXNM / FMINNM scalar semantics, parameterized by FP type.
-@@ -10268,53 +10256,23 @@
+@@ -10236,53 +10224,23 @@ class Interpreter {
    //                    both-NaN input -> default NaN.
    // The +0/-0 disambiguation is the same in both families.
    template <typename FpType>
@@ -829,103 +925,6 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
    }
  
    static float FpHalfToSingle(uint16_t h) {
-diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
---- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
-+++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
-@@ -6511,6 +6511,54 @@
-                                                                            bool is_max,
-                                                                            bool is_nm,
-                                                                            bool is_double) {
-+  // apklayer patch (0041): the Arm NaN result (see lite_translator_fp_dataproc.inc EmitArmFpMinMax): m_a = the NaN to return, sel = the lanes it replaces.
-+  FpRegister m_a = AllocTempSimdReg();
-+  FpRegister m_b = AllocTempSimdReg();
-+  FpRegister q = AllocZeroedSimdReg();
-+  FpRegister s1 = AllocTempSimdReg();
-+  FpRegister s2 = AllocTempSimdReg();
-+  FpRegister sel = AllocTempSimdReg();
-+  auto mv = [&](FpRegister d, FpRegister s) { GenRaw<x86_64::MovdqaXRegXReg>(d.machine_reg(), s.machine_reg()); };
-+  auto unord = [&](FpRegister d, FpRegister s) {
-+    if (is_double) GenRaw<x86_64::CmpunordpdXRegXReg>(d.machine_reg(), s.machine_reg());
-+    else GenRaw<x86_64::CmpunordpsXRegXReg>(d.machine_reg(), s.machine_reg());
-+  };
-+  GenRaw<x86_64::PcmpeqdXRegXReg>(q.machine_reg(), q.machine_reg());  // the quiet bit: 0x00400000 / 0x0008000000000000
-+  if (is_double) {
-+    GenRaw<x86_64::PsllqXRegImm>(q.machine_reg(), int8_t{63});
-+    GenRaw<x86_64::PsrlqXRegImm>(q.machine_reg(), int8_t{12});
-+  } else {
-+    GenRaw<x86_64::PslldXRegImm>(q.machine_reg(), int8_t{31});
-+    GenRaw<x86_64::PsrldXRegImm>(q.machine_reg(), int8_t{9});
-+  }
-+  mv(m_a, n); unord(m_a, m_a);  // a is NaN
-+  mv(m_b, m); unord(m_b, m_b);  // b is NaN
-+  auto snan = [&](FpRegister s, FpRegister v, FpRegister nan_mask) {  // NaN with the quiet bit clear
-+    mv(s, v);
-+    GenRaw<x86_64::PandXRegXReg>(s.machine_reg(), q.machine_reg());
-+    GenRaw<x86_64::PcmpeqdXRegXReg>(s.machine_reg(), q.machine_reg());
-+    if (is_double) GenRaw<x86_64::PshufdXRegXRegImm>(s.machine_reg(), s.machine_reg(), int8_t{static_cast<int8_t>(0xF5)});
-+    GenRaw<x86_64::PandnXRegXReg>(s.machine_reg(), nan_mask.machine_reg());
-+  };
-+  snan(s1, n, m_a);
-+  snan(s2, m, m_b);
-+  if (!is_nm) {
-+    mv(sel, m_a);
-+    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_b.machine_reg());
-+  } else {
-+    mv(sel, s1);
-+    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), s2.machine_reg());
-+    GenRaw<x86_64::PandXRegXReg>(m_b.machine_reg(), m_a.machine_reg());
-+    GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_b.machine_reg());  // a signalling NaN, or both NaN
-+  }
-+  mv(m_b, s2);
-+  GenRaw<x86_64::PandnXRegXReg>(m_b.machine_reg(), m_a.machine_reg());
-+  GenRaw<x86_64::PorXRegXReg>(s1.machine_reg(), m_b.machine_reg());  // s1: a is the NaN to return
-+  mv(m_a, s1);
-+  GenRaw<x86_64::PandXRegXReg>(m_a.machine_reg(), n.machine_reg());
-+  GenRaw<x86_64::PandnXRegXReg>(s1.machine_reg(), m.machine_reg());
-+  GenRaw<x86_64::PorXRegXReg>(m_a.machine_reg(), s1.machine_reg());
-+  GenRaw<x86_64::PorXRegXReg>(m_a.machine_reg(), q.machine_reg());  // quieted
-   // FMAX: negate both inputs so the shared FMIN lowering computes it; the
-   // per-lane sign mask (all-ones << 31/63) is XORed in now and, after the
-   // MIN, XORed back out of the result.
-@@ -6583,7 +6631,10 @@
-   if (is_max) {
-     GenRaw<x86_64::PxorXRegXReg>(result.machine_reg(), sign_mask.machine_reg());
-   }
--  return result;
-+  GenRaw<x86_64::PandXRegXReg>(m_a.machine_reg(), sel.machine_reg());  // the Arm NaN where there is one
-+  GenRaw<x86_64::PandnXRegXReg>(sel.machine_reg(), result.machine_reg());
-+  GenRaw<x86_64::PorXRegXReg>(sel.machine_reg(), m_a.machine_reg());
-+  return sel;
- }
- 
- // AdvSIMD three-same INTEGER ops that lower to a single packed SSE2/SSE4.1
-@@ -7069,6 +7120,8 @@
-   // .2S/.4S/.2D reach here. Requires host FMA — bail if absent.
-   if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlaV ||
-       args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) {
-+    // apklayer patch (0041): FMLS: Arm negates a NaN operand before the fused multiply-add; the interpreter has that (interpreter/arm64/arm_nan.h).
-+    if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) { UndefinedReturningVoid(); return; }
-     if (!host_platform::kHasFMA) {
-       UndefinedReturningVoid();
-       return;
-@@ -7573,6 +7626,8 @@
-   // the decoder rejects the reserved sz=1&&!Q (.1D) shape.
-   if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFrecpsV ||
-       args.opcode == Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV) {
-+    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
-+    if (true) { UndefinedReturningVoid(); return; }
-     if (args.is_fp16 || !host_platform::kHasFMA) {
-       UndefinedReturningVoid();
-       return;
-@@ -13001,6 +13056,8 @@
-   // (is_fp16) bails to lite (owned by the FP16 slice; matches AdvSimdScalarPairwise).
-   if (args.opcode == ScOp::kFabd || args.opcode == ScOp::kFmulx ||
-       args.opcode == ScOp::kFrecps || args.opcode == ScOp::kFrsqrts) {
-+    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
-+    if (args.opcode == ScOp::kFrecps || args.opcode == ScOp::kFrsqrts) { UndefinedReturningVoid(); return; }
-     if (args.is_fp16) {
-       // FP16 scalar: only FMULX is covered here via the F16C round-trip (widen
-       // Vn.h[0]/Vm.h[0] to FP32 lane 0 with upper lanes +0.0, apply the packed
 diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
 --- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
 +++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
@@ -1006,6 +1005,18 @@ diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_da
      return true;
    }
  
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
+@@ -96,6 +96,8 @@
+     const bool is_fmulx = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFmulx);
+     const bool is_frecps = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrecps);
+     const bool is_frsqrts = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrsqrts);
++    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
++    if (is_frecps || is_frsqrts) { success_ = false; return; }
+     const bool is_fabd = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFabd);
+     const bool is_fcmeq = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmeq);
+     const bool is_fcmge = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmge);
 diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
 --- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
 +++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
@@ -1027,15 +1038,3 @@ diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_
          // FP16 vector FRECPS / FRSQRTS .4H / .8H via
          // F16C round-trip.  The interpreter computes FP16 lanes as
          // FpSingleToHalf(FrecpsScalar<float>(a, b)) — i.e. the whole
-diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
---- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
-+++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
-@@ -96,6 +96,8 @@
-     const bool is_fmulx = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFmulx);
-     const bool is_frecps = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrecps);
-     const bool is_frsqrts = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrsqrts);
-+    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
-+    if (is_frecps || is_frsqrts) { success_ = false; return; }
-     const bool is_fabd = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFabd);
-     const bool is_fcmeq = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmeq);
-     const bool is_fcmge = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmge);

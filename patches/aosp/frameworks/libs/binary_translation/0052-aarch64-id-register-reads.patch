@@ -1,0 +1,101 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer: EL0 reads of the AArch64 ID registers are answered as a Linux kernel does; HWCAP_CPUID advertised
+
+A real kernel traps every EL0 MRS of the ID register space (op0=3, op1=0, CRn=0, CRm 0..7) and returns a sanitised value, never SIGILL.
+The interpreter answered only MIDR_EL1/CTR_EL0 and raised SIGILL for the rest, so 0010 left HWCAP_CPUID out (PGR's ACE read
+ID_AA64PFR1_EL1 and died 1.5 s in). Now ID_AA64PFR0/PFR1/ISAR0/ISAR1 report the features berberis translates (the AT_HWCAP and
+/proc/cpuinfo set of 0010) and the rest of the space reads 0 (IsAArch64IdReg); AT_HWCAP gains HWCAP_CPUID and the Features line "cpuid".
+This was an in-place edit of the LineageOS tree that shipped in libberberis_arm64 since 2026-11-15 without a patch file; exported
+2026-11-16 (0061 builds on it). Module libberberis_arm64.
+diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+--- a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
++++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+@@ -516,6 +516,13 @@ class Decoder {
+     kCntfrqEl0 = SysRegEncoding(3, 3, 14, 0, 0),  // CNTFRQ_EL0 (counter frequency)
+     kCntpctEl0 = SysRegEncoding(3, 3, 14, 0, 1),  // CNTPCT_EL0 (physical count)
+     kCntvctEl0 = SysRegEncoding(3, 3, 14, 0, 2),  // CNTVCT_EL0 (virtual count)
++    // apklayer patch: the AArch64 feature ID registers (op0=3, op1=0, CRn=0, CRm=4..7). A real kernel traps every EL0 read of this
++    // space (TID3) and returns a sanitised value, never SIGILL; the interpreter returns the features berberis emulates, 0 otherwise.
++    // The feature-carrying ones are named; the rest of the space is caught by range in the interpreter (IsAArch64IdReg).
++    kIdAa64Pfr0El1 = SysRegEncoding(3, 0, 0, 4, 0),   // ID_AA64PFR0_EL1
++    kIdAa64Pfr1El1 = SysRegEncoding(3, 0, 0, 4, 1),   // ID_AA64PFR1_EL1 (read by Tencent ACE)
++    kIdAa64Isar0El1 = SysRegEncoding(3, 0, 0, 6, 0),  // ID_AA64ISAR0_EL1
++    kIdAa64Isar1El1 = SysRegEncoding(3, 0, 0, 6, 1),  // ID_AA64ISAR1_EL1
+   };
+ 
+   //
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -639,12 +639,44 @@ class Interpreter {
+         if (k.count) CountMrs(state_->cpu.insn_addr, ns);
+         return static_cast<Register>((static_cast<__uint128_t>(ns) * k.frq) / 1000000000ULL / k.scale);
+       }
++      // apklayer patch: the AArch64 feature ID registers. A real Linux kernel traps every EL0 read of this space and returns a
++      // sanitised value (0 for anything the hardware lacks), so an app that probes CPU features never SIGILLs there; the three
++      // below report exactly the features berberis translates and the ones it cannot (SVE, DIT, MTE, JSCVT, FCMA, RNDR, ...) as
++      // absent, matching the AT_HWCAP / /proc/cpuinfo set (patch 0010). The rest of the ID space returns 0 (the default below).
++      case Decoder::SystemReg::kIdAa64Pfr0El1:
++        // EL0/EL1 AArch64-only; FP and AdvSIMD with half-precision (fp, asimd, fphp, asimdhp). SVE, RAS, DIT, MPAM, AMU absent.
++        return 0x0000000000110011ULL;
++      case Decoder::SystemReg::kIdAa64Pfr1El1:
++        // BT, SSBS, MTE, SME: none emulated.
++        return 0x0ULL;
++      case Decoder::SystemReg::kIdAa64Isar0El1:
++        // AES+PMULL, SHA1, SHA256, CRC32, LSE atomics, RDM, dotprod. RNDR, SHA3, SM3/SM4, FHM absent.
++        return 0x0000100010211120ULL;
++      case Decoder::SystemReg::kIdAa64Isar1El1:
++        // DC CVAP (DPB), LRCPC. Pointer auth, JSCVT, FCMA, FRINTTS, BF16, I8MM absent.
++        return 0x0000000000100001ULL;
+       default:
++        // apklayer patch: the rest of the AArch64 ID register space (op0=3, op1=0, CRn=0, CRm 0..7) reads as 0, as the kernel's
++        // TID3 trap returns for feature fields it sanitises to "not implemented" - never an undefined-instruction fault.
++        if (IsAArch64IdReg(sysreg)) {
++          return 0;
++        }
+         Undefined();
+         return 0;
+     }
+   }
+ 
++  // apklayer patch: true for the AArch64 ID register encoding space (MRS Xt, S3_0_C0_CRm_op2 with CRm in 0..7), whose EL0 reads a
++  // real kernel always answers (sanitised or 0), never with SIGILL.
++  static bool IsAArch64IdReg(Decoder::SystemReg sysreg) {
++    const uint16_t enc = static_cast<uint16_t>(sysreg);
++    const unsigned op0 = (enc >> 14) & 0x3;
++    const unsigned op1 = (enc >> 11) & 0x7;
++    const unsigned crn = (enc >> 7) & 0xf;
++    const unsigned crm = (enc >> 3) & 0xf;
++    return op0 == 3 && op1 == 0 && crn == 0 && crm <= 7;
++  }
++
+   void Msr(Decoder::SystemReg sysreg, Register value) {
+     CHECK(!exception_raised_);
+     switch (sysreg) {
+diff --git a/guest_loader/arm64/guest_loader_arch.cc b/guest_loader/arm64/guest_loader_arch.cc
+--- a/guest_loader/arm64/guest_loader_arch.cc
++++ b/guest_loader/arm64/guest_loader_arch.cc
+@@ -60,10 +60,7 @@ GuestAddr InitKernelArgs(GuestAddr guest_sp,
+       // dotprod, CPUID register access); evtstrm, which is not provided, is dropped from the Features line instead (open_emulation.cc).
+       (1UL << 9) |   // HWCAP_FPHP (half-precision FP)
+       (1UL << 10) |  // HWCAP_ASIMDHP (half-precision ASIMD)
+-      // HWCAP_CPUID (bit 11) is intentionally NOT set: the decoder emulates MIDR_EL1/CTR_EL0 but not the ID_AA64* registers, and code
+-      // that sees HWCAP_CPUID reads them directly (MRS x9, ID_AA64PFR1_EL1 = 0xd5380429) - which the decoder rejects as undefined and
+-      // the interpreter raises SIGILL on (PGR died 1.5 s in). A real kernel traps and emulates those EL0 reads; until the decoder does
+-      // too, do not advertise the bit. The Features line omits "cpuid" to match (open_emulation.cc).
++      (1UL << 11) |  // HWCAP_CPUID (EL0 reads of the AArch64 ID registers; the interpreter emulates them, interpreter.h IsAArch64IdReg)
+       (1UL << 12) |  // HWCAP_ASIMDRDM (RDMA)
+       (1UL << 15) |  // HWCAP_LRCPC (RCpc load-acquire)
+       (1UL << 16) |  // HWCAP_DCPOP (DC CVAP)
+diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulation.cc
+--- a/kernel_api/arm64/open_emulation.cc
++++ b/kernel_api/arm64/open_emulation.cc
+@@ -164,7 +164,7 @@ std::string FormatGuestCpuinfo(int num_cpus) {
+                      // apklayer patch: no evtstrm (the generic-timer event stream is not provided); the list now matches AT_HWCAP
+                      // (guest_loader_arch.cc) bit for bit, so code that cross-checks /proc/cpuinfo against getauxval agrees.
+                      "Features\t: fp asimd aes pmull sha1 sha2 crc32 "
+-                     "atomics fphp asimdhp asimdrdm lrcpc dcpop asimddp\n"
++                     "atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp\n"
+                      "CPU implementer\t: %s\n"
+                      "CPU architecture: 8\n"
+                      "CPU variant\t: %s\n"

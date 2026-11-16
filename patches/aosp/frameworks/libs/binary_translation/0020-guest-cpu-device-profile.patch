@@ -8,7 +8,33 @@ Gold/Prime (part 0x804), and a guest read of MIDR_EL1 (interpreter, the decoder 
 instead of the generic Cortex-A53's. The Features line is untouched: it must stay what AT_HWCAP and the interpreter provide (0010). The identity values are
 from memory of a Pixel 5, not captured from one. Without the property nothing changes. The host's online CPU count (sysconf, /sys/devices/system/cpu) is
 still the host's; only /proc/cpuinfo and MIDR_EL1 are profiled. Applies after 0019. Module libberberis_arm64.
-
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -30,6 +30,7 @@
+ 
+ #include "berberis/base/bit_util.h"
+ #include "berberis/base/checks.h"
++#include "berberis/base/config_globals.h"  // apklayer patch (0020)
+ #include "berberis/decoder/arm64/decoder.h"
+ #include "berberis/decoder/arm64/semantics_player.h"
+ #include "berberis/guest_state/guest_addr.h"
+@@ -558,6 +559,15 @@ class Interpreter {
+         //   Implementer 0x41 ('A' = ARM Ltd)
+         //   Variant 0x0, Architecture 0xF (defined by ID_AA64*_EL1)
+         //   PartNum 0xD03 (Cortex-A53), Revision 0x4
++        // apklayer patch (0020): a device profile's core (berberis.cpuinfo, the same setting as /proc/cpuinfo): pixel5 = Kryo 475 Silver r13p14
++        // (implementer 0x51, variant 0xd, part 0x805, revision 14), so MIDR_EL1 agrees with the cpuinfo the guest reads.
++        {
++          static ConfigStr cpuinfo_profile("BERBERIS_CPUINFO", "berberis.cpuinfo");
++          const char* profile = cpuinfo_profile.get();
++          if (profile != nullptr && std::strcmp(profile, "pixel5") == 0) {
++            return 0x51DF805EULL;
++          }
++        }
+         return 0x410FD034ULL;
+       case Decoder::SystemReg::kRndr:
+       case Decoder::SystemReg::kRndrrs: {
 diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulation.cc
 --- a/kernel_api/arm64/open_emulation.cc
 +++ b/kernel_api/arm64/open_emulation.cc
@@ -23,7 +49,7 @@ diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulatio
  #include "berberis/base/tracing.h"
  
  namespace berberis {
-@@ -110,6 +112,31 @@
+@@ -110,6 +112,31 @@ int SwapArchSpecificBits(int flags) {
  
  const char* kGuestCpuinfoPath = "/system/etc/cpuinfo.arm64.txt";
  
@@ -55,7 +81,7 @@ diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulatio
  std::string FormatGuestCpuinfo(int num_cpus) {
    if (num_cpus < 1) {
      num_cpus = 1;
-@@ -122,6 +149,11 @@
+@@ -122,6 +149,11 @@ std::string FormatGuestCpuinfo(int num_cpus) {
    // describe a generic ARMv8 core (0x41 = 'ARM', 0xd05 = Cortex-A55); only the
    // CPU count is taken from the real device, so a guest sees the emulator's
    // actual online core count rather than a hard-coded value.
@@ -67,10 +93,10 @@ diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulatio
    std::string out;
    out.reserve(static_cast<size_t>(num_cpus) * 256);
    for (int i = 0; i < num_cpus; ++i) {
-@@ -133,13 +165,14 @@
+@@ -133,13 +165,14 @@ std::string FormatGuestCpuinfo(int num_cpus) {
                       // (guest_loader_arch.cc) bit for bit, so code that cross-checks /proc/cpuinfo against getauxval agrees.
                       "Features\t: fp asimd aes pmull sha1 sha2 crc32 "
-                      "atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp\n"
+                      "atomics fphp asimdhp asimdrdm lrcpc dcpop asimddp\n"
 -                     "CPU implementer\t: 0x41\n"
 +                     "CPU implementer\t: %s\n"
                       "CPU architecture: 8\n"
@@ -87,30 +113,3 @@ diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulatio
      if (n > 0) {
        out.append(block, static_cast<size_t>(n));
      }
-diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
---- a/cpu_emulation/interpreter/arm64/interpreter.h
-+++ b/cpu_emulation/interpreter/arm64/interpreter.h
-@@ -30,6 +30,7 @@
- 
- #include "berberis/base/bit_util.h"
- #include "berberis/base/checks.h"
-+#include "berberis/base/config_globals.h"  // apklayer patch (0020)
- #include "berberis/decoder/arm64/decoder.h"
- #include "berberis/decoder/arm64/semantics_player.h"
- #include "berberis/guest_state/guest_addr.h"
-@@ -558,6 +559,15 @@
-         //   Implementer 0x41 ('A' = ARM Ltd)
-         //   Variant 0x0, Architecture 0xF (defined by ID_AA64*_EL1)
-         //   PartNum 0xD03 (Cortex-A53), Revision 0x4
-+        // apklayer patch (0020): a device profile's core (berberis.cpuinfo, the same setting as /proc/cpuinfo): pixel5 = Kryo 475 Silver r13p14
-+        // (implementer 0x51, variant 0xd, part 0x805, revision 14), so MIDR_EL1 agrees with the cpuinfo the guest reads.
-+        {
-+          static ConfigStr cpuinfo_profile("BERBERIS_CPUINFO", "berberis.cpuinfo");
-+          const char* profile = cpuinfo_profile.get();
-+          if (profile != nullptr && std::strcmp(profile, "pixel5") == 0) {
-+            return 0x51DF805EULL;
-+          }
-+        }
-         return 0x410FD034ULL;
-       case Decoder::SystemReg::kRndr:
-       case Decoder::SystemReg::kRndrrs: {

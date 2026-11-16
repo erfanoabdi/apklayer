@@ -6,7 +6,7 @@ knows si_addr. berberis.log_faults=1 (env BERBERIS_LOG_FAULTS) writes one stderr
 (SIGSEGV/SIGBUS/SIGILL/SIGFPE with si_code > 0, SIGTRAP): tid, signal, code, si_addr, the guest handler, pc and its instruction word, x0-x30,
 sp, and for pc, x30 and si_addr the host mapping that contains it (range, protections, name+offset). First 300 per process.
 Nothing is answered differently. Module libberberis_arm64.
-
+diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/guest_signal_handling.cc
 --- a/guest_os_primitives/guest_signal_handling.cc
 +++ b/guest_os_primitives/guest_signal_handling.cc
 @@ -14,7 +14,12 @@
@@ -22,9 +22,9 @@ Nothing is answered differently. Module libberberis_arm64.
  
  #include <atomic>
  #include <bit>
-@@ -559,6 +564,62 @@
+@@ -558,6 +563,62 @@ void GuestThread::ProcessPendingSignals() {
+   }
  }
- 
  
 +// apklayer patch (0050, DIAGNOSTIC): berberis.log_faults=1 (BERBERIS_LOG_FAULTS) writes one stderr block per guest fault signal (SIGSEGV, SIGBUS,
 +// SIGILL, SIGFPE with si_code > 0, SIGTRAP) the translator delivers: tid, signal, si_code, si_addr, the guest handler, the guest pc with the
@@ -85,7 +85,7 @@ Nothing is answered differently. Module libberberis_arm64.
  bool GuestThread::ProcessAndDisablePendingSignals() {
    for (;;) {
      // If pending signals are not present, cas should disable them.
-@@ -602,6 +663,7 @@
+@@ -601,6 +662,7 @@ void GuestThread::ProcessPendingSignalsImpl() {
      // branch this one replaces, so convert here -- once, ahead of both paths,
      // because the SIGSYS arm rewrites si_syscall and is not idempotent.
      ConvertHostSiginfoToGuest(signal_info, state_);

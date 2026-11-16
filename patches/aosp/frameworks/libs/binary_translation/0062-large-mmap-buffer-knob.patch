@@ -6,7 +6,7 @@ guest's /proc/self/maps (PGR on an x86_64 PC); no device process has it. berberi
 PROT_NONE (---p, like ART's reservations; LargeMmapImplOrDie maps every piece MAP_FIXED with its own protections), "off" makes no buffer
 (allocations go to mmap directly), "hide" reserves it and leaves every maps line inside it (the GuestMapShadow's 8 GB rw-p, code cache
 pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged. Module libberberis_arm64.
-
+diff --git a/base/include/berberis/base/large_mmap.h b/base/include/berberis/base/large_mmap.h
 --- a/base/include/berberis/base/large_mmap.h
 +++ b/base/include/berberis/base/large_mmap.h
 @@ -17,6 +17,8 @@
@@ -18,7 +18,7 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
  #include "berberis/base/mmap.h"
  
  namespace berberis {
-@@ -26,6 +28,10 @@
+@@ -26,6 +28,10 @@ void InitLargeMmap();
  void* LargeMmapOrDie(size_t size);
  void* LargeMmapImplOrDie(MmapImplArgs args);
  
@@ -29,6 +29,7 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
  }  // namespace berberis
  
  #endif  // BERBERIS_BASE_LARGE_MMAP_H_
+diff --git a/base/large_mmap.cc b/base/large_mmap.cc
 --- a/base/large_mmap.cc
 +++ b/base/large_mmap.cc
 @@ -20,6 +20,10 @@
@@ -42,7 +43,7 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
  namespace berberis {
  
  #if defined(__LP64__)
-@@ -52,6 +56,7 @@
+@@ -52,6 +56,7 @@ namespace {
  // ATTENTION: buffer allocation is not atomic! To make it atomic, use PointerAndCounter!
  std::atomic<uint8_t*> g_buffer = nullptr;
  uint8_t* g_buffer_end = nullptr;
@@ -50,7 +51,7 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
  
  }  // namespace
  
-@@ -60,12 +65,32 @@
+@@ -60,12 +65,32 @@ void InitLargeMmap() {
    constexpr size_t kSpacingSize = size_t(1) << 35;  // 32gb
  
    // As explained above we expect mmap to work top-to-down, so spacing is at the higher addresses.
@@ -84,7 +85,7 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
  }
  
  void* LargeMmapImplOrDie(MmapImplArgs args) {
-@@ -96,6 +121,10 @@
+@@ -96,6 +121,10 @@ void* LargeMmapImplOrDie(MmapImplArgs args) {
  
  void InitLargeMmap() {}
  
@@ -95,9 +96,10 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
  void* LargeMmapImplOrDie(MmapImplArgs args) {
    return MmapImplOrDie(args);
  }
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 --- a/kernel_api/open_emulation.cc
 +++ b/kernel_api/open_emulation.cc
-@@ -44,6 +44,7 @@
+@@ -43,6 +43,7 @@
  #include "berberis/base/checks.h"
  #include "berberis/base/fd.h"
  #include "berberis/base/forever_alloc.h"
@@ -105,7 +107,7 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
  #include "berberis/base/scoped_errno.h"  // apklayer patch (0014)
  #include "berberis/base/tracing.h"
  #include "berberis/guest_os_primitives/guest_map_shadow.h"
-@@ -388,6 +389,10 @@
+@@ -387,6 +388,10 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
        guest_maps.append(cur_line + "\n");
        continue;
      }
@@ -113,6 +115,6 @@ pieces, the reserved rest) out of the guest's /proc/self/maps. Default unchanged
 +    if (IsInHiddenLargeMmap(start, end)) {
 +      continue;
 +    }
-     // apklayer patch (0051): berberis.maps_view=arm64 (BERBERIS_MAPS_VIEW): no x86_64-only lines in the served maps: [vsyscall] (x86_64's
-     // fixed page at ffffffffff600000) and [vvar_vclock] (arm64 shows [vvar] and [vdso] only). Default off.
-     {
+     // region digitalis
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
+     // Give the guest a coherent ARM64 view of the dynamic linker. The process

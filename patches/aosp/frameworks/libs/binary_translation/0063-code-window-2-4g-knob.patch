@@ -1,0 +1,1377 @@
+From: kuloPo <admin@kulopo.com>
+Subject: [PATCH] Reserve and protect randomized 2-4 GiB JIT space on x86-64 (DigitalisX64 android17 e680eae6), behind berberis.code_window
+
+Upstream (DigitalisX64 platform_frameworks_libs_binary_translation android17, e680eae6, kuloPo, 2026-11-01; Apache-2.0): reserve the
+free 2-4 GiB address ranges before arm64 guest execution and allocate the code pools there with lock-free cursors; refuse guest
+mmap(MAP_FIXED)/munmap/mprotect/mremap over them (EEXIST/ENOMEM kept for retries), so a guest cannot unmap or overwrite translated code.
+The only commit of android17 after our REVISION abefbe2b.
+apklayer patch (0063): taken whole (tests included); one conflict with 0044 in MmapForGuest (both kept, the refusal first); and
+EnableCodeWindow() runs only with berberis.code_window=on (env BERBERIS_CODE_WINDOW): the reservation is a ~2 GiB PROT_NONE line in the
+guest's /proc/self/maps that no device has, and ACE reads the maps. Off (default) nothing changes. Applies after 0062. Module libberberis_arm64.
+
+diff --git a/Android.bp b/Android.bp
+--- a/Android.bp
++++ b/Android.bp
+@@ -751,3 +751,45 @@ python_binary_host {
+     main: "tests/gen_gtest_failure_template.py",
+     srcs: ["tests/gen_gtest_failure_template.py"],
+ }
++
++// region digitalis
++// Exercise the Android ELF-backed wrapper pool through the production ARM64
++// bridge, alongside the anonymous pools and their shared address allocator.
++cc_test {
++    name: "berberis_code_window_tests",
++    defaults: ["berberis_arm64_defaults"],
++    enabled: false,
++    arch: {
++        x86_64: {
++            enabled: true,
++        },
++    },
++    srcs: [
++        "base/mmap_test.cc",
++        "kernel_api/arm64/code_window_protection_test.cc",
++        "runtime_primitives/code_pool_test.cc",
++        "runtime_primitives/exec_region_anonymous_test.cc",
++        "runtime_primitives/exec_region_anonymous_try_test.cc",
++        "runtime_primitives/exec_region_elf_backed_test.cc",
++        "runtime_primitives/translation_cache_test.cc",
++        "test_utils/code_window_tests_main.cc",
++    ],
++    header_libs: [
++        "libberberis_assembler_headers",
++        "libberberis_base_headers",
++        "libberberis_guest_state_arm64_headers",
++        "libberberis_kernel_api_headers",
++        "libberberis_runtime_headers",
++        "libberberis_runtime_library_headers",
++        "libberberis_runtime_primitives_headers",
++    ],
++    static_libs: ["libgmock"],
++    shared_libs: [
++        "libberberis_arm64",
++        "liblog",
++    ],
++    required: ["libberberis_exec_region"],
++    test_suites: ["general-tests"],
++}
++
++// endregion
+diff --git a/base/include/berberis/base/mmap.h b/base/include/berberis/base/mmap.h
+--- a/base/include/berberis/base/mmap.h
++++ b/base/include/berberis/base/mmap.h
+@@ -52,10 +52,38 @@ constexpr bool IsAlignedPageSize(T x) {
+   return IsAligned(x, kPageSize);
+ }
+ 
++// region digitalis
++#if defined(MAP_FIXED_NOREPLACE)
++inline constexpr int kMmapFixedNoReplace = MAP_FIXED_NOREPLACE;
++#else
++// Compatibility with Linux headers predating MAP_FIXED_NOREPLACE.
++inline constexpr int kMmapFixedNoReplace = 0x100000;
++#endif
++// endregion
++
+ enum MmapBerberisFlags {
+   kMmapBerberis32Bit = 1,
++  // region digitalis
++  // On x86-64, allocate from randomized, process-lifetime code reservations in
++  // [2 GiB, 4 GiB - one page). Released slices are not reused. On x86-64, addr is ignored.
++  // On other hosts, use the existing kMmapBerberis32Bit placement instead.
++  // Zero size, fixed mappings and combining both flags return EINVAL on all hosts.
++  // Data requiring signed 32-bit absolute addresses must use kMmapBerberis32Bit.
++  kMmapBerberisCode32Bit = 2,
++  // endregion
+ };
+ 
++// region digitalis
++// Call before creating any executable pool or starting translated guest threads.
++// This selects the code window for executable factories and completes its
++// initialization before raw-clone fork children can allocate code.
++void EnableCodeWindow();
++int GetExecutableMmapFlags();
++// Page-rounded overlap with actual code-window ownership, including unused and
++// released slices. Does not initialize the window or acquire library locks.
++bool IntersectsCodeWindow(const void* addr, size_t size);
++// endregion
++
+ struct MmapImplArgs {
+   void* addr = nullptr;
+   size_t size = 0;
+diff --git a/base/mmap_posix.cc b/base/mmap_posix.cc
+--- a/base/mmap_posix.cc
++++ b/base/mmap_posix.cc
+@@ -18,6 +18,14 @@
+ 
+ #include <sys/mman.h>
+ 
++// region digitalis
++#include <sys/syscall.h>
++#include <unistd.h>
++
++#include <algorithm>
++#include <array>
++#include <limits>
++// endregion
+ #include <atomic>
+ #include <bit>
+ // region digitalis
+@@ -116,7 +124,239 @@ void* TryMmap32Bit(MmapImplArgs args) {
+ 
+ #endif  // defined(__LP64__) && !defined(__x86_64__)
+ 
++// region digitalis
++#if defined(__x86_64__)
++namespace {
++
++// Reservations are established before translated guest threads can fork. The
++// ownership ranges remain immutable; only lock-free allocation cursors change.
++class CodeWindow {
++ public:
++  static constexpr uintptr_t kBegin = uintptr_t{1} << 31;
++  static constexpr uintptr_t kEnd = uintptr_t{1} << 32;
++  static constexpr size_t kChunkSize = 64 * 1024 * 1024;
++  // Subdivide occupied chunks down to the normal anonymous code-region size.
++  static constexpr size_t kMinChunkSize = 4 * 1024 * 1024;
++  static constexpr size_t kMaxRanges = (kEnd - kBegin) / kMinChunkSize;
++
++  CodeWindow() {
++    uint64_t random;
++    size_t received = 0;
++    while (received < sizeof(random)) {
++      ssize_t n = syscall(
++          SYS_getrandom, reinterpret_cast<char*>(&random) + received, sizeof(random) - received, 0);
++      if (n < 0 && errno == EINTR) {
++        continue;
++      }
++      if (n <= 0) {
++        error_ = n < 0 ? errno : EIO;
++        return;
++      }
++      received += n;
++    }
++
++    for (uintptr_t begin = kBegin; begin < kEnd - kPageSize; begin += kChunkSize) {
++      Reserve(begin, std::min(begin + kChunkSize, kEnd - kPageSize));
++    }
++    if (range_count_ == 0) {
++      return;
++    }
++
++    // Randomize the first page without discarding the preceding capacity.
++    size_t first = (random >> 32) % range_count_;
++    const Range& range = ranges_[first];
++    size_t headroom = std::min(range.end - range.begin, uintptr_t{kMinChunkSize});
++    size_t pages = (range.end - range.begin - headroom) / kPageSize + 1;
++    uintptr_t pivot = range.begin + (static_cast<uint32_t>(random) % pages) * kPageSize;
++    AddAllocationRange(pivot, range.end);
++    for (size_t i = 1; i < range_count_; ++i) {
++      const Range& next = ranges_[(first + i) % range_count_];
++      AddAllocationRange(next.begin, next.end);
++    }
++    if (pivot != range.begin) {
++      AddAllocationRange(range.begin, pivot);
++    }
++  }
++
++  void* Allocate(size_t size) {
++    for (size_t i = 0; i < count_; ++i) {
++      uintptr_t next = cursors_[i].load(std::memory_order_relaxed);
++      while (size <= ends_[i] - next) {
++        if (cursors_[i].compare_exchange_weak(next, next + size, std::memory_order_relaxed)) {
++          return std::bit_cast<void*>(next);
++        }
++      }
++    }
++    errno = error_;
++    return MAP_FAILED;
++  }
++
++  bool Intersects(uintptr_t begin, size_t size) const {
++    if (size == 0 || begin >= kEnd) {
++      return false;
++    }
++    uintptr_t end = RangeEnd(begin, size);
++    if (end <= kBegin) {
++      return false;
++    }
++    for (size_t i = 0; i < range_count_; ++i) {
++      if (begin < ranges_[i].end && ranges_[i].begin < end) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++  bool Contains(uintptr_t begin, size_t size) const {
++    if (size == 0 || begin < kBegin || begin >= kEnd || !IsAlignedPageSize(begin)) {
++      return false;
++    }
++    uintptr_t end = RangeEnd(begin, size);
++    for (size_t i = 0; i < range_count_; ++i) {
++      if (ranges_[i].begin <= begin && end <= ranges_[i].end) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++ private:
++  struct Range {
++    uintptr_t begin;
++    uintptr_t end;
++  };
++
++  static uintptr_t RangeEnd(uintptr_t begin, size_t size) {
++    size_t rounded;
++    uintptr_t end;
++    if (AlignUpPageSizeOverflow(size, &rounded) || __builtin_add_overflow(begin, rounded, &end)) {
++      return std::numeric_limits<uintptr_t>::max();
++    }
++    return end;
++  }
++
++  void Reserve(uintptr_t begin, uintptr_t end) {
++    void* reservation = mmap(std::bit_cast<void*>(begin),
++                             end - begin,
++                             PROT_NONE,
++                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | kMmapFixedNoReplace,
++                             -1,
++                             0);
++    if (reservation == std::bit_cast<void*>(begin)) {
++      if (range_count_ != 0 && ranges_[range_count_ - 1].end == begin) {
++        ranges_[range_count_ - 1].end = end;
++      } else {
++        ranges_[range_count_++] = {begin, end};
++      }
++      return;
++    }
++    if (reservation == MAP_FAILED && errno != EEXIST) {
++      return;
++    }
++    if (reservation != MAP_FAILED) {
++      // Older kernels can ignore MAP_FIXED_NOREPLACE; never claim a misplaced map.
++      MunmapOrDie(reservation, end - begin);
++    }
++    if (end - begin <= kMinChunkSize) {
++      return;
++    }
++    uintptr_t middle =
++        std::max(begin + kMinChunkSize, AlignDown(begin + (end - begin) / 2, kMinChunkSize));
++    Reserve(begin, middle);
++    Reserve(middle, end);
++  }
++
++  void AddAllocationRange(uintptr_t begin, uintptr_t end) {
++    cursors_[count_].store(begin, std::memory_order_relaxed);
++    ends_[count_++] = end;
++  }
++
++  static_assert(std::atomic<uintptr_t>::is_always_lock_free);
++  std::array<Range, kMaxRanges> ranges_{};
++  size_t range_count_ = 0;
++  std::array<std::atomic<uintptr_t>, kMaxRanges + 1> cursors_{};
++  std::array<uintptr_t, kMaxRanges + 1> ends_{};
++  size_t count_ = 0;
++  int error_ = ENOMEM;
++};
++
++CodeWindow& GetCodeWindow() {
++  static CodeWindow window;
++  return window;
++}
++
++std::atomic<bool> g_code_window_enabled{false};
++
++void* TryMmapCode32Bit(MmapImplArgs args) {
++  size_t size;
++  if (AlignUpPageSizeOverflow(args.size, &size) ||
++      size > CodeWindow::kEnd - CodeWindow::kBegin - kPageSize) {
++    errno = ENOMEM;
++    return MAP_FAILED;
++  }
++  void* address = GetCodeWindow().Allocate(size);
++  if (address == MAP_FAILED) {
++    return MAP_FAILED;
++  }
++  if (args.prot == PROT_NONE && args.flags == (MAP_PRIVATE | MAP_ANONYMOUS)) {
++    return address;
++  }
++  return mmap(address, size, args.prot, args.flags | MAP_FIXED, args.fd, args.offset);
++}
++
++}  // namespace
++#endif  // defined(__x86_64__)
++
++void EnableCodeWindow() {
++#if defined(__x86_64__)
++  // Complete the local-static initialization guard before guest execution and
++  // raw-clone children can reach code allocation.
++  (void)GetCodeWindow();
++  g_code_window_enabled.store(true, std::memory_order_release);
++#endif
++}
++
++bool IntersectsCodeWindow(const void* addr, size_t size) {
++#if defined(__x86_64__)
++  if (g_code_window_enabled.load(std::memory_order_acquire)) {
++    return GetCodeWindow().Intersects(std::bit_cast<uintptr_t>(addr), size);
++  }
++#else
++  UNUSED(addr);
++  UNUSED(size);
++#endif
++  return false;
++}
++
++int GetExecutableMmapFlags() {
++#if defined(__x86_64__)
++  if (g_code_window_enabled.load(std::memory_order_acquire)) {
++    return kMmapBerberisCode32Bit;
++  }
++#endif
++  return kMmapBerberis32Bit;
++}
++// endregion
++
+ void* MmapImpl(MmapImplArgs args) {
++  // region digitalis
++  if ((args.berberis_flags & kMmapBerberisCode32Bit) != 0) {
++    int invalid_flags = MAP_FIXED | kMmapFixedNoReplace;
++#if defined(__x86_64__)
++    invalid_flags |= MAP_32BIT;
++#endif
++    if (args.size == 0 || (args.flags & invalid_flags) != 0 ||
++        (args.berberis_flags & kMmapBerberis32Bit) != 0) {
++      errno = EINVAL;
++      return MAP_FAILED;
++    }
++#if defined(__x86_64__)
++    return TryMmapCode32Bit(args);
++#else
++    args.berberis_flags |= kMmapBerberis32Bit;
++#endif
++  }
++  // endregion
+   if ((args.berberis_flags & kMmapBerberis32Bit) != 0) {
+     // This doesn't make sense for MAP_FIXED
+     CHECK_EQ(args.flags & MAP_FIXED, 0);
+@@ -151,6 +391,19 @@ void* MmapImplOrDie(MmapImplArgs args) {
+ }
+ 
+ void MunmapOrDie(void* ptr, size_t size) {
++  // region digitalis
++#if defined(__x86_64__)
++  if (g_code_window_enabled.load(std::memory_order_acquire) &&
++      GetCodeWindow().Contains(std::bit_cast<uintptr_t>(ptr), size)) {
++    // Retain address ownership when executable pages are released, so ordinary
++    // guest allocations cannot acquire a hole inside the protected window.
++    void* reserved =
++        mmap(ptr, size, PROT_NONE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
++    CHECK_EQ(reserved, ptr);
++    return;
++  }
++#endif
++  // endregion
+   int res = munmap(ptr, size);
+   CHECK_EQ(res, 0);
+ }
+diff --git a/base/mmap_test.cc b/base/mmap_test.cc
+--- a/base/mmap_test.cc
++++ b/base/mmap_test.cc
+@@ -18,8 +18,34 @@
+ 
+ #include <sys/mman.h>
+ 
++// region digitalis
++#include <linux/filter.h>
++#include <linux/seccomp.h>
++#include <sys/prctl.h>
++#include <sys/syscall.h>
++#include <sys/wait.h>
++#include <unistd.h>
++
++#include <array>
++#include <atomic>
++// endregion
+ #include <bit>
++// region digitalis
++#include <cerrno>
++#include <csignal>
++// endregion
+ #include <cstddef>
++#include <cstdint>
++// region digitalis
++#include <cstdio>
++#include <limits>
++#include <thread>
++
++#if defined(__BIONIC__)
++extern "C" void malloc_disable();
++extern "C" void malloc_enable();
++#endif
++// endregion
+ 
+ #include "berberis/base/mmap.h"
+ 
+@@ -27,6 +53,237 @@ namespace berberis {
+ 
+ namespace {
+ 
++// region digitalis
++TEST(MmapCodeFlagsTest, RejectsFixedMappingsAndZeroSizeOnAllHosts) {
++  for (int flags : {MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
++                    MAP_PRIVATE | MAP_ANONYMOUS | kMmapFixedNoReplace}) {
++    EXPECT_EQ(
++        MmapImpl({.size = kPageSize, .flags = flags, .berberis_flags = kMmapBerberisCode32Bit}),
++        MAP_FAILED);
++    EXPECT_EQ(errno, EINVAL);
++  }
++  EXPECT_EQ(MmapImpl({.size = 0, .berberis_flags = kMmapBerberisCode32Bit}), MAP_FAILED);
++  EXPECT_EQ(errno, EINVAL);
++  EXPECT_EQ(
++      MmapImpl({.size = kPageSize, .berberis_flags = kMmapBerberisCode32Bit | kMmapBerberis32Bit}),
++      MAP_FAILED);
++  EXPECT_EQ(errno, EINVAL);
++}
++
++#if defined(__x86_64__)
++class MmapCode32Test : public testing::Test {
++ protected:
++  static constexpr uintptr_t kBegin = uintptr_t{1} << 31;
++  static constexpr uintptr_t kEnd = uintptr_t{1} << 32;
++
++  static void* Allocate(size_t size, void* hint = nullptr) {
++    return MmapImpl({.addr = hint, .size = size, .berberis_flags = kMmapBerberisCode32Bit});
++  }
++
++  void CheckRange(void* mapping, size_t size) {
++    auto address = std::bit_cast<uintptr_t>(mapping);
++    EXPECT_GE(address, kBegin);
++    EXPECT_LE(address + AlignUpPageSize(size), kEnd - kPageSize);
++  }
++};
++
++TEST_F(MmapCode32Test, MapsCodeAbove2GiB) {
++  constexpr size_t kSize = 4 * 1024 * 1024;
++  void* mapping = Allocate(kSize);
++  ASSERT_NE(mapping, MAP_FAILED);
++  CheckRange(mapping, kSize);
++  *static_cast<uint64_t*>(mapping) = 42;
++  EXPECT_EQ(*static_cast<uint64_t*>(mapping), 42u);
++  MunmapOrDie(mapping, kSize);
++}
++
++TEST_F(MmapCode32Test, OccupiedHintIsNotReplaced) {
++  void* occupied = Allocate(kPageSize);
++  ASSERT_NE(occupied, MAP_FAILED);
++  *static_cast<uint64_t*>(occupied) = 0x123456789abcdef0;
++  void* mapping = Allocate(kPageSize, occupied);
++  ASSERT_NE(mapping, MAP_FAILED);
++  CheckRange(mapping, kPageSize);
++  EXPECT_NE(mapping, occupied);
++  EXPECT_EQ(*static_cast<uint64_t*>(occupied), 0x123456789abcdef0u);
++  MunmapOrDie(mapping, kPageSize);
++  MunmapOrDie(occupied, kPageSize);
++}
++
++TEST_F(MmapCode32Test, RejectsInvalidSizesAndNativeLowAddressFlag) {
++  EXPECT_EQ(Allocate(kEnd - kBegin), MAP_FAILED);
++  EXPECT_EQ(errno, ENOMEM);
++  EXPECT_EQ(Allocate(std::numeric_limits<size_t>::max()), MAP_FAILED);
++  EXPECT_EQ(errno, ENOMEM);
++  EXPECT_EQ(MmapImpl({.size = kPageSize,
++                      .flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT,
++                      .berberis_flags = kMmapBerberisCode32Bit}),
++            MAP_FAILED);
++  EXPECT_EQ(errno, EINVAL);
++}
++
++TEST_F(MmapCode32Test, ExhaustionIsIsolatedAndRetriesNeedNoSyscalls) {
++  ::testing::FLAGS_gtest_death_test_style = "threadsafe";
++  auto run = [] {
++    constexpr size_t kSize = 4 * 1024 * 1024;
++    size_t count = 0;
++    while (count <= 512) {
++      void* mapping =
++          MmapImpl({.size = kSize, .prot = PROT_NONE, .berberis_flags = kMmapBerberisCode32Bit});
++      if (mapping == MAP_FAILED) {
++        break;
++      }
++      uintptr_t start = std::bit_cast<uintptr_t>(mapping);
++      if (start < kBegin || start + kSize > kEnd - kPageSize) {
++        _exit(1);
++      }
++      ++count;
++    }
++    if (count == 0 || count > 512 || errno != ENOMEM) {
++      _exit(2);
++    }
++    // If an exhausted retry performs any mapping or procfs open, its error
++    // changes to EPERM. The code-window allocator must retain ENOMEM instead.
++    sock_filter filters[] = {
++        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, nr)),
++        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_mmap, 3, 0),
++        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_openat, 2, 0),
++        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_open, 1, 0),
++        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
++        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
++    };
++    sock_fprog program = {static_cast<unsigned short>(std::size(filters)), filters};
++    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) ||
++        prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program)) {
++      _exit(3);
++    }
++    for (size_t i = 0; i < 100; ++i) {
++      if (Allocate(kSize) != MAP_FAILED || errno != ENOMEM) {
++        _exit(4);
++      }
++    }
++    _exit(0);
++  };
++  ASSERT_EXIT(run(), ::testing::ExitedWithCode(0), "");
++  void* mapping = Allocate(kPageSize);
++  ASSERT_NE(mapping, MAP_FAILED);
++  MunmapOrDie(mapping, kPageSize);
++}
++
++TEST_F(MmapCode32Test, ConcurrentAllocationsAreDistinct) {
++  constexpr size_t kCount = 16;
++  std::array<void*, kCount> mappings{};
++  std::array<std::thread, kCount> threads;
++  for (size_t i = 0; i < kCount; ++i) {
++    threads[i] = std::thread([&, i] { mappings[i] = Allocate(kPageSize); });
++  }
++  for (auto& thread : threads) {
++    thread.join();
++  }
++  for (size_t i = 0; i < kCount; ++i) {
++    ASSERT_NE(mappings[i], MAP_FAILED);
++    CheckRange(mappings[i], kPageSize);
++    for (size_t j = 0; j < i; ++j) {
++      EXPECT_NE(mappings[i], mappings[j]);
++    }
++    MunmapOrDie(mappings[i], kPageSize);
++  }
++}
++
++#if defined(__BIONIC__)
++int RawForkWithMallocDisabled(bool scan_maps, void* original) {
++  int channel[2];
++  if (pipe(channel) != 0) {
++    return -1;
++  }
++  std::atomic<bool> start{false};
++  std::atomic<bool> locked{false};
++  std::thread holder([&] {
++    while (!start.load(std::memory_order_acquire)) {
++      std::this_thread::yield();
++    }
++    malloc_disable();
++    locked.store(true, std::memory_order_release);
++    char value;
++    while (read(channel[0], &value, 1) < 0 && errno == EINTR) {
++    }
++    malloc_enable();
++  });
++  start.store(true, std::memory_order_release);
++  while (!locked.load(std::memory_order_acquire)) {
++    std::this_thread::yield();
++  }
++  // Bypass libc's atfork handlers while another thread holds real malloc locks.
++  pid_t child = syscall(SYS_fork);
++  if (child == 0) {
++    // Runtime initialization may ignore SIGALRM; make the child deadline fatal.
++    struct sigaction action{};
++    action.sa_handler = SIG_DFL;
++    sigemptyset(&action.sa_mask);
++    sigset_t signals;
++    sigemptyset(&signals);
++    sigaddset(&signals, SIGALRM);
++    if (sigaction(SIGALRM, &action, nullptr) != 0 ||
++        sigprocmask(SIG_UNBLOCK, &signals, nullptr) != 0) {
++      _exit(5);
++    }
++    alarm(scan_maps ? 1 : 5);
++    if (scan_maps) {
++      FILE* maps = fopen("/proc/self/maps", "r");
++      if (!maps) {
++        _exit(2);
++      }
++      char line[512];
++      if (!fgets(line, sizeof(line), maps)) {
++        _exit(3);
++      }
++      fclose(maps);
++      _exit(4);
++    }
++    void* mapping = MmapImpl({.size = kPageSize, .berberis_flags = kMmapBerberisCode32Bit});
++    if (mapping == MAP_FAILED || mapping == original || *static_cast<uint64_t*>(original) != 42) {
++      _exit(1);
++    }
++    *static_cast<uint64_t*>(mapping) = 99;
++    _exit(0);
++  }
++  int status = 0;
++  pid_t waited;
++  do {
++    waited = child > 0 ? waitpid(child, &status, 0) : -1;
++  } while (waited < 0 && errno == EINTR);
++  while (write(channel[1], "x", 1) < 0 && errno == EINTR) {
++  }
++  holder.join();
++  close(channel[0]);
++  close(channel[1]);
++  return child > 0 && waited == child ? status : -1;
++}
++#endif
++
++TEST_F(MmapCode32Test, RawForkAllocationAvoidsTheMallocLocksUsedByMapsScanning) {
++#if defined(__BIONIC__)
++  void* original = Allocate(kPageSize);
++  ASSERT_NE(original, MAP_FAILED);
++  *static_cast<uint64_t*>(original) = 42;
++  int scan_status = RawForkWithMallocDisabled(true, original);
++  int allocation_status = RawForkWithMallocDisabled(false, original);
++  EXPECT_EQ(*static_cast<uint64_t*>(original), 42u);
++  MunmapOrDie(original, kPageSize);
++  // The maps-scanning control must block while the malloc locks are held.
++  ASSERT_NE(scan_status, -1);
++  ASSERT_TRUE(WIFSIGNALED(scan_status));
++  EXPECT_EQ(WTERMSIG(scan_status), SIGALRM);
++  ASSERT_NE(allocation_status, -1);
++  ASSERT_TRUE(WIFEXITED(allocation_status));
++  EXPECT_EQ(WEXITSTATUS(allocation_status), 0);
++#else
++  GTEST_SKIP() << "Bionic malloc_disable is required to hold the allocator locks";
++#endif
++}
++#endif
++// endregion
++
+ #if defined(__LP64__)
+ TEST(MmapTest, kMmapImpl_MmapBerberis32Bit) {
+   constexpr size_t k8Mb = 0x1 << 23;
+diff --git a/kernel_api/arm64/code_window_protection_test.cc b/kernel_api/arm64/code_window_protection_test.cc
+new file mode 100644
+--- /dev/null
++++ b/kernel_api/arm64/code_window_protection_test.cc
+@@ -0,0 +1,219 @@
++/*
++ * Copyright (C) 2026 utzcoz
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "gtest/gtest.h"
++
++#include <array>
++#include <atomic>
++#include <cerrno>
++#include <cstdint>
++#include <limits>
++#include <thread>
++
++#include "berberis/base/mmap.h"
++#include "berberis/kernel_api/sys_mman_emulation.h"
++
++namespace berberis {
++namespace {
++
++class CodeWindowProtection : public testing::Test {
++ protected:
++  void SetUp() override {
++    ASSERT_EQ(GetExecutableMmapFlags(), kMmapBerberisCode32Bit);
++    code_ = MmapImpl({.size = kPageSize, .berberis_flags = kMmapBerberisCode32Bit});
++    ASSERT_NE(code_, MAP_FAILED);
++    *static_cast<uint64_t*>(code_) = kValue;
++  }
++  void TearDown() override {
++    if (code_ != MAP_FAILED) {
++      MunmapOrDie(code_, kPageSize);
++    }
++  }
++  void CheckValue() { EXPECT_EQ(*static_cast<uint64_t*>(code_), kValue); }
++  static constexpr uint64_t kValue = 0x123456789abcdef0;
++  void* code_ = MAP_FAILED;
++};
++
++TEST_F(CodeWindowProtection, RejectsFixedReplacementAndUnmapBeforeChangingData) {
++  for (int fixed : {MAP_FIXED, kMmapFixedNoReplace}) {
++    EXPECT_EQ(
++        MmapForGuest(
++            code_, kPageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | fixed, -1, 0),
++        MAP_FAILED);
++    EXPECT_EQ(errno, fixed == kMmapFixedNoReplace ? EEXIST : EACCES);
++    CheckValue();
++  }
++  EXPECT_EQ(MunmapForGuest(code_, kPageSize), -1);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_EQ(MprotectForGuest(code_, kPageSize, PROT_NONE), -1);
++  EXPECT_EQ(errno, EACCES);
++  CheckValue();
++}
++
++TEST_F(CodeWindowProtection, GuestAllocatorRetriesAfterNoReplaceCollision) {
++  void* available = reinterpret_cast<void*>(0x903fe000);
++  void* guest = MAP_FAILED;
++  for (void* candidate : {code_, available}) {
++    guest = MmapForGuest(candidate,
++                         kPageSize,
++                         PROT_READ | PROT_WRITE,
++                         MAP_PRIVATE | MAP_ANONYMOUS | kMmapFixedNoReplace,
++                         -1,
++                         0);
++    if (guest != MAP_FAILED || errno != EEXIST) {
++      break;
++    }
++  }
++  ASSERT_NE(guest, MAP_FAILED);
++  EXPECT_EQ(guest, available);
++  *static_cast<uint64_t*>(guest) = 99;
++  EXPECT_EQ(*static_cast<uint64_t*>(guest), 99u);
++  CheckValue();
++  EXPECT_EQ(MunmapForGuest(guest, kPageSize), 0);
++}
++
++TEST_F(CodeWindowProtection, RejectsRemapSourcesAndDestinations) {
++  void* guest =
++      MmapForGuest(nullptr, kPageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++  ASSERT_NE(guest, MAP_FAILED);
++  *static_cast<uint64_t*>(guest) = 42;
++  EXPECT_EQ(MremapForGuest(guest, kPageSize, kPageSize, MREMAP_MAYMOVE | MREMAP_FIXED, code_),
++            MAP_FAILED);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_EQ(MremapForGuest(code_, kPageSize, kPageSize, MREMAP_MAYMOVE | MREMAP_FIXED, guest),
++            MAP_FAILED);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_EQ(MremapForGuest(code_, 0, kPageSize, MREMAP_MAYMOVE, nullptr), MAP_FAILED);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_EQ(*static_cast<uint64_t*>(guest), 42u);
++  CheckValue();
++  EXPECT_EQ(MunmapForGuest(guest, kPageSize), 0);
++}
++
++TEST_F(CodeWindowProtection, ProtectsUnusedAndReleasedReservations) {
++  void* unused =
++      MmapImpl({.size = kPageSize, .prot = PROT_NONE, .berberis_flags = kMmapBerberisCode32Bit});
++  ASSERT_NE(unused, MAP_FAILED);
++  EXPECT_EQ(MmapForGuest(unused,
++                         kPageSize,
++                         PROT_READ | PROT_WRITE,
++                         MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
++                         -1,
++                         0),
++            MAP_FAILED);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_EQ(MunmapForGuest(unused, kPageSize), -1);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_EQ(MprotectForGuest(unused, kPageSize, PROT_READ | PROT_WRITE), -1);
++  EXPECT_EQ(errno, EACCES);
++  MunmapOrDie(unused, kPageSize);
++  EXPECT_TRUE(IntersectsCodeWindow(unused, kPageSize));
++  EXPECT_EQ(
++      mmap(unused, kPageSize, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | kMmapFixedNoReplace, -1, 0),
++      MAP_FAILED);
++  EXPECT_EQ(errno, EEXIST);
++  void* hinted =
++      MmapForGuest(unused, kPageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++  ASSERT_NE(hinted, MAP_FAILED);
++  EXPECT_FALSE(IntersectsCodeWindow(hinted, kPageSize));
++  EXPECT_EQ(MunmapForGuest(hinted, kPageSize), 0);
++}
++
++TEST_F(CodeWindowProtection, ChecksPageRoundingAndOverflow) {
++  void* before_owned_range = reinterpret_cast<void*>(0x903ff000);
++  EXPECT_FALSE(IntersectsCodeWindow(before_owned_range, kPageSize));
++  EXPECT_TRUE(IntersectsCodeWindow(before_owned_range, kPageSize + 1));
++  EXPECT_EQ(MunmapForGuest(before_owned_range, kPageSize + 1), -1);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_EQ(MunmapForGuest(code_, std::numeric_limits<size_t>::max()), -1);
++  EXPECT_EQ(errno, EACCES);
++  EXPECT_FALSE(IntersectsCodeWindow(code_, 0));
++  CheckValue();
++}
++
++TEST_F(CodeWindowProtection, AllowsExistingMappingsAndOrdinaryGuestOperations) {
++  // The startup collision belongs to the guest, not to the JIT reservation.
++  void* existing = reinterpret_cast<void*>(0x90200000);
++  EXPECT_FALSE(IntersectsCodeWindow(existing, kPageSize));
++  EXPECT_EQ(MprotectForGuest(existing, kPageSize, PROT_READ | PROT_WRITE), 0);
++  void* guest =
++      MmapForGuest(nullptr, kPageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++  ASSERT_NE(guest, MAP_FAILED);
++  *static_cast<uint64_t*>(guest) = 99;
++  EXPECT_EQ(MprotectForGuest(guest, kPageSize, PROT_READ), 0);
++  EXPECT_EQ(MprotectForGuest(guest, kPageSize, PROT_READ | PROT_WRITE), 0);
++  void* grown = MremapForGuest(guest, kPageSize, 2 * kPageSize, MREMAP_MAYMOVE, nullptr);
++  ASSERT_NE(grown, MAP_FAILED);
++  EXPECT_EQ(*static_cast<uint64_t*>(grown), 99u);
++  EXPECT_EQ(MunmapForGuest(grown, 2 * kPageSize), 0);
++  CheckValue();
++}
++
++TEST_F(CodeWindowProtection, AllowsMovingGrowthPastTheReservationBoundary) {
++  void* guest = MmapForGuest(reinterpret_cast<void*>(0x903ff000),
++                             kPageSize,
++                             PROT_READ | PROT_WRITE,
++                             MAP_PRIVATE | MAP_ANONYMOUS | kMmapFixedNoReplace,
++                             -1,
++                             0);
++  ASSERT_EQ(guest, reinterpret_cast<void*>(0x903ff000));
++  *static_cast<uint64_t*>(guest) = 99;
++  // Compare the retry error with the same request sent directly to the kernel.
++  EXPECT_EQ(mremap(guest, kPageSize, 2 * kPageSize, 0), MAP_FAILED);
++  EXPECT_EQ(errno, ENOMEM);
++  void* grown = MremapForGuest(guest, kPageSize, 2 * kPageSize, 0, nullptr);
++  EXPECT_EQ(grown, MAP_FAILED);
++  EXPECT_EQ(errno, ENOMEM);
++  const bool can_retry = grown == MAP_FAILED && errno == ENOMEM;
++  EXPECT_EQ(*static_cast<uint64_t*>(guest), 99u);
++  if (can_retry) {
++    grown = MremapForGuest(guest, kPageSize, 2 * kPageSize, MREMAP_MAYMOVE, nullptr);
++  }
++  ASSERT_NE(grown, MAP_FAILED);
++  EXPECT_FALSE(IntersectsCodeWindow(grown, 2 * kPageSize));
++  EXPECT_EQ(*static_cast<uint64_t*>(grown), 99u);
++  EXPECT_EQ(MunmapForGuest(grown, 2 * kPageSize), 0);
++  CheckValue();
++}
++
++TEST_F(CodeWindowProtection, ConcurrentGuestRequestsCannotRemoveCodeOwnership) {
++  std::atomic<bool> failed{false};
++  std::array<std::thread, 4> threads;
++  for (auto& thread : threads) {
++    thread = std::thread([&] {
++      for (int i = 0; i < 100; ++i) {
++        if (MunmapForGuest(code_, kPageSize) != -1 || errno != EACCES ||
++            MmapForGuest(code_,
++                         kPageSize,
++                         PROT_READ | PROT_WRITE,
++                         MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
++                         -1,
++                         0) != MAP_FAILED ||
++            errno != EACCES) {
++          failed.store(true);
++        }
++      }
++    });
++  }
++  for (auto& thread : threads) {
++    thread.join();
++  }
++  EXPECT_FALSE(failed.load());
++  CheckValue();
++}
++
++}  // namespace
++}  // namespace berberis
+diff --git a/kernel_api/sys_mman_emulation.cc b/kernel_api/sys_mman_emulation.cc
+--- a/kernel_api/sys_mman_emulation.cc
++++ b/kernel_api/sys_mman_emulation.cc
+@@ -69,6 +69,14 @@ void UpdateGuestProt(int guest_prot, void* addr, size_t length) {
+ // it might pick up an already obsolete code.
+ 
+ void* MmapForGuest(void* addr, size_t length, int prot, int flags, int fd, off64_t offset) {
++  // region digitalis
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  if ((flags & (MAP_FIXED | kMmapFixedNoReplace)) && IntersectsCodeWindow(addr, length)) {
++    errno = (flags & kMmapFixedNoReplace) ? EEXIST : EACCES;
++    return MAP_FAILED;
++  }
++#endif
++  // endregion
+   // Teto 3ba3e754, apklayer patch (0044): Android runs with overcommit mode 1; keep that per private anonymous mapping.
+   static const bool noreserve = !IsConfigFlagSet(kAndroidMmapReserve);
+   if (noreserve && (flags & MAP_ANONYMOUS) && (flags & MAP_TYPE) == MAP_PRIVATE) {
+@@ -189,11 +197,27 @@ void* MmapForGuest(void* addr, size_t length, int prot, int flags, int fd, off64
+ }
+ 
+ int MunmapForGuest(void* addr, size_t length) {
++  // region digitalis
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  if (IntersectsCodeWindow(addr, length)) {
++    errno = EACCES;
++    return -1;
++  }
++#endif
++  // endregion
+   GuestMapShadow::GetInstance()->ClearExecutable(ToGuestAddr(addr), length);
+   return munmap(addr, length);
+ }
+ 
+ int MprotectForGuest(void* addr, size_t length, int prot) {
++  // region digitalis
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  if (IntersectsCodeWindow(addr, length)) {
++    errno = EACCES;
++    return -1;
++  }
++#endif
++  // endregion
+   // In b/218772975 the app is scanning "/proc/self/maps" and tries to mprotect
+   // mappings for some libraries found there (for unknown reason) effectively removing
+   // execution permission. GuestMapShadow is pre-populated with such mappings, so we
+@@ -210,6 +234,21 @@ int MprotectForGuest(void* addr, size_t length, int prot) {
+ }
+ 
+ void* MremapForGuest(void* old_addr, size_t old_size, size_t new_size, int flags, void* new_addr) {
++  // region digitalis
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  // old_size == 0 can clone a shareable mapping, so still check its source page.
++  if (IntersectsCodeWindow(old_addr, old_size == 0 ? kPageSize : old_size) ||
++      ((flags & MREMAP_FIXED) && IntersectsCodeWindow(new_addr, new_size))) {
++    errno = EACCES;
++    return MAP_FAILED;
++  }
++  if (!(flags & MREMAP_MAYMOVE) && IntersectsCodeWindow(old_addr, new_size)) {
++    // Preserve the retry signal for growth blocked by an existing mapping.
++    errno = ENOMEM;
++    return MAP_FAILED;
++  }
++#endif
++  // endregion
+   // As we drop xbit for host mmap calls, host mappings might differ from guest
+   // mappings, and host mremap might work when guest mremap should not. Check in
+   // advance to avoid that. Rules for checks:
+diff --git a/runtime/arm64/init_guest_arch.cc b/runtime/arm64/init_guest_arch.cc
+--- a/runtime/arm64/init_guest_arch.cc
++++ b/runtime/arm64/init_guest_arch.cc
+@@ -16,10 +16,21 @@
+ 
+ #include "berberis/runtime/init_guest_arch.h"
+ 
++#include <cstring>  // apklayer patch (0063)
++
++#include "berberis/base/config_globals.h"  // apklayer patch (0063)
++#include "berberis/base/mmap.h"
++
+ namespace berberis {
+ 
+ void InitGuestArch() {
+-  // Nothing special for arm64
++  // apklayer patch (0063): kuloPo's code window (e680eae6) reserves the whole 2-4 GiB range PROT_NONE, a ~2 GiB line in the guest's
++  // maps no device has; off unless berberis.code_window=on (BERBERIS_CODE_WINDOW) until an A/B with ACE (PGR) and acediff passes.
++  // Off, code allocation stays as before (kMmapBerberis32Bit, no guest mapping refusals).
++  static const ConfigStr code_window("BERBERIS_CODE_WINDOW", "berberis.code_window");
++  if (code_window.get() != nullptr && strcmp(code_window.get(), "on") == 0) {
++    EnableCodeWindow();
++  }
+ }
+ 
+ }  // namespace berberis
+diff --git a/runtime/berberis.cc b/runtime/berberis.cc
+--- a/runtime/berberis.cc
++++ b/runtime/berberis.cc
+@@ -35,6 +35,11 @@ bool IsAddressGuestExecutable(GuestAddr pc) {
+ }
+ 
+ bool InitBerberisUnsafe() {
++  // region digitalis
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  InitGuestArch();
++#endif
++  // endregion
+   InitLargeMmap();
+   InitHostEntries();
+   Tracing::Init();
+@@ -42,7 +47,13 @@ bool InitBerberisUnsafe() {
+   InitGuestFunctionWrapper(&IsAddressGuestExecutable);
+   InitTranslator();
+   InitGuestSignalHandling();
++  // region digitalis
++#if !defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  // endregion
+   InitGuestArch();
++  // region digitalis
++#endif
++  // endregion
+   return true;
+ }
+ 
+diff --git a/runtime_primitives/code_pool_test.cc b/runtime_primitives/code_pool_test.cc
+--- a/runtime_primitives/code_pool_test.cc
++++ b/runtime_primitives/code_pool_test.cc
+@@ -26,6 +26,13 @@
+ #include <unistd.h>
+ // endregion
+ 
++// region digitalis
++#if defined(__x86_64__) && defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++#include "berberis/assembler/x86_64.h"
++#include "berberis/runtime_library/runtime_library.h"
++#endif
++// endregion
++
+ #include "berberis/base/bit_util.h"
+ // region digitalis
+ #include "berberis/base/mmap.h"
+@@ -72,6 +79,35 @@ uint8_t* AllocExecutableRegion() {
+   }));
+ }
+ 
++// region digitalis
++#if defined(__x86_64__) && defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++TEST(CodePool, AllExecutablePoolsRelocateToExitTrampoline) {
++  ASSERT_EQ(GetExecutableMmapFlags(), kMmapBerberisCode32Bit);
++  ASSERT_GE(kEntryExitGeneratedCode, uint32_t{0x80000000});
++  RecordProperty("exit_trampoline", std::to_string(kEntryExitGeneratedCode));
++  auto check = [](auto* pool) {
++    MachineCode code;
++    x86_64::Assembler as(&code);
++    as.Jmp32(kEntryExitGeneratedCode);
++    as.Jcc32(x86_64::Assembler::Condition::kEqual, kEntryExitGeneratedCode);
++    as.Finalize();
++    HostCodeAddr installed = pool->Add(&code);
++    ASSERT_GE(installed, uint32_t{0x80000000});
++    ASSERT_LT(uint64_t{installed} + code.install_size(), uint64_t{1} << 32);
++    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(uintptr_t{installed});
++    int32_t jump, conditional;
++    memcpy(&jump, bytes + 1, sizeof(jump));
++    memcpy(&conditional, bytes + 7, sizeof(conditional));
++    EXPECT_EQ(int64_t{installed} + 5 + jump, int64_t{kEntryExitGeneratedCode});
++    EXPECT_EQ(int64_t{installed} + 11 + conditional, int64_t{kEntryExitGeneratedCode});
++  };
++  check(GetDefaultCodePoolInstance());
++  check(GetColdCodePoolInstance());
++  check(GetFunctionWrapperCodePoolInstance());
++}
++#endif
++// endregion
++
+ TEST(CodePool, Smoke) {
+   MockExecRegionFactory exec_region_factory_mock;
+   MockExecRegionFactory::SetImpl(&exec_region_factory_mock);
+diff --git a/runtime_primitives/exec_region_anonymous.cc b/runtime_primitives/exec_region_anonymous.cc
+--- a/runtime_primitives/exec_region_anonymous.cc
++++ b/runtime_primitives/exec_region_anonymous.cc
+@@ -18,6 +18,11 @@
+ 
+ #include <sys/mman.h>
+ 
++// region digitalis
++#include <cerrno>
++#include <cstring>
++// endregion
++
+ #include "berberis/base/fd.h"
+ #include "berberis/base/mmap.h"
+ 
+@@ -48,6 +53,23 @@ namespace {
+ ExecRegion CreateImpl(size_t size, bool fatal) {
+   size = AlignUpPageSize(size);
+ 
++  // region digitalis
++  // Reserve before creating a memfd, so an exhausted code window fails without
++  // file-descriptor or mapping syscalls on every subsequent translation.
++  void* reserved = nullptr;
++#if defined(__x86_64__)
++  if (GetExecutableMmapFlags() == kMmapBerberisCode32Bit) {
++    reserved =
++        MmapImpl({.size = size, .prot = PROT_NONE, .berberis_flags = kMmapBerberisCode32Bit});
++    if (reserved == MAP_FAILED) {
++      if (fatal) {
++        FATAL("Unable to reserve executable code region: %s", strerror(errno));
++      }
++      return ExecRegion{};
++    }
++  }
++#endif
++  // endregion
+   auto fd = CreateMemfdOrDie("exec");
+   // region digitalis - tag as host-owned so a concurrent guest fd sweep can't
+   // close the fd between here and the maps below; see fd.h.
+@@ -56,21 +78,25 @@ ExecRegion CreateImpl(size_t size, bool fatal) {
+   FtruncateOrDie(fd, static_cast<off64_t>(size));
+ 
+ #if defined(__x86_64__)
+-  constexpr int kBerberisFlags = kMmapBerberis32Bit;
++  // region digitalis
++  const int kBerberisFlags = reserved ? 0 : kMmapBerberis32Bit;
++  // endregion
+ #else
+   // TODO(b/363611588): enable for other backends (arm64/riscv64)
+   constexpr int kBerberisFlags = 0;
+ #endif  // defined(__x86_64__)
+ 
+   // region digitalis
++  const MmapImplArgs exec_args{.addr = reserved,
++                               .size = size,
++                               .prot = PROT_READ | PROT_EXEC,
++                               .flags = reserved ? MAP_SHARED | MAP_FIXED : MAP_SHARED,
++                               .fd = fd,
++                               .berberis_flags = kBerberisFlags};
+   // Non-fatal path: map with MmapImpl and unwind on failure so the caller can
+   // fall back to interpreting the region.
+   if (!fatal) {
+-    void* exec = MmapImpl({.size = size,
+-                           .prot = PROT_READ | PROT_EXEC,
+-                           .flags = MAP_SHARED,
+-                           .fd = fd,
+-                           .berberis_flags = kBerberisFlags});
++    void* exec = MmapImpl(exec_args);
+     if (exec == MAP_FAILED) {
+       CloseHostOwnedFdUnsafe(fd);
+       return ExecRegion{};
+@@ -88,11 +114,9 @@ ExecRegion CreateImpl(size_t size, bool fatal) {
+   // endregion
+ 
+   ExecRegion result{
+-      static_cast<uint8_t*>(MmapImplOrDie({.size = size,
+-                                           .prot = PROT_READ | PROT_EXEC,
+-                                           .flags = MAP_SHARED,
+-                                           .fd = fd,
+-                                           .berberis_flags = kBerberisFlags})),
++      // region digitalis
++      static_cast<uint8_t*>(MmapImplOrDie(exec_args)),
++      // endregion
+       static_cast<uint8_t*>(MmapImplOrDie(
+           {.size = size, .prot = PROT_READ | PROT_WRITE, .flags = MAP_SHARED, .fd = fd})),
+       size};
+diff --git a/runtime_primitives/exec_region_anonymous_test.cc b/runtime_primitives/exec_region_anonymous_test.cc
+--- a/runtime_primitives/exec_region_anonymous_test.cc
++++ b/runtime_primitives/exec_region_anonymous_test.cc
+@@ -20,6 +20,10 @@
+ 
+ #include "berberis/runtime_primitives/exec_region_anonymous.h"
+ 
++// region digitalis
++#include "berberis/base/mmap.h"
++// endregion
++
+ namespace berberis {
+ 
+ namespace {
+@@ -30,6 +34,14 @@ TEST(ExecRegionAnonymous, Smoke) {
+   ExecRegion exec = ExecRegionAnonymousFactory::Create(sizeof(buf));
+   const uint8_t* code = exec.begin();
+   ASSERT_NE(nullptr, code);
++  // region digitalis
++#if defined(__x86_64__)
++  if (GetExecutableMmapFlags() == kMmapBerberisCode32Bit) {
++    EXPECT_GE(reinterpret_cast<uintptr_t>(code), uintptr_t{1} << 31);
++    EXPECT_LE(reinterpret_cast<uintptr_t>(code) + exec.size(), (uintptr_t{1} << 32) - kPageSize);
++  }
++#endif
++  // endregion
+ 
+   exec.Write(code, buf, sizeof(buf));
+   ASSERT_EQ('f', code[7]);
+diff --git a/runtime_primitives/exec_region_anonymous_try_test.cc b/runtime_primitives/exec_region_anonymous_try_test.cc
+--- a/runtime_primitives/exec_region_anonymous_try_test.cc
++++ b/runtime_primitives/exec_region_anonymous_try_test.cc
+@@ -30,6 +30,10 @@
+ #include "gtest/gtest.h"
+ 
+ #include <sys/resource.h>
++// region digitalis
++#include <unistd.h>
++#include "berberis/base/mmap.h"
++// endregion
+ 
+ #include <cstddef>
+ 
+@@ -39,6 +43,38 @@ namespace berberis {
+ 
+ namespace {
+ 
++// region digitalis
++#if defined(__x86_64__)
++TEST(ExecRegionAnonymousTryCreate, ExhaustionDoesNotCreateMemfd) {
++  if (GetExecutableMmapFlags() != kMmapBerberisCode32Bit) {
++    GTEST_SKIP() << "This guest keeps the original executable-address policy";
++  }
++  ::testing::FLAGS_gtest_death_test_style = "threadsafe";
++  auto run = [] {
++    constexpr size_t kSize = ExecRegionAnonymousFactory::kExecRegionSize;
++    while (MmapImpl({.size = kSize, .prot = PROT_NONE, .berberis_flags = kMmapBerberisCode32Bit}) !=
++           MAP_FAILED) {
++    }
++    rlimit limit;
++    if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {
++      _exit(1);
++    }
++    limit.rlim_cur = 0;
++    if (setrlimit(RLIMIT_NOFILE, &limit) != 0) {
++      _exit(2);
++    }
++    for (int i = 0; i < 100; ++i) {
++      if (ExecRegionAnonymousFactory::TryCreate(kSize).begin() != nullptr) {
++        _exit(3);
++      }
++    }
++    _exit(0);
++  };
++  ASSERT_EXIT(run(), ::testing::ExitedWithCode(0), "");
++}
++#endif
++// endregion
++
+ TEST(ExecRegionAnonymousTryCreate, SucceedsForNormalSize) {
+   ExecRegion region = ExecRegionAnonymousFactory::TryCreate(
+       ExecRegionAnonymousFactory::kExecRegionSize);
+diff --git a/runtime_primitives/exec_region_elf_backed.cc b/runtime_primitives/exec_region_elf_backed.cc
+--- a/runtime_primitives/exec_region_elf_backed.cc
++++ b/runtime_primitives/exec_region_elf_backed.cc
+@@ -52,6 +52,9 @@ ExecRegion ExecRegionElfBackedFactory::Create(size_t size) {
+ 
+   // Since we cannot force android loader to map library in lower 2G memory we will need
+   // to reserve the space first and then direct the loader to load the library at that address.
++  // region digitalis
++  // Reserve from the selected code pool before directing the Android loader to use it.
++  // endregion
+   size_t load_size = TinyLoader::CalculateLoadSize(kExecRegionLibraryPath, nullptr);
+   CHECK_NE(load_size, 0);
+ 
+@@ -59,7 +62,10 @@ ExecRegion ExecRegionElfBackedFactory::Create(size_t size) {
+                                    .size = load_size,
+                                    .prot = PROT_NONE,
+                                    .flags = MAP_ANONYMOUS | MAP_PRIVATE,
+-                                   .berberis_flags = kMmapBerberis32Bit});
++                                   // region digitalis
++                                   // .berberis_flags = kMmapBerberis32Bit});
++                                   .berberis_flags = GetExecutableMmapFlags()});
++  // endregion
+ 
+   android_dlextinfo dlextinfo{.flags = ANDROID_DLEXT_FORCE_LOAD | ANDROID_DLEXT_RESERVED_ADDRESS,
+                               .reserved_addr = load_addr,
+diff --git a/runtime_primitives/exec_region_elf_backed_test.cc b/runtime_primitives/exec_region_elf_backed_test.cc
+--- a/runtime_primitives/exec_region_elf_backed_test.cc
++++ b/runtime_primitives/exec_region_elf_backed_test.cc
+@@ -20,6 +20,10 @@
+ 
+ #include <dlfcn.h>
+ 
++// region digitalis
++#include "berberis/base/mmap.h"
++// endregion
++
+ namespace berberis {
+ 
+ namespace {
+@@ -30,6 +34,14 @@ TEST(ExecRegionElfBacked, Smoke) {
+   ExecRegion exec = ExecRegionElfBackedFactory::Create(sizeof(buf));
+   const uint8_t* code = exec.begin();
+   ASSERT_NE(nullptr, code);
++  // region digitalis
++#if defined(__x86_64__)
++  if (GetExecutableMmapFlags() == kMmapBerberisCode32Bit) {
++    EXPECT_GE(reinterpret_cast<uintptr_t>(code), uintptr_t{1} << 31);
++    EXPECT_LE(reinterpret_cast<uintptr_t>(code) + exec.size(), (uintptr_t{1} << 32) - kPageSize);
++  }
++#endif
++  // endregion
+ 
+   exec.Write(code, buf, sizeof(buf));
+   ASSERT_EQ('f', code[7]);
+diff --git a/runtime_primitives/translation_cache.cc b/runtime_primitives/translation_cache.cc
+--- a/runtime_primitives/translation_cache.cc
++++ b/runtime_primitives/translation_cache.cc
+@@ -239,7 +239,11 @@ GuestAddr TranslationCache::SlowLookupGuestCodeEntryPCByHostPC(HostCode pc) {
+   for (auto& it : guest_entries_) {
+     auto* entry = &it.second;
+     auto host_code = entry->host_code->load();
+-    if (host_code <= pc_addr && pc_addr < host_code + entry->host_size) {
++    // region digitalis
++    // if (host_code <= pc_addr && pc_addr < host_code + entry->host_size) {
++    const uint64_t end = static_cast<uint64_t>(host_code) + entry->host_size;
++    if (host_code <= pc_addr && pc_addr < end) {
++      // endregion
+       return it.first;
+     }
+   }
+diff --git a/runtime_primitives/translation_cache_test.cc b/runtime_primitives/translation_cache_test.cc
+--- a/runtime_primitives/translation_cache_test.cc
++++ b/runtime_primitives/translation_cache_test.cc
+@@ -35,6 +35,21 @@ using std::chrono_literals::operator""ms;
+ // A test guest pc that is valid in both 32bit and 64bit modes.
+ constexpr GuestAddr kGuestPC = 0x1234'5678;
+ 
++// region digitalis
++TEST(TranslationCacheTest, HostRangeEndingAt4GiBDoesNotWrap) {
++  TranslationCache tc;
++  constexpr HostCodeAddr kStart = 0xfffff000u;
++  GuestCodeEntry* entry = tc.AddAndLockForTranslation(kGuestPC, 0);
++  ASSERT_NE(entry, nullptr);
++  tc.SetTranslatedAndUnlock(
++      kGuestPC, entry, 4, GuestCodeEntry::Kind::kSpecialHandler, {kStart, 4096});
++  EXPECT_EQ(tc.SlowLookupGuestCodeEntryPCByHostPC(AsHostCode(kStart)), kGuestPC);
++  EXPECT_EQ(tc.SlowLookupGuestCodeEntryPCByHostPC(AsHostCode(HostCodeAddr{0xfffffff0u})), kGuestPC);
++  EXPECT_EQ(tc.SlowLookupGuestCodeEntryPCByHostPC(AsHostCode(kStart - 1)), 0u);
++  EXPECT_EQ(tc.SlowLookupGuestCodeEntryPCByHostPC(AsHostCode(HostCodeAddr{0})), 0u);
++}
++// endregion
++
+ TEST(TranslationCacheTest, DefaultNotTranslated) {
+   TranslationCache tc;
+ 
+diff --git a/test_utils/code_window_tests_main.cc b/test_utils/code_window_tests_main.cc
+new file mode 100644
+--- /dev/null
++++ b/test_utils/code_window_tests_main.cc
+@@ -0,0 +1,53 @@
++/*
++ * Copyright (C) 2026 utzcoz
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "gtest/gtest.h"
++
++#include <cstdint>
++#include <cstdio>
++
++#include "berberis/base/mmap.h"
++#include "berberis/runtime/berberis.h"
++
++namespace {
++constexpr uintptr_t kExistingPage = 0x90200000;
++constexpr uint64_t kValue = 0x123456789abcdef0;
++
++TEST(CodeWindowStartup, PreservesExistingDataAndReservesItsChunkNeighbors) {
++  EXPECT_EQ(*reinterpret_cast<uint64_t*>(kExistingPage), kValue);
++  EXPECT_FALSE(berberis::IntersectsCodeWindow(reinterpret_cast<void*>(kExistingPage), 4096));
++  EXPECT_TRUE(berberis::IntersectsCodeWindow(reinterpret_cast<void*>(0x90400000), 4096));
++  EXPECT_TRUE(berberis::IntersectsCodeWindow(reinterpret_cast<void*>(0x93fff000), 4096));
++}
++}  // namespace
++
++int main(int argc, char** argv) {
++  testing::InitGoogleTest(&argc, argv);
++  // Occupy part of one 64 MiB chunk before the production runtime reserves it.
++  void* page = mmap(reinterpret_cast<void*>(kExistingPage),
++                    berberis::kPageSize,
++                    PROT_READ | PROT_WRITE,
++                    MAP_PRIVATE | MAP_ANONYMOUS | berberis::kMmapFixedNoReplace,
++                    -1,
++                    0);
++  if (page != reinterpret_cast<void*>(kExistingPage)) {
++    std::fprintf(stderr, "Unable to create the startup collision mapping\n");
++    return 1;
++  }
++  *static_cast<uint64_t*>(page) = kValue;
++  berberis::InitBerberis();
++  return RUN_ALL_TESTS();
++}
