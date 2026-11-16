@@ -551,6 +551,38 @@ mrs readability              0000000000000000
   ldaxr/stlxr total (80000) 0138800002130180
   release/acquire order violations 0000000000000000
 threads                      0000000000000000
+selftext own: open of the maps path ok
+selftext own: mmap fixed over the whole text ok
+selftext own: after the remap getpid 1 marker 4242
+selftext own: partial remap ok
+selftext own: errno after the partial remap 2
+  own text line in maps 00000100000001b3
+  selftext remap done 00000100000001b3
+text remapped from its file  0000000000000000
+munmap views anonymous: maps covers the hole 0, map lines over the block 2
+munmap views anonymous: mincore of the hole -1 errno 12
+munmap views anonymous: mincore of a mapped page 0
+munmap views anonymous: process_vm_readv of the hole -1 errno 14
+munmap views anonymous: process_vm_readv of a mapped page 8
+munmap views anonymous: pagemap of the hole 8 entry 0
+munmap views anonymous: map_files link of the hole -1
+munmap views executed code: maps covers the hole 0, map lines over the block 2
+munmap views executed code: mincore of the hole -1 errno 12
+munmap views executed code: mincore of a mapped page 0
+munmap views executed code: process_vm_readv of the hole -1 errno 14
+munmap views executed code: process_vm_readv of a mapped page 8
+munmap views executed code: pagemap of the hole 8 entry 0
+munmap views executed code: map_files link of the hole -1
+munmap views executed code: the pages before the hole still run 1
+munmap views file text: maps covers the hole 0, map lines over the block 2
+munmap views file text: mincore of the hole -1 errno 12
+munmap views file text: mincore of a mapped page 0
+munmap views file text: process_vm_readv of the hole -1 errno 14
+munmap views file text: process_vm_readv of a mapped page 8
+munmap views file text: pagemap of the hole 8 entry 0
+munmap views file text: map_files link of the hole -1
+  munmap views done 00000100000001b3
+views after a munmap of an own block 0000000000000000
 smc a-mprotect-flip checked
 smc (flush)                  c263853bcc4a6add
 signal wild-jump round 0: in_handler=2 signo=7 code=1 addr=0x1342 pc=0x1342 sp=0x1342

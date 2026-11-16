@@ -15,3 +15,4 @@ vsha512
  mrs s3_3_c4_c2_
  mrs s3_3_c2_c4_
 ^  pending has usr1
+^selftext libc: 

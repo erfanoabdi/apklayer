@@ -1,0 +1,7 @@
+// Snapshots of the game's raw host /proc/<pid>/maps at each time the game (ACE) opens a maps file: native arm64 = what ACE reads; translated
+// = the host's view behind the translator's emulated one (compare with berberis.dump_maps). Needs --unsafe (system()). @OUT@ = output dir.
+// Run: sed s|@OUT@|dir| ace-mapsnap.bt > x.bt; sudo env BPFTRACE_MAX_STRLEN=200 bpftrace --unsafe x.bt
+tracepoint:syscalls:sys_enter_openat
+/ comm == "ng.grayraven.en" && strncmp(str(args->filename), "/proc/", 6) == 0 && strcontains(str(args->filename), "/maps") /
+{ @n++; printf("%lu OPEN tid %d %s\n", elapsed / 1000000, tid, str(args->filename)); system("cat /proc/%d/maps > @OUT@/hostmaps-%d.txt; cat /proc/%d/smaps_rollup > @OUT@/rollup-%d.txt", pid, @n, pid, @n); }
+BEGIN { printf("READY\n"); }
