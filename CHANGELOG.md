@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-16: binary_translation series repair, 0052 exported, 0063 (DigitalisX64 e680eae6 code window, knob off); preload arm64 status view
+- Upstream check (DigitalisX64 android17 after our REVISION abefbe2b: only e680eae6; its android16 line and kuloPo's branches): every commit that matches PGR's symptoms is already in (guest ucontext on the guest stack, the guest's own JNIEnv table, TLS headroom above the guest stack, free quarantine 1 MiB = 0022, TBI); e680eae6 imported as 0063 behind `berberis.code_window=on`.
+- The series did not rebuild the shipped translator from abefbe2b (0020 vs 0010's cpuid edit; 0061 on an unexported ID-register edit; 0061/0062 headers): repaired, see commit 11d1d947 and docs/PATCHES.md 0052.
+- Preload: translated status without x86 lines (18ba7e65); PGR A/B on pgrshared pending.
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24 via `ssh erfanabdi@100.85.219.120`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64` (existing module). Why: patch 0063 (base/mmap_posix.cc, mmap.h, kernel_api/sys_mman_emulation.cc, runtime/berberis.cc, runtime/arm64/init_guest_arch.cc, runtime_primitives/exec_region_*.cc, translation_cache.cc, Android.bp test modules) added to the tree in place.
+
 ## 2026-11-16: per-app translation mode (agent W)
 - `apklayer [--instance ID] app <package> translation-mode [default|lite|interpret]`: reads or writes `berberis.mode.<package>` in the instance's overrides (via `prop set|unset`, same store and validation; package names up to 49 characters, unknown modes rejected), prints `translation-mode\t<mode>`, notes that it applies from the app's next start and that it does nothing for an app that is not translated. Nothing is restarted. The manager already had the switch ("Lite translation" on the app page, shown for `nativeRoute=bridge-*` apps only, hence hidden on native arm64 hosts and for x86 apps); it uses the same property. Test group `translation-mode` (tests/vm/translation-mode.sh), passes on the arm64 UTM VM (the "not translated" note path); the translated path needs an x86_64 host and was not run.
 
