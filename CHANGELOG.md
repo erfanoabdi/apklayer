@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: PGR memory lead (team agent B): guest fault log (binary_translation 0050), build log
+
+- Build log (`gsi_x86_64 userdebug`, incremental, blocking `flock ~/los24-build.lock`, queued behind another agent's build of the same module): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: ACE's real SEGV/BUS faults and the final misaligned-pc SIGBUS are known only by kernel si_addr; the guest pc, registers, instruction word and the mapping of pc/x30/si_addr are not. Edit: guest_os_primitives/guest_signal_handling.cc only: `BERBERIS_LOG_FAULTS=1` / property `berberis.log_faults` writes one stderr block per delivered guest fault signal (first 300). Diagnostic, nothing is answered differently.
+
 ## 2026-11-16: PGR A/B on the tester copy: runtime layout, CPU count, splits (none of them is the cause; death time scales with CPU speed)
 
 - Copy instance `envtest` in a private home (microG only, PGR app + data copy, ACE files reset each run; `tools/ace/pgr-timeline.sh`, true death = EXIT, seconds after the game's first open; run limit 75 s). EXIT times in seconds, `alive` = still running at the limit:
