@@ -1,15 +1,19 @@
 // Every syscall (arm64 number, a0-a2, return) of the game process for its first 38 s, native arm64. Pair: ace-sysdiff-translated.bt (same line format).
-// Lines: "E <ms since the first libanogs open> <tid> <nr> <a0> <a1> <a2> [path]" at the entry, "X <tid> <ret>" at the exit; compare per thread with tools/ace/sysdiff.py.
+// Lines: "E <ms since the first libanogs open> <tid> <nr> <a0> <a1> <a2>" at the entry, "P <tid> <path>" after it for the path calls (the kernel's own
+// sys_enter_* tracepoints read the user string; raw_syscalls cannot), "X <tid> <ret>" at the exit; compare per thread with tools/ace/sysdiff.py.
 // Run through tools/ace/pgr-timeline.sh (EXTRA_BT=ace-sysdiff-native.bt): BPFTRACE_MAX_STRLEN=200.
 tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0 = nsecs; }
 
-tracepoint:raw_syscalls:sys_enter / @g[pid] && (args->id == 56 || args->id == 48 || args->id == 78 || args->id == 79 || args->id == 35 || args->id == 34 || args->id == 291) /
-{
-  printf("E %lu %d %d %lx %lx %lx %s\n", (nsecs - @t0) / 1000000, tid, args->id, args->args[0], args->args[1], args->args[2], str(args->args[1]));
-}
-tracepoint:raw_syscalls:sys_enter / @g[pid] && !(args->id == 56 || args->id == 48 || args->id == 78 || args->id == 79 || args->id == 35 || args->id == 34 || args->id == 291) /
+tracepoint:raw_syscalls:sys_enter / @g[pid] /
 {
   printf("E %lu %d %d %lx %lx %lx\n", (nsecs - @t0) / 1000000, tid, args->id, args->args[0], args->args[1], args->args[2]);
   if (nsecs - @t0 > 38000000000) { exit(); }
 }
 tracepoint:raw_syscalls:sys_exit / @g[pid] / { printf("X %d %d\n", tid, args->ret); }
+
+tracepoint:syscalls:sys_enter_openat / @g[pid] / { printf("P %d %s\n", tid, str(args->filename)); }
+tracepoint:syscalls:sys_enter_faccessat / @g[pid] / { printf("P %d %s\n", tid, str(args->filename)); }
+tracepoint:syscalls:sys_enter_newfstatat / @g[pid] / { printf("P %d %s\n", tid, str(args->filename)); }
+tracepoint:syscalls:sys_enter_readlinkat / @g[pid] / { printf("P %d %s\n", tid, str(args->pathname)); }
+tracepoint:syscalls:sys_enter_unlinkat / @g[pid] / { printf("P %d %s\n", tid, str(args->pathname)); }
+tracepoint:syscalls:sys_enter_mkdirat / @g[pid] / { printf("P %d %s\n", tid, str(args->pathname)); }

@@ -11,6 +11,8 @@ def load(fn):
         if f[0] == "E" and len(f) >= 7:
             tid = f[2]; rec = [int(f[1]), int(f[3]), f[4:7], f[7] if len(f) > 7 else "", None]
             th.setdefault(tid, []).append(rec); pend[tid] = rec
+        elif f[0] == "P" and len(f) >= 3 and f[1] in pend:
+            pend[f[1]][3] = " ".join(f[2:])
         elif f[0] == "X" and len(f) >= 3 and f[1] in pend:
             try: pend[f[1]][4] = int(f[2])
             except ValueError: pass
