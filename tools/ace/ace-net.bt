@@ -21,3 +21,5 @@ tracepoint:syscalls:sys_enter_recvmsg / @g[pid] / { printf("%lu NET %d %s recvms
 tracepoint:syscalls:sys_enter_write / @g[pid] && args->count == 321 / { printf("%lu NET %d %s write len 321 fd %d\n", (nsecs - @t0) / 1000000, tid, comm, args->fd); }
 
 END { clear(@g); clear(@t0); clear(@rf); }
+
+BEGIN { printf("READY\n"); }
