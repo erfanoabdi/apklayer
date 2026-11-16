@@ -50,6 +50,11 @@ optional = true
 apps = ["hello-arm64"]
 run = ["tests/vm/native-bridge.sh", "python3 -u tests/vm/exit-deadline.py native"]
 
+[translation-mode]
+# `apklayer app <package> translation-mode`: the per-app lite translation switch of the manager (berberis.mode.<package>)
+apps = ["hello-arm64"]
+run = ["tests/vm/translation-mode.sh"]
+
 [arm32]
 # an armeabi-v7a-only JNI app in the 32-bit app process (docs/history/PLAN-2026-11-10.md "apps built for another CPU" 2(a)): needs a CPU that runs AArch32 code
 # (the Volla X23; not the VMs on Apple Silicon) and the 32-bit runtime (tools/stage arm32, tools/armhf/build.sh, APKLAYER_ARM32)

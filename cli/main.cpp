@@ -60,6 +60,8 @@ int usage() {
           "  instance autostart <id> [on [--no-start]|off]  always-on mode: a systemd user unit starts the instance (stack and hub) at login and keeps it up, its hub never\n"
           "                         exits when idle (background push, alarms, jobs); without on|off: prints the state\n"
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
+          "  app <package> translation-mode [default|lite|interpret]  how the translator runs the app's ARM code (lite: no optimizing tier, slower, for apps\n"
+          "                         that draw wrong otherwise); the property berberis.mode.<package>, from the app's next start\n"
           "  providers [set DOMAIN BACKEND [KEY=VALUE...] | unset DOMAIN]  the hardware providers (sensors, gnss, vibrator, camera) and their backends\n"
           "                         (rows: domain provider backend option...; backend DOMAIN NAME probe; option DOMAIN BACKEND KEY DEFAULT text|file)\n"
           "  config [list | get KEY | set KEY VALUE | unset KEY] [--app <package>]  the user's settings (graphics, JVM, views, audio...), also in the\n"
@@ -178,6 +180,7 @@ int main(int argc, char** argv) {
     if (cmd == "instance" && n == 3) return instanceCommand(layout, args[1], args[2]);
     if (cmd == "providers") return providersCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "settings") return settingsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "app" && n >= 3) return appCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "prop") return propCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "permissions" && n >= 2) return permissionsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "status") return status(layout, inst);

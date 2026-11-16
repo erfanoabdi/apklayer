@@ -1,0 +1,10 @@
+// malloc/calloc/realloc/posix_memalign results of 4072..4104 bytes (glibc chunk 0x1010) of the game process, with the thread and time; and the frees of those pointers.
+// Pair with the invalid-free lines of stderr (berberis: free(0x..) of no glibc chunk): the same run's pointers. Translated: the JVM process's glibc (the guest's malloc is the host's).
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0 = nsecs; }
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc / @g[pid] && arg0 >= 4072 && arg0 <= 4104 / { @sz[tid] = arg0; }
+uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc / @sz[tid] / { if (@n < 400000) { @n++; printf("%lu M %d %lu %lx\n", (nsecs - @t0) / 1000000, tid, @sz[tid], retval); } delete(@sz[tid]); }
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:calloc / @g[pid] && arg0 * arg1 >= 4072 && arg0 * arg1 <= 4104 / { @sz[tid] = arg0 * arg1; }
+uretprobe:/lib/x86_64-linux-gnu/libc.so.6:calloc / @sz[tid] / { if (@n < 400000) { @n++; printf("%lu C %d %lu %lx\n", (nsecs - @t0) / 1000000, tid, @sz[tid], retval); } delete(@sz[tid]); }
+interval:s:40 { exit(); }
+BEGIN { printf("READY\n"); }
+END { clear(@g); clear(@t0); clear(@sz); clear(@n); }
