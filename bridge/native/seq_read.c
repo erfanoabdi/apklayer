@@ -9,6 +9,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
