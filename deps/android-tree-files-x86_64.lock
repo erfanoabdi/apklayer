@@ -359,7 +359,7 @@ ab185d08e7129eab280c5753f519819d7bd00f00318df04750e53c393fffd99b 1169960 x86_64/
 192e706f079d94159f4590be131851790668feeb1e2535fb1c745d407a61f57c 104680 x86_64/android-libs/lib64/libheadtracking.so out/target/product/generic_x86_64/system/lib64/libheadtracking.so same
 90c71fd5905701e8062af089c9fd42c6ff659fdcef39d3da7a526f07c70e84c6 69208 x86_64/android-libs/lib64/libhidl-gen-utils.so out/target/product/generic_x86_64/system/lib64/libhidl-gen-utils.so same
 aad14d4d2e5ad1b25525ad5e0763419bae208ff571c40de254602de43c4b7a53 35360 x86_64/android-libs/lib64/libhidlallocatorutils.so out/target/product/generic_x86_64/system/lib64/libhidlallocatorutils.so same
-e56dfa788c1f893b6b20ecb2bc588e3250b5a408b2ce34e4cdbe21ae8248af44 745384 x86_64/android-libs/lib64/libhidlbase.so out/target/product/generic_x86_64/system/lib64/libhidlbase.so same
+18459ae77d32ca074a018bf4c84354c3fda9c999ec2fe3a3dc6e1d4c8e10b2c3 745400 x86_64/android-libs/lib64/libhidlbase.so out/target/product/generic_x86_64/system/lib64/libhidlbase.so same
 118099142a9301353e97adc27178411642f7b12ec8eb40688c1b82226bb30952 52176 x86_64/android-libs/lib64/libhidlmemory.so out/target/product/generic_x86_64/system/lib64/libhidlmemory.so same
 df77b06765a871bbb1457f88e38c1f5ec3f296749f0f9ad93fc2df97102e3402 13005848 x86_64/android-libs/lib64/libhwui.so out/target/product/generic_x86_64/system/lib64/libhwui.so same
 86bf617f43ee431a620ac321eec57ee8302c5d33c030b677989dcd832782f118 70520 x86_64/android-libs/lib64/libicu.so out/target/product/generic_x86_64/apex/com.android.i18n/lib64/libicu.so same
