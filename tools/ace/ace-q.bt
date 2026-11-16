@@ -1,0 +1,28 @@
+// Agent Q: ace-net.bt plus the DNS question name (first bytes of a UDP sendto on a socket connected to :53), ioctl requests and comm of the thread
+// on every line, so the 5 s before the first Tencent query can be read. `<ms since first libanogs open> Q <tid> <comm> ...`
+#include <linux/socket.h>
+#include <linux/in.h>
+
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0 = nsecs; }
+
+tracepoint:syscalls:sys_enter_connect / @g[pid] /
+{
+  $sa = (struct sockaddr_in *)args->uservaddr;
+  $p = (($sa->sin_port & 0xff) << 8) | ($sa->sin_port >> 8);
+  if ($p == 53) { @dns[pid, args->fd] = 1; }
+  printf("%lu Q %d %s connect fd %d port %d addr %s\n", (nsecs - @t0) / 1000000, tid, comm, args->fd, $p, ntop($sa->sin_addr.s_addr));
+}
+tracepoint:syscalls:sys_enter_sendto / @g[pid] /
+{
+  if (@dns[pid, args->fd]) { printf("%lu Q %d %s dnsq fd %d len %d %r\n", (nsecs - @t0) / 1000000, tid, comm, args->fd, args->len, buf(args->buff + 12, 40)); }
+  else { printf("%lu Q %d %s sendto fd %d len %d\n", (nsecs - @t0) / 1000000, tid, comm, args->fd, args->len); }
+}
+tracepoint:syscalls:sys_enter_sendmsg / @g[pid] / { printf("%lu Q %d %s sendmsg fd %d\n", (nsecs - @t0) / 1000000, tid, comm, args->fd); }
+tracepoint:syscalls:sys_enter_recvfrom / @g[pid] / { @rf[tid] = args->size; }
+tracepoint:syscalls:sys_exit_recvfrom / @g[pid] && @rf[tid] /
+{ printf("%lu Q %d %s recvfrom ret %d\n", (nsecs - @t0) / 1000000, tid, comm, args->ret); delete(@rf[tid]); }
+tracepoint:syscalls:sys_enter_ioctl / @g[pid] && args->cmd != 0x5421 && args->cmd != 0xc0306201 / { printf("%lu Q %d %s ioctl fd %d cmd %x\n", (nsecs - @t0) / 1000000, tid, comm, args->fd, args->cmd); }
+tracepoint:sched:sched_process_exec / @g[pid] / { printf("%lu Q exec %s\n", (nsecs - @t0) / 1000000, str(args->filename)); }
+
+END { clear(@g); clear(@t0); clear(@rf); clear(@dns); }
+BEGIN { printf("READY\n"); }
