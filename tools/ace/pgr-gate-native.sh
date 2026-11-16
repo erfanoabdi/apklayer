@@ -19,6 +19,10 @@ IN
 if [ -n "${NOPROBE:-}" ]; then P=""; else
   P="perf record -q -o $W/gate.perf -m 128M -T -e mem:$(printf 0x%x $((BASE + 0x1f5200))):x -e mem:$(printf 0x%x $((BASE + 0x1f5238))):x -c 1 --user-regs=x0,x1,x2,x3,lr --"
 fi
+if [ -n "${MAPSOUT:-}" ]; then  # the game's real maps right when the hub registers it (event driven, no polling)
+  H=$HOME/.local/state/apklayer/$INST/hub.log; mkdir -p "$(dirname "$H")"; touch "$H"
+  ( pid=$(tail -n0 -F "$H" | grep -a -m1 -o 'registered com.kurogame[^ ]* pid=[0-9]*' | sed 's/.*pid=//'); sudo -n cat /proc/$pid/maps > "$MAPSOUT"; sudo -n cat /proc/$pid/smaps_rollup > "$MAPSOUT.rollup" 2>/dev/null ) &
+fi
 sudo -n $P unshare -m --propagation private bash "$W/inner.sh" > "$W/run.log" 2>&1 || true
 XDG_DATA_HOME=$XDG_DATA_HOME apklayer --instance "$INST" stop >/dev/null 2>&1 || true
 ls -la "$W"/gate.perf 2>/dev/null || true
