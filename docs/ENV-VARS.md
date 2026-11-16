@@ -56,7 +56,7 @@ Read where they are needed; set them for one command (`APKLAYER_RUNTIME_DEBUG=1 
 | `APKLAYER_BOOT_BROADCASTS`, `APKLAYER_MEDIA_WATCHES` | `0`/a package: BOOT_COMPLETED receivers; the hub's inotify budget |
 | `APKLAYER_DISPLAY_WIDTH`, `_HEIGHT`, `_DPI` | the virtual display (720x1280, 320 dpi) |
 | `APKLAYER_UNSTRIPPED` | a directory of unstripped libraries for `tools/debug/symbolize-trace.py` |
-| `-Dapklayer.perf`, `.runms`, `.debugkeys`, `.debugwheel`, `.runtimetrace`, `.rawtraces`, `.traceroots`, `.tracebind`, `.tracestart`, `.threads`, `.tracewindows` | JVM-side traces and the run time of a test launch (through the `jvm-options` setting) |
+| `-Dapklayer.perf`, `.runms`, `.debugkeys`, `.debugwheel`, `.runtimetrace`, `.rawtraces`, `.traceroots`, `.tracebind`, `.tracestart`, `.traceuncaught` (every exception reaching the default uncaught handler, printed before the app's own handler, which may end the process: Play services), `.threads`, `.tracewindows` | JVM-side traces and the run time of a test launch (through the `jvm-options` setting) |
 
 ## Test only
 

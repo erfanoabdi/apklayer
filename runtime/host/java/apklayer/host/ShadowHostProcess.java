@@ -12,6 +12,7 @@ public class ShadowHostProcess extends ShadowProcess {
     // the desktop user's Linux uid is apklayer's own (native services, the hub, a spare not yet given its app): Android's system uid, as libbinder's
     // patch 0007 says. Taken raw it names another user from 100000 up (Sailfish OS's defaultuser is 100000: user 1) or an app (Ubuntu Touch's 32011).
     private static final int OWN_UID = Process.SYSTEM_UID;
+    static { UncaughtTrace.install(); }
 
     static int ownUid() { return OWN_UID; }
 
