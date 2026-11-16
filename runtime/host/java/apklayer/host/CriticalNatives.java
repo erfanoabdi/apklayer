@@ -46,6 +46,29 @@ public final class CriticalNatives {
         return out.toArray(new String[0]);
     }
 
+    /**
+     * The class's critical natives (called from the shim at each RegisterNatives): the framework's from the list; an app class's from its own
+     * bytecode, where the converter keeps the annotation (YouTube's UpbArena.jniFuse: called with JNIEnv and jclass it read them as its arenas).
+     */
+    public static String[] of(Class<?> c) {
+        String name = c.getName();
+        String[] listed = of(name);
+        ClassLoader loader = c.getClassLoader();
+        if (listed.length > 0 || loader == null || AppClassLoader.app == null || AppClassLoader.platform(name)) return listed;
+        String resource = name.replace('.', '/') + ".class";
+        try (InputStream in = loader.getResourceAsStream(resource) != null ? loader.getResourceAsStream(resource)
+                : AppClassLoader.index != null ? AppClassLoader.index.getResourceAsStream(resource) : null) {
+            if (in == null) return listed;
+            java.io.StringWriter lines = new java.io.StringWriter();
+            try (PrintWriter w = new PrintWriter(lines)) { scan(new ClassReader(in), w); }
+            List<String> out = new ArrayList<>();
+            for (String line : lines.toString().split("\n")) if (line.indexOf(' ') > 0) out.add(line.substring(line.indexOf(' ') + 1).trim());
+            return out.toArray(new String[0]);
+        } catch (Exception | LinkageError unreadable) {
+            return listed;
+        }
+    }
+
     /** Generator: {@code CriticalNatives out.txt jar...}. */
     public static void main(String[] args) throws Exception {
         try (PrintWriter w = new PrintWriter(args[0], "UTF-8")) {

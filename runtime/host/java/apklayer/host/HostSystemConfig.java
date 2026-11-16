@@ -33,6 +33,18 @@ final class HostSystemConfig {
     final Map<String, Library> libraries = new HashMap<>();  // <library>: the shared libraries apps may use (HostSharedLibraries)
     final Set<String> nativeLibraries = new HashSet<>();  // the native shared libraries <uses-native-library> names (SystemConfig.readPublicNativeLibrariesList)
 
+    /**
+     * DefaultPermissionGrantPolicy's location grant, which is code, not XML: the system packages LocationManager lists as providers
+     * (config_locationProviderPackageNames; a GMS or microG build's overlay names Play services) get location in every form and activity recognition.
+     * Without it Play services held no location (fused location, Play Store's region checks through it failed). Only a system app, as there.
+     */
+    private static final List<String> LOCATION_PROVIDERS = List.of("com.android.location.fused", "com.google.android.gms");
+    private static final List<String> LOCATION_GRANTS = List.of("android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION",
+            "android.permission.ACCESS_BACKGROUND_LOCATION", "android.permission.ACTIVITY_RECOGNITION");
+    private void grantLocationProviders() {
+        for (String pkg : LOCATION_PROVIDERS) if (privileged.containsKey(pkg)) defaultGrants.computeIfAbsent(pkg, k -> new HashSet<>()).addAll(LOCATION_GRANTS);
+    }
+
     /** A {@code <library name file dependency>}: its jar's path on a device, the libraries it needs. */
     record Library(String file, List<String> dependencies) {}
 
@@ -70,6 +82,7 @@ final class HostSystemConfig {
             for (String dir : new String[] {"permissions", "sysconfig"}) config.readDir(new File(gapps, dir), false);
             config.readDir(new File(gapps, "default-permissions"), true);
         }
+        config.grantLocationProviders();
         // the vendor's public libraries and the partitions' public.libraries-<company>.txt (the plain public.libraries.txt is every app's anyway)
         java.util.List<File> lists = new java.util.ArrayList<>(java.util.List.of(new File(new File(root).getParentFile(), "vendor/etc/public.libraries.txt")));
         for (String dir : new String[] {"etc", "system_ext/etc", "product/etc"}) {

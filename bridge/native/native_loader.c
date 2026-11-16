@@ -2,6 +2,7 @@
  * linker and wires its JNI functions into the running HotSpot JVM.
  * Java side: apklayer.host.NativeLoader. */
 #define _GNU_SOURCE
+#include <execinfo.h>
 #include <jni.h>
 #include <link.h>
 #include <stdint.h>
@@ -127,9 +128,26 @@ JNIEXPORT jint JNICALL Java_apklayer_host_NativeLoader_registerNative(JNIEnv *en
 /* An app process ends the way Android ends it, killed: its native libraries' static destructors and atexit handlers do not run. Under HotSpot they would run on
  * the VM thread, which is not attached to the JVM (fbjni's destructors abort: "Unable to retrieve jni environment"), while the app's threads still use what they
  * destroy. Registered last, this handler runs first in exit(): stdio is flushed, then the process ends with the status. */
+/* Diagnostic (APKLAYER_EXIT_TRACE=1): the status and native stack of whatever ends the process through exit() (a native exit, the JVM's halt or
+ * System.exit at its end), on stderr. Registered first at load, so it also runs for an exit before the JVM's shutdown hooks. */
+static int exit_trace = -1;
+static void trace_exit(int status)
+{
+    if (exit_trace < 0) { const char *v = getenv("APKLAYER_EXIT_TRACE"); exit_trace = v && v[0] == '1'; }
+    if (!exit_trace) return;
+    void *frames[48];
+    int n = backtrace(frames, 48);
+    fprintf(stderr, "[apklayer] exit(%d) on thread %ld:\n", status, (long)gettid());
+    fflush(stderr);
+    backtrace_symbols_fd(frames, n, 2);
+}
+static void traced_exit(int status, void *arg) { (void)arg; trace_exit(status); }
+__attribute__((constructor)) static void register_exit_trace(void) { const char *v = getenv("APKLAYER_EXIT_TRACE"); if (v && v[0] == '1') on_exit(traced_exit, NULL); }
+
 static void end_without_native_destructors(int status, void *arg)
 {
     (void)arg;
+    trace_exit(status);
     fflush(NULL);
     _exit(status);
 }

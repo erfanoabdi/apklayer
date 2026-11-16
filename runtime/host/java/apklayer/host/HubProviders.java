@@ -79,7 +79,11 @@ final class HubProviders {
     /** grantUriPermission / revokeUriPermission: only the app that owns the uri's provider may (the target null means every app, for revoke). */
     void grant(HubDirectory.Peer caller, String target, android.net.Uri uri, int mode, boolean revoke) {
         ProviderInfo info = uri.getAuthority() == null ? null : packages.provider(uri.getAuthority());
-        if (info == null || !info.packageName.equals(caller.name())) throw new SecurityException(caller.name() + " does not own the provider of " + uri);
+        if (info == null) {  // as UriGrantsManagerService: "No content provider found for permission check", nothing granted, no exception (Play services' AppDoctor)
+            System.out.println("[apklayer-hub] no content provider found for the grant of " + uri + " by " + caller.name());
+            return;
+        }
+        if (!info.packageName.equals(caller.name())) throw new SecurityException(caller.name() + " does not own the provider of " + uri);
         if (revoke) grants.removeIf(g -> (target == null || g.target.equals(target)) && covers(uri, g.uri, true));
         else grants.add(new Grant(target, uri, mode));
     }

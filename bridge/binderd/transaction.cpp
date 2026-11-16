@@ -189,6 +189,7 @@ void Driver::transaction(Thread* thread, const binder_transaction_data& tr, bool
     }
     if (tr.offsets_size % sizeof(binder_size_t) || extra_size % sizeof(uint64_t)) return fail(BR_FAILED_REPLY, -EINVAL);
 
+    if (!data) return fail(BR_FAILED_REPLY, -ENOSPC);  // too large for the route's shared buffer (protocol.h BD_TXN_TOO_LARGE)
     int err = 0;
     Buffer* buf = allocBuf(target_proc, tr.data_size, tr.offsets_size, extra_size, !reply && oneway, &err);
     if (!buf) return fail(err == -ESRCH ? BR_DEAD_REPLY : BR_FAILED_REPLY, err);

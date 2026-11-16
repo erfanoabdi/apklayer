@@ -153,9 +153,7 @@ static jmethodID critical_of; static jclass critical_class; static int critical_
 static jobjectArray critical_methods(JNIEnv *env, jclass cls)
 {
     if (!critical_of) return NULL;
-    jmethodID get_name = (*env)->GetMethodID(env, class_class, "getName", "()Ljava/lang/String;");
-    jobject name = (*env)->CallObjectMethod(env, cls, get_name);
-    jobjectArray r = (*env)->CallStaticObjectMethod(env, critical_class, critical_of, name);
+    jobjectArray r = (*env)->CallStaticObjectMethod(env, critical_class, critical_of, cls);  /* the framework's list, or an app class's annotations */
     if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); r = NULL; }
     return r;
 }
@@ -190,7 +188,7 @@ static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNI
         if (real_table->RegisterNatives(env, cls, &one, 1) != 0) {
             if (runtime_debug()) fprintf(stderr, "[runtime] not registered (no such native binding): %s %s\n", name, methods[i].signature);
             (*env)->ExceptionClear(env); /* not a method Robolectric instruments... */
-            JNINativeMethod plain = { methods[i].name, methods[i].signature, methods[i].fnPtr };
+            JNINativeMethod plain = { methods[i].name, methods[i].signature, fn };  /* fn: a critical native keeps its adapter */
             if (real_table->RegisterNatives(env, cls, &plain, 1) != 0) (*env)->ExceptionClear(env); /* ...but an uninstrumented class (an app library's, a host helper) has it under its own name */
         }
     }
@@ -225,6 +223,7 @@ static void JNICALL apply_free_function(JNIEnv *env, jclass cls, jlong free_func
  * This FindClass loads without initializing (Class.forName(name, false, loader)); initialization then happens on first use. */
 static jobject class_loader;
 static jmethodID for_name;
+static jclass jni_caller; static jmethodID caller_loader;  /* apklayer.host.JniCaller.loaderFor: the calling native method's loader, as ART's FindClass */
 
 /* apklayer patch: Android's FileDescriptor keeps its number in `descriptor`, OpenJDK's in `fd`; native libraries (Conscrypt) look the Android name up. */
 static jfieldID JNICALL w_GetFieldID(JNIEnv *env, jclass c, const char *name, const char *sig) {
@@ -269,8 +268,11 @@ static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
     dotted[i] = 0;
     jstring s = (*env)->NewStringUTF(env, dotted);
     extern __thread jobject apklayer_onload_loader;  /* native_loader.c: inside a library's JNI_OnLoad, the loader of that library's classes */
-    jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, apklayer_onload_loader ? apklayer_onload_loader : class_loader);
+    jobject caller = !apklayer_onload_loader && caller_loader ? (*env)->CallStaticObjectMethod(env, jni_caller, caller_loader, s) : NULL;
+    if (caller_loader) (*env)->ExceptionClear(env);
+    jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, apklayer_onload_loader ? apklayer_onload_loader : caller ? caller : class_loader);
     (*env)->DeleteLocalRef(env, s);
+    if (caller) (*env)->DeleteLocalRef(env, caller);
     if (!c && runtime_debug()) fprintf(stderr, "[runtime] FindClass(%s) failed\n", name);
     return (jclass)c; /* NULL with the pending exception, like FindClass */
 }
@@ -516,8 +518,12 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         jobject cc = (*env)->CallStaticObjectMethod(env, class_class, for_name, cn, JNI_TRUE, class_loader);
         if (cc) {
             critical_class = (*env)->NewGlobalRef(env, cc);
-            critical_of = (*env)->GetStaticMethodID(env, critical_class, "of", "(Ljava/lang/String;)[Ljava/lang/String;");
+            critical_of = (*env)->GetStaticMethodID(env, critical_class, "of", "(Ljava/lang/Class;)[Ljava/lang/String;");
         }
+        (*env)->ExceptionClear(env);
+        jstring jn = (*env)->NewStringUTF(env, "apklayer.host.JniCaller");
+        jobject jc = (*env)->CallStaticObjectMethod(env, class_class, for_name, jn, JNI_TRUE, class_loader);
+        if (jc) caller_loader = (*env)->GetStaticMethodID(env, jni_caller = (*env)->NewGlobalRef(env, jc), "loaderFor", "(Ljava/lang/String;)Ljava/lang/ClassLoader;");
         (*env)->ExceptionClear(env);
     }
     if (getenv("APKLAYER_JNI_EXC")) {

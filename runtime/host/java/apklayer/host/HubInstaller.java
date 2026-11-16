@@ -78,13 +78,15 @@ final class HubInstaller {
 
     private void staged(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, Path dir, int count, IBinder status, boolean now) throws IOException {
         String pkg = null;
+        java.util.List<String> seen = new java.util.ArrayList<>();
         try {
             for (Path apk : HubInstallSessions.apks(dir)) {
+                seen.add(apk.getFileName() + " (" + Files.size(apk) + " bytes)");
                 PackageParser.ApkLite lite = PackageParser.parseApkLite(apk.toFile(), 0);
                 if (lite.splitName == null) pkg = lite.packageName;
             }
         } catch (PackageParser.PackageParserException | IOException | RuntimeException unreadable) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_PARSE_FAILED: " + unreadable.getMessage()); return; }
-        if (pkg == null) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_INVALID_APK: no base APK"); return; }
+        if (pkg == null) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_INVALID_APK: no base APK among " + seen); return; }
         if (expected != null && !expected.equals(pkg)) { finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_PACKAGE_CHANGED: the session is for " + expected); return; }
         String denied = mayRequest(caller.name(), REQUEST_INSTALL, 26);
         if (denied != null) { finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE, denied); return; }
@@ -195,7 +197,7 @@ final class HubInstaller {
 
     private void install(Request request) {
         boolean update = packages.get(request.pkg) != null;
-        List<String> command = new ArrayList<>(List.of(System.getProperty("apklayer.cli"), "install"));
+        List<String> command = new ArrayList<>(List.of(System.getProperty("apklayer.cli"), "install", "--installer", request.installer()));
         try { HubInstallSessions.apks(request.staged).forEach(apk -> command.add(apk.toString())); }
         catch (IOException failure) { send(request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_FAILURE, failure.toString(), null); return; }
         int[] exit = {0};

@@ -34,7 +34,7 @@ namespace {
 int usage() {
     fputs("usage: apklayer [--instance ID] <command>\n"
           "  inspect <file> <icon.png>                         what an install would add: package, version, label, permissions (icon written to the path)\n"
-          "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
+          "  install [-d] [--system] [--installer <pkg>] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
           "  setup [--check] [--update] [--bundle <file|file://|URL>] [--microg | --gapps] [--fdroid]  first run and runtime updates in one command (the manager runs it):\n"
@@ -133,10 +133,13 @@ int main(int argc, char** argv) {
     if (cmd == "run" || cmd == "open" || cmd == "list") refreshDesktops(layout), refreshAutostart(layout);  // a launch from a working entry or the manager mends the others
     if (cmd == "install" && n >= 2) {
         bool downgrade = false, system = false;
+        std::string installer;  // --installer <package>: the store that installed it (the hub passes a session's installer)
         size_t first = 1;
-        for (; first < n && (args[first] == "-d" || args[first] == "--system"); first++) (args[first] == "-d" ? downgrade : system) = true;
+        for (; first < n && (args[first] == "-d" || args[first] == "--system" || (args[first] == "--installer" && first + 1 < n)); first++)
+            if (args[first] == "--installer") installer = args[++first];
+            else (args[first] == "-d" ? downgrade : system) = true;
         if (first == n) return usage();
-        installApp(layout, inst, std::vector<std::string>(args.begin() + first, args.end()), downgrade, system);
+        installApp(layout, inst, std::vector<std::string>(args.begin() + first, args.end()), downgrade, system, installer);
         return 0;
     }
     if (cmd == "inspect" && n == 3) return previewApk(layout, args[1], args[2]);
