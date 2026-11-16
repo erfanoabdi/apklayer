@@ -136,7 +136,7 @@ jobs:
         with: {name: runtime, path: out/apklayer-runtime-*, if-no-files-found: error}
 
   sailfish:
-    # the Sailfish OS RPMs (aarch64): apklayer and what Sailfish's repositories lack (temurin-21-jdk, libmd, libbsd, libunwind), built in the
+    # the Sailfish OS RPMs (aarch64): apklayer and what Sailfish's repositories lack (temurin-25-jdk, libmd, libbsd, libunwind), built in the
     # Platform SDK's SailfishOS-5.0.0.62 aarch64 target as a native container (rpm/Dockerfile, docs/HALIUM.md "Building for Sailfish OS")
     needs: guard
     runs-on: ubuntu-24.04-arm
