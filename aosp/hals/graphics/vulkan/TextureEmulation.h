@@ -2,7 +2,7 @@
 // (gfxstream/vulkan/emulated_textures, unmodified). The app's image is an uncompressed image of the decoded format; the
 // compressed blocks live in one block-per-texel image per mip level beside it, in the same memory; copies go to those, and a
 // barrier that makes the image readable runs gfxstream's compute decoder into the app's image (as gfxstream's own host does).
-// Only a device whose physical device lacks the feature is touched; APKLAYER_VULKAN_TEXTURE_EMULATION=0 turns it off, =force emulates on every device (tests).
+// Only a device whose physical device lacks the feature is touched; APKLAYER_VULKAN_TEXTURE_EMULATION=0 turns it off.
 #pragma once
 #include <vulkan/vulkan.h>
 

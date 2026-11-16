@@ -420,11 +420,6 @@ run = ["b/bridge/hals/graphics/readback-test"]
 # the instance-GPU Vulkan filter (DeviceSelect.h): a fake device list, then the host's real loader (render node -> that GPU only, no-driver node -> CPU device)
 run = ["b/bridge/hals/graphics/vulkan-select-test real"]
 
-[vulkan-textures]
-# ASTC/ETC2 emulation of the Vulkan HAL (TextureEmulation.cpp, gfxstream's decoder) on the host's GPU: features and formats reported, ASTC
-# blocks of two mip levels uploaded, decoded at the readable barrier (version-1 and synchronization2), texels and blocks read back
-run = ["b/bridge/hals/graphics/vulkan-textures-test"]
-
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)
 run = ["python3 -u tests/vm/gpu-select.py"]

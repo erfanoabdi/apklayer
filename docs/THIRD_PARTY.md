@@ -10,7 +10,6 @@
 
 apklayer itself is AGPL-3.0-or-later (PLAN archive D5), compatible with all of the above.
 
-- gfxstream's compressed-texture emulation (`host/vulkan/emulated_textures`: compressed_image_info, gpu_decompression_pipeline and the compiled SPIR-V decoders in `shaders/compiled`, `hardware/google/gfxstream` in the LineageOS tree, as in the prebuilts' `common/gfxstream`), Apache-2.0, unmodified, in `aosp/hals/graphics/vulkan/gfxstream/vulkan/emulated_textures/`; beside it apklayer's own shims for the headers it includes (`goldfish_vk_dispatch.h`, `gfxstream/common/logging.h`, `gfxstream/ArraySize.h`, `vulkan/vk_format_utils.h`, `vulkan/vk_enum_string_helper.h`, and `astc_texture.h` in place of the CPU decoder, not vendored). Built into `vulkan.apklayer` (ASTC/ETC2 on host devices without them).
 - gfxstream's GLES_CM translator and GLcommon (`hardware/google/gfxstream` in the LineageOS tree), Apache-2.0, unmodified, its sources in the prebuilts' `common/gfxstream` (`tools/stage gfxstream`, or `-Dgfxstream=<source>`), built by Meson into `libapklayer-gles1.so`.
 - `bridge/shell/protocols/wayland-android.xml`: libhybris's `android_wlegl` protocol (Collabora, MIT-style), for showing device gralloc buffers on Lomiri/Lipstick.
 - `bridge/shell/maliit.c`: the D-Bus interface description of maliit-framework's `com.meego.inputmethod.inputcontext1` (LGPL-2.1, an interface
