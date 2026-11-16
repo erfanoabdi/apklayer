@@ -17,4 +17,4 @@ uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE / @g[pid] /
 uretprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE / @gpr[tid] /
 { printf("GX %lu %d %d\n", nsecs, tid, *(int64 *)(@gst[tid])); delete(@gpr[tid]); delete(@gst[tid]); }
 
-END { clear(@gpr); clear(@gst); }
+END { clear(@g); clear(@pr); clear(@gpr); clear(@gst); }

@@ -47,7 +47,12 @@ def load(fn, arch, guest=False):
 def merge(files, arch, guest=False):
     R = collections.defaultdict(set); C = collections.defaultdict(list); per = []
     for f in files:
-        r, c = load(f, arch, guest); per.append(set(r))
+        r, c = load(f, arch, guest)
+        if guest:   # the translated side: the guest's own svc (before the path layer) and what reached the host kernel
+            r2, c2 = load(f, arch, False)
+            for k, v in r2.items(): r.setdefault(k, set()).update(v)
+            for k, v in c2.items(): c[k] = c.get(k, 0) + v
+        per.append(set(r))
         for k, v in r.items(): R[k] |= v
         for k, v in c.items(): C[k].append(v)
     return R, C, per
