@@ -6,7 +6,7 @@
   bbtrace.py diff A B [CTX]           first divergence of two traces (offsets inside [lo,hi), outside collapsed to one token)
   bbtrace.py tail FILE [N]            last N records (the path into a death)
 Record: v=(zigzag(src-last_tgt)<<2)|0 + varint zigzag(tgt-src); 1: v>>2 = ns timestamp; 2: v>>2 = pc, 33 raw u64 follow
-(x0..x30, sp, flags); 3: v>>2 = x8, a varint x0 follows.
+(x0..x30, sp, flags); 3: v>>2 = x8, varints x0 x1 x2 follow (x8 0xffff: the svc's return in x0; 0xfffe: AES ring, count + (Vd,Vn) pairs; 0xfffd: memory dump, len + bytes).
 """
 import struct, sys
 
@@ -44,16 +44,53 @@ def load(path):
                 regs = struct.unpack_from('<33Q', b, j); j += 264
                 out.append(('r', v >> 2, regs))
             else:
-                x0, j = varint(b, j)
-                out.append(('s', v >> 2, x0, n))
+                x8 = v >> 2
+                if x8 == 0xfffe:    # AES ring: count, then (Vd, Vn) 16-byte pairs
+                    c, j = varint(b, j)
+                    out.append(('a', [(b[j + 32 * k:j + 32 * k + 16], b[j + 32 * k + 16:j + 32 * k + 32]) for k in range(c)]))
+                    j += 32 * c
+                elif x8 == 0xfffc:  # memory region: base, len, bytes
+                    base, j = varint(b, j)
+                    c, j = varint(b, j)
+                    out.append(('g', base, b[j:j + c], n))
+                    j += c
+                elif x8 == 0xfffd:  # memory dump
+                    c, j = varint(b, j)
+                    out.append(('m', b[j:j + c], n))
+                    j += c
+                else:
+                    x0, j = varint(b, j)
+                    x1, j = varint(b, j)
+                    x2, j = varint(b, j)
+                    out.append(('s', x8, x0, n, x1, x2))
             i = j
         except IndexError:
             break  # a truncated tail
     return lo, hi, out
 
 
+RNG = {}  # trace path -> [(start, end, pgoff, tag)] from maps-<pid>.txt, when present
+
+
+def load_maps(path):
+    import os, re
+    m = re.search(r'bb-(\d+)-', os.path.basename(path))
+    f = os.path.join(os.path.dirname(path), 'maps-%s.txt' % m.group(1)) if m else ''
+    r = []
+    if os.path.exists(f):
+        for k, l in enumerate(open(f)):
+            p = l.split()
+            a, b = (int(x, 16) for x in p[0].split('-'))
+            r.append((a, b, int(p[2], 16), k))
+    return r
+
+
 def off(a, lo, hi):
-    return a - lo if lo <= a < hi else None
+    """File offset of a (with the module's own mapping list when maps-<pid>.txt exists), else offset from lo."""
+    for (s0, e0, po, k) in CUR:
+        if s0 <= a < e0:
+            return po + (a - s0) + (k << 40)  # k<<40: which mapping, see fmt
+    return None if CUR else (a - lo if lo <= a < hi else None)
 
 
 def norm(recs, lo, hi):
@@ -70,12 +107,17 @@ def norm(recs, lo, hi):
 
 
 def fmt(e):
-    f = lambda o: 'X' if o is None else '+%#x' % o
+    f = lambda o: 'X' if o is None else ('+%#x' % o if o < 1 << 40 else 'm%d+%#x' % (o >> 40, o & ((1 << 40) - 1)))
     return '%s -> %s' % (f(e[0]), f(e[1]))
 
 
+CUR = []
+
+
 def main():
+    global CUR
     a = sys.argv
+    CUR = load_maps(a[2])
     if a[1] == 'dump':
         lo, hi, r = load(a[2]); k = 0
         for x in r:
@@ -89,7 +131,7 @@ def main():
         lo, hi, r = load(a[2])
         for x in r:
             if x[0] == 's':
-                print('branch#%d x8=%d x0=%#x' % (x[3], x[1], x[2]))
+                print('branch#%d x8=%d x0=%#x x1=%#x x2=%#x' % (x[3], x[1], x[2], x[4], x[5]))
     elif a[1] == 'tail':
         lo, hi, r = load(a[2]); n = int(a[3]) if len(a) > 3 else 60
         for x in r[-n:]:

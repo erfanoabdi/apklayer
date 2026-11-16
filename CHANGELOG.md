@@ -24,6 +24,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 ## 2026-11-17: PGR guest control-flow differential: interpreter branch trace (patch 0049), build log
 
 - Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: every syscall/file/property differential found nothing, ACE decides in guest code; two interpreted runs of the same code (survivor vs death) must be compared by control flow. Edit: cpu_emulation/interpreter/arm64/interpreter-main.cc only (`BERBERIS_TRACE_BB=<dir>`: per-thread varint trace of taken branches into libanogs.so; no effect without it).
+- Build log 2 (same command): trace v2: all mappings of the module (the first run showed pcs 57 MB beyond libanogs's 6 MB: copies mapped) written to maps-<pid>.txt, svc records with x1/x2, register dump of a faulting insn. Same file only.
+- Build log 3 (same command): trace v3: svc return values (x8=0xffff record), regs at a pending signal (host fault), dump pcs capped at 20. Same file only. Why: run10's ACE thread munmaps 16 KB then faults 0x3ed8 into it (own stack?); need sp/regs.
+- Build log 4 (same command): trace v5: the sendto buffer's surrounding heap (64 KB) and the stack (16 KB) dumped at each sendto > 200 bytes (the report is software-encrypted: the first four traced deaths showed no AES instructions; its plaintext is looked for in the buffers around it). Same file only.
 
 ## 2026-11-16: PGR timing lead: no CNTVCT reads at all; syscall-level trace: translated ACE probes emulator artefacts that native does not (first 38 s)
 
