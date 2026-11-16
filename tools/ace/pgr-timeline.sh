@@ -25,12 +25,8 @@ if grep -q -i error "$OUT"; then cat "$OUT"; sd sysctl -q -w kernel.core_pattern
 if [ -n "${EXTRA_BT:-}" ]; then   # a second bpftrace script (ace-sysdiff-*.bt) over the same run; @BRIDGE@ = the instance's translator
   BR=$(readlink -f "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/runtime/current/android-libs/libberberis_arm64.so")
   sed -e "s|@BRIDGE@|$BR|g" -e "s|@FAULT@|$FAULT|" "$HERE/$EXTRA_BT" > "$WORK/extra.bt"
-<<<<<<< HEAD
   sd env ${STRLEN:+BPFTRACE_MAX_STRLEN=$STRLEN} BPFTRACE_PERF_RB_PAGES=${RBPAGES:-8192} bpftrace $(grep -q "system(" "$WORK/extra.bt" && echo --unsafe) "$WORK/extra.bt" > "$WORK/extra-$N.txt" 2>&1 &
-=======
-  sd env ${STRLEN:+BPFTRACE_MAX_STRLEN=$STRLEN} BPFTRACE_PERF_RB_PAGES=${RBPAGES:-8192} bpftrace --unsafe "$WORK/extra.bt" > "$WORK/extra-$N.txt" 2>&1 &
   grep -m1 -q -i -e READY -e error < <(tail -f -n+1 "$WORK/extra-$N.txt")   # attached before the game starts (a late attach missed the libanogs open)
->>>>>>> worktree-agent-af56ce931f4556412
 fi
 S=$(date +%s.%N)
 APKLAYER_JOPTS=-Dapklayer.runms=$RUNMS $APKLAYER --instance "$INST" run $PKG > "$WORK/run-$N.log" 2>&1; rc=$?
