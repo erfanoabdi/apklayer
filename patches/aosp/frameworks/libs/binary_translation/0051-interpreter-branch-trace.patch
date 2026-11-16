@@ -1,0 +1,203 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: interpreter branch trace (BERBERIS_TRACE_BB)
+
+PGR control-flow differential: per guest thread varint trace of taken branches into one module (default libanogs.so), svc records, register dumps at listed offsets. Off without BERBERIS_TRACE_BB. Module libberberis_arm64.
+
+--- a/cpu_emulation/interpreter/arm64/interpreter-main.cc
++++ b/cpu_emulation/interpreter/arm64/interpreter-main.cc
+@@ -16,6 +16,17 @@
+ 
+ #include "berberis/interpreter/arm64/interpreter.h"
+ 
++#include <fcntl.h>
++#include <sys/syscall.h>
++#include <time.h>
++#include <unistd.h>
++
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++
++#include "berberis/base/config_globals.h"
++
+ #include "berberis/decoder/arm64/decoder.h"
+ #include "berberis/decoder/arm64/semantics_player.h"
+ #include "berberis/guest_state/guest_addr.h"
+@@ -30,6 +41,156 @@
+ 
+ namespace berberis {
+ 
++// apklayer patch (0049): guest control-flow trace of the interpreter (env BERBERIS_TRACE_BB=<dir>, or prop berberis.trace_bb). Per guest
++// thread, file <dir>/bb-<pid>-<tid>.bin: every taken-branch transition (non-sequential pc) whose source or target lies in the module
++// BERBERIS_TRACE_MODULE (default libanogs.so; its range is read from /proc/self/maps; BERBERIS_TRACE_ALL=1: no filter), as varints:
++// v=(zigzag(src-last_tgt)<<2)|0 then zigzag(tgt-src); type 1: v=(ns<<2)|1 timestamp every 65536 records; type 2: v=(pc<<2)|2 then 33 raw
++// u64 (x0..x30, sp, flags) at a pc listed in BERBERIS_TRACE_DUMP (hex offsets from the module's low address, comma separated).
++namespace {
++struct BbCfg {
++  const char* dir = nullptr;
++  const char* module = "libanogs.so";
++  bool all = false;
++  uint64_t dump[8] = {};
++  int ndump = 0;
++};
++const BbCfg& Cfg() {
++  static const BbCfg cfg = [] {
++    BbCfg c;
++    static ConfigStr dir("BERBERIS_TRACE_BB", "berberis.trace_bb");
++    static ConfigStr mod("BERBERIS_TRACE_MODULE", "berberis.trace_module");
++    static ConfigStr all("BERBERIS_TRACE_ALL", "berberis.trace_all");
++    static ConfigStr dmp("BERBERIS_TRACE_DUMP", "berberis.trace_dump");
++    c.dir = dir.get();
++    if (mod.get()) c.module = mod.get();
++    c.all = all.get() && all.get()[0] == '1';
++    if (dmp.get()) {
++      const char* q = dmp.get();
++      while (*q && c.ndump < 8) {
++        c.dump[c.ndump++] = strtoull(q, nullptr, 16);
++        q = strchr(q, ',');
++        if (!q) break;
++        q++;
++      }
++    }
++    return c;
++  }();
++  return cfg;
++}
++uint64_t g_lo = 0, g_hi = 0;  // module range (racy but monotone: written once found)
++struct BbThread {
++  int fd = -1;
++  uint64_t last_tgt = 0, n = 0, any = 0;
++  uint32_t len = 0;
++  uint8_t buf[32768];
++};
++thread_local BbThread t_bb;
++
++void FindRange() {
++  FILE* f = fopen("/proc/self/maps", "r");
++  if (!f) return;
++  char line[1024];
++  uint64_t lo = ~0ULL, hi = 0;
++  while (fgets(line, sizeof line, f)) {
++    if (!strstr(line, Cfg().module)) continue;
++    uint64_t a = strtoull(line, nullptr, 16), b = strtoull(strchr(line, '-') + 1, nullptr, 16);
++    if (a < lo) lo = a;
++    if (b > hi) hi = b;
++  }
++  fclose(f);
++  if (hi) {
++    g_hi = hi;
++    g_lo = lo;
++  }
++}
++void Flush(BbThread& t) {
++  for (uint32_t o = 0; o < t.len;) {
++    ssize_t w = write(t.fd, t.buf + o, t.len - o);
++    if (w <= 0) break;
++    o += w;
++  }
++  t.len = 0;
++}
++void Put(BbThread& t, uint64_t v) {
++  while (v >= 0x80) {
++    t.buf[t.len++] = (uint8_t(v) & 0x7f) | 0x80;
++    v >>= 7;
++  }
++  t.buf[t.len++] = uint8_t(v);
++}
++uint64_t Zz(int64_t d) { return (uint64_t(d) << 1) ^ uint64_t(d >> 63); }
++void Stamp(BbThread& t) {
++  timespec ts;
++  clock_gettime(CLOCK_MONOTONIC, &ts);
++  Put(t, ((uint64_t(ts.tv_sec) * 1000000000ULL + ts.tv_nsec) << 2) | 1);
++}
++void EnsureOpen(BbThread& t) {
++  if (t.fd >= 0) return;
++  char path[256];
++  snprintf(path, sizeof path, "%s/bb-%d-%ld.bin", Cfg().dir, getpid(), long(syscall(SYS_gettid)));
++  t.fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
++  if (t.fd < 0) {
++    t.fd = -2;
++  } else {
++    uint64_t hdr[4] = {0x31544242ULL, g_lo, g_hi, 0};
++    memcpy(t.buf, hdr, sizeof hdr);
++    t.len = sizeof hdr;
++    Stamp(t);
++  }
++}
++inline bool In(uint64_t a) { return Cfg().all || (a >= g_lo && a < g_hi); }
++// Called after each interpreted insn: pc before, state after.
++void BbAfter(ThreadState* state, uint64_t pc, uint8_t insn_len) {
++  BbThread& t = t_bb;
++  if (t.fd == -2) return;
++  uint64_t tgt = state->cpu.insn_addr;
++  if (tgt == pc + insn_len) return;
++  if (!g_hi && !Cfg().all) {
++    if ((++t.any & 0xffff) == 1) FindRange();
++    return;
++  }
++  if (!In(pc) && !In(tgt)) return;
++  EnsureOpen(t);
++  if (t.fd < 0) return;
++  if (t.len > sizeof t.buf - 64) Flush(t);
++  Put(t, Zz(int64_t(pc - t.last_tgt)) << 2);
++  Put(t, Zz(int64_t(tgt - pc)));
++  t.last_tgt = tgt;
++  if ((++t.n & 0xffff) == 0) Stamp(t);
++  if ((t.n & 0xff) == 0) Flush(t);
++}
++// Before an insn at pc: an svc in a traced thread is recorded (type 3: x8, x0) and flushed, so the last syscalls survive a death.
++void BbSvc(ThreadState* state, uint64_t pc) {
++  BbThread& t = t_bb;
++  if (t.fd < 0) return;
++  if ((*reinterpret_cast<const uint32_t*>(pc) & 0xffe0001fu) != 0xd4000001u) return;
++  if (t.len > sizeof t.buf - 64) Flush(t);
++  Put(t, (state->cpu.x[8] << 2) | 3);
++  Put(t, state->cpu.x[0]);
++  Flush(t);
++}
++// Before an insn at pc: dump registers at a listed pc.
++void BbDump(ThreadState* state, uint64_t pc) {
++  const BbCfg& c = Cfg();
++  if (!g_hi) return;
++  for (int i = 0; i < c.ndump; i++) {
++    if (pc != g_lo + c.dump[i]) continue;
++    BbThread& t = t_bb;
++    EnsureOpen(t);
++    if (t.fd < 0) return;
++    if (t.len > sizeof t.buf - 400) Flush(t);
++    Put(t, (pc << 2) | 2);
++    uint64_t r[33];
++    for (int k = 0; k < 31; k++) r[k] = state->cpu.x[k];
++    r[31] = state->cpu.sp;
++    r[32] = state->cpu.flags;
++    memcpy(t.buf + t.len, r, sizeof r);
++    t.len += sizeof r;
++    Flush(t);
++  }
++}
++}  // namespace
++
+ void InitInterpreter() {
+   AddFaultyMemoryAccessRecoveryCode();
+ }
+@@ -49,14 +210,20 @@
+   Interpreter interpreter(state);
+   SemanticsPlayer sem_player(&interpreter);
+   Decoder decoder(&sem_player);
++  static const bool trace_on = Cfg().dir != nullptr;
+ 
+   for (int i = 0; i < max_insns; i++) {
+     GuestAddr pc = state->cpu.insn_addr;
+     if (pc == 0 || ArePendingSignalsPresent(*state)) break;
+ 
++    if (trace_on) {
++      BbSvc(state, pc);
++      if (Cfg().ndump) BbDump(state, pc);
++    }
+     interpreter.Reset();
+     uint8_t insn_len = decoder.Decode(ToHostAddr<const uint16_t>(pc));
+     interpreter.FinalizeInsn(insn_len);
++    if (trace_on) BbAfter(state, pc, insn_len);
+ 
+     // If a memory fault occurred, HandleHostSignal queued it as pending.
+     // Break so ExecuteGuest can deliver the signal to the guest handler.
