@@ -7,7 +7,7 @@
 set -u
 INST=${INST:?instance}; WORK=${WORK:?work dir}; N=${N:-1}; PW=${PW:-}; RUNMS=${RUNMS:-120000}; APKLAYER=${APKLAYER:-apklayer}
 PKG=com.kurogame.gplay.punishing.grayraven.en
-F=$HOME/.local/share/apklayer/$INST/app-data/$PKG/app/files
+F=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$INST/app-data/$PKG/app/files
 HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$WORK"
 sd() { if [ -n "$PW" ]; then sudo -S -p '' "$@" <<<"$PW"; else sudo -n "$@"; fi; }
