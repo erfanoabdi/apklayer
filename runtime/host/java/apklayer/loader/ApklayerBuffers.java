@@ -52,7 +52,7 @@ public final class ApklayerBuffers {
         Lent lent;
         synchronized (ApklayerBuffers.class) { lent = appDirect.computeIfAbsent(new Key(b, null), k -> new Lent(b.capacity())); }
         synchronized (lent) {
-            b.get(0, lent.copy);  // absolute bulk get: the position stays
+            b.duplicate().clear().get(lent.copy);  // the whole capacity, as ART's backing array; the buffer's own position and limit stay (an absolute get stops at the limit: Cronet's partly filled read buffers threw, YouTube's requests failed)
             System.arraycopy(lent.copy, 0, lent.seen, 0, lent.copy.length);
         }
         return lent.copy;
