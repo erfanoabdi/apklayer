@@ -15,6 +15,9 @@ ro.zygote=zygote64
 # is `berberis.cpuinfo=pixel5` below (the translator's /proc/cpuinfo and MIDR_EL1). `apklayer prop set` overrides any of them per instance; tools/device-profile.sh
 # off sets the instance back to the generic desktop (profiles/desktop.prop). ro.hardware stays "apklayer": the graphics and gralloc modules are chosen by it.
 berberis.cpuinfo=pixel5
+# The translator's default mode: lite translation, no heavy tier (it miscompiled PGR's home scene into block noise). One app goes back to the
+# upstream default with `apklayer prop set berberis.mode.<package> two-gear` (binary_translation 0008); BERBERIS_MODE still wins.
+berberis.mode=lite-translate-or-interpret
 ro.product.brand=google
 ro.product.manufacturer=Google
 ro.product.model=Pixel 5

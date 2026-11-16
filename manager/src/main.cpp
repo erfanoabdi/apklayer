@@ -36,6 +36,8 @@ std::string field(const std::vector<std::string>& row, size_t i) { return i < ro
 
 // the native bridge's mode without the heavy tier (binary_translation 0008: the property berberis.mode.<package>)
 const char* const kLiteMode = "lite-translate-or-interpret";
+// upstream's default with the heavy tier; the instance default is kLiteMode (berberis.mode in bridge/native/apklayer.prop)
+const char* const kTwoGearMode = "two-gear";
 
 // What the selected app's detail shows besides the list's row: `info` and `permissions` (whose failure, an install older than the list, is a note there)
 struct Detail {
@@ -116,8 +118,12 @@ public:
             // the native bridge's apps: the lite-translation switch (bridge/native/native_bridge.c, binary_translation 0008)
             std::ifstream info(field(r, 3) + "/info.properties");
             for (std::string line; std::getline(info, line);) if (line.rfind("nativeRoute=bridge-", 0) == 0) e.translated = true;
-            for (const auto& p : s.props)
-                if (field(p, 0) == "berberis.mode." + field(r, 0) && field(p, 1) == kLiteMode) e.lite = true;
+            std::string mode, appMode;  // no berberis.mode row (an older root): two-gear
+            for (const auto& p : s.props) {
+                if (field(p, 0) == "berberis.mode") mode = field(p, 1);
+                if (field(p, 0) == "berberis.mode." + field(r, 0)) appMode = field(p, 1);
+            }
+            e.lite = (appMode.empty() ? mode : appMode) == kLiteMode;
             if (field(r, 0) == current_) b.set_current_app(e);
             apps->push_back(e);
         }
@@ -415,8 +421,9 @@ private:
         });
         b.on_set_lite([this](slint::SharedString pkg, bool lite) {
             std::string key = "berberis.mode." + std::string(pkg);
+            // lite is the default (apklayer.prop), set explicitly anyway: an instance may have changed berberis.mode; off is the app's own two-gear mode
             if (lite) action("Lite translation on (from its next start)", {"prop", "set", key, kLiteMode});
-            else action("Lite translation off (from its next start)", {"prop", "unset", key});
+            else action("Lite translation off (from its next start)", {"prop", "set", key, kTwoGearMode});
         });
         b.on_set_drawer([this](slint::SharedString pkg, bool shown) {
             action(shown ? "Showing in the app drawer" : "Hiding from the app drawer", {"launcher", shown ? "show" : "hide", std::string(pkg)});

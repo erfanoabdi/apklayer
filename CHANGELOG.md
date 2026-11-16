@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-16: lite translation is the default
+- `bridge/native/apklayer.prop` sets `berberis.mode=lite-translate-or-interpret` for every instance (the heavy tier drew PGR's home-scene noise); `apklayer prop set berberis.mode.<package> two-gear` gives one app upstream's two-gear mode back, BERBERIS_MODE still wins. Mode names checked in the 0.4.19 libberberis_arm64.so (`two-gear`, `lite-translate-or-interpret`, `interpret-only`).
+- Manager: the lite switch shows the app's effective mode (its own berberis.mode.<package>, else berberis.mode); off sets the app to `two-gear`, on to lite. Not built or run here (no build tree on this PC); no translated run with the new default yet.
+
 ## 2026-11-16: PGR on native arm64: main survives after 6e2704dd; the GL filter crash is a dlsym scope bug (agent K)
 - AWS, main 6e2704dd built as a deb in a private tree, private home (pgrtest storage as an overlay), `tools/ace/pgr-timeline.sh`, true death, cap 100 s. Filter OFF (`glesFilterEnv` call removed): 5 of 5 alive (EXIT 100.6-101.7 s). A cold first run died at 46 s (microG "Cannot start com.google.android.gms for provider chimera", first start of a fresh home): not counted.
 - Filter ON (main as is): 5 of 5 die 3-18 s after launch, SIGSEGV pc 0 in UnityMain (x0 = 0x91bf = GL_MAX_COMPUTE_WORK_GROUP_SIZE: `glGetIntegeri_v` pointer NULL).
