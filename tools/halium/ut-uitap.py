@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""dev-uitap.py X Y [X Y ...]: taps at screen pixels (720x1560) through a temporary uinput touchscreen (root)."""
+"""ut-uitap.py X Y [X Y ...]: taps at screen pixels (720x1560) through a temporary uinput touchscreen (root); an argument X1,Y1>X2,Y2 swipes instead (one argument, not a pair)."""
 import fcntl, os, struct, sys, time
 W, H = 720, 1560
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045565, 0x40045567, 0x4004556e
@@ -19,14 +19,26 @@ os.write(fd, struct.pack('80sHHHHI', b'apklayer-test-touch', 3, 1, 2, 1, 0) + st
 fcntl.ioctl(fd, UI_DEV_CREATE)
 time.sleep(1.0)
 def ev(t, c, v): os.write(fd, struct.pack('llHHi', 0, 0, t, c, v))
-args = [int(a) for a in sys.argv[1:]]
-for i in range(0, len(args), 2):
-    x, y = args[i], args[i + 1]
-    ev(EV_ABS, ABS_MT_SLOT, 0); ev(EV_ABS, ABS_MT_TRACKING_ID, i + 1)
+args = sys.argv[1:]
+nums = [a for a in args if '>' not in a]
+def tap(x, y, n):
+    ev(EV_ABS, ABS_MT_SLOT, 0); ev(EV_ABS, ABS_MT_TRACKING_ID, n)
     ev(EV_ABS, ABS_MT_POSITION_X, x); ev(EV_ABS, ABS_MT_POSITION_Y, y)
     ev(EV_ABS, ABS_X, x); ev(EV_ABS, ABS_Y, y); ev(EV_KEY, BTN_TOUCH, 1); ev(EV_SYN, 0, 0)
-    time.sleep(0.1)
+def move(x, y):
+    ev(EV_ABS, ABS_MT_POSITION_X, x); ev(EV_ABS, ABS_MT_POSITION_Y, y); ev(EV_ABS, ABS_X, x); ev(EV_ABS, ABS_Y, y); ev(EV_SYN, 0, 0)
+def lift():
     ev(EV_ABS, ABS_MT_TRACKING_ID, -1); ev(EV_KEY, BTN_TOUCH, 0); ev(EV_SYN, 0, 0)
-    time.sleep(0.6)
+i, n = 0, 1
+while i < len(args):
+    if '>' in args[i]:
+        (x1, y1), (x2, y2) = [[int(v) for v in p.split(',')] for p in args[i].split('>')]
+        tap(x1, y1, n); time.sleep(0.05)
+        for k in range(1, 13):
+            move(x1 + (x2 - x1) * k // 12, y1 + (y2 - y1) * k // 12); time.sleep(0.02)
+        lift(); time.sleep(0.6); i += 1
+    else:
+        tap(int(args[i]), int(args[i + 1]), n); time.sleep(0.1); lift(); time.sleep(0.6); i += 2
+    n += 1
 fcntl.ioctl(fd, UI_DEV_DESTROY)
 os.close(fd)
