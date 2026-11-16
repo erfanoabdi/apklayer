@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <optional>
@@ -535,6 +536,9 @@ static void lomiriScale() {
 }
 
 int main(int argc, char** argv) {
+    // Lomiri starts a click's app in the click's own version directory, which its update removes under the running manager: every program the
+    // manager then ran (the CLI's JVM: "Could not determine current working directory") failed (the X23, 2026-11-16)
+    if (char cwd[4096]; getcwd(cwd, sizeof cwd) && strncmp(cwd, "/opt/click.ubuntu.com/", 22) == 0) { const char* home = getenv("HOME"); if (chdir(home && *home ? home : "/") != 0) perror("chdir"); }
     lomiriScale();
     Cli cli(Cli::locate());
     if (const char* id = getenv("APKLAYER_INSTANCE"); id && *id) cli.instance = id;
