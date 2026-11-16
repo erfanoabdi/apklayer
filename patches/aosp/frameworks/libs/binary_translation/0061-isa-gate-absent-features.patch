@@ -350,7 +350,7 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    if ((code & entry.mask) == entry.value) return true;
 +  }
 +  // LDP / LDPSW with Rt == Rt2 (CONSTRAINED UNPREDICTABLE; every arm64 core measured raises SIGILL): pair load, not LDNP, opc != 11
-+  if (((code >> 27) & 7) == 5 && ((code >> 26) & 1) == 0 && ((code >> 22) & 1) == 1 && ((code >> 23) & 7) != 0 && ((code >> 30) & 3) != 3 &&
++  if (((code >> 27) & 7) == 5 && ((code >> 26) & 1) == 0 && ((code >> 25) & 1) == 0 && ((code >> 23) & 3) != 0 && ((code >> 22) & 1) == 1 && ((code >> 30) & 3) != 3 &&
 +      (code & 0x1f) == ((code >> 10) & 0x1f)) {
 +    return true;
 +  }
