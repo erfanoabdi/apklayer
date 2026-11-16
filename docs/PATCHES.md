@@ -92,6 +92,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 | frameworks/av/0002-mediametrics-vendor-visibility | libmediametrics visible to vendor/apklayer |
 | frameworks/av/0004-audiopolicy-call-audio-activity | the audio policy service answers a private transaction (system uid only): per uid, a started voice communication player / unsilenced recorder (what AudioService's activity monitors give; HubCallAudio) |
 | frameworks/base/0001-media-player-native-parcels | MediaPlayer JNI: callback Parcels from apklayer NativeParcel |
+| frameworks/base/0002-settingsprovider-ssaid-by-package-uid | SettingsProvider: the SSAID lookup keyed by the package uid, not the (isolated) caller uid |
 | frameworks/native/0001-libbinder-no-security-context | libbinder without kernel security contexts |
 | frameworks/native/0002-no-system-server-clients | ActivityManager and SensorPrivacyManager clients without system_server |
 | frameworks/native/0003-vulkan-host-dispatch | libvulkan keeps the host loader dispatch pointers |
