@@ -1,0 +1,25 @@
+// Who in the guest creates files (openat with O_CREAT, raw svc or libc): guest pc, x30 and the frame chain, to map ACE's writes (fake_uiui.dat at +4 s,
+// ano_app_915c.dat, ac_tmp, config2) to libanogs.so offsets. The path's tail is printed (the guest spells /data/user/0/<pkg>/files/ano_tmp/...).
+// Run: sudo tools/ace/trace.sh ace-creat.bt out.txt   (--unsafe: the maps of the process are copied to /tmp/ace-maps-<pid>.txt at the first event)
+// Offsets: libanogs.so file offset = guest address - the base of its first mapping in /tmp/ace-maps-<pid>.txt (the segment's file offset added).
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+{
+  $s = (uint64)arg0;
+  $nr = *(uint64 *)($s + 0x40);
+  if ($nr == 56 && (*(uint64 *)($s + 0x10) & 0x40)) {  // openat: x1 path, x2 flags; 0x40 = O_CREAT
+    $p = *(uint64 *)($s + 0x08);
+    printf("CREAT %lu tid %d pc 0x%lx x30 0x%lx %s\n", elapsed / 1000000, tid, *(uint64 *)($s + 0x100), *(uint64 *)($s + 0xf0), str($p + 20));
+    $fp = *(uint64 *)($s + 0xe8);
+    $i = 0;
+    while ($i < 6) {
+      if ($fp == 0) { break; }
+      printf("   frame %d ret 0x%lx\n", $i, *(uint64 *)($fp + 8));
+      $fp = *(uint64 *)$fp;
+      $i++;
+    }
+    if (@maps[pid] == 0) { @maps[pid] = 1; system("cat /proc/%d/maps >/tmp/ace-maps-%d.txt", pid, pid); }
+  }
+}
+
+END { clear(@maps); }

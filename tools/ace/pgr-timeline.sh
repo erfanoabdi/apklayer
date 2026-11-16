@@ -18,16 +18,16 @@ sd sysctl -q -w kernel.core_pattern='|/bin/true'
 mkdir -p "$WORK/ace-before-$N" "$WORK/ace-after-$N"
 for f in "$F"/ano_tmp "$F"/ace_shell_di.dat "$F"/ano_app_* "$F"/fake_* "$F"/atti_*; do [ -e "$f" ] && mv "$f" "$WORK/ace-before-$N/"; done
 OUT=$WORK/timeline-$N.txt; : > "$OUT"
-export BPFTRACE_MAX_STRLEN=200
-sd env BPFTRACE_MAX_STRLEN=200 bpftrace "$WORK/timeline.bt" > "$OUT" 2>&1 &
-grep -m1 -q -e READY -e ERROR < <(tail -f -n0 "$OUT")
-if grep -q ERROR "$OUT"; then cat "$OUT"; sd sysctl -q -w kernel.core_pattern="$(cat "$WORK/core-pattern-saved")"; exit 1; fi
+# STRLEN=200 for an old bpftrace (default 64, the tester PC); bpftrace 0.25 (AWS) has a long default and fails to load with the variable set
+sd env ${STRLEN:+BPFTRACE_MAX_STRLEN=$STRLEN} bpftrace "$WORK/timeline.bt" > "$OUT" 2>&1 &
+grep -m1 -q -i -e READY -e error < <(tail -f -n+1 "$OUT")
+if grep -q -i error "$OUT"; then cat "$OUT"; sd sysctl -q -w kernel.core_pattern="$(cat "$WORK/core-pattern-saved")"; exit 1; fi
 S=$(date +%s.%N)
 APKLAYER_JOPTS=-Dapklayer.runms=$RUNMS $APKLAYER --instance "$INST" run $PKG > "$WORK/run-$N.log" 2>&1; rc=$?
 echo "run $N rc=$rc wall $(echo "$(date +%s.%N) - $S" | bc)"
 $APKLAYER --instance "$INST" stop >/dev/null 2>&1
 sd pkill -INT -f "[b]pftrace $WORK/timeline.bt"
-pkill -f "[t]ail -f -n0 $OUT"
+pkill -f "[t]ail -f -n+1 $OUT"
 cp -a "$F"/ano_tmp "$F"/ace_shell_di.dat "$F"/ano_app_* "$F"/fake_* "$F"/atti_* "$WORK/ace-after-$N/" 2>/dev/null
 sd sysctl -q -w kernel.core_pattern="$(cat "$WORK/core-pattern-saved")"
 echo "core_pattern now: $(cat /proc/sys/kernel/core_pattern)"
