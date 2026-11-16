@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: PGR maps lead: dump knob for the served /proc/self/maps (patch 0049), build log
+
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock -n ~/los24-build.lock`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: the maps text the guest reads can only be compared with native if it is captured; edit: kernel_api/open_emulation.cc only (`berberis.dump_maps=<dir>` / BERBERIS_DUMP_MAPS writes each served maps text to `<dir>/maps-<pid>-<n>.txt`; default off). Measured before: ACE reads maps in ~1 KiB pieces: translated 252-278 KB, native (AWS) 295-319 KB, so the translated text is smaller, not longer.
+
 ## 2026-11-16: PGR A/B on the tester copy: runtime layout, CPU count, splits (none of them is the cause; death time scales with CPU speed)
 
 - Copy instance `envtest` in a private home (microG only, PGR app + data copy, ACE files reset each run; `tools/ace/pgr-timeline.sh`, true death = EXIT, seconds after the game's first open; run limit 75 s). EXIT times in seconds, `alive` = still running at the limit:
