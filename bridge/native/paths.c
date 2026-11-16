@@ -673,6 +673,42 @@ static int desktop_root_path(const char *path)
     return 0;
 }
 
+/* apklayer patch: an x86_64 host's CPU frequency and capacity files. The arm64 guest runs on a desktop CPU: cpuinfo_max_freq reads 4470508 kHz for every one of
+ * 12 cpus and cpu_capacity 1024 for all, which no phone has; Tencent ACE (PGR) and Unity's CPU topology code read them hundreds of times. ENOENT, as on an aarch64
+ * virtual machine (the AWS host, where PGR runs for hours): the cpufreq directories (/sys/devices/system/cpu/cpu<N>/cpufreq, /sys/devices/system/cpu/cpufreq/policy<N>,
+ * also under /sys/bus/cpu/devices), cpu<N>/cpu_capacity, the x86 drivers' amd_pstate/intel_pstate/intel_uncore_frequency, cpu<N>/microcode and acpi_cppc, for an app
+ * process (own data set) on x86_64 hosts only: an aarch64 host's are a device's own. Measured alone it does not stop ACE's verdict on the tester PC (CHANGELOG
+ * 2026-11-16). APKLAYER_CPUFREQ_VIEW=host (config cpufreq-view) turns it off. */
+static int desktop_cpu_path(const char *path)
+{
+#if defined(__x86_64__)
+    const char *r;
+    bool system_cpu = !strncmp(path, "/sys/devices/system/cpu/", 24);
+    if (system_cpu) r = path + 24;
+    else if (!strncmp(path, "/sys/bus/cpu/devices/", 21)) r = path + 21;
+    else return 0;
+    if (!__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
+    static int host_view = -1;
+    if (host_view < 0) { const char *v = getenv("APKLAYER_CPUFREQ_VIEW"); host_view = v && !strcmp(v, "host"); }
+    if (host_view) return 0;
+    if (system_cpu) {  /* the policies (/sys/devices/system/cpu/cpufreq/policy<N>) and the x86 CPUs' frequency drivers (their names say AMD or Intel) */
+        static const char *const x86[] = {"cpufreq", "amd_pstate", "intel_pstate", "intel_uncore_frequency", NULL};
+        for (int i = 0; x86[i]; i++) {
+            size_t n = strlen(x86[i]);
+            if (!strncmp(r, x86[i], n) && (!r[n] || r[n] == '/')) return 1;
+        }
+    }
+    if (strncmp(r, "cpu", 3) || r[3] < '0' || r[3] > '9') return 0;
+    r += 3;
+    while (*r >= '0' && *r <= '9') r++;
+    if (*r++ != '/') return 0;
+    return (!strncmp(r, "cpufreq", 7) && (!r[7] || r[7] == '/')) || !strcmp(r, "cpu_capacity") || !strncmp(r, "microcode", 9) || !strncmp(r, "acpi_cppc", 9);
+#else
+    (void)path;
+    return 0;
+#endif
+}
+
 /* apklayer patch: Android paths an app can stat and this machine has no file for, as stand-ins in the instance's data (made on first use, once). /data/local/tmp is
  * Android's, empty and writable; /system/bin/app_process64 (and 32) is the ELF stand-in of /proc/self/exe (proc_view.c); /data/dalvik-cache and /vendor/lib64
  * are empty directories; /dev/socket/zygote is a bound unix socket nobody listens on; /system/framework/framework.jar links to the Robolectric framework jar
@@ -840,7 +876,7 @@ bool apklayer_apply_path_overrides(char **path)
         *path = mapped;
         return true;
     }
-    if (apklayer_proc_hidden(*path) || other_package_path(*path) || other_scoped_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
+    if (apklayer_proc_hidden(*path) || other_package_path(*path) || other_scoped_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path) || desktop_root_path(*path) || desktop_cpu_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
         char *gone = strdup("/proc/.apklayer-hidden");
         if (gone) { *path = gone; return true; }
     }

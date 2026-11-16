@@ -22,6 +22,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 | `permissions` | `APKLAYER_PERMISSIONS` | ask | grant: every runtime permission an app requests is granted without the prompt | yes |
 | `proc-view` | `APKLAYER_PROC_VIEW` | app | host: /proc as the host has it, not only the app's own processes | yes |
 | `etc-view` | `APKLAYER_ETC_VIEW` | app | host: the host's /etc | yes |
+| `cpufreq-view` | `APKLAYER_CPUFREQ_VIEW` | app | host: the host's /sys/devices/system/cpu/cpu<N>/cpufreq and cpu_capacity files (x86_64 hosts: apps see none by default) | yes |
 | `pts-view` | `APKLAYER_PTS_VIEW` | app | host: all of the host's terminals | yes |
 | `raw-syscall-view` | `APKLAYER_RAW_SYSCALL_VIEW` | on | off: an app's own system calls see the host's /proc, /etc and identity | yes |
 | `webview-provider` | `APKLAYER_WEBVIEW_PROVIDER` | Chromium when installed | none, or the package of a provider | yes |

@@ -1,0 +1,114 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] the guest's kernel identity: /proc/version, /proc/sys/kernel/arch, uname release and version
+
+/proc/version names the host's compiler ("x86_64-linux-gnu-gcc") and /proc/sys/kernel/arch says "x86_64" while the guest's uname says aarch64 (Unity's SystemInfo.processorType read "x86-64" under translation on the tester PC and "ARM64" on the aarch64 host). The guest's open of /proc/version gets the host's text with x86_64/amd64 spelled aarch64/arm64, or, with berberis.kernel.release and berberis.kernel.version set (properties, or BERBERIS_KERNEL_RELEASE/VERSION), a device kernel's "Linux version <release> (android-build@abfarm-release-rbe-64) (Android clang version 12.0.5) <version>"; /proc/sys/kernel/arch is "aarch64"; /proc/sys/kernel/osrelease and version are the properties when set; uname's release and version follow them. BERBERIS_SHOW_HOST_MAPS turns it off. kernel_api/open_emulation.cc (OpenKernelIdentityForGuest), arm64/syscall_emulation.cc. Module libberberis_arm64.
+
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -21,6 +21,7 @@
+ #include <fcntl.h>
+ #include <sys/stat.h>
+ #include <sys/syscall.h>  // apklayer patch (0014): __NR_getdents64
++#include <sys/utsname.h>  // apklayer patch (0047)
+ #include <unistd.h>
+ 
+ #include <cerrno>
+@@ -38,6 +39,7 @@
+ #include "berberis/base/arena_map.h"
+ #include "berberis/base/arena_string.h"
+ #include "berberis/base/arena_vector.h"
++#include "berberis/base/config_globals.h"  // apklayer patch (0047): ConfigStr
+ #include "berberis/base/checks.h"
+ #include "berberis/base/fd.h"
+ #include "berberis/base/forever_alloc.h"
+@@ -669,6 +671,58 @@
+   return mem_fd;
+ }
+ 
++// apklayer patch (0047): the guest's kernel identity. The host's /proc/version names its compiler ("x86_64-linux-gnu-gcc") and /proc/sys/kernel/arch says
++// "x86_64" while the guest's uname says aarch64 (an anti-cheat reads them: Unity's SystemInfo.processorType read "x86-64" under translation).
++// - /proc/version: the host's text with x86_64/amd64 spelled aarch64/arm64; with `berberis.kernel.release` (and `berberis.kernel.version`, the "#1 SMP ..."
++//   build string; properties, or BERBERIS_KERNEL_RELEASE/BERBERIS_KERNEL_VERSION) a device kernel's: "Linux version <release> (android-build@abfarm) (Android
++//   clang version 12.0.5) <version>".
++// - /proc/sys/kernel/arch: "aarch64"; /proc/sys/kernel/osrelease and /proc/sys/kernel/version: the two properties when set.
++// uname's release and version follow the same properties (arm64/syscall_emulation.cc). BERBERIS_SHOW_HOST_MAPS turns it off.
++// Returns a memfd for a path of this set opened for reading, else -1 with errno 0.
++int OpenKernelIdentityForGuest(const char* path, int host_flags) {
++  static const bool show_host = berberis::HostGetenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  errno = 0;
++  if (show_host || path == nullptr || strncmp(path, "/proc/", 6) != 0 || (host_flags & O_ACCMODE) != O_RDONLY) return -1;
++  const char* leaf = path + 6;
++  static ConfigStr release_prop("BERBERIS_KERNEL_RELEASE", "berberis.kernel.release");
++  static ConfigStr version_prop("BERBERIS_KERNEL_VERSION", "berberis.kernel.version");
++  const char* release = release_prop.get();
++  const char* version = version_prop.get();
++  if (release != nullptr && release[0] == '\0') release = nullptr;
++  if (version != nullptr && version[0] == '\0') version = nullptr;
++  std::string text;
++  if (strcmp(leaf, "version") == 0) {
++    struct utsname uts;
++    if (release != nullptr && uname(&uts) == 0) {
++      text = std::string("Linux version ") + release + " (android-build@abfarm-release-rbe-64) (Android clang version 12.0.5) " + (version != nullptr ? version : uts.version) + "\n";
++    } else {
++      int fd = open("/proc/version", O_RDONLY | O_CLOEXEC);
++      if (fd < 0) return -1;
++      char buf[1024];
++      ssize_t n = read(fd, buf, sizeof(buf) - 1);
++      close(fd);
++      if (n <= 0) return -1;
++      text.assign(buf, static_cast<size_t>(n));
++      for (const auto& [from, to] : {std::pair<const char*, const char*>{"x86_64", "aarch64"}, {"amd64", "arm64"}}) {
++        for (size_t at = text.find(from); at != std::string::npos; at = text.find(from, at + strlen(to))) text.replace(at, strlen(from), to);
++      }
++    }
++  } else if (strcmp(leaf, "sys/kernel/arch") == 0) {
++    text = "aarch64\n";
++  } else if (strcmp(leaf, "sys/kernel/osrelease") == 0 && release != nullptr) {
++    text = std::string(release) + "\n";
++  } else if (strcmp(leaf, "sys/kernel/version") == 0 && version != nullptr) {
++    text = std::string(version) + "\n";
++  } else {
++    return -1;
++  }
++  int mem_fd = CreateMemfdOrDie("[guest kernel identity]");
++  WriteFullyOrDie(mem_fd, text.c_str(), text.size());
++  lseek(mem_fd, 0, 0);
++  return mem_fd;
++}
++
++
+ // In zygote this is not needed because native bridge is mounting
+ // /proc/cpuinfo to point to the emulated version. But for executables
+ // this does not happen and they end up reading host cpuinfo.
+@@ -829,6 +883,9 @@
+     }
+     return OpenAttrCurrentForGuest();
+   }
++  if (const int kernel_fd = OpenKernelIdentityForGuest(path, host_flags); kernel_fd >= 0) {  // apklayer patch (0047)
++    return kernel_fd;
++  }
+   if (IsProcSelfMaps(path, host_flags, "/proc/self/status")) {  // apklayer patch (0017): /proc/<own pid>/status is the same inode
+     return OpenatProcSelfStatusForGuest(dirfd, host_flags, mode);
+   }
+diff --git a/kernel_api/arm64/syscall_emulation.cc b/kernel_api/arm64/syscall_emulation.cc
+--- a/kernel_api/arm64/syscall_emulation.cc
++++ b/kernel_api/arm64/syscall_emulation.cc
+@@ -422,6 +422,17 @@
+     if (r == 0) {
+       strncpy(uts.machine, "aarch64", sizeof(uts.machine) - 1);
+       uts.machine[sizeof(uts.machine) - 1] = '\0';
++      // apklayer patch (0047): a device kernel's release and build string, when the properties name them (open_emulation.cc /proc/version)
++      static ConfigStr kernel_release("BERBERIS_KERNEL_RELEASE", "berberis.kernel.release");
++      static ConfigStr kernel_version("BERBERIS_KERNEL_VERSION", "berberis.kernel.version");
++      if (kernel_release.get() != nullptr && kernel_release.get()[0] != '\0') {
++        strncpy(uts.release, kernel_release.get(), sizeof(uts.release) - 1);
++        uts.release[sizeof(uts.release) - 1] = '\0';
++      }
++      if (kernel_version.get() != nullptr && kernel_version.get()[0] != '\0') {
++        strncpy(uts.version, kernel_version.get(), sizeof(uts.version) - 1);
++        uts.version[sizeof(uts.version) - 1] = '\0';
++      }
+       *ToHostAddr<struct utsname>(state->cpu.x[0]) = uts;
+       state->cpu.x[0] = 0;
+     } else {

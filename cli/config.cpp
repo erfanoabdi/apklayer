@@ -31,6 +31,8 @@ const Setting kSettings[] = {
      "app: only the app's own processes; host: the whole host's, as it is", true},
     {"etc-view", "APKLAYER_ETC_VIEW", "choice", "app", "app,host", "", "/etc seen by apps", "app: an Android-like /etc; host: the host's", true},
     {"pts-view", "APKLAYER_PTS_VIEW", "choice", "app", "app,host", "", "/dev/pts seen by apps", "app: only the terminals the app opened; host: all", true},
+    {"cpufreq-view", "APKLAYER_CPUFREQ_VIEW", "choice", "app", "app,host", "", "CPU frequency files seen by apps",
+     "app: none on an x86_64 host (a desktop CPU's frequencies and capacities are not a phone's); host: the host's cpufreq and cpu_capacity files", true},
     {"raw-syscall-view", "APKLAYER_RAW_SYSCALL_VIEW", "choice", "on", "on,off", "", "Raw system calls",
      "on: system calls an app makes itself see the same /proc, /etc and identity as its library calls; off: the host's", true},
     {"webview-provider", "APKLAYER_WEBVIEW_PROVIDER", "text", "", "", "", "WebView provider",
