@@ -1,0 +1,20 @@
+// Translated side only: the path syscalls the GUEST issues with its own svc (ACE's), before the path layer and the emulation, with the guest's x0 result.
+// Same line format as ace-fsdiff.bt ("P ns tid name path", "X ns tid ret", "@gc[name, path]"), names = the arm64 syscall names. @BRIDGE@ = libberberis_arm64.so (pgr-timeline.sh).
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE / @g[pid] /
+{
+  $s = (uint64)arg0; $nr = *(uint64 *)($s + 0x40);
+  if ($nr == 56 || $nr == 437 || $nr == 48 || $nr == 439 || $nr == 79 || $nr == 291 || $nr == 78) {
+    $k = str(*(uint64 *)($s + 0x08)); @gst[tid] = $s;
+    @gc[$nr, $k]++;
+    if (@gc[$nr, $k] <= 10) { @gpr[tid] = 1; printf("GP %lu %d %d %s\t%s\n", nsecs, tid, $nr, $k, comm); }
+  } else if ($nr == 43 || $nr == 8 || $nr == 9) {
+    $k = str(*(uint64 *)($s)); @gst[tid] = $s;
+    @gc[$nr, $k]++;
+    if (@gc[$nr, $k] <= 10) { @gpr[tid] = 1; printf("GP %lu %d %d %s\t%s\n", nsecs, tid, $nr, $k, comm); }
+  }
+}
+uretprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE / @gpr[tid] /
+{ printf("GX %lu %d %d\n", nsecs, tid, *(int64 *)(@gst[tid])); delete(@gpr[tid]); delete(@gst[tid]); }
+
+END { clear(@g); clear(@pr); clear(@gpr); clear(@gst); }
