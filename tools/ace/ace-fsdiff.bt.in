@@ -1,0 +1,26 @@
+// Path-level filesystem diff of the game process (all threads), native arm64 vs translated x86_64, from the HOST kernel's raw_syscalls.
+// Output (at exit, bpftrace prints the maps): @res[nr,path,-errno|0]=count, @mode[nr,path] (st_mode), @size[nr,path].
+// Generated per arch by tools/ace/mk-fsdiff.sh from this template (syscall id lists, struct stat offsets). No printf per event.
+config = { max_map_keys = 65536 }
+
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; }
+
+tracepoint:raw_syscalls:sys_enter / @g[pid] && (@IDS1@) /
+{ @nr[tid] = args->id; @pp[tid] = args->args[1]; @b[tid] = args->args[2]; if (args->id == 291 || args->id == 332) { @b[tid] = args->args[4]; } }
+tracepoint:raw_syscalls:sys_enter / @g[pid] && (@IDS0@) /
+{ @nr[tid] = args->id; @pp[tid] = args->args[0]; @b[tid] = args->args[1]; }
+
+// one map per probe: the BPF stack (512 B) cannot hold two path keys
+tracepoint:raw_syscalls:sys_exit / @g[pid] && @nr[tid] /
+{ $e = args->ret; if ($e >= 0) { $e = 0; } @res[@nr[tid], str(@pp[tid]), $e] = count(); }
+tracepoint:raw_syscalls:sys_exit / @g[pid] && @nr[tid] && args->ret >= 0 && (@nr[tid] == 291 || @nr[tid] == 332) /
+{ @mode[@nr[tid], str(@pp[tid])] = max(*(uint16 *)(@b[tid] + 28)); }
+tracepoint:raw_syscalls:sys_exit / @g[pid] && @nr[tid] && args->ret >= 0 && (@nr[tid] == 291 || @nr[tid] == 332) /
+{ @size[@nr[tid], str(@pp[tid])] = max(*(uint64 *)(@b[tid] + 40)); }
+tracepoint:raw_syscalls:sys_exit / @g[pid] && @nr[tid] && args->ret >= 0 && (@nr[tid] == @STATIDS@) /
+{ @mode[@nr[tid], str(@pp[tid])] = max(*(uint32 *)(@b[tid] + @MODEOFF@)); }
+tracepoint:raw_syscalls:sys_exit / @g[pid] && @nr[tid] && args->ret >= 0 && (@nr[tid] == @STATIDS@) /
+{ @size[@nr[tid], str(@pp[tid])] = max(*(uint64 *)(@b[tid] + 48)); }
+tracepoint:raw_syscalls:sys_exit / @g[pid] && @nr[tid] /
+{ delete(@nr[tid]); delete(@pp[tid]); delete(@b[tid]); }
+END { clear(@g); clear(@nr); clear(@pp); clear(@b); }
