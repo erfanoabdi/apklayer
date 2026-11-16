@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-17: PGR agent GATE: call-gate trace, translated vs native (patch 0071), build log
+
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: the invalid-free storm is ACE's payload freeing its block list twice; the first behavioural difference is in the sequence of gate calls (libanogs +0x1f5200, callee x1, argument x2), which only a per-call log shows on the translated route (native: bpftrace uprobes). Edit: `runtime/arm64/gate_trace.h` (new, header only), `runtime/arm64/translator_x86_64.cc` and `runtime_primitives/host_function_wrapper_impl.cc` (callee names, weak seam); off unless `BERBERIS_TRACE_GATE=<dir>`.
+
 ## 2026-11-16: binary_translation series repair, 0052 exported, 0063 (DigitalisX64 e680eae6 code window, knob off); preload arm64 status view
 - Upstream check (DigitalisX64 android17 after our REVISION abefbe2b: only e680eae6; its android16 line and kuloPo's branches): every commit that matches PGR's symptoms is already in (guest ucontext on the guest stack, the guest's own JNIEnv table, TLS headroom above the guest stack, free quarantine 1 MiB = 0022, TBI); e680eae6 imported as 0063 behind `berberis.code_window=on`.
 - The series did not rebuild the shipped translator from abefbe2b (0020 vs 0010's cpuid edit; 0061 on an unexported ID-register edit; 0061/0062 headers): repaired, see commit 11d1d947 and docs/PATCHES.md 0052.
