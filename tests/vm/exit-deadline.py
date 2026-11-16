@@ -62,7 +62,7 @@ try:
     if CASE == 'spare':
         first, lines, jvm = launch()
         instance.wait_file(Path(LOGDIR) / 'app-spare.log', 'spare: preloaded', 90)  # the spare this launch started is ready
-        spare = next(p for r in Path(LOGDIR).glob('run.*') for p in [[int(x) for x in r.read_text().split()]] if len(p) == 2 and p[1] == int(r.name[4:]))
+        spare = next(p for r in Path(LOGDIR).glob('run.*') for p in [[int(x) for x in r.read_text().split()[:2] if x.isdigit()]] if len(p) == 2 and p[1] == int(r.name[4:]))
         end(first, jvm, lines)
         for pid in spare: os.kill(pid, signal.SIGTERM)
         run, lines, jvm = launch()
