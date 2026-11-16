@@ -1,5 +1,6 @@
 /* Harness and entry points (see atomics.h). */
 #include "atomics.h"
+#include <time.h>
 int NT = 4, PIN = 0; long IT = 20000; const char *ONLY; static int fails, ncpu = 1;
 static char rep[1 << 16];
 
@@ -12,9 +13,17 @@ void say(const char *fmt, ...)
 void result(const char *name, long bad, const char *fmt, ...)
 {
     char d[300]; va_list ap; va_start(ap, fmt); vsnprintf(d, sizeof d, fmt, ap); va_end(ap);
-    say("RES %-30s %s %s\n", name, bad ? "FAIL" : "PASS", d); if (bad) fails++;
+    struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); long ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;   /* ms since the previous result: the test's own time */
+    static long last; long took = last ? ms - last : 0; last = ms;
+    say("RES %-30s %s %s [%ldms]\n", name, bad ? "FAIL" : "PASS", d, took); if (bad) fails++;
 }
-int want(const char *name) { return !ONLY || strstr(name, ONLY); }
+int want(const char *name)
+{   /* ONLY: comma separated substrings; a leading "-" excludes */
+    if (!ONLY) return 1;
+    char b[256]; strncpy(b, ONLY, sizeof b - 1); b[sizeof b - 1] = 0; int any = 0, hit = 0;
+    for (char *t = strtok(b, ","); t; t = strtok(0, ",")) { if (*t == '-') { if (strstr(name, t + 1)) return 0; } else { any = 1; hit |= strstr(name, t) != 0; } }
+    return !any || hit;
+}
 int spin_ok(void) { return PIN < 2 && (PIN == 0 || NT <= ncpu) && NT <= ncpu; }
 
 static wfn curf; static pthread_barrier_t bar;
