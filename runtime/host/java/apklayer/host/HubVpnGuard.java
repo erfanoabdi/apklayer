@@ -24,8 +24,9 @@ import java.util.function.Consumer;
  */
 final class HubVpnGuard {
     private final Path dir;
-    private final Consumer<String> gone;  // the TUN lost its carrier: the interface name
-    private Process process;
+    private final Consumer<String> gone;  // "gone <if>": the TUN lost its carrier; "revoked <if>": its connection was deleted from outside
+    private Process process, pre;  // the VPN's guard; the protect-only server before it
+    private String preUnderlying;
     private OutputStream commands;
     private volatile String error;
     private volatile LocalServerSocket server;
@@ -37,6 +38,7 @@ final class HubVpnGuard {
     /** The TUN's descriptor (the caller closes it once it has parceled it). {@code teardown}: the command the guard runs when the VPN ends. */
     synchronized FileDescriptor start(String ifname, String underlying, boolean nonblock, List<String> teardown) throws IOException {
         Files.createDirectories(dir);
+        stopProtectOnly();
         Path sock = dir.resolve("hub.sock");
         Files.deleteIfExists(sock);
         LocalSocket listening = new LocalSocket();
@@ -73,7 +75,7 @@ final class HubVpnGuard {
                 for (String line; (line = out.readLine()) != null;) {
                     System.out.println("[apklayer-hub] vpn guard: " + line);
                     if (line.startsWith("error ")) { error = line.substring(6); closeServer(); }
-                    else if (line.startsWith("gone ") && process == mine) gone.accept(line.substring(5));
+                    else if ((line.startsWith("gone ") || line.startsWith("revoked ")) && process == mine) gone.accept(line);
                 }
             } catch (IOException ended) { /* the guard ended */ }
             if (error == null) error = "the VPN's guard ended";
@@ -88,8 +90,39 @@ final class HubVpnGuard {
         try { if (s != null) s.close(); } catch (IOException ignored) { /* closed */ }
     }
 
-    /** VpnService.protect(): the guard binds the socket to the underlying interface; whether it did. */
-    boolean protect(FileDescriptor socket) {
+    /** The protect server alone, for protect() before establish() (OpenVPN protects its transport socket first); {@code underlying} is the interface to bind to. */
+    private synchronized boolean ensureProtectOnly(String underlying) {
+        if (process != null) return true;  // the VPN's own guard serves
+        if (pre != null && pre.isAlive() && underlying.equals(preUnderlying)) return true;
+        stopProtectOnly();
+        try {
+            Files.createDirectories(dir);
+            Process p = new ProcessBuilder(System.getProperty("apklayer.cli"), "vpn-guard", "--protect-only", protectSocket().toString(), underlying).redirectErrorStream(true).start();
+            BufferedReader out = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String line;
+            while ((line = out.readLine()) != null && !line.startsWith("ready") && !line.startsWith("error")) { /* the JVM's signal-chaining warning, ... */ }
+            if (line == null || !line.startsWith("ready")) { p.destroyForcibly(); System.out.println("[apklayer-hub] vpn: protect server: " + line); return false; }
+            pre = p;
+            preUnderlying = underlying;
+            return true;
+        } catch (IOException failure) { System.out.println("[apklayer-hub] vpn: protect server: " + failure); return false; }
+    }
+
+    /** An app protected a socket before establish() (the protect-only server runs). */
+    synchronized boolean protectedBefore() { return pre != null && pre.isAlive(); }
+
+    /** The protect-only server ends (its stdin closes) before the VPN's guard takes the socket path over, and with the VPN. */
+    private synchronized void stopProtectOnly() {
+        Process p = pre;
+        pre = null;
+        if (p == null) return;
+        try { p.getOutputStream().close(); p.waitFor(5, TimeUnit.SECONDS); } catch (IOException | InterruptedException ignored) { /* gone */ }
+        p.destroyForcibly();
+    }
+
+    /** VpnService.protect(): the guard binds the socket to the underlying interface; whether it did. {@code before}: the interface to use when no VPN exists yet (else null). */
+    boolean protect(FileDescriptor socket, String before) {
+        if (process == null && (before == null || !ensureProtectOnly(before))) return false;
         try (LocalSocket guard = new LocalSocket()) {
             guard.connect(new LocalSocketAddress(protectSocket().toString(), LocalSocketAddress.Namespace.FILESYSTEM));
             guard.setFileDescriptorsForSend(new FileDescriptor[] {socket});
@@ -103,6 +136,7 @@ final class HubVpnGuard {
 
     /** The VPN ends: the guard runs its teardown and exits; the call returns once it has (or after 10 s). */
     synchronized void close() {
+        stopProtectOnly();
         Process mine = process;
         if (mine == null) return;
         process = null;

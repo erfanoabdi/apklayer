@@ -4,7 +4,8 @@
  * libraries it loads in one 4 GiB window (apklayer_guest_window_take, below); one seccomp-bpf filter turns the few syscalls that carry
  * identity into SIGSYS when the instruction pointer is in that window, and the handler answers them through the views the libc path has
  * (syscall() of paths_preload.c: the path layer, the /proc projections; apklayer_app_uid and groups: paths.c). Host code (the JVM, glibc, bionic's libc here)
- * is outside the window: the filter costs it one compare. Only the app process (APKLAYER_OWN_DATA) gets the window; x86_64 hosts translate
+ * is outside the window: the filter costs it one compare. mkdirat/unlinkat/bind/connect (a Go runtime's, at /data/data/<pkg>) go to a second filter that
+ * answers by seccomp user notification instead of a signal (a supervisor thread, install_notify_filter below). Only the app process (APKLAYER_OWN_DATA) gets the window; x86_64 hosts translate
  * guest code, whose syscalls the translator already sees. APKLAYER_RAW_SYSCALL_VIEW=off turns it off. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -175,6 +176,90 @@ static int install_filter(unsigned long base)
     return raw(SYS_seccomp, SECCOMP_SET_MODE_FILTER, 0, &prog);  /* a thread with a filter of its own (TSYNC refuses): this thread and its children */
 }
 
+/* The syscalls that carry an Android path and must not run in a signal handler: a Go runtime's raw mkdirat/unlinkat/bind/connect (WireGuard's
+ * /data/data/<pkg>/cache/wireguard and its UAPI socket). A SIGSYS handler runs on the faulting thread's stack, and a Go cgo-callback thread has none to
+ * spare (no alternate stack, or Go's 32 KB one), which crashed the Go runtime. Seccomp user notification instead: the kernel parks the thread, a
+ * supervisor thread of this process (same fd table) does the call through the path layer and answers. Kernel 5.0+ (5.7 with the TSYNC flag); older
+ * kernels leave these calls unmapped as before. */
+#ifdef SECCOMP_RET_USER_NOTIF
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <sys/un.h>
+#ifndef SECCOMP_USER_NOTIF_FLAG_CONTINUE
+#define SECCOMP_USER_NOTIF_FLAG_CONTINUE (1UL << 0)
+#endif
+bool apklayer_unix_address(const struct sockaddr *a, socklen_t *len, struct sockaddr_un *out);
+
+static void *supervise(void *arg)
+{
+    int fd = (int)(long)arg;
+    struct seccomp_notif_sizes sizes;
+    if (syscall(SYS_seccomp, SECCOMP_GET_NOTIF_SIZES, 0, &sizes)) return NULL;
+    struct seccomp_notif *req = calloc(1, sizes.seccomp_notif);
+    struct seccomp_notif_resp *resp = calloc(1, sizes.seccomp_notif_resp);
+    if (!req || !resp) return NULL;
+    for (;;) {
+        memset(req, 0, sizes.seccomp_notif);
+        if (ioctl(fd, SECCOMP_IOCTL_NOTIF_RECV, req)) { if (errno == EINTR) continue; break; }
+        memset(resp, 0, sizes.seccomp_notif_resp);
+        resp->id = req->id;
+        const unsigned long long *a = req->data.args;
+        long nr = req->data.nr, r = 0;
+        bool carry = req->pid != (unsigned)getpid();  /* a forked child's call: its fd table is not ours; the kernel does it, unmapped */
+        if (!carry && (nr == __NR_bind || nr == __NR_connect)) {
+            struct sockaddr_un in = {0}, out;
+            socklen_t len = a[2] < sizeof in ? (socklen_t)a[2] : sizeof in;
+            struct iovec local = { &in, len }, remote = { (void *)a[1], len };
+            carry = process_vm_readv(getpid(), &local, 1, &remote, 1, 0) != (ssize_t)len || !apklayer_unix_address((struct sockaddr *)&in, &len, &out);
+            if (!carry) r = (nr == __NR_bind ? bind : connect)((int)a[0], (struct sockaddr *)&out, len) ? -errno : 0;
+        } else if (!carry) {
+            r = syscall(nr, a[0], a[1], a[2], a[3], a[4], a[5]);  /* paths_preload's syscall(): the path layer */
+            if (r < 0) r = -errno;
+        }
+        if (debug()) fprintf(stderr, "[raw-syscall] notified nr %ld pid %u (%d): %s %ld %s\n", nr, req->pid, getpid(), carry ? "kernel's" : "done", r, nr == __NR_mkdirat ? (char *)a[1] : "");
+        if (carry) resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+        else if (r < 0) resp->error = (int)r;
+        else resp->val = r;
+        ioctl(fd, SECCOMP_IOCTL_NOTIF_SEND, resp);  /* ENOENT: the caller was interrupted */
+    }
+    return NULL;
+}
+
+static void install_notify_filter(unsigned long base)
+{
+    static const int numbers[] = { __NR_mkdirat, __NR_unlinkat, __NR_bind, __NR_connect };
+    enum { N = sizeof numbers / sizeof *numbers };
+    struct sock_filter f[7 + N + 2];
+    int n = 0;
+    f[n++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, 4 /* arch */);
+    f[n++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
+    f[n++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+    f[n++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, 12 /* upper word of the instruction pointer */);
+    f[n++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (unsigned)(base >> 32), 1, 0);
+    f[n++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+    f[n++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, 0 /* nr */);
+    for (int i = 0; i < N; i++)  /* a match jumps to the last instruction */
+        f[n++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (unsigned)numbers[i], (unsigned char)(N - i), 0);
+    f[n++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+    f[n++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
+    struct sock_fprog prog = { .len = (unsigned short)n, .filter = f };
+    long (*raw)(long, ...) = REAL(syscall);
+    if (!raw) raw = syscall;
+    long fd = raw(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER | SECCOMP_FILTER_FLAG_TSYNC, &prog);
+    if (fd < 0) fd = raw(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER, &prog);
+    if (fd < 0) { if (debug()) fprintf(stderr, "[raw-syscall] no user notification (%s): raw mkdirat/bind keep the kernel's view\n", strerror(errno)); return; }
+    pthread_t t;
+    pthread_attr_t at;
+    pthread_attr_init(&at);
+    pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&t, &at, supervise, (void *)fd)) close((int)fd);
+    pthread_attr_destroy(&at);
+}
+#else
+static void install_notify_filter(unsigned long base) { (void)base; }
+#endif
+
 static void reserve_and_install(void)
 {
     window_tried = true;
@@ -198,6 +283,7 @@ static void reserve_and_install(void)
         window_base = 0;
         return;
     }
+    install_notify_filter(window_base);
     apklayer_raw_syscall_active = 1;
     if (debug()) fprintf(stderr, "[raw-syscall] guest libraries in %#lx..%#lx, raw syscalls viewed\n", window_base, window_base + WINDOW_SIZE);
 }
