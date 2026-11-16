@@ -61,7 +61,8 @@ public final class DynamicDexChecks {
                 if (loaded.getClassLoader() != dynamic || !last && !"first".equals(loaded.getMethod("run").invoke(null)))
                     throw new AssertionError("path DEX not defined by " + dynamic.getClass().getSimpleName());
                 if (last && dynamic.loadClass("payload.ParentContext").getClassLoader() != dynamic)
-                    throw new AssertionError("DelegateLastClassLoader took the parent's class before its own");
+                    throw new AssertionError("DelegateLastClassLoader took the parent's class before its own: "
+                            + dynamic.loadClass("payload.ParentContext").getClassLoader());
             }
         } finally {
             if (!apk.delete()) throw new AssertionError("could not remove path DEX fixture");
