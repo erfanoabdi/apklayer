@@ -76,7 +76,7 @@ diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/inter
 diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_features.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_features.h
 --- /dev/null
 +++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_features.h
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,283 @@
 +/*
 + * apklayer patch (0061): instructions of features the claimed CPU (berberis.cpuinfo profile pixel5: Kryo 475 Silver, a Cortex-A55-class ARMv8.2 core: no FCMA,
 + * JSCVT, FlagM, FRINT32/64, BF16, I8MM, SB, SSBS, DIT, PAuth, MTE, RNG, SHA3/SHA512/SM3/SM4, FHM, LRCPC2/3, LSE128, HBC, MOPS, CSSC, WFxT, DPB2) does not have, and the
@@ -169,11 +169,14 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    {0xfffffc00, 0x6e21f800},  // frint3264:frint64x R.4s, R.4s
 +    {0xffbffc5e, 0x1e294040},  // frint3264:frint64z R, R
 +    {0xfffffc00, 0x4e21f800},  // frint3264:frint64z R.4s, R.4s
-+    {0xffffffff, 0x5400007e},  // hbc:bc.al #I
-+    {0xffffffff, 0x54000050},  // hbc:bc.eq #I
-+    {0xffffffff, 0x54002018},  // hbc:bc.hi #I
-+    {0xffffffff, 0x5400003b},  // hbc:bc.lt #I
-+    {0xffffffff, 0x54ffff91},  // hbc:bc.ne #I
++    {0xff00001f, 0x5400001e},  // hbc:bc.al #I
++    {0xff00001f, 0x54000012},  // hbc:bc.cs #I
++    {0xff00001f, 0x54000010},  // hbc:bc.eq #I
++    {0xff00001f, 0x54000018},  // hbc:bc.hi #I
++    {0xff00001f, 0x5400001b},  // hbc:bc.lt #I
++    {0xff00001f, 0x54000014},  // hbc:bc.mi #I
++    {0xff00001f, 0x54000011},  // hbc:bc.ne #I
++    {0xff00001f, 0x54000016},  // hbc:bc.vs #I
 +    {0xffe0fc00, 0x4e80a400},  // i8mm:smmla R.4s, R.16b, R.16b
 +    {0xffffffff, 0x0f07f0c5},  // i8mm:sudot R.2s, R.8b, R.4b[0]
 +    {0xffffffff, 0x4f22f020},  // i8mm:sudot R.4s, R.16b, R.4b[1]
@@ -183,18 +186,16 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    {0xffe0fc00, 0x4e809c00},  // i8mm:usdot R.4s, R.16b, R.16b
 +    {0xffffffff, 0x4f82f820},  // i8mm:usdot R.4s, R.16b, R.4b[2]
 +    {0xffe0fc00, 0x4e80ac00},  // i8mm:usmmla R.4s, R.16b, R.16b
-+    {0xffffffe0, 0x1e7e0060},  // jscvt:fjcvtzs R, R
-+    {0xbfef8c00, 0x994f8000},  // lrcpc2:ldapur R, [R, #I]
-+    {0xfffffc00, 0xd9400000},  // lrcpc2:ldapur R, [R]
-+    {0xfffffc00, 0x19401000},  // lrcpc2:ldapurb R, [R, #I]
-+    {0xfffffc00, 0x59402000},  // lrcpc2:ldapurh R, [R, #I]
-+    {0xfffffc00, 0x19803000},  // lrcpc2:ldapursb R, [R, #I]
-+    {0xfffffc00, 0x59c04000},  // lrcpc2:ldapursh R, [R, #I]
-+    {0xfffffc00, 0x99808000},  // lrcpc2:ldapursw R, [R, #I]
-+    {0xfffffc00, 0x991fc000},  // lrcpc2:stlur R, [R, #I]
-+    {0xfffffc00, 0xd9000000},  // lrcpc2:stlur R, [R]
-+    {0xfffffc00, 0x19005000},  // lrcpc2:stlurb R, [R, #I]
-+    {0xfffffc00, 0x59006000},  // lrcpc2:stlurh R, [R, #I]
++    {0xfffffc00, 0x1e7e0000},  // jscvt:fjcvtzs R, R
++    {0xbfe00c00, 0x99400000},  // lrcpc2:ldapur R, [R]
++    {0xffe00c00, 0x19400000},  // lrcpc2:ldapurb R, [R]
++    {0xffe00c00, 0x59400000},  // lrcpc2:ldapurh R, [R]
++    {0xffa00c00, 0x19800000},  // lrcpc2:ldapursb R, [R]
++    {0xffa00c00, 0x59800000},  // lrcpc2:ldapursh R, [R]
++    {0xffe00c00, 0x99800000},  // lrcpc2:ldapursw R, [R]
++    {0xbfe00c00, 0x99000000},  // lrcpc2:stlur R, [R]
++    {0xffe00c00, 0x19000000},  // lrcpc2:stlurb R, [R]
++    {0xffe00c00, 0x59000000},  // lrcpc2:stlurh R, [R]
 +    {0xffe0fc00, 0x19800400},  // mops:cpyfe [R]!, [R]!, R!
 +    {0xffe0fc00, 0x19400400},  // mops:cpyfm [R]!, [R]!, R!
 +    {0xffe0fc00, 0x19000400},  // mops:cpyfp [R]!, [R]!, R!
@@ -222,23 +223,21 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    {0xffe0fc00, 0x9ac01400},  // mte:gmi R, R, R
 +    {0xfffffc00, 0x9adf1000},  // mte:irg R, R
 +    {0xffe0fc00, 0x9ac01000},  // mte:irg R, R, R
-+    {0xfffffc00, 0xd9601000},  // mte:ldg R, [R, #I]
-+    {0xfffffc00, 0xd9600000},  // mte:ldg R, [R]
++    {0xffffec00, 0xd9600000},  // mte:ldg R, [R]
 +    {0xfffffc00, 0xd9e00000},  // mte:ldgm R, [R]
 +    {0xfffffc00, 0xd9a00800},  // mte:st2g R, [R]
 +    {0xfffffc00, 0xd9a02400},  // mte:st2g R, [R], #I
-+    {0xfffffc00, 0xd9202800},  // mte:stg R, [R, #I]
-+    {0xfffffc00, 0xd9201c00},  // mte:stg R, [R, #I]!
-+    {0xfffffc00, 0xd9200800},  // mte:stg R, [R]
++    {0xffffdc00, 0xd9200800},  // mte:stg R, [R]
++    {0xfffffc00, 0xd9201c00},  // mte:stg R, [R]!
 +    {0xfffffc00, 0xd9201400},  // mte:stg R, [R], #I
 +    {0xfffffc00, 0xd9a00000},  // mte:stgm R, [R]
-+    {0xffff8000, 0x69808000},  // mte:stgp R, R, [R, #I]!
 +    {0xffff8000, 0x69000000},  // mte:stgp R, R, [R]
++    {0xffff8000, 0x69808000},  // mte:stgp R, R, [R]!
 +    {0xffff8000, 0x68808000},  // mte:stgp R, R, [R], #I
-+    {0xfffffc00, 0xd9e02800},  // mte:stz2g R, [R, #I]
-+    {0xfffffc00, 0xd9e03c00},  // mte:stz2g R, [R, #I]!
-+    {0xfffffc00, 0xd97ffc00},  // mte:stzg R, [R, #I]!
++    {0xfffffc00, 0xd9e02800},  // mte:stz2g R, [R]
++    {0xfffffc00, 0xd9e03c00},  // mte:stz2g R, [R]!
 +    {0xfffffc00, 0xd9600800},  // mte:stzg R, [R]
++    {0xfffffc00, 0xd97ffc00},  // mte:stzg R, [R]!
 +    {0xfffffc00, 0xd9200000},  // mte:stzgm R, [R]
 +    {0xfffffc00, 0xd1823c00},  // mte:subg R, R, #I, #I
 +    {0xffe0fc00, 0x9ac00000},  // mte:subp R, R, R
@@ -280,11 +279,10 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    {0xffffffe0, 0xdac127e0},  // pauth_dp:pacizb R
 +    {0xffffffe0, 0xdac147e0},  // pauth_dp:xpacd R
 +    {0xffffffe0, 0xdac143e0},  // pauth_dp:xpaci R
-+    {0xfffffc00, 0xf83ff400},  // pauth_ld:ldraa R, [R, #I]
-+    {0xfffffc00, 0xf8201c00},  // pauth_ld:ldraa R, [R, #I]!
-+    {0xfffffc00, 0xf8200400},  // pauth_ld:ldraa R, [R]
-+    {0xfffffc00, 0xf8ffec00},  // pauth_ld:ldrab R, [R, #I]!
++    {0xffe00c00, 0xf8200400},  // pauth_ld:ldraa R, [R]
++    {0xfffffc00, 0xf8201c00},  // pauth_ld:ldraa R, [R]!
 +    {0xfffffc00, 0xf8a00400},  // pauth_ld:ldrab R, [R]
++    {0xfffffc00, 0xf8ffec00},  // pauth_ld:ldrab R, [R]!
 +    {0xffffffe0, 0xd5087e40},  // priv_sys:dc cisw, R
 +    {0xffffffe0, 0xd5087a40},  // priv_sys:dc csw, R
 +    {0xffffffe0, 0xd5087640},  // priv_sys:dc isw, R
@@ -303,9 +301,9 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    {0xffe0fc00, 0x99400800},  // rcpc3_lse128:ldiapp R, R, [R], #I
 +    {0xffe0fc00, 0x19203000},  // rcpc3_lse128:ldsetp R, R, [R]
 +    {0xffe0fc00, 0x19a03000},  // rcpc3_lse128:ldsetpa R, R, [R]
-+    {0xffe0fc00, 0xd9000800},  // rcpc3_lse128:stilp R, R, [R, #I]!
 +    {0xffe0fc00, 0xd9001800},  // rcpc3_lse128:stilp R, R, [R]
-+    {0xfffffc00, 0xd9800800},  // rcpc3_lse128:stlr R, [R, #I]!
++    {0xffe0fc00, 0xd9000800},  // rcpc3_lse128:stilp R, R, [R]!
++    {0xfffffc00, 0xd9800800},  // rcpc3_lse128:stlr R, [R]!
 +    {0xffe0fc00, 0x19208000},  // rcpc3_lse128:swpp R, R, [R]
 +    {0xffe0fc00, 0x19a08000},  // rcpc3_lse128:swppa R, R, [R]
 +    {0xffe0fc00, 0x19e08000},  // rcpc3_lse128:swppal R, R, [R]
@@ -329,6 +327,12 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    {0xffffffff, 0xce47bcc5},  // sm3:sm3tt2b R.4s, R.4s, R.s[3]
 +    {0xfffffc00, 0xcec08400},  // sm4:sm4e R.4s, R.4s
 +    {0xffe0fc00, 0xce60c800},  // sm4:sm4ekey R.4s, R.4s, R.4s
++    {0xffffffff, 0xd503477f},  // sme_state:smstart
++    {0xffffffff, 0xd503437f},  // sme_state:smstart sm
++    {0xffffffff, 0xd503457f},  // sme_state:smstart za
++    {0xffffffff, 0xd503467f},  // sme_state:smstop
++    {0xffffffff, 0xd503427f},  // sme_state:smstop sm
++    {0xffffffff, 0xd503447f},  // sme_state:smstop za
 +    {0xffffffe1, 0xd53b42c0},  // ssbs:mrs R, ssbs
 +    {0xfffffeff, 0xd503403f},  // ssbs:msr ssbs, #I
 +    {0xffffffeb, 0xd51b42c1},  // ssbs:msr ssbs, R
@@ -346,7 +350,7 @@ diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/absent_feature
 +    if ((code & entry.mask) == entry.value) return true;
 +  }
 +  // LDP / LDPSW with Rt == Rt2 (CONSTRAINED UNPREDICTABLE; every arm64 core measured raises SIGILL): pair load, not LDNP, opc != 11
-+  if (((code >> 27) & 7) == 5 && ((code >> 26) & 1) == 0 && ((code >> 22) & 1) == 1 && ((code >> 23) & 7) != 0 && ((code >> 30) & 3) != 3 &&
++  if (((code >> 27) & 7) == 5 && ((code >> 26) & 1) == 0 && ((code >> 25) & 1) == 0 && ((code >> 23) & 3) != 0 && ((code >> 22) & 1) == 1 && ((code >> 30) & 3) != 3 &&
 +      (code & 0x1f) == ((code >> 10) & 0x1f)) {
 +    return true;
 +  }

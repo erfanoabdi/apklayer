@@ -23,7 +23,7 @@ def vec(fmt, arr):  # fmt with $a (arrangement) and v registers
 G = {}
 G['fcma'] = vec('fcmla v$0.$a, v$1.$a, v$2.$a, #0', ['4s', '2d', '8h', '4h', '2s']) + vec('fcmla v$0.$a, v$1.$a, v$2.$a, #270', ['4s']) + vec('fcadd v$0.$a, v$1.$a, v$2.$a, #90', ['4s', '2d', '8h']) + \
     vec('fcadd v$0.$a, v$1.$a, v$2.$a, #270', ['4s']) + ['fcmla v0.4s, v1.4s, v2.s[1], #90', 'fcmla v31.8h, v1.8h, v2.h[3], #0', 'fcmla v5.4s, v6.4s, v7.s[0], #270', 'fcmla v1.4h, v2.4h, v3.h[0], #180']
-G['jscvt'] = regs('fjcvtzs $w, d3')
+G['jscvt'] = ['fjcvtzs w0, d0', 'fjcvtzs w30, d31', 'fjcvtzs w5, d17', 'fjcvtzs w17, d9', 'fjcvtzs w1, d2']
 G['flagm'] = ['cfinv', 'setf8 w0', 'setf16 w5', 'setf8 w30', 'rmif x0, #3, #5', 'rmif x30, #63, #15', 'rmif x5, #0, #0']
 G['flagm2'] = ['axflag', 'xaflag']
 G['frint3264'] = vec('frint32z v$0.$a, v$1.$a', ['4s', '2s', '2d']) + vec('frint64x v$0.$a, v$1.$a', ['4s']) + vec('frint32x v$0.$a, v$1.$a', ['4s']) + vec('frint64z v$0.$a, v$1.$a', ['4s']) + \
@@ -55,11 +55,15 @@ G['sm3'] = vec('sm3ss1 v$0.4s, v$1.4s, v$2.4s, v$0.4s', ['x']) + vec('sm3partw1 
 G['sm4'] = vec('sm4e v$0.4s, v$1.4s', ['x']) + vec('sm4ekey v$0.4s, v$1.4s, v$2.4s', ['x'])
 G['fhm'] = vec('fmlal v$0.$a, v$1.$b, v$2.$b'.replace('$b', '2h'), ['2s']) + vec('fmlal v$0.4s, v$1.4h, v$2.4h', ['x']) + vec('fmlsl v$0.2s, v$1.2h, v$2.2h', ['x']) + vec('fmlsl2 v$0.4s, v$1.4h, v$2.4h', ['x']) + vec('fmlal2 v$0.2s, v$1.2h, v$2.2h', ['x']) + \
     ['fmlal v0.4s, v1.4h, v2.h[7]', 'fmlsl v31.2s, v30.2h, v15.h[0]', 'fmlal2 v0.4s, v1.4h, v2.h[3]', 'fmlsl2 v5.2s, v6.2h, v7.h[5]']
-G['lrcpc2'] = regs('ldapur $x, [$y]') + regs('ldapur $x, [$y, #-8]') + regs('ldapur $w, [$y, #255]') + regs('ldapurb $w, [$y, #1]') + regs('ldapurh $w, [$y, #2]') + regs('ldapursb $x, [$y, #3]') + regs('ldapursh $w, [$y, #4]') + regs('ldapursw $x, [$y, #8]') + \
-    regs('stlur $x, [$y]') + regs('stlur $w, [$y, #-4]') + regs('stlurb $w, [$y, #5]') + regs('stlurh $w, [$y, #6]')
+IM = ['0', '1', '-8', '255', '-256']
+G['lrcpc2'] = []
+for op, r in [('ldapur', 'x'), ('ldapur', 'w'), ('ldapurb', 'w'), ('ldapurh', 'w'), ('ldapursb', 'x'), ('ldapursb', 'w'), ('ldapursh', 'x'), ('ldapursh', 'w'), ('ldapursw', 'x'), ('stlur', 'x'), ('stlur', 'w'), ('stlurb', 'w'), ('stlurh', 'w')]:
+    for k, im in enumerate(IM):
+        G['lrcpc2'].append('%s %s%d, [x%d, #%s]' % (op, r, [0, 5, 17, 30, 3][k], [1, 9, 0, 30, 3][k], im))
 G['rcpc3_lse128'] = regs('ldiapp $x, $y, [$z]') + regs('stilp $x, $y, [$z]') + regs('ldiapp $w, $u, [$z], #8') + regs('stilp $x, $y, [$z, #-16]!') + regs('ldapr $x, [$y, #-8]!') + regs('stlr $x, [$y, #-8]!') + regs('ldapr $w, [$y], #4') + \
     regs('swpp $x, $y, [$z]') + regs('swppa $x, $y, [$z]') + regs('swppal $x, $y, [$z]') + regs('swppl $x, $y, [$z]') + regs('ldclrp $x, $y, [$z]') + regs('ldclrppal $x, $y, [$z]'.replace('ldclrppal', 'ldclrpal')) + regs('ldsetp $x, $y, [$z]') + regs('ldsetpa $x, $y, [$z]')
-G['hbc'] = ['bc.eq #8', 'bc.ne #-16', 'bc.hi #1024', 'bc.lt #4', 'bc.al #12']
+G['hbc'] = [c + ' #' + i for c in ['bc.eq', 'bc.ne', 'bc.hi', 'bc.lt', 'bc.al', 'bc.cs', 'bc.mi', 'bc.vs'] for i in ['8', '-16', '1024', '4', '262140', '-262144']]
+G['sme_state'] = ['smstart', 'smstop', 'smstart sm', 'smstart za', 'smstop sm', 'smstop za', 'zero {za}']
 G['mops'] = regs('cpyfp [$x]!, [$y]!, $z!') + regs('cpyfm [$x]!, [$y]!, $z!') + regs('cpyfe [$x]!, [$y]!, $z!') + regs('cpyp [$x]!, [$y]!, $z!') + regs('cpyfpwn [$x]!, [$y]!, $z!') + regs('cpyfprn [$x]!, [$y]!, $z!') + regs('cpyfpn [$x]!, [$y]!, $z!') + \
     regs('setp [$x]!, $y!, $z') + regs('setm [$x]!, $y!, $z') + regs('sete [$x]!, $y!, $z') + regs('setgp [$x]!, $y!, $z') + regs('setpn [$x]!, $y!, $z') + regs('setgm [$x]!, $y!, $z') + regs('setge [$x]!, $y!, $z')
 G['cssc'] = regs('abs $x, $y') + regs('abs $w, $u') + regs('cnt $x, $y') + regs('cnt $w, $u') + regs('ctz $x, $y') + regs('ctz $w, $u') + regs('smax $x, $y, $z') + regs('smin $w, $u, $v') + regs('umax $x, $y, $z') + regs('umin $w, $u, $v') + \
@@ -93,7 +97,7 @@ for name, lines in G.items():
             sys.stderr.write('skip %s | %s | %s\n' % (name, ln, err.strip().splitlines()[0][-70:] if err.strip() else ''))
             continue
         keep = ln.split()[0] in ('sys', 'sysl', 'dc', 'ic', 'msr', 'mrs')
-        key = (name, re.sub(r'\b[xwvqdsh]\d+', 'R', ln) if keep else re.sub(r'#-?\d+', '#I', re.sub(r'\b[xwvqdsh]\d+', 'R', ln)))
+        key = (name, re.sub(r'\b[xwvqdsh]\d+', 'R', ln) if keep else re.sub(r'#-?\d+', '#I', re.sub(r', #-?\d+\]', ']', re.sub(r'\b[xwvqdsh]\d+', 'R', ln))))
         if keep and ln.split()[0] == 'msr' and '#' in ln:
             key = (name, re.sub(r'#\d+', '#I', key[1]))
         out.setdefault(key, []).extend(w)
