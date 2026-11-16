@@ -94,6 +94,8 @@ const std::set<std::string> kIgnoredEnv = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOK
                                            "WINDOWID", "TERM_SESSION_ID", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM", "STY", "TMUX", "TMUX_PANE",
                                            "KONSOLE_DBUS_SESSION", "KONSOLE_DBUS_WINDOW", "KONSOLE_DBUS_SERVICE", "VTE_VERSION", "GNOME_TERMINAL_SCREEN",
                                            "GNOME_TERMINAL_SERVICE", "ITERM_SESSION_ID", "LC_TERMINAL", "LC_TERMINAL_VERSION", "WT_SESSION"};
+// APKLAYER_EXTRA_ETC (cli/env.cpp) is deliberately in neither set: installing or removing Google's apps changes it, and that difference is
+// what makes a spare which loaded the old allowlists count as stale, so the next launch starts cold instead of serving a stale configuration.
 
 // The first entry (NUL-separated) in which a launch's key differs from the spare's: why a spare could not take it.
 std::string firstDifference(const std::string& spare, const std::string& launch) {

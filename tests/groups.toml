@@ -186,6 +186,19 @@ needs = ["com.android.externalstorage", "com.android.providers.media.module"]  #
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
 run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh", "SCOPED=1 tests/vm/files.sh", "LIBCORE=1 tests/vm/files.sh"]
 
+# The same allowlist, read from <data>/apklayer/google-apps/etc instead -- where `setup --gapps` keeps Google's (cli/gapps.cpp), since a package
+# build serves the runtime tree read-only and nothing is copied there any more. Run sandboxed (the tmpfs over <data>/apklayer, cli/sandbox.cpp,
+# hides the directory from the app's own JVM). Checked 2026-11-16: it passes with the bind removed too, because the provider's check is the hub's,
+# outside the sandbox: it proves the hub reads the allowlist from the data home, not the bind. The empty app directory is the Services Framework marker
+# gappsEtcDir looks for; every reader of appsDir skips a directory without info.properties.
+[files-gapps-etc]
+optional = true  # sandboxed: needs tools/host-setup/sandbox.sh once, as the sandbox group
+apps = ["hello-files"]
+needs = ["com.android.externalstorage", "com.android.providers.media.module"]
+setup = ["""d=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer; mkdir -p "$d/google-apps/etc/permissions" "$d/apps/com.google.android.gsf"; printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > "$d/google-apps/etc/permissions/apklayer-test-hello-files.xml"; rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml"""]
+# the marker and the allowlist are the test's: removed afterwards, or the data home would count as having Google's apps installed
+run = ["APKLAYER_SANDBOX=1 tests/vm/files.sh; r=$?; d=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer; rm -f $d/google-apps/etc/permissions/apklayer-test-hello-files.xml; rmdir $d/apps/com.google.android.gsf $d/google-apps/etc/permissions $d/google-apps/etc $d/google-apps 2>/dev/null; exit $r"]
+
 [volumes]  # a vfat loop image mounted at /media/<user>/<label> and removed while hello-files runs (root: sudo -n, or sudo -A with SUDO_ASKPASS)
 apps = ["hello-files"]
 needs = ["com.android.providers.media.module", "com.android.externalstorage"]
