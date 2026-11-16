@@ -1,0 +1,54 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] guest private anonymous mappings are MAP_NORESERVE (Android's overcommit mode 1)
+
+Idea and code shape from Teto (github.com/denialwm/teto, branch droidloom, commit 3ba3e754 "Preserve Android memory reservations on container hosts", Doctor Logix / the Droidloom Authors, Apache-2.0). Android's init sets vm.overcommit_memory=1; a PC (both test PCs) runs 0 (heuristic), where a large writable private reservation by a game engine or an anti-cheat can fail with ENOMEM that no device gives. MmapForGuest adds MAP_NORESERVE to guest MAP_PRIVATE|MAP_ANONYMOUS mappings (file-backed and shared ones keep their accounting). Teto made it opt-in (`android-mmap-noreserve`); apklayer has it on, and `BERBERIS_FLAGS=android-mmap-reserve` turns it off. Module libberberis_arm64.
+
+diff --git a/base/config_globals.cc b/base/config_globals.cc
+--- a/base/config_globals.cc
++++ b/base/config_globals.cc
+@@ -180,6 +180,8 @@
+       return "disable-ir-check";
+     case kGlibcHostThreadIdHandoff:
+       return "glibc-host-thread-id-handoff";
++    case kAndroidMmapReserve:
++      return "android-mmap-reserve";
+     // endregion
+     case kNumConfigFlags:
+       break;
+diff --git a/base/include/berberis/base/config_globals.h b/base/include/berberis/base/config_globals.h
+--- a/base/include/berberis/base/config_globals.h
++++ b/base/include/berberis/base/config_globals.h
+@@ -93,6 +93,10 @@
+   // host seeds a synthetic bionic pthread record in the guest-state slot and
+   // hands it over from there. Never set it on a real bionic host.
+   kGlibcHostThreadIdHandoff,
++  // Teto (Droidloom, Apache-2.0) 3ba3e754: Android's init sets vm.overcommit_memory=1; a PC has 0. Guest private anonymous
++  // mappings get MAP_NORESERVE so a big reservation does not fail with ENOMEM. apklayer patch (0044): on unless
++  // BERBERIS_FLAGS names android-mmap-reserve (the opt-out; Teto's opt-in flag was android-mmap-noreserve).
++  kAndroidMmapReserve,
+   // endregion
+   kNumConfigFlags
+ };
+diff --git a/kernel_api/sys_mman_emulation.cc b/kernel_api/sys_mman_emulation.cc
+--- a/kernel_api/sys_mman_emulation.cc
++++ b/kernel_api/sys_mman_emulation.cc
+@@ -29,6 +29,7 @@
+ #endif
+ // endregion
+ 
++#include "berberis/base/config_globals.h"
+ #include "berberis/base/mmap.h"
+ #include "berberis/base/prctl_helpers.h"
+ #include "berberis/base/tracing.h"
+@@ -68,6 +69,11 @@
+ // it might pick up an already obsolete code.
+ 
+ void* MmapForGuest(void* addr, size_t length, int prot, int flags, int fd, off64_t offset) {
++  // Teto 3ba3e754, apklayer patch (0044): Android runs with overcommit mode 1; keep that per private anonymous mapping.
++  static const bool noreserve = !IsConfigFlagSet(kAndroidMmapReserve);
++  if (noreserve && (flags & MAP_ANONYMOUS) && (flags & MAP_TYPE) == MAP_PRIVATE) {
++    flags |= MAP_NORESERVE;
++  }
+   void* result = mmap64(addr, length, ToHostProt(prot), flags, fd, offset);
+   if (result != MAP_FAILED) {
+     UpdateGuestProt(prot, result, length);
