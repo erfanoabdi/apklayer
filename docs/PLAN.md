@@ -38,7 +38,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 
 ## Permissions and Android rules
-- HIDL (`docs/HIDL.md`): needs a phone: the stack in a host-HAL instance (camera/media/graphics = device) starts the manager and writes the marker, forwarded names still work, an own service there. Rerun `tests/run hidl host-binder` on the x86 PC with the new libraries.
 - Storage: `UNMOUNTABLE` is decided not to be sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by; a drive nobody can mount stays unlisted, as a drive the desktop does not mount). Scoped storage follows symlinks only in a process that made one itself (or its children) and cwd-relative paths only when the cwd is under the instance's Android/ directory; a link made by an earlier process and `openat(dirfd, ...)` into another package's directory are not seen (needs a fd-based check).
 - Call audio: the call mode owner asks the audio policy per uid/pid (patches/aosp/frameworks/av/0004; groups `audio-uid`, `audio-backend-swap`, UTM only): PLAN: the policy sends no event, so the hub polls it each second while two communication requesters compete; a native client carries the stack uid 1000, so only its own process counts (another process of the same app does not); run both groups on the x86 PC.
 
@@ -48,7 +47,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Packaging and releases
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: a real double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, and OpenVPN importing an .ovpn from the file manager. Open: `apklayer open` under the sandbox is tested only for a fresh launch, not the running app's `onNewIntent`; the install preview resolves plain-string labels and PNG icons only (no adaptive/vector icon, no sparse/16-bit arsc types: package name fallback); Flatpak (mime package needs an `xdg-data/mime:create` override and the host's `update-mime-database`), Sailfish and Ubuntu Touch variants; the manager's multi-file install queue.
-- Click: Share/"Open with"; "Choose file…" from the manager; the click update install (`installClick`) is untested off a phone.
 - Flatpak: launcher portal dialog.
 - JDK 25 on the phones (CHANGELOG 2026-11-16 "JDK 25 for the phones"): packages exist (RPM `temurin-25-jdk`, click image from `click.sh`), the Quintus runs it (phone-test PASS) but starts 1-2 s slower than 21 + CDS; X23 not tested with it: quiet A/B of 21 vs 25 on both phones (hello, NewPipe, the AOT cache's training, memory), then choose the phones' default; release.yml's click job needs `openjdk-25-jdk-headless` (or the Temurin tarball) to build with 25.
 - Release: the first real tag run, the GitHub runners (the fetch steps, `actions/checkout` of the `prebuilts-v<version>` tag, upload/download of `~` file names) are unrun here; the guard, SHA256SUMS rename and `releases-json.py` ran locally with a fake tag (2026-11-16); PackageKit/pkexec install untested; the Flatpak `openjdk25` extension and 26.08 runtime stay unverified without `flatpak-builder`.
@@ -67,9 +65,11 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Needs hardware or a person
 - Tester PC: run `kde-window.py` once at 150% on its KWin (the prebuilts there are current; the new deb is built, not installed).
-- Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
+- Quintus: re-run `phone-test.sh sfos` groups with the current RPM (the lock code is `SAILFISH_LOCK` in `local.conf` since 2026-11-16, `tools/halium/unlock.sh sfos`).
+- AMD: Vulkan presentation and host ES1 untested.
+- Halium: vendor HALs, `media = device`, NewPipe network; wheel/stylus, text-input and the layout subtype cannot run under Lomiri (no pointer or tablet, Maliit): a Sailfish/KDE check only.
 - Sailfish: a finger on the host dialog (Open Camera with CAMERA revoked was denied at once, no prompt seen: needs a look), a real pointer over the navigation bar (a uinput mouse shows Lipstick's cursor but it stays at 0,0: nothing verified), a geoclue fix outdoors.
-- Ubuntu Touch: manager on screen, navigation bar under the panel, drawer tap, shell window, maximize, turning by hand.
+- Ubuntu Touch: turning by hand (the fake accelerometer of `tools/halium/ut-rotate.sh` did not reach sensorfwd on the 0.4.101 click: orientation stayed 5); the look of the manager's Install dialog (its path field fills half the screen); the update banner is half a screen tall while it runs (a screenshot on the X23; not the empty button row, not the bar's height: look at the card's layout in `manager/ui/setup.slint` `UpdateBanner`); `HubIncoming/<n>` of a Share whose dialog was replaced by "Choose file…" stays (the manager removes only the installed file's folder).
 - Bluetooth PIN dialog on a legacy device. A real USB serial adapter.
 - Push: a real Telegram/WhatsApp message with microG; the unit starting the stack at login.
 - By eye: window raise, text magnifier, portal file chooser, pkexec, Google sign-in, playback, audio, colours, IME look.

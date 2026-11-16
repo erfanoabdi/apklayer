@@ -87,8 +87,11 @@ static void draw(void *px, int pw, int ph, int lw, int lh, int dark, int pressed
 void navbar_update(struct navbar *n, int y, int lw, int lh, int scale, int dark, int pressed)
 {
     if ((!n->surface && !n->remote) || lw <= 0 || lh <= 0) return;
+    int moved = n->sub && y != n->y && n->shown;
     if (n->sub && (y != n->y || !n->shown)) { wl_subsurface_set_position(n->sub, 0, y); n->y = y; }
-    if (n->shown && n->lw == lw && n->lh == lh && n->scale == scale && n->dark == dark && n->pressed == pressed) return;
+    /* Lomiri's screenshot of the X23 showed the bar 20 px low (the first configure is 1528 px, the next 1508: the first position, 1444, not the last, 1424)
+     * though the shell sent set_position(0, 1424) and committed the parent: a commit of the bar's own surface after a move */
+    if (n->shown && n->lw == lw && n->lh == lh && n->scale == scale && n->dark == dark && n->pressed == pressed) { if (moved) wl_surface_commit(n->surface); return; }
     int s = scale > 0 ? scale : 100;
     if (!n->viewport && !n->remote) s = (s + 50) / 100 * 100;  /* without wp_viewporter: whole multiples only (wl_surface.set_buffer_scale) */
     int pw = (lw * s + 99) / 100, ph = (lh * s + 99) / 100;

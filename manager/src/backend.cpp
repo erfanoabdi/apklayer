@@ -21,6 +21,17 @@ std::string Cli::locate() {
     ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
     if (n > 0) {
         std::string dir(exe, n);
+        // a click is installed as /opt/click.ubuntu.com/<name>/<version>/ and its update removes the old version's directory, under
+        // this very (still running) manager: the CLI is taken through the click's `current` link, which the update moves (an update's restart, probe and
+        // the add-on lists used the deleted path and failed, 2026-11-16)
+        static const std::string click = "/opt/click.ubuntu.com/";
+        if (dir.rfind(click, 0) == 0) {
+            size_t name = dir.find('/', click.size());
+            if (name != std::string::npos) {
+                std::string current = dir.substr(0, name) + "/current/usr/bin/apklayer";
+                if (access(current.c_str(), X_OK) == 0) return current;
+            }
+        }
         for (size_t slash; (slash = dir.rfind('/')) != std::string::npos && slash > 0;) {
             dir.resize(slash);
             if (access((dir + "/bin/apklayer").c_str(), X_OK) == 0) return dir + "/bin/apklayer";

@@ -1,0 +1,23 @@
+From: apklayer
+Subject: [PATCH] libhidl: the host-forwarding stand-in answers get(IServiceManager) with the instance's own manager (a remote object)
+
+apklayer patch (docs/PATCHES.md, docs/HIDL.md, docs/HALIUM.md). In an instance with host HALs (Halium) the stand-in is every process's default service manager, and
+its get() of android.hidl.manager@1.x::IServiceManager returned the stand-in itself, a local object: a Java HwBinder.getService (old system apps' IServiceManager,
+tests/apps/hello-hidl, `HwBinder.getService("android.hidl.manager@1.0::IServiceManager", "default")`) could not wrap it and got NoSuchElementException
+(found on the Volla X23, 2026-11-16, `phone-test.sh ut hidl-host`). With the marker (0004) the stack runs the instance's own manager: get() hands back that
+manager's proxy, as a device with hwservicemanager does; without it the old answer. Rebuild: `m libhidlbase`.
+Against system/libhidl 061055fc4dad (REVISION), after 0001-0005. Apply: patches/apply aosp <LineageOS tree>.
+---
+--- a/transport/ServiceManagement.cpp
++++ b/transport/ServiceManagement.cpp
+@@ -227,7 +227,9 @@
+         sp<IBase> ret = nullptr;
+
+         if (isServiceManager(fqName)) {
+-            ret = defaultServiceManager1_2();
++            // apklayer patch (libhidl 0006): the instance's own manager, a remote object a Java HwBinder.getService can wrap (this stand-in is local)
++            sp<IServiceManager1_2> local = details::localServiceManager();
++            ret = local != nullptr ? sp<IBase>(local) : sp<IBase>(defaultServiceManager1_2());
+         } else {
+             APKLAYER_LOCAL(get, fqName, name)  // apklayer patch
+         }

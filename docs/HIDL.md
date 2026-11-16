@@ -50,8 +50,10 @@ the manager refuses to run without its own `android.hidl.manager` entry), and wr
   (group `host-binder`): a hand-written `host_hals.conf` listing atrace, the marker, the manager started with its VINTF entry staged by the test, and a second
   instance playing the device: `hidltool local` (register, find, list) passes through the stand-in's local branches and `hidltool atrace` still reaches the device.
   The stack's part (starting the manager and writing the marker where `writeHostHals` chose device HALs) is not run, it needs `probeDeviceHal` to see a Halium
-  device. **Needs a phone**: the stack in an instance with `camera`/`media`/`graphics = device` starts the manager and writes the marker, the host-forwarded
-  names (camera, media, graphics) work with the manager running (nothing waits on its `hwservicemanager.ready`), and an own service there.
+  device. Checked on the X23 (2026-11-16, `tools/halium/phone-test.sh ut hidl-host hidl`): the stack in an instance with `camera`/`media`/`graphics = device` starts the manager
+  and writes the marker, the host-forwarded names (camera provider, Codec2 stores) are listed with the manager running, `hidltool manager` and `local` pass, and
+  `hello.hidl` (Java) gets the manager and registers its own service since libhidl 0006 (before it, `HwBinder.getService(IServiceManager)` returned the local stand-in
+  and the Java side saw NoSuchElementException).
 
 ## What remains
 

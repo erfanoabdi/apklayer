@@ -513,10 +513,13 @@ weston's VNC backend stops repainting (no frame callbacks, no buffer releases) w
   Quintus: `rpm -Uvh --replacepkgs` as root), runs `apklayer setup --bundle`, removes its copies.
 - `tools/halium/phone-test.sh <ut|sfos> <group>...`: runs `phone-checks.sh` on the phone in an instance of its own (`ptest`) and prints PASS/FAIL per group:
   `hello` (hello.input, SurfaceFlinger's picture), `providers` (graphics, camera, media, vibrator are `device` by default), `hidl` (`hidl-list.sh`),
-  `camera` (hello.camera lists cameras, none is FAIL), `sensors` (hello.hardware), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's
-  orientation lock turns the shell's display; the lock is put back), `notify` (`hello.notify`: every kind of notification reaches the shell's notification service, hints, replace, cancel, a tap on the Lipstick banner; Lomiri closes all of them at once: SKIP click; Lipstick pictures in `build/phone-shots`). It copies what it needs, removes it and the instance, and on the X23 wakes the phone
-  with the PIN (`ut-unlock.sh on`: apps are stopped while it is locked; the sudo password is the PIN) and locks it again. The Quintus has to be unlocked
-  by hand (its lock code is not in `local.conf`; a wrong code shows "Incorrect security code", try nothing blindly). A fresh Quintus instance needs no prop (meow is mapped to mali, above).
+  `hidl-host` (hello.hidl: the instance's own manager and marker, an own service; `hidltool manager|local`), `camera` (hello.camera lists cameras, none is FAIL),
+  `sensors` (hello.hardware), `fullscreen` (UiBench hides and shows the system bars: the navigation bar inset 84, 0, 84), `navbar` (ut: touches on the bar's
+  Back reach the app and the hub logs the vibrator's click), `notify` (`hello.notify`: every kind of notification reaches the shell's notification service, hints, replace, cancel, a tap on the Lipstick banner; Lomiri closes all of them at once: SKIP click; Lipstick pictures in `build/phone-shots`), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's orientation lock turns the
+  shell's display; the lock is put back). It copies what it needs, removes it and the instance, and wakes and unlocks the phone first with
+  `tools/halium/unlock.sh <ut|sfos>` (apps are stopped while it is locked): the X23's PIN is `UBPORTS_PASSWORD` (swipe to the keypad, press the digits, then
+  Lomiri's greeter `IsActive` must be false), the Quintus' lock code `SAILFISH_LOCK` in `local.conf` (never committed). The X23 is locked again afterwards. A
+  wrong code counts: a phone that its sensor turned to landscape shows the keypad turned and the taps miss (turn it back first). A fresh Quintus instance needs no prop (meow is mapped to mali, above).
 - Race `stop <package>` (CHANGELOG 2026-11-15): a launch that took the instance's spare was unknown to `stop <package>`, `info` and relaunch until its JVM
   renamed itself (seconds on a loaded phone); the run record names the process now. Group `spare-race` (UTM) holds the window with a stopped spare.
 - A keyboard inset for a turned window is not possible through the insets: Android's `InsetsSource.calculateArbitraryInsets` treats a non-floating IME
