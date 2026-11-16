@@ -38,7 +38,7 @@ BuildRequires:  pkgconfig(gstreamer-allocators-1.0)
 BuildRequires:  pkgconfig(libelf)
 BuildRequires:  pkgconfig(libbsd)
 BuildRequires:  pkgconfig(libunwind)
-Requires:       (temurin-25-jdk or temurin-21-jdk)
+Requires:       temurin-25-jdk
 Requires:       python3-base
 # bridge/portal's D-Bus helpers (Bluetooth, location, settings) are PyGObject; Sailfish does not install it by default
 Requires:       python3-gobject
