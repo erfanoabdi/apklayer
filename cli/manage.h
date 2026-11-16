@@ -25,6 +25,8 @@ void listInstances(const Layout& layout);
 int instanceCommand(const Layout& layout, const std::string& action, const std::string& id);
 // `prop [list] | set KEY VALUE | unset KEY`: the instance's overrides, applied at its stack's next start
 int propCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
+// `app <package> translation-mode [default|lite|interpret]`: prints (and sets) the app's translator mode, the property berberis.mode.<package>
+int appCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 // `settings [list] | set KEY VALUE | unset KEY`: the instance's host-settings overrides (night, accent, contrast, animations, font-scale, locale,
 // timezone, time-format), laid over the desktop's by the hub; a running instance applies them at once
 int settingsCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
