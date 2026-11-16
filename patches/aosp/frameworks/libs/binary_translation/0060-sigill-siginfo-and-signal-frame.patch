@@ -1,0 +1,200 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] SIGILL with the kernel's siginfo (ILL_ILLOPC), HLT is SIGILL, the signal frame has NZCV pstate, fault_address, esr_context (knobs berberis.sigill_code / berberis.sigframe = kernel)
+
+diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+--- a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
++++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
+@@ -2348,10 +2348,7 @@
+       insn_consumer_->Brk(imm16);
+       return;
+     }
+-    if (opc == 0b010 && ll == 0b00) {  // HLT — same SIGTRAP path as BRK
+-      insn_consumer_->Brk(imm16);
+-      return;
+-    }
++    // apklayer patch (0060): HLT is UNDEFINED at EL0 (no halting debug): SIGILL as on hardware, falls through to Undefined().
+     // HVC (opc=000, ll=10), SMC (opc=000, ll=11) and DCPS1-3 (opc=101) are
+     // UNDEFINED at EL0 (privileged / debug-state-only). They fall through to
+     // Undefined(), which delivers SIGILL to the guest — the architecturally
+diff --git a/guest_os_primitives/arm64/guest_context_arch.h b/guest_os_primitives/arm64/guest_context_arch.h
+--- a/guest_os_primitives/arm64/guest_context_arch.h
++++ b/guest_os_primitives/arm64/guest_context_arch.h
+@@ -35,7 +35,10 @@
+   GuestContext(const GuestContext&) = delete;
+   GuestContext& operator=(const GuestContext&) = delete;
+ 
+-  void Save(const CPUState* cpu) {
++  // apklayer patch (0060), knob berberis.sigframe=kernel (kernel_frame): the kernel's frame: pstate with N Z C V in bits 31:28 (the internal flags
++  // are x86-style bits), fault_address (si_addr of a SIGSEGV/SIGBUS) and an esr_context block (esr 0 = none).
++  void Save(const CPUState* cpu, uint64_t fault_address = 0, uint32_t esr = 0, bool kernel_frame = false) {
++    kernel_frame_ = kernel_frame;
+     // Save everything.
+     cpu_ = *cpu;
+ 
+@@ -47,6 +50,15 @@
+     ctx_.uc_mcontext.sp = cpu->sp;
+     ctx_.uc_mcontext.pc = cpu->insn_addr;
+     ctx_.uc_mcontext.pstate = cpu->flags;
++    if (kernel_frame_) {
++      uint64_t pstate = 0;
++      if (cpu->flags & CPUState::kFlagNegative) pstate |= uint64_t{1} << 31;
++      if (cpu->flags & CPUState::kFlagZero) pstate |= uint64_t{1} << 30;
++      if (cpu->flags & CPUState::kFlagCarry) pstate |= uint64_t{1} << 29;
++      if (cpu->flags & CPUState::kFlagOverflow) pstate |= uint64_t{1} << 28;
++      ctx_.uc_mcontext.pstate = pstate;
++      ctx_.uc_mcontext.fault_address = fault_address;
++    }
+ 
+     // Per the Linux arm64 ABI, FPSIMD state is delivered to the guest signal
+     // handler as a chained _aarch64_ctx block at the start of
+@@ -70,6 +82,12 @@
+     fpsimd->fpcr = cpu->cached_fpcr;
+     static_assert(sizeof(cpu->v) == sizeof(fpsimd->vregs));
+     memcpy(fpsimd->vregs, cpu->v, sizeof(fpsimd->vregs));
++    if (kernel_frame_ && esr != 0) {  // the esr_context block follows the fpsimd one, then the zero terminator (the memset above)
++      auto* esr_ctx = reinterpret_cast<Guest_esr_context*>(ctx_.uc_mcontext.__reserved + sizeof(Guest_fpsimd_context));
++      esr_ctx->magic = ESR_MAGIC;
++      esr_ctx->size = sizeof(Guest_esr_context);
++      esr_ctx->esr = esr;
++    }
+   }
+ 
+   void Restore(CPUState* cpu) const {
+@@ -81,6 +99,15 @@
+     cpu->sp = ctx_.uc_mcontext.sp;
+     cpu->insn_addr = ctx_.uc_mcontext.pc;
+     cpu->flags = static_cast<uint16_t>(ctx_.uc_mcontext.pstate);
++    if (kernel_frame_) {  // apklayer patch (0060): NZCV from bits 31:28 back to the internal flags
++      uint64_t pstate = ctx_.uc_mcontext.pstate;
++      uint16_t flags = 0;
++      if (pstate & (uint64_t{1} << 31)) flags |= CPUState::kFlagNegative;
++      if (pstate & (uint64_t{1} << 30)) flags |= CPUState::kFlagZero;
++      if (pstate & (uint64_t{1} << 29)) flags |= CPUState::kFlagCarry;
++      if (pstate & (uint64_t{1} << 28)) flags |= CPUState::kFlagOverflow;
++      cpu->flags = flags;
++    }
+ 
+     // Restore FPSIMD from the chained block at the start of __reserved.
+     // If the guest handler clobbered or unchained the FPSIMD context, the
+@@ -100,6 +127,8 @@
+ 
+  private:
+   static constexpr uint32_t FPSIMD_MAGIC = 0x46508001;
++  static constexpr uint32_t ESR_MAGIC = 0x45535201;  // apklayer patch (0060)
++  bool kernel_frame_ = false;
+ 
+   // See bionic/libc/kernel/uapi/asm-arm64/asm/sigcontext.h
+   struct Guest_sigcontext {
+@@ -112,6 +141,11 @@
+     uint8_t __reserved[4096] __attribute__((aligned(16)));
+   };
+ 
++  struct Guest_esr_context {  // apklayer patch (0060): the kernel's struct esr_context
++    uint32_t magic;
++    uint32_t size;
++    uint64_t esr;
++  };
+   // Header for extended context blocks in __reserved area.
+   struct Guest_aarch64_ctx {
+     uint32_t magic;
+diff --git a/guest_os_primitives/guest_signal_handling_arch.cc b/guest_os_primitives/guest_signal_handling_arch.cc
+--- a/guest_os_primitives/guest_signal_handling_arch.cc
++++ b/guest_os_primitives/guest_signal_handling_arch.cc
+@@ -33,6 +33,7 @@
+ #include <cstring>
+ 
+ #include "berberis/base/bit_util.h"
++#include "berberis/base/config_globals.h"  // apklayer patch (0060)
+ // endregion
+ #include "berberis/base/host_signal.h"
+ #include "berberis/base/tracing.h"
+@@ -85,7 +86,31 @@
+   // Save state to ucontext.
+   ThreadState* state = thread->state();
+   GuestContext ctx;
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  // apklayer patch (0060), knob berberis.sigframe (env BERBERIS_SIGFRAME) = "kernel": the frame of a SIGSEGV/SIGBUS fault carries fault_address
++  // and an esr_context, as the kernel's: EC 0x24 (data abort) or 0x20 (instruction abort: the address is the pc), WnR from the load/store
++  // instruction's L bit, DFSC translation (MAPERR), permission (ACCERR) or alignment. A SIGILL or SIGTRAP frame has none.
++  static const bool kernel_frame = [] {
++    ConfigStr knob("BERBERIS_SIGFRAME", "berberis.sigframe");
++    return knob.get() != nullptr && knob.get()[0] == 'k';
++  }();
++  uint64_t fault_address = 0;
++  uint32_t esr = 0;
++  if (kernel_frame && (info->si_signo == SIGSEGV || info->si_signo == SIGBUS) && info->si_code > 0) {
++    fault_address = reinterpret_cast<uint64_t>(info->si_addr);
++    uint64_t pc = GetInsnAddr(GetCPUState(*state));
++    bool exec = fault_address == pc || (info->si_signo == SIGBUS && (pc & 3) != 0);
++    uint32_t insn = 0;
++    if (!exec) memcpy(&insn, ToHostAddr<const void>(pc), sizeof(insn));
++    bool load_store = (insn & 0x0a000000) == 0x08000000;
++    uint32_t wnr = load_store && !((insn >> 22) & 1) ? 0x40 : 0;
++    uint32_t dfsc = info->si_signo == SIGBUS ? 0x21 : info->si_code == SEGV_ACCERR ? 0x0f : (fault_address < 0x100000 ? 0x06 : 0x07);
++    esr = exec ? ((info->si_signo == SIGBUS ? 0x8a000000u : 0x82000000u) | (dfsc & 0x3f)) : (0x92000000u | wnr | dfsc);
++  }
++  ctx.Save(&state->cpu, fault_address, esr, kernel_frame);
++#else
+   ctx.Save(&state->cpu);
++#endif
+ 
+   // region digitalis - capture pre-altstack SP for diagnostics (arm64-guest
+   // only; consumed by the forensics TRACE below).
+diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/guest_signal_handling.cc
+--- a/guest_os_primitives/guest_signal_handling.cc
++++ b/guest_os_primitives/guest_signal_handling.cc
+@@ -698,7 +698,8 @@
+       // apklayer patch (0040): a signal some process sent (kill, raise, tgkill, sigqueue: si_code <= 0) that the guest has no handler for
+       // ends the process with that signal, as on hardware; HandleFatalSignal would run HotSpot's handler, which prints a JVM crash
+       // report and ends with SIGABRT. Faults (si_code > 0) go on to HandleFatalSignal: HotSpot's own faults are among them.
+-      if (signal_info->si_code <= 0 || signal_info->si_signo == SIGTRAP) {  // (0045) a BRK has TRAP_BRKPT, is never HotSpot's
++      if (signal_info->si_code <= 0 || signal_info->si_signo == SIGTRAP ||  // (0045) a BRK has TRAP_BRKPT, is never HotSpot's
++          (signal_info->si_signo == SIGILL && signal_info->si_code == ILL_ILLOPC)) {  // (0060) an undefined guest instruction likewise
+         int signo = signal_info->si_signo;
+         pending_signals_.FreeSignal(signal_info);
+         GuestDieWithDefaultAction(signo);
+diff --git a/runtime_primitives/interpret_helpers_arm64.cc b/runtime_primitives/interpret_helpers_arm64.cc
+--- a/runtime_primitives/interpret_helpers_arm64.cc
++++ b/runtime_primitives/interpret_helpers_arm64.cc
+@@ -24,6 +24,7 @@
+ #include <cstring>
+ 
+ #include "berberis/base/checks.h"
++#include "berberis/base/config_globals.h"
+ #include "berberis/base/tracing.h"
+ #include "berberis/guest_state/guest_addr.h"
+ 
+@@ -35,15 +36,26 @@
+   uint32_t code;
+   memcpy(&code, addr, sizeof(code));
+   TRACE_AND_ALOGE("Undefined arm64 instruction 0x%" PRIx32 " at %p", code, addr);
+-#ifdef __GLIBC__
+-  // Our old 2.17 glibc has a bug resulting in raise() failing after any CLONE_VM.
+-  // Work around by calling tgkill directly.
++  // apklayer patch (0060): knob berberis.sigill_code (env BERBERIS_SIGILL_CODE) = "kernel": the architectural siginfo of an undefined
++  // instruction (ILL_ILLOPC, si_addr = the instruction), not tgkill's SI_TKILL with the sender's pid/uid in the union; a guest SIGILL
++  // handler (an anti-emulation probe: udf, an unallocated encoding, a privileged mrs) reads si_code. Sending kernel-style siginfo to
++  // oneself is permitted.
++  static const bool kernel_siginfo = [] {
++    ConfigStr knob("BERBERIS_SIGILL_CODE", "berberis.sigill_code");
++    return knob.get() != nullptr && knob.get()[0] == 'k';
++  }();
+   pid_t pid = syscall(__NR_getpid);
+   pid_t tid = syscall(__NR_gettid);
+-  syscall(SYS_tgkill, pid, tid, SIGILL);
+-#else
+-  raise(SIGILL);
+-#endif
++  if (!kernel_siginfo) {
++    // Our old 2.17 glibc has a bug resulting in raise() failing after any CLONE_VM. Work around by calling tgkill directly.
++    syscall(SYS_tgkill, pid, tid, SIGILL);
++    return;
++  }
++  siginfo_t info{};
++  info.si_signo = SIGILL;
++  info.si_code = ILL_ILLOPC;
++  info.si_addr = ToHostAddr<void>(pc);
++  CHECK_EQ(syscall(__NR_rt_tgsigqueueinfo, pid, tid, SIGILL, &info), 0);
+ }
+ 
+ void BreakpointInsn(GuestAddr pc) {
