@@ -27,6 +27,15 @@ int cli(const Layout& layout, const std::vector<std::string>& args) {
     s.env = currentEnv();
     return runAndWait(s);
 }
+// Migration: an earlier build copied these XMLs into the runtime's android-root; a removal takes any such copy out, or microG's GmsCore (same package
+// name) would stay a privileged system app. Nothing writes there any more; a read-only package runtime has none and unlink just fails.
+void removeCopiedConfig(const Layout& layout, const std::string& from, const std::string& rel = "") {
+    for (const std::string& name : listDir(join(from, rel))) {
+        const std::string sub = rel.empty() ? name : join(rel, name);
+        if (isDir(join(from, sub))) removeCopiedConfig(layout, from, sub);
+        else unlink(join(join(layout.native, "android-root/system/etc"), sub).c_str());
+    }
+}
 // Google's packages, the reverse of the install order (the Services Framework last: the others use its provider)
 const char* const kPackages[] = {"com.google.android.syncadapters.calendar", "com.google.android.syncadapters.contacts", "com.android.vending",
                                  "com.google.android.gms", "com.google.android.gsf"};
@@ -52,7 +61,8 @@ std::string removeGapps(const Layout& layout, const Instance& instance, const st
         report(std::string("Removing Google's ") + pkg);
         if (cli(layout, {"--instance", instance.id, "uninstall", pkg}) != 0) return std::string("Could not remove Google's ") + pkg;
     }
-    // the allowlists and the installed build's marker; nothing was put in the runtime, so this is the whole of it (a later --gapps downloads again)
+    if (isDir(join(gappsDir(layout), "etc"))) removeCopiedConfig(layout, join(gappsDir(layout), "etc"));
+    // the allowlists and the installed build's marker (a later --gapps downloads again)
     removeTree(gappsDir(layout));
     return "";
 }
