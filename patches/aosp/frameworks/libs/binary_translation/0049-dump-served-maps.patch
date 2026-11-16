@@ -1,0 +1,42 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: berberis.dump_maps writes the guest's served /proc/self/maps
+
+BERBERIS_DUMP_MAPS=<dir> (prop berberis.dump_maps) writes each served maps text to <dir>/maps-<pid>-<n>.txt; off by default. Module libberberis_arm64.
+
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -24,6 +24,7 @@
+ #include <sys/utsname.h>  // apklayer patch (0047)
+ #include <unistd.h>
+ 
++#include <atomic>
+ #include <cerrno>
+ #include <cstdint>
+ #include <cstdio>
+@@ -526,6 +527,26 @@
+ 
+   WriteFullyOrDie(mem_fd, guest_maps.c_str(), guest_maps.size());
+ 
++  // apklayer patch (0049): berberis.dump_maps=<dir> (BERBERIS_DUMP_MAPS) writes every served /proc/self/maps text to <dir>/maps-<pid>-<n>.txt.
++  {
++    static const ConfigStr dump_dir("BERBERIS_DUMP_MAPS", "berberis.dump_maps");
++    if (dump_dir.get() != nullptr && dump_dir.get()[0] != '\0') {
++      static std::atomic<int> dump_seq{0};
++      char dump_path[512];
++      snprintf(dump_path, sizeof(dump_path), "%s/maps-%d-%d.txt", dump_dir.get(), getpid(), dump_seq.fetch_add(1));
++      int dump_fd = open(dump_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
++      if (dump_fd >= 0) {
++        size_t done = 0;
++        while (done < guest_maps.size()) {
++          ssize_t w = write(dump_fd, guest_maps.c_str() + done, guest_maps.size() - done);
++          if (w <= 0) break;
++          done += static_cast<size_t>(w);
++        }
++        close(dump_fd);
++      }
++    }
++  }
++
+   lseek(mem_fd, 0, 0);
+ 
+   EmulatedFileDescriptors::GetInstance()->Add(mem_fd);

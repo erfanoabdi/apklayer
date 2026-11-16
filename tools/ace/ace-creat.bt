@@ -1,6 +1,7 @@
 // Who in the guest creates files (openat with O_CREAT, raw svc or libc): guest pc, x30 and the frame chain, to map ACE's writes (fake_uiui.dat at +4 s,
 // ano_app_915c.dat, ac_tmp, config2) to libanogs.so offsets. The path's tail is printed (the guest spells /data/user/0/<pkg>/files/ano_tmp/...).
 // Run: sudo tools/ace/trace.sh ace-creat.bt out.txt   (--unsafe: the maps of the process are copied to /tmp/ace-maps-<pid>.txt at the first event)
+// The "pc" column (ThreadState +0x100) is not the guest pc (it read 0x91 in 2026-11-16 traces): use x30 and the frames.
 // Offsets: libanogs.so file offset = guest address - the base of its first mapping in /tmp/ace-maps-<pid>.txt (the segment's file offset added).
 
 uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE

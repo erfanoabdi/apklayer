@@ -1,0 +1,40 @@
+// Who in the guest unmaps/remaps memory (PGR/ACE, team lead B): the guest's raw svc munmap/mremap/mprotect/madvise with the guest pc, x30 and frame chain
+// (libanogs.so offsets from the maps copied at the first event). Translated route only (uprobe on RunGuestSyscall, as ace-creat.bt); needs --unsafe.
+// Filter: munmap of exactly 0x4000 bytes, any mremap, and mprotect that removes PROT_READ (0) of a range inside the libc text window printed by the caller.
+// Guest arm64 syscall numbers: munmap 215, mremap 216, mmap 222, mprotect 226, mincore 232, madvise 233.
+// ThreadState offsets (as ace-creat.bt): x0 +0x00, x1 +0x08, x2 +0x10, x8 +0x40, x19..x22 +0x98..+0xb0, x29 +0xe8, x30 +0xf0. The "pc" printed from +0x100 is NOT the guest pc (it read 0x91): use x30 and the frames.
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+{
+  $s = (uint64)arg0;
+  $nr = *(uint64 *)($s + 0x40);
+  $x0 = *(uint64 *)($s + 0x00);
+  $x1 = *(uint64 *)($s + 0x08);
+  if (($nr == 215 && $x1 == 0x4000) || $nr == 216) {
+    printf("GUEST %lu tid %d nr %lu x0 0x%lx x1 0x%lx x2 0x%lx pc 0x%lx x30 0x%lx x29 0x%lx\n", elapsed / 1000000, tid, $nr, $x0, $x1, *(uint64 *)($s + 0x10), *(uint64 *)($s + 0x100), *(uint64 *)($s + 0xf0), *(uint64 *)($s + 0xe8));
+    $fp = *(uint64 *)($s + 0xe8);
+    $i = 0;
+    while ($i < 8) {
+      if ($fp == 0) { break; }
+      printf("   frame %d ret 0x%lx\n", $i, *(uint64 *)($fp + 8));
+      $fp = *(uint64 *)$fp;
+      $i++;
+    }
+    printf("   regs x3 0x%lx x4 0x%lx x5 0x%lx x19 0x%lx x20 0x%lx x21 0x%lx x22 0x%lx\n", *(uint64 *)($s + 0x18), *(uint64 *)($s + 0x20), *(uint64 *)($s + 0x28), *(uint64 *)($s + 0x98), *(uint64 *)($s + 0xa0), *(uint64 *)($s + 0xa8), *(uint64 *)($s + 0xb0));
+    @n++;
+    system("cat /proc/%d/maps >/tmp/pgrB-unmap-maps-%d-%d.txt", pid, pid, @n);
+  }
+}
+
+// the guest's own handler registration for SIGBUS(7)/SIGSEGV(11) (rt_sigaction 134: x0 signal, x1 new action in the kernel layout handler, flags, restorer, mask)
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+{
+  $s = (uint64)arg0;
+  if (*(uint64 *)($s + 0x40) == 134 && *(uint64 *)($s + 0x08) != 0 && (*(uint64 *)($s + 0x00) == 7 || *(uint64 *)($s + 0x00) == 11)) {
+    $a = *(uint64 *)($s + 0x08);
+    printf("SIGACT %lu tid %d sig %lu handler 0x%lx flags 0x%lx restorer 0x%lx pc 0x%lx x30 0x%lx\n", elapsed / 1000000, tid, *(uint64 *)($s + 0x00), *(uint64 *)$a, *(uint64 *)($a + 8), *(uint64 *)($a + 16), *(uint64 *)($s + 0x100), *(uint64 *)($s + 0xf0));
+  }
+}
+
+BEGIN { printf("READY\n"); }
+END { clear(@n); }

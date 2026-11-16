@@ -1,0 +1,23 @@
+// Network calls of the game process (native arm64 and translated alike): connect destination, sendto/sendmsg sizes, recvfrom/recvmsg returns, close of sockets,
+// as `<ms since the first libanogs.so open> NET <tid> <comm> <call> ...`. Run beside pgr-timeline.bt (EXTRA_BT=ace-net.bt tools/ace/pgr-timeline.sh): its output goes to <work>/extra-<N>.txt.
+// Compare the size of the report ACE sends and of the reply it gets between a survivor and the deaths (a 321-byte sendto + recvfrom is ACE's report/verdict exchange).
+#include <linux/socket.h>
+#include <linux/in.h>
+
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0 = nsecs; }
+
+tracepoint:syscalls:sys_enter_connect / @g[pid] /
+{
+  $sa = (struct sockaddr_in *)args->uservaddr;
+  printf("%lu NET %d %s connect fd %d fam %d port %d addr %s\n", (nsecs - @t0) / 1000000, tid, comm, args->fd, $sa->sin_family,
+         (($sa->sin_port & 0xff) << 8) | ($sa->sin_port >> 8), ntop($sa->sin_addr.s_addr));
+}
+tracepoint:syscalls:sys_enter_sendto / @g[pid] / { printf("%lu NET %d %s sendto fd %d len %d\n", (nsecs - @t0) / 1000000, tid, comm, args->fd, args->len); }
+tracepoint:syscalls:sys_enter_sendmsg / @g[pid] / { printf("%lu NET %d %s sendmsg fd %d\n", (nsecs - @t0) / 1000000, tid, comm, args->fd); }
+tracepoint:syscalls:sys_enter_recvfrom / @g[pid] / { @rf[tid] = args->size; }
+tracepoint:syscalls:sys_exit_recvfrom / @g[pid] && @rf[tid] /
+{ printf("%lu NET %d %s recvfrom ret %d (buf %d)\n", (nsecs - @t0) / 1000000, tid, comm, args->ret, @rf[tid]); delete(@rf[tid]); }
+tracepoint:syscalls:sys_enter_recvmsg / @g[pid] / { printf("%lu NET %d %s recvmsg fd %d\n", (nsecs - @t0) / 1000000, tid, comm, args->fd); }
+tracepoint:syscalls:sys_enter_write / @g[pid] && args->count == 321 / { printf("%lu NET %d %s write len 321 fd %d\n", (nsecs - @t0) / 1000000, tid, comm, args->fd); }
+
+END { clear(@g); clear(@t0); clear(@rf); }
