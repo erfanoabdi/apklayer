@@ -1,9 +1,0 @@
-// Copies the game process's /proc/<pid>/maps (the host's text: native arm64 = what the guest reads) to /tmp/ace-hostmaps-<pid>-<s>s.txt at 12, 20 and 28 s after its first
-// openat (the game's libanogs/ACE phase). Needs bpftrace --unsafe (system()); pgr-timeline.sh runs EXTRA_BT scripts with it when they call system().
-tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @p = pid; @t0 = nsecs; }
-interval:s:1
-/ @p /
-{
-  $s = (nsecs - @t0) / 1000000000;
-  if ($s == 12 || $s == 20 || $s == 28) { system("cat /proc/%d/maps > /tmp/ace-hostmaps-%d-%ds.txt", @p, @p, $s); }
-}
