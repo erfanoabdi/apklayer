@@ -303,9 +303,29 @@ int apklayer_proc_prctl_view(int option, long *result)
     return 1;
 }
 
-/* The status lines that state the same: NoNewPrivs 1, Seccomp 2 (filter), one filter, no bounding capabilities (an app uid's CapBnd is 0). */
+/* Whether arm64 code runs here through the translator (an x86_64 host's native bridge): its /proc status is an arm64 kernel's. bionic_translation's
+ * linker loads libberberis_arm64.so, so glibc's dlopen does not see it; native_bridge.c's bridgeInit sets BERBERIS_FLAGS before it loads the
+ * bridge, in this process only (an x86 app never has it). */
+static int translated_arm64(void)
+{
+#if defined(__x86_64__)
+    return getenv("BERBERIS_FLAGS") != NULL;
+#else
+    return 0;
+#endif
+}
+
+/* The status lines that state the same: NoNewPrivs 1, Seccomp 2 (filter), one filter, no bounding capabilities (an app uid's CapBnd is 0).
+ * Translated arm64 code also gets an arm64 kernel's lines: no x86_Thread_features* (x86 shadow stacks) and no untag_mask (x86 LAM), an
+ * indirect-branch state arm64 does not report ("unknown": arch_prctl_spec_ctrl_get is -ENODEV there), a device's single memory node
+ * (MAX_NUMNODES 1, not x86's 1024: 32 mask groups). "" drops the line. */
 const char *apklayer_proc_status_line(const char *line)
 {
+    if (translated_arm64() && (!getenv("APKLAYER_STATUS_VIEW") || strcmp(getenv("APKLAYER_STATUS_VIEW"), "host"))) {
+        if (!strncmp(line, "x86_", 4) || !strncmp(line, "untag_mask:", 11)) return "";
+        if (!strncmp(line, "SpeculationIndirectBranch:", 26)) return "SpeculationIndirectBranch:\tunknown\n";
+        if (!strncmp(line, "Mems_allowed:", 13)) return "Mems_allowed:\t1\n";
+    }
     if (!strncmp(line, "NoNewPrivs:", 11)) return "NoNewPrivs:\t1\n";
     if (!strncmp(line, "Seccomp:", 8)) return "Seccomp:\t2\n";
     if (!strncmp(line, "Seccomp_filters:", 16)) return "Seccomp_filters:\t1\n";

@@ -21,6 +21,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 | `java` | `APKLAYER_NATIVE_JAVA` | the system's Java 21 | the java the apps run on (a phone's small root file system) | |
 | `permissions` | `APKLAYER_PERMISSIONS` | ask | grant: every runtime permission an app requests is granted without the prompt | yes |
 | `proc-view` | `APKLAYER_PROC_VIEW` | app | host: /proc as the host has it, not only the app's own processes | yes |
+| `status-view` | `APKLAYER_STATUS_VIEW` | app | host: a translated (arm64 on x86_64) app's /proc/<pid>/status keeps the x86 kernel's lines (x86_Thread_features*, untag_mask, 32 Mems_allowed groups); default is an arm64 kernel's | yes |
 | `etc-view` | `APKLAYER_ETC_VIEW` | app | host: the host's /etc | yes |
 | `cpufreq-view` | `APKLAYER_CPUFREQ_VIEW` | app | host: the host's /sys/devices/system/cpu/cpu<N>/cpufreq and cpu_capacity files (x86_64 hosts: apps see none by default) | yes |
 | `pts-view` | `APKLAYER_PTS_VIEW` | app | host: all of the host's terminals | yes |
