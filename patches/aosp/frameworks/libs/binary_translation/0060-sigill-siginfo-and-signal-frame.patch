@@ -1,5 +1,5 @@
 From: apklayer <noreply@apklayer.invalid>
-Subject: [PATCH] SIGILL with the kernel's siginfo (ILL_ILLOPC), HLT is SIGILL, the signal frame has NZCV pstate, fault_address, esr_context (knobs berberis.sigill_code / berberis.sigframe = kernel)
+Subject: [PATCH] SIGILL with the kernel's siginfo (ILL_ILLOPC, si_errno marker), HLT is SIGILL, the signal frame has NZCV pstate, fault_address, esr_context (knobs berberis.sigill_code / berberis.sigframe = kernel)
 
 diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
 --- a/cpu_emulation/decoder/include/berberis/decoder/arm64/decoder.h
@@ -143,7 +143,25 @@ diff --git a/guest_os_primitives/guest_signal_handling_arch.cc b/guest_os_primit
 diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/guest_signal_handling.cc
 --- a/guest_os_primitives/guest_signal_handling.cc
 +++ b/guest_os_primitives/guest_signal_handling.cc
-@@ -698,7 +698,8 @@
+@@ -89,6 +89,9 @@
+ // Note that a _user_ sent signal which is typically synchronious, such as SIGSEGV,
+ // can continue until pending signals check.
+ bool IsPendingSignalWithoutRecoveryCodeFatal(siginfo_t* info) {
++  // apklayer patch (0060): the SIGILL of an undefined guest instruction (UndefinedInsn: ILL_ILLOPC + this si_errno) is the translator's own: it is
++  // deferred to the next pending-signals check like the tgkill signal it replaces, not a host fault without recovery code
++  if (info->si_signo == SIGILL && info->si_errno == 0x41504b) return false;
+   return IsPotentiallyFatalSignal(info->si_signo) && SI_FROMKERNEL(info);
+ }
+ 
+@@ -385,6 +388,7 @@
+ }
+ 
+ void ConvertHostSiginfoToGuest(siginfo_t* signal_info, const ThreadState* state) {
++  if (signal_info->si_signo == SIGILL && signal_info->si_errno == 0x41504b) signal_info->si_errno = 0;  // apklayer patch (0060): the marker is not the guest's
+   switch (signal_info->si_signo) {
+     case SIGILL:
+     // Teto 558c400f, apklayer patch (0045): SIGTRAP keeps its siginfo: BreakpointInsn supplies si_code TRAP_BRKPT and
+@@ -698,7 +702,8 @@
        // apklayer patch (0040): a signal some process sent (kill, raise, tgkill, sigqueue: si_code <= 0) that the guest has no handler for
        // ends the process with that signal, as on hardware; HandleFatalSignal would run HotSpot's handler, which prints a JVM crash
        // report and ends with SIGABRT. Faults (si_code > 0) go on to HandleFatalSignal: HotSpot's own faults are among them.
@@ -156,7 +174,7 @@ diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/
 diff --git a/runtime_primitives/interpret_helpers_arm64.cc b/runtime_primitives/interpret_helpers_arm64.cc
 --- a/runtime_primitives/interpret_helpers_arm64.cc
 +++ b/runtime_primitives/interpret_helpers_arm64.cc
-@@ -24,6 +24,7 @@
+@@ -24,26 +24,40 @@
  #include <cstring>
  
  #include "berberis/base/checks.h"
@@ -164,7 +182,12 @@ diff --git a/runtime_primitives/interpret_helpers_arm64.cc b/runtime_primitives/
  #include "berberis/base/tracing.h"
  #include "berberis/guest_state/guest_addr.h"
  
-@@ -35,15 +36,26 @@
+ namespace berberis {
+ 
+ void UndefinedInsn(GuestAddr pc) {
++  constexpr int kSyntheticSigillErrno = 0x41504b;  // "APK"
+   auto* addr = ToHostAddr<const uint32_t>(pc);
+   // ARM64 instructions are always 4 bytes.
    uint32_t code;
    memcpy(&code, addr, sizeof(code));
    TRACE_AND_ALOGE("Undefined arm64 instruction 0x%" PRIx32 " at %p", code, addr);
@@ -193,6 +216,7 @@ diff --git a/runtime_primitives/interpret_helpers_arm64.cc b/runtime_primitives/
 +  siginfo_t info{};
 +  info.si_signo = SIGILL;
 +  info.si_code = ILL_ILLOPC;
++  info.si_errno = kSyntheticSigillErrno;  // marks it as the translator's own (HandleHostSignal: not a host fault); reset before the guest sees it
 +  info.si_addr = ToHostAddr<void>(pc);
 +  CHECK_EQ(syscall(__NR_rt_tgsigqueueinfo, pid, tid, SIGILL, &info), 0);
  }
