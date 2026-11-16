@@ -388,7 +388,7 @@ static uint64_t t_signals(void)
 
 /* acediff_nan.c, acediff_sys.c */
 uint64_t t_nan(void), t_nan_inv(void), t_nan_dn(void), t_nan_nn(void);
-uint64_t t_fp16(void), t_misc(void), t_svc(void), t_sysregs(void), t_threads(void);
+uint64_t t_fp16(void), t_misc(void), t_svc(void), t_sysregs(void), t_threads(void), t_selftext(void);
 void timing(void), costs(void);
 
 const char *acediff_run(void)
@@ -398,7 +398,7 @@ const char *acediff_run(void)
     run("aes", t_aes); run("sha1", t_sha1); run("sha256", t_sha256); run("sha512", t_sha512); run("sha3 eor3/rax1/xar/bcax", t_sha3); run("sm4", t_sm4); run("pmull", t_pmull); run("crc32", t_crc);
     run("tbl/tbx", t_tbl); run("shuffles/ext/rev/cnt", t_shuffle); run("neon int arith", t_intarith); run("ld1-4/st1-4", t_ldst);
     run("float finite", t_float_fin); run("float any bits", t_float_any); run("fpcr/fpsr", t_fpcr); run("nan rules", t_nan); run("nan rules invalid operations", t_nan_inv); run("nan rules FPCR.DN", t_nan_dn); run("nan rules two NaN operands", t_nan_nn); run("scalar int/flags", t_scalar); run("lse atomics", t_lse); run("exclusives", t_excl); run("unaligned", t_unalign);
-    run("fp16", t_fp16); run("lrcpc/dc/ic/barriers", t_misc); run("raw svc syscalls", t_svc); run("mrs readability", t_sysregs); run("threads", t_threads);
+    run("fp16", t_fp16); run("lrcpc/dc/ic/barriers", t_misc); run("raw svc syscalls", t_svc); run("mrs readability", t_sysregs); run("threads", t_threads); run("text remapped from its file", t_selftext);
     run("smc (flush)", t_smc); run("info smc (no flush)", t_smc_noflush); run("signals", t_signals);
     return out;
 }

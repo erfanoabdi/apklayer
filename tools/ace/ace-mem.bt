@@ -1,10 +1,10 @@
 // Which memory the game process touches (PGR/ACE, team lead B): memory syscalls with addresses, user page faults (kernel view, per 16 MB
 // region and per tid) and the fault signals, all relative to the first libanogs.so open (t0). Run by pgr-timeline.sh EXTRA_BT=ace-mem.bt
 // (@FAULT@ is substituted; @BRIDGE@ unused). Nothing is traced before libanogs is opened, so the output is the ACE window only.
-// Page faults only see first touches of non-resident pages: a read of a resident page leaves no trace (use BERBERIS_LOG_FAULTS for the
+// (page faults per tid and 16 MB region are printed as @pf at the end.) Page faults only see first touches of non-resident pages: a read of a resident page leaves no trace (use BERBERIS_LOG_FAULTS for the
 // guest's own view of its real faults).
 
-tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] && strncmp(str(args->filename), "/data/app", 9) == 0 && strcontains(str(args->filename), "libanogs") / { @g[pid] = 1; @t0 = nsecs; printf("0 T0 %d\n", pid); }
+tracepoint:syscalls:sys_enter_openat / !@g[pid] && strcontains(str(args->filename), "libanogs") / { @g[pid] = 1; @t0 = nsecs; printf("0 T0 %d\n", pid); }
 
 tracepoint:syscalls:sys_enter_mmap / @g[pid] / { printf("%lu mmap tid %d addr 0x%lx len 0x%lx prot %x fl %x fd %d\n", (nsecs - @t0) / 1000000, tid, args->addr, args->len, args->prot, args->flags, args->fd); }
 tracepoint:syscalls:sys_enter_munmap / @g[pid] / { printf("%lu munmap tid %d addr 0x%lx len 0x%lx\n", (nsecs - @t0) / 1000000, tid, args->addr, args->len); }
@@ -20,7 +20,8 @@ tracepoint:syscalls:sys_enter_readlinkat / @g[pid] && strncmp(str(args->pathname
 tracepoint:syscalls:sys_enter_openat / @g[pid] && (strncmp(str(args->filename), "/proc/self/m", 12) == 0 || strncmp(str(args->filename), "/proc/self/pagemap", 18) == 0 || strncmp(str(args->filename), "/proc/self/task", 15) == 0 || strncmp(str(args->filename), "/proc/self/smaps", 16) == 0) /
 { printf("%lu open tid %d %s\n", (nsecs - @t0) / 1000000, tid, str(args->filename)); }
 
-tracepoint:exceptions:page_fault_user / @g[pid] / { @pf[tid, args->address >> 24] = count(); @pfip[tid, args->ip >> 20] = count(); }
+// kprobe, not tracepoint:exceptions:page_fault_user: arm64 has none. arg1 = faulting address (handle_mm_fault(vma, address, flags, regs)).
+kprobe:handle_mm_fault / @g[pid] / { @pf[tid, arg1 >> 24] = count(); }
 
 @FAULT@
 / @g[pid] /
