@@ -38,7 +38,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - OTR2 in a mobile maximized window and FlorisBoard typing.
 
 ## Permissions and Android rules
-- HIDL (`docs/HIDL.md`): checked on the X23 (`phone-test.sh ut hidl-host hidl`, 2026-11-16). Open: libhidlbase with libhidl 0006 (built in los24, sha256 `0f3ebb72...`, arm64) into the prebuilts (the click has the old one: `hidl-host` fails on `hello.hidl` until then: Java `HwBinder.getService(IServiceManager)`), the x86_64 one too; then rerun `tests/run hidl host-binder` on the x86 PC.
 - Storage: `UNMOUNTABLE` is decided not to be sent (udisks sends no failed-mount event and an unknown file system has no UUID to key a volume by; a drive nobody can mount stays unlisted, as a drive the desktop does not mount). Scoped storage follows symlinks only in a process that made one itself (or its children) and cwd-relative paths only when the cwd is under the instance's Android/ directory; a link made by an earlier process and `openat(dirfd, ...)` into another package's directory are not seen (needs a fd-based check).
 - Call audio: the call mode owner asks the audio policy per uid/pid (patches/aosp/frameworks/av/0004; groups `audio-uid`, `audio-backend-swap`, UTM only): PLAN: the policy sends no event, so the hub polls it each second while two communication requesters compete; a native client carries the stack uid 1000, so only its own process counts (another process of the same app does not); run both groups on the x86 PC.
 
