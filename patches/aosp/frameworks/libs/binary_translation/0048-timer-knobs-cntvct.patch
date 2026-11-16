@@ -1,0 +1,85 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: CNTVCT/CNTFRQ debug knobs (timer scale, cntfrq, per-pc read count)
+
+Env or props BERBERIS_TIMER_SCALE (berberis.timer_scale), BERBERIS_CNTFRQ (berberis.cntfrq), BERBERIS_COUNT_MRS (berberis.count_mrs); defaults change nothing. Module libberberis_arm64.
+
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -20,6 +20,7 @@
+ #include <chrono>
+ #include <cmath>
+ #include <cstdint>
++#include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+ #include <limits>
+@@ -521,6 +522,42 @@
+     CHECK(!exception_raised_);
+     BreakpointInsn(GetInsnAddr());
+     exception_raised_ = true;
++  }
++
++  // apklayer patch (0048): debug knobs of the generic counter (env BERBERIS_TIMER_SCALE / BERBERIS_CNTFRQ / BERBERIS_COUNT_MRS, or the props).
++  struct TimerKnobsT {
++    uint64_t frq = 19200000ULL;
++    uint64_t scale = 1;
++    bool count = false;
++  };
++  static const TimerKnobsT& TimerKnobs() {
++    static const TimerKnobsT knobs = [] {
++      TimerKnobsT r;
++      ConfigStr scale("BERBERIS_TIMER_SCALE", "berberis.timer_scale");
++      ConfigStr frq("BERBERIS_CNTFRQ", "berberis.cntfrq");
++      ConfigStr count("BERBERIS_COUNT_MRS", "berberis.count_mrs");
++      if (scale.get() && std::strtoull(scale.get(), nullptr, 10) > 0) r.scale = std::strtoull(scale.get(), nullptr, 10);
++      if (frq.get() && std::strtoull(frq.get(), nullptr, 10) > 0) r.frq = std::strtoull(frq.get(), nullptr, 10);
++      r.count = count.get() && count.get()[0] == '1';
++      return r;
++    }();
++    return knobs;
++  }
++  static void CountMrs(uint64_t pc, uint64_t ns) {
++    static std::atomic<uint64_t> pcs[64], counts[64];
++    static const uint64_t t0 = ns;
++    for (size_t i = 0; i < 64; i++) {
++      uint64_t cur = pcs[i].load(std::memory_order_relaxed);
++      if (cur == 0 && pcs[i].compare_exchange_strong(cur, pc)) cur = pc;
++      if (cur == pc) {
++        uint64_t n = counts[i].fetch_add(1, std::memory_order_relaxed) + 1;
++        if ((n & (n - 1)) == 0) {
++          fprintf(stderr, "apklayer mrs-cntvct pc=0x%llx count=%llu t=%llu ms\n", (unsigned long long)pc, (unsigned long long)n,
++                  (unsigned long long)((ns - t0) / 1000000));
++        }
++        return;
++      }
++    }
+   }
+ 
+   Register Mrs(Decoder::SystemReg sysreg) {
+@@ -586,20 +623,21 @@
+       case Decoder::SystemReg::kCntfrqEl0:
+         // Counter frequency: 19.2 MHz, the de-facto Android generic-timer rate.
+         // CNTVCT/CNTPCT below are scaled to match, so cntvct/cntfrq = seconds.
+-        return 19200000ULL;
++        return TimerKnobs().frq;
+       // apklayer patch (0037): TPIDRRO_EL0 is readable (0 for a 64-bit Linux task); CNTPCT_EL0 is not (Linux leaves EL0PCTEN off: the read
+       // is an undefined instruction, SIGILL, which the default case raises); only CNTVCT_EL0 is.
+       case Decoder::SystemReg::kTpidrroEl0:
+         return 0;
+       case Decoder::SystemReg::kCntvctEl0: {
+-        // Monotonic virtual/physical counter backed by the host steady clock,
+-        // expressed in 19.2 MHz ticks. __uint128_t intermediate avoids overflow.
++        // apklayer patch (0048): ticks of cntfrq (default 19.2 MHz) divided by berberis.timer_scale (default 1), and an optional per-pc
++        // count of reads (BERBERIS_COUNT_MRS=1: a stderr line at every power-of-two count of a pc).
++        const TimerKnobsT& k = TimerKnobs();
+         uint64_t ns = static_cast<uint64_t>(
+             std::chrono::duration_cast<std::chrono::nanoseconds>(
+                 std::chrono::steady_clock::now().time_since_epoch())
+                 .count());
+-        return static_cast<Register>(
+-            (static_cast<__uint128_t>(ns) * 19200000ULL) / 1000000000ULL);
++        if (k.count) CountMrs(state_->cpu.insn_addr, ns);
++        return static_cast<Register>((static_cast<__uint128_t>(ns) * k.frq) / 1000000000ULL / k.scale);
+       }
+       // apklayer patch: the AArch64 feature ID registers. A real Linux kernel traps every EL0 read of this space and returns a
+       // sanitised value (0 for anything the hardware lacks), so an app that probes CPU features never SIGILLs there; the three
