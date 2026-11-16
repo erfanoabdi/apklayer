@@ -172,3 +172,9 @@ if is_variable('apklayer_preload') and is_variable('dl_bio')
     test('raw-syscall-' + mode, raw_syscall_test, args: [dl_bio, 'libraw-syscall-lib.so', mode], depends: raw_syscall_lib, env: raw_env, suite: 'bionic', timeout: 30)
   endforeach
 endif
+
+# the converter's ByteBuffer redirect (runtime/host/java/apklayer/loader/ApklayerBuffers.java), on the host classes as built
+if is_variable('host_jar')
+  test('apklayer-buffers', find_program('java'), args: ['-cp', host_jar.full_path(), meson.current_source_dir() / 'ApklayerBuffersTest.java'],
+    depends: host_jar, suite: 'bionic', timeout: 30)
+endif
