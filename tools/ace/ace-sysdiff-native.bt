@@ -17,3 +17,5 @@ tracepoint:syscalls:sys_enter_newfstatat / @g[pid] / { printf("P %d %s\n", tid, 
 tracepoint:syscalls:sys_enter_readlinkat / @g[pid] / { printf("P %d %s\n", tid, str(args->pathname)); }
 tracepoint:syscalls:sys_enter_unlinkat / @g[pid] / { printf("P %d %s\n", tid, str(args->pathname)); }
 tracepoint:syscalls:sys_enter_mkdirat / @g[pid] / { printf("P %d %s\n", tid, str(args->pathname)); }
+
+BEGIN { printf("READY\n"); }

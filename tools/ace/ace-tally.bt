@@ -1,0 +1,12 @@
+// Per-syscall-name tally of the game process (all threads), first 28 s after its first open; prints the top by count at the end.
+// Native arm64 and translated alike (tracepoint names). Key = pid, name.  Also tgkill by (sig, self) and ptrace by request.
+tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0[pid] = nsecs; }
+tracepoint:syscalls:sys_enter_* / @g[pid] / { @c[pid, probe] = count(); }
+tracepoint:syscalls:sys_enter_tgkill / @g[pid] / { @tk[pid, args->sig, args->pid == tid ? "self" : "other"] = count(); }
+tracepoint:syscalls:sys_enter_rt_sigaction / @g[pid] / { @sa[pid, args->sig] = count(); }
+tracepoint:syscalls:sys_enter_ptrace / @g[pid] / { @pt[pid, args->request] = count(); }
+tracepoint:syscalls:sys_enter_prctl / @g[pid] / { @pr[pid, args->option] = count(); }
+tracepoint:syscalls:sys_enter_openat / @g[pid] && strncmp(str(args->filename), "/proc/", 6) == 0 / { @pp[pid, str(args->filename)] = count(); }
+interval:s:30 { exit(); }
+BEGIN { printf("READY\n"); }
+END { clear(@g); clear(@t0); }
