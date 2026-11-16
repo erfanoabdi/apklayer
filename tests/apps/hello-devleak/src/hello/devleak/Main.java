@@ -13,6 +13,12 @@ import java.io.InputStreamReader;
 public class Main extends Activity {
     static void put(String k, Object v) { System.out.println("[devleak] " + k + "=" + String.valueOf(v).replace("\n", "\\n")); }
 
+    static void file(String key, String path) {
+        try (BufferedReader r = new BufferedReader(new java.io.FileReader(path))) {
+            String l; int n = 0; while ((l = r.readLine()) != null && n++ < 40) put(key, l);
+        } catch (Throwable t) { put(key, "THROWS " + t.getClass().getSimpleName()); }
+    }
+
     static void exec(String key, String... cmd) {
         try {
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
@@ -42,8 +48,13 @@ public class Main extends Activity {
             try { put("build." + f, Build.class.getField(f).get(null)); } catch (Throwable t) { put("build." + f, "THROWS " + t); }
         }
         put("build.SDK", Build.VERSION.SDK_INT + " " + Build.VERSION.RELEASE + " " + Build.VERSION.SECURITY_PATCH + " " + Build.TIME);
-        exec("uname", "uname", "-a");
-        exec("getprop", "getprop");
+        for (String f : new String[] {"/proc/version", "/proc/sys/kernel/osrelease", "/proc/sys/kernel/ostype", "/proc/sys/kernel/hostname", "/proc/sys/kernel/arch", "/proc/sys/kernel/version", "/proc/cpuinfo", "/proc/self/cgroup", "/proc/self/status"})
+            file("file" + f, f);
+        for (String k : new String[] {"device_name", "development_settings_enabled", "adb_enabled", "usb_mass_storage_enabled", "install_non_market_apps", "stay_on_while_plugged_in", "airplane_mode_on", "bluetooth_name", "android_id"}) {
+            put("global." + k, Settings.Global.getString(getContentResolver(), k));
+            put("secure." + k, Settings.Secure.getString(getContentResolver(), k));
+            put("system." + k, Settings.System.getString(getContentResolver(), k));
+        }
         table("global", Settings.Global.CONTENT_URI);
         table("secure", Settings.Secure.CONTENT_URI);
         table("system", Settings.System.CONTENT_URI);

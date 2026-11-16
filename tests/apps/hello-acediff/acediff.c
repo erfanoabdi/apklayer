@@ -9,6 +9,8 @@ const char *slot_name[96]; uint64_t slot_val[96]; int slots;
 sigjmp_buf jb;
 volatile sig_atomic_t armed;
 char altstack[65536] __attribute__((aligned(16)));
+/* a child that ends by a signal on purpose must not dump core: with core_pattern piped to systemd-coredump the kernel stalls it (and the parent's waitpid) for 100+ s per child */
+#define NOCORE do { struct rlimit z = {0, 0}; setrlimit(RLIMIT_CORE, &z); prctl(PR_SET_DUMPABLE, 0); } while (0)
 static void on_sig(int s) { if (armed) siglongjmp(jb, s); _exit(99); }
 static void run(const char *name, uint64_t (*f)(void))
 {
@@ -341,16 +343,16 @@ static uint64_t t_signals(void)
     stack_t cur; sigaltstack(NULL, &cur); say("signal altstack roundtrip size=%zu flags=%d same=%d", cur.ss_size, cur.ss_flags, cur.ss_sp == altstack);
     /* SIGSEGV without SA_ONSTACK, sp bad, in a child: the kernel cannot build the frame and kills the thread with SIGSEGV */
     pid_t pid = fork();
-    if (pid == 0) { struct sigaction s2 = {.sa_handler = child_dead}; sigemptyset(&s2.sa_mask); sigaction(SIGSEGV, &s2, NULL); sigaltstack(&(stack_t){.ss_flags = SS_DISABLE}, NULL);
+    if (pid == 0) { NOCORE; struct sigaction s2 = {.sa_handler = child_dead}; sigemptyset(&s2.sa_mask); sigaction(SIGSEGV, &s2, NULL); sigaltstack(&(stack_t){.ss_flags = SS_DISABLE}, NULL);
         __asm__ volatile("mov x9, #0x1342\n mov sp, x9\n br x9\n" ::: "x9", "memory"); _exit(7); }
     if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal bad-sp no-altstack child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
     /* a handler address that is not 4-aligned (ACE's handler 0x...63ba): the PC alignment fault is a SIGBUS (BUS_ADRALN) the child's SIGBUS handler sees (its default action is the JVM's crash report under Berberis, not compared) */
     pid = fork();
-    if (pid == 0) { struct sigaction sb = {.sa_sigaction = child_bus, .sa_flags = SA_SIGINFO}; sigemptyset(&sb.sa_mask); sigaction(SIGBUS, &sb, NULL); struct sigaction s3 = {.sa_flags = 0}; s3.sa_handler = (void (*)(int))((uintptr_t)on_wild | 2); sigemptyset(&s3.sa_mask); sigaction(SIGUSR1, &s3, NULL); raise(SIGUSR1); _exit(7); }
+    if (pid == 0) { NOCORE; struct sigaction sb = {.sa_sigaction = child_bus, .sa_flags = SA_SIGINFO}; sigemptyset(&sb.sa_mask); sigaction(SIGBUS, &sb, NULL); struct sigaction s3 = {.sa_flags = 0}; s3.sa_handler = (void (*)(int))((uintptr_t)on_wild | 2); sigemptyset(&s3.sa_mask); sigaction(SIGUSR1, &s3, NULL); raise(SIGUSR1); _exit(7); }
     if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal misaligned-handler child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
     /* BRK #imm: SIGTRAP with the architectural siginfo (apklayer 0045) */
     pid = fork();
-    if (pid == 0) { struct sigaction sk = {.sa_sigaction = child_brk, .sa_flags = SA_SIGINFO}; sigemptyset(&sk.sa_mask); sigaction(SIGTRAP, &sk, NULL);
+    if (pid == 0) { NOCORE; struct sigaction sk = {.sa_sigaction = child_brk, .sa_flags = SA_SIGINFO}; sigemptyset(&sk.sa_mask); sigaction(SIGTRAP, &sk, NULL);
         __asm__ volatile("adr x9, 1f\n str x9, [%0]\n 1: brk #0x123\n" :: "r"(&brk_pc) : "x9", "memory"); _exit(7); }
     if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal brk-siginfo child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
     /* a signal the process sends itself, with the default disposition (reset with signal(), the handler run() left is gone): the process ends with that signal
@@ -359,7 +361,7 @@ static uint64_t t_signals(void)
     for (int si = 0; si < 5; si++) for (int via = 0; via < 4; via++) {
         if (via == 3 && dsigs[si] != SIGABRT) continue;
         pid = fork();
-        if (pid == 0) { signal(dsigs[si], SIG_DFL);
+        if (pid == 0) { NOCORE; signal(dsigs[si], SIG_DFL);
             if (via == 0) kill(getpid(), dsigs[si]); else if (via == 1) raise(dsigs[si]); else if (via == 2) syscall(SYS_tgkill, getpid(), gettid(), dsigs[si]); else abort();
             _exit(7); }
         if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal default-action %s via %s: %s %d", strsignal(dsigs[si]), dvia[via], WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
