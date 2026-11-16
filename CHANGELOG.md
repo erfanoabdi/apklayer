@@ -3,6 +3,24 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: PGR A/B on the tester copy: runtime layout, CPU count, splits (none of them is the cause; death time scales with CPU speed)
+
+- Copy instance `envtest` in a private home (microG only, PGR app + data copy, ACE files reset each run; `tools/ace/pgr-timeline.sh`, true death = EXIT, seconds after the game's first open; run limit 75 s). EXIT times in seconds, `alive` = still running at the limit:
+
+| setup | runs | EXIT |
+|---|---|---|
+| baseline (earlier entry) | 5 | 40.7, 33.9, 34.8, 33.2, 33.4 |
+| flat layout: guest libs in system/lib64 and system/bin, ld.config.arm64.txt `/system/${LIB}` (no arm64 in the search path), `arm64 -> .` symlinks left because libberberis_arm64 hardcodes `/system/lib64/arm64/libc.so`, `/system/bin/arm64/app_process64`, `arm64/linker64`, `arm64/libnative_bridge_vdso.so` | 7 | alive (76.3), 48.1, 33.7, 33.9, 37.5, 33.4, 32.0 |
+| flat + taskset 0-3 (4 CPUs) | 5 | 35.4, 35.9, 35.8, 29.6, alive (76.7) |
+| flat + taskset 0-1 | 3 | 36.1, 36.5, 32.6 |
+| flat + taskset 0 (1 CPU) | 3 | 50.2, 48.2, 48.1 |
+| flat + splits config.en/config.mdpi removed (AWS has 3 APKs, the tester 5) | 3 | 36.0, 33.3, 35.7 |
+
+- Reading: the Houdini-looking layout, the CPU count (12 -> 4 -> 2) and the split set change nothing; 2 of 12 runs outlived 40 s with no setting in common (flat run 1, 4-CPU run 5), so a survivor is chance at about 15%, not a fix. Pinned to ONE CPU the death moves to 48-50 s (+14 s): the verdict follows executed work, not wall time. The storm of `lseek`/`read` on base.apk (125 k pairs, 1.0-3.0 s after start) is not it (it ends 31 s before the death).
+- Step-1 trace (ace-proxy.bt, 4.7 M lines): the guest thread that runs the emulator-probe list is the process's main Java thread (libanogs is loaded there); right before the list the translator's own path resolution stats `/proc/<pid>/cmdline`, `/proc/self/maps`, `/proc/self/auxv`, `/proc/self/task/<pid>` and the thread looks up `shell_cache/vm/comm.zip` (ENOENT, a dozen times). Nothing arch-specific is visible in the libc proxy calls of that thread; the decision is made from values the trace does not show (JNI/Build, properties, memory).
+- Differences left that were not A/B-ed: install record (`nativeRoute=bridge-arm64` vs `native`, uid 10014 vs 10001, `converterAbi` 11 vs 9), host kernel/CPU (`/proc/cpuinfo` reads: the translated cpuinfo thread makes 157 k syscalls), and the guest-visible JNI `Build` / property values of the two routes.
+- Cleaned: tester `~/envT` removed.
+
 ## 2026-11-16: PGR timing lead: no CNTVCT reads at all; syscall-level trace: translated ACE probes emulator artefacts that native does not (first 38 s)
 
 - Interpreter knob build (patch 0048, libberberis_arm64 `c057908a`, build log above). With `berberis.count_mrs=1` PGR (microG copy on the tester PC, died at 39.9 s) printed **no** `mrs cntvct_el0` line in 40 s; control `hello.acediff` in the same instance printed 35 lines (16384+ reads from one pc, 59-69 ns each). So no timer scale or fast-CNTVCT can change the verdict; ACE's time sources are syscalls (clock_gettime 113, gettimeofday 169: 16 and 427 calls in 35 s translated; native 2908 and 431, native counts include libc-level calls, see below).
