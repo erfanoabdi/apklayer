@@ -1,0 +1,35 @@
+#!/bin/bash
+# One timed PGR run with the true timeline (pgr-timeline.bt): ACE's files reset first (moved to ace-before-<N>, what the run wrote copied to ace-after-<N>),
+# core dumps off for the run (a process that dies of SIGSEGV otherwise lingers 80-130 s in systemd-coredump), the run's trace in <work>/timeline-<N>.txt.
+# Run on the host that has the instance (the Mac cannot reach the tester PC except through git: copy-paste the text over ssh stdin, never scp).
+#   INST=trial2 WORK=~/pgr-work N=1 [PW=<sudo password>] [RUNMS=120000] [APKLAYER=apklayer] tools/ace/pgr-timeline.sh
+# x86_64 hosts: kprobe force_sig_fault; arm64: arm64_force_sig_fault too. Restores the core_pattern at the end.
+set -u
+INST=${INST:?instance}; WORK=${WORK:?work dir}; N=${N:-1}; PW=${PW:-}; RUNMS=${RUNMS:-120000}; APKLAYER=${APKLAYER:-apklayer}
+PKG=com.kurogame.gplay.punishing.grayraven.en
+F=$HOME/.local/share/apklayer/$INST/app-data/$PKG/app/files
+HERE=$(cd "$(dirname "$0")" && pwd)
+mkdir -p "$WORK"
+sd() { if [ -n "$PW" ]; then sudo -S -p '' "$@" <<<"$PW"; else sudo -n "$@"; fi; }
+case "$(uname -m)" in aarch64) FAULT='kprobe:arm64_force_sig_fault, kprobe:force_sig_fault';; *) FAULT='kprobe:force_sig_fault';; esac
+sed "s|@FAULT@|$FAULT|" "$HERE/pgr-timeline.bt" > "$WORK/timeline.bt"
+[ -f "$WORK/core-pattern-saved" ] || cat /proc/sys/kernel/core_pattern > "$WORK/core-pattern-saved"
+sd sysctl -q -w kernel.core_pattern='|/bin/true'
+mkdir -p "$WORK/ace-before-$N" "$WORK/ace-after-$N"
+for f in "$F"/ano_tmp "$F"/ace_shell_di.dat "$F"/ano_app_* "$F"/fake_* "$F"/atti_*; do [ -e "$f" ] && mv "$f" "$WORK/ace-before-$N/"; done
+OUT=$WORK/timeline-$N.txt; : > "$OUT"
+export BPFTRACE_MAX_STRLEN=200
+sd env BPFTRACE_MAX_STRLEN=200 bpftrace "$WORK/timeline.bt" > "$OUT" 2>&1 &
+grep -m1 -q -e READY -e ERROR < <(tail -f -n0 "$OUT")
+if grep -q ERROR "$OUT"; then cat "$OUT"; sd sysctl -q -w kernel.core_pattern="$(cat "$WORK/core-pattern-saved")"; exit 1; fi
+S=$(date +%s.%N)
+APKLAYER_JOPTS=-Dapklayer.runms=$RUNMS $APKLAYER --instance "$INST" run $PKG > "$WORK/run-$N.log" 2>&1; rc=$?
+echo "run $N rc=$rc wall $(echo "$(date +%s.%N) - $S" | bc)"
+$APKLAYER --instance "$INST" stop >/dev/null 2>&1
+sd pkill -INT -f "[b]pftrace $WORK/timeline.bt"
+pkill -f "[t]ail -f -n0 $OUT"
+cp -a "$F"/ano_tmp "$F"/ace_shell_di.dat "$F"/ano_app_* "$F"/fake_* "$F"/atti_* "$WORK/ace-after-$N/" 2>/dev/null
+sd sysctl -q -w kernel.core_pattern="$(cat "$WORK/core-pattern-saved")"
+echo "core_pattern now: $(cat /proc/sys/kernel/core_pattern)"
+echo "ace-after-$N: $(ls "$WORK/ace-after-$N" | tr '\n' ' ')"
+grep -a -e T0 -e EXIT -e FAULT -e RTSQ -e TGKILL -e ' SIG ' "$OUT" | grep -a -v -e 'sig 11 code 1 .*java' | cut -c1-200 | head -${HEAD:-40}
