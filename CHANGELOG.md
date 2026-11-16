@@ -3,6 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: PGR network cut (agent G): the server's reply is NOT the verdict; the death is a fixed ~6 s after the ACE net thread's connect() to :10012 returns
+- Net thread (the one that later self-raises SIGBUS): DNS of one name with 6 Tencent Cloud IPs (101.32.143.{232,247,64,142}, 129.226.{1.157,2.37}); stage 1 TLS-like on :443 (sends 42/54/237/232, gets 50/53/84/94); then connect :10012, sends 42/54/325 (gets 50/137/196), then the post-connect path below. Tracer `tools/ace/ace-net.bt`, driver `tools/ace/pgr-netblock.sh` (iptables per-IP rules, uid only, removed with -D, `iptables -S` identical before/after in every batch).
+- Tester PC, pgrshared, lite mode, lib 985ec9c9. True death = EXIT after T0, connect = connect(:10012) return:
+
+| variant (6 IPs) | runs | death (s) | connect :10012 (s) | death - connect |
+|---|---|---|---|---|
+| none | 2 | 44.5, 34.2 | 38.7, 28.4 | 5.8, 5.8 |
+| REJECT tcp-reset :10012 | 8 | 31.2, 33.6, 34.3, 31.4, 36.0, 32.7, 34.2, 33.2 | 25.2, 27.6, 28.3, 27.8, 30.0, 27.2, 28.2, 27.7 | 6.0 each |
+| REJECT :443+:10012 | 8 | 34.0, 51.9, 33.1, 61.7, 32.9, 31.1, 34.1, 34.1 | 21.4, 41.8, 22.4, 51.1, 20.9, 18.5, 20.1, 21.5 | 10-14 (443 retries) |
+| DROP :10012 | 8 | all alive at the 75 s cap (rc 0) | blocked in connect | - |
+| DROP :10012, cap 300 s | 3 | 166.6, 166.3, 170.7 | 160.5, 161.3, 164.7 (ETIMEDOUT -110) | 6.1, 5.0, 6.0 |
+
+- Alive runs render the login screen at 120 s (screenshot). So: no reply needed (RST dies the same), the death clock is the net thread's own: connect returns (success or error) -> 18x berberis "free() of no glibc chunk" diagnostics (each: process_vm_readv 16 B + write(2) ~300 B; guest caller 0x..8238, guest pc 0x..a52c0, chunks 0x1010 apart in a 0x..90000000 region, header 0x0) + rt_sigaction(SIGABRT get, SIGTRAP set) -> exactly ~6 s later munmap(0x4000 block), rt_sigaction(SIGBUS), tgkill(self, SIGBUS). Identical in normal and rejected runs.
+- Do not trace the net thread with raw_syscalls unfiltered: its fault/signal loop (297/202/27/39/186) made 9 M lines/s, GBs of trace, the run lived 103 s. ace-net.bt now counts them.
+- DROP of tcp :10012 to those IPs postpones the death by the connect timeout (127 s), a workaround at best.
+
 ## 2026-11-16: PGR maps/file view: names in the served maps did not open (17 ENOENT); making them open does not stop the death
 
 - Served maps (patch 0049 dump on `pgrshared`, 3537 lines, 229 KB) vs native AWS (3132 lines, 319 KB): 0043 strips `arm64/` from names, so the maps list `/system/lib64/<x>.so` (269 names) and `/apex/com.android.runtime/lib64/bionic/lib{c,dl,m}.so`, but the guest's file view had those libs only under `/system/lib64/arm64/` and no apex runtime dir: ACE's 17 `openat` of such names at 19.8 s returned ENOENT. Also: one x86 name in the maps (`libclang_rt.ubsan_standalone-x86_64-android.so`), 2361 anonymous lines (native 1533). Native maps show host paths and JDK libs too, so "hide the host" is not what native does.
