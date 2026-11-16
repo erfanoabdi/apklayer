@@ -44,7 +44,7 @@ static void all(const char *path, int fl, const char *tag) {
   char t[64]; int fd = open(path, fl | O_CLOEXEC); snprintf(t, sizeof t, "open%s", tag);
   if (fd < 0) { P(t, "-1|%d|", errno); return; }
   struct stat st; int r = fstat(fd, &st);
-  P(t, "%d|0|mode=%o size=%lld blksize=%ld blocks=%lld nlink=%ld", fd, st.st_mode & 07777, (long long)st.st_size, (long)st.st_blksize, (long long)st.st_blocks, (long)st.st_nlink); (void)r;
+  P(t, "ok|0|mode=%o size=%lld blksize=%ld blocks>0=%d nlink=%ld", st.st_mode & 07777, (long long)st.st_size, (long)st.st_blksize, (long long)st.st_blocks > 0, (long)st.st_nlink); (void)r;
   if (*tag) { close(fd); return; }
   static const size_t ns[] = {1, 7, 100, 1000, 4095, 4096, 4097, 8192, 65536};
   char op[48];
@@ -63,9 +63,9 @@ static void all(const char *path, int fl, const char *tag) {
   { size_t n = 1 << 20; char *b = mk(n); lseek(fd, 0, SEEK_SET); long k = read(fd, b, n); rd("read(1M)", k, n, b);
     P("read(1M)-nul", "%d", k > 0 ? (int)(memchr(b, 0, k) != NULL) : -1); free(b); }
   { /* the whole file in 4096 chunks: calls, per-call counts bounded, total, EOF twice */
-    lseek(fd, 0, SEEK_SET); char *b = mk(4096); long tot = 0, calls = 0, first = -1, mx = 0, k; int over = 0; char g[32];
-    while ((k = read(fd, b, 4096)) > 0) { if (!calls) first = k; if (k > mx) mx = k; tot += k; calls++; if (k > 4096) over = 1; memset(b, 0xA5, 4096); if (calls > 100000) break; }
-    ovr(b, 4096, g); P("loop4096", "tot>0=%d calls=%ld first=%ld max=%ld end=%ld over=%d %s", tot > 0, calls, first, mx, k, over, g);
+    lseek(fd, 0, SEEK_SET); char *b = mk(4096); long tot = 0, calls = 0, first = -1, mx = 0, k; int over = 0, badend = 0, badstart = 0; char g[32];
+    while ((k = read(fd, b, 4096)) > 0) { badend += b[k - 1] != '\n'; badstart += b[0] >= 'A' && b[0] <= 'Z'; if (!calls) first = k; if (k > mx) mx = k; tot += k; calls++; if (k > 4096) over = 1; memset(b, 0xA5, 4096); if (calls > 100000) break; }
+    ovr(b, 4096, g); P("loop4096", "tot>0=%d calls=%ld first=%ld max=%ld end=%ld over=%d badend=%d badstart=%d %s", tot > 0, calls, first, mx, k, over, badend, badstart, g);
     for (int i = 0; i < 2; i++) { k = read(fd, b, 4096); P("read-at-eof", "%ld|%ld", R(k), E(k)); }
     off_t offs[] = {tot, tot + 1, 1 << 20, 1L << 40, -1};
     for (int i = 0; i < 5; i++) { k = pread(fd, b, 100, offs[i]); snprintf(op, sizeof op, "pread(off=%s)", i == 0 ? "size" : i == 1 ? "size+1" : i == 2 ? "1M" : i == 3 ? "1T" : "-1"); P(op, "%ld|%ld", R(k), E(k)); }
@@ -118,6 +118,8 @@ static void *work(void *a) {
 }
 static const char *run(void) {
   out = calloc(1, 4u << 20); used = 0;
+  /* ~1500 mappings: a real maps file is then far larger than a page, and a seq_file read returns whole lines, at most about one page */
+  char *a = mmap(0, 3000 * 4096, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0); for (int i = 1; i < 3000; i += 2) mprotect(a + i * 4096, 4096, PROT_NONE);
   pthread_t t; pthread_create(&t, 0, work, 0); pthread_join(t, 0);  /* the thread: ACE reads from a thread arena */
   return out;
 }

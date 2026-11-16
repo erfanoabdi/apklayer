@@ -28,6 +28,8 @@ bool apklayer_guest_path_overrides(char **path);  /* paths.c: the same, with /ho
 int apklayer_proc_fd(int fd);
 int apklayer_proc_prctl_view(int option, long *result);  /* proc_task.c; declared before the syscall() wrapper uses it (gcc 15: implicit declarations are errors) */
 long apklayer_proc_getdents64(int fd, void *buf, size_t count);
+int apklayer_seq_syscall(long nr, const long *a, long *r);  /* seq_read.c */
+void apklayer_seq_new_fd(long fd);
 FILE *apklayer_proc_file(FILE *file);
 int apklayer_proc_pid_hidden(const char *name);
 int apklayer_proc_hidden_at(int dirfd, const char *path);  /* paths.c: path (relative to dirfd) names a process this app does not see */
@@ -461,6 +463,8 @@ long syscall(long nr, ...)
     for (int i = 0; i < 6; i++) a[i] = va_arg(ap, long);
     va_end(ap);
     if (nr == SYS_getdents64) return apklayer_proc_getdents64((int)a[0], (void *)a[1], (size_t)a[2]);
+    long seq;
+    if (apklayer_seq_syscall(nr, a, &seq)) return seq;  /* seq_read.c: the served maps/mounts memfds read like seq_files */
     int at = nr == SYS_openat || nr == SYS_newfstatat || nr == SYS_faccessat || nr == SYS_readlinkat || nr == SYS_statx || nr == SYS_mkdirat ||
              nr == SYS_unlinkat || nr == SYS_fchmodat || nr == SYS_fchownat || nr == SYS_utimensat || nr == SYS_mknodat ||
              nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat
@@ -489,7 +493,7 @@ long syscall(long nr, ...)
 #ifdef SYS_open
         || nr == SYS_open
 #endif
-    ) return apklayer_proc_fd((int)r);
+    ) { apklayer_seq_new_fd(r); return apklayer_proc_fd((int)r); }
     if (nr == SYS_prctl) { long v; if (r >= 0 && apklayer_proc_prctl_view((int)a[0], &v)) return v; }
     /* the raw getcwd syscall (bionic's getcwd in translated code ends here, not in glibc's): the directory under its Android name when it fits the caller's buffer.
      * The kernel's answer is the length including the NUL */
