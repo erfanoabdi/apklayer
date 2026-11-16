@@ -201,6 +201,29 @@ int propCommand(const Layout& l, const Instance& inst, const std::vector<std::st
     return 0;
 }
 
+// `app <package> translation-mode [default|lite|interpret]`: berberis.mode.<package> (binary_translation 0008), the same override as `prop set`
+int appCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
+    static const std::map<std::string, std::string> modes = {{"lite", "lite-translate-or-interpret"}, {"interpret", "interpret-only"}};
+    if (args.size() < 2 || args.size() > 3 || args[1] != "translation-mode") die("app <package> translation-mode [default|lite|interpret]");
+    const std::string& pkg = args[0];
+    if (pkg.size() > 49) die("a package name of at most 49 characters (the translator's property name limit)");  // "berberis.mode." + 49 = 63 bytes
+    std::string info = join(appDir(l, pkg), "info.properties");
+    if (!exists(info)) die("not installed: " + pkg);
+    const std::string key = "berberis.mode." + pkg;
+    if (args.size() == 3) {
+        if (args[2] != "default" && !modes.count(args[2])) die("not a translation mode: " + args[2] + " (default, lite, interpret)");
+        int r = propCommand(l, inst, args[2] == "default" ? std::vector<std::string>{"unset", key} : std::vector<std::string>{"set", key, modes.at(args[2])});
+        if (r != 0) return r;
+    }
+    std::string mode = "default";
+    for (const auto& [k, v] : propLines(inst.propOverrides()))
+        if (k == key) for (const auto& [name, value] : modes) if (value == v) mode = name;
+    printf("translation-mode\t%s\n", mode.c_str());
+    if (property(info, "nativeRoute").rfind("bridge-", 0) != 0) puts("note: this app's code is not translated here; the mode has no effect");
+    puts("note: takes effect at the app's next start");
+    return 0;
+}
+
 int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     const std::string file = join(inst.root, "settings");  // read by the hub (apklayer.host.HubHostSettings), which lays it over the desktop's
     static const std::map<std::string, std::regex> keys = {  // what each value may be (the hub reads them as such)

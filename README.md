@@ -18,6 +18,8 @@ Android services as host processes: servicemanager, SurfaceFlinger, gralloc, HWC
 apklayer-shell ──> one Wayland window per app                                                       (bridge/shell)
 ```
 
+**Translation mode (x86_64 hosts, arm64 apps):** an app whose native code is translated runs with the optimizing translator by default; one that draws wrong (a game's 3D scene as noise) can run lite-translated, slower: the app's page in the manager has a "Lite translation" switch, or `apklayer app <package> translation-mode default|lite|interpret` (prints the mode without an argument); it applies from the app's next start.
+
 **Window style:** on a phone or in a mobile shell (Lomiri, Phosh, Plasma Mobile, Sailfish) apps open maximized with an Android navigation bar (Back; Home is the shell's own) and the phone's real density; on a desktop they are normal windows. Change it with `apklayer settings set window-mode auto|mobile|desktop` (or `window-mode.<package>` for one app) or in the manager; it applies at once.
 
 **Navigation bar on desktop windows:** where the compositor draws the title bar (KDE, sway and other wlroots desktops) it has no Back button, so a desktop-style window gets the same navigation bar as the mobile style (Back only, at the bottom of the window, shown to the app as its navigation bar inset, hidden in fullscreen; a tap gives Android's light haptic click where the instance has a vibrator). On GNOME the shell's own title bar has Back and no bar is added. `apklayer settings set navbar auto|on|off` (auto: where the compositor draws the title bar) or the manager's Settings page; it applies at once.

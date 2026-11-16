@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-16: per-app translation mode (agent W)
+- `apklayer [--instance ID] app <package> translation-mode [default|lite|interpret]`: reads or writes `berberis.mode.<package>` in the instance's overrides (via `prop set|unset`, same store and validation; package names up to 49 characters, unknown modes rejected), prints `translation-mode\t<mode>`, notes that it applies from the app's next start and that it does nothing for an app that is not translated. Nothing is restarted. The manager already had the switch ("Lite translation" on the app page, shown for `nativeRoute=bridge-*` apps only, hence hidden on native arm64 hosts and for x86 apps); it uses the same property. Test group `translation-mode` (tests/vm/translation-mode.sh), passes on the arm64 UTM VM (the "not translated" note path); the translated path needs an x86_64 host and was not run.
+
 ## 2026-11-16: PGR agent M: what the freed pointers are; the chain does not need the trampoline; native never starts ACE's Tencent network stage; the native trampoline death is a stack-protector abort in the wrapper
 
 - **The chain is not the trampoline's.** Preload rebuilt from main (3139e3b, no `vma_names.c`, `nm -D` shows no `pthread_create`) on the tester PC, used through a private `APKLAYER_NATIVE` dir of symlinks (checked: the game's maps show `~/pgr-m-build/libapklayer-preload.so`; `libberberis_arm64.so` sha 985ec9c9 at start and end; pgrshared, 40-60 s runs under the lock): 12 of 15 runs died at 32.5-39.8 s (connect :10012 at 25-31 s, 20-63 invalid frees right after, SIGBUS tgkill 6-8 s later), 3 outlived the 40-46 s limit (chance, as before). Same chain as with the trampoline.
