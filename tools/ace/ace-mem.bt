@@ -14,7 +14,7 @@ tracepoint:syscalls:sys_enter_mremap / @g[pid] / { printf("%lu mremap tid %d old
 tracepoint:syscalls:sys_enter_madvise / @g[pid] / { printf("%lu madvise tid %d addr 0x%lx len 0x%lx adv %d\n", (nsecs - @t0) / 1000000, tid, args->start, args->len_in, args->behavior); }
 tracepoint:syscalls:sys_enter_mincore / @g[pid] / { printf("%lu mincore tid %d addr 0x%lx len 0x%lx\n", (nsecs - @t0) / 1000000, tid, args->start, args->len); }
 tracepoint:syscalls:sys_enter_msync / @g[pid] / { printf("%lu msync tid %d addr 0x%lx len 0x%lx\n", (nsecs - @t0) / 1000000, tid, args->start, args->len); }
-tracepoint:syscalls:sys_enter_process_vm_readv / @g[pid] / { printf("%lu process_vm_readv tid %d target %d remote 0x%lx len 0x%lx n %d\n", (nsecs - @t0) / 1000000, tid, args->pid, *(uint64 *)args->rvec, *(uint64 *)(args->rvec + 8), args->riovcnt); }
+tracepoint:syscalls:sys_enter_process_vm_readv / @g[pid] / { printf("%lu process_vm_readv tid %d target %d remote 0x%lx len 0x%lx n %d\n", (nsecs - @t0) / 1000000, tid, args->pid, *(uint64 *)args->rvec, *(uint64 *)((uint64)args->rvec + 8), args->riovcnt); }
 tracepoint:syscalls:sys_enter_process_vm_writev / @g[pid] / { printf("%lu process_vm_writev tid %d target %d\n", (nsecs - @t0) / 1000000, tid, args->pid); }
 tracepoint:syscalls:sys_enter_ptrace / @g[pid] / { printf("%lu ptrace tid %d req %ld pid %ld\n", (nsecs - @t0) / 1000000, tid, args->request, args->pid); }
 tracepoint:syscalls:sys_enter_pread64 / @g[pid] / { @pread[tid, args->fd] = count(); }

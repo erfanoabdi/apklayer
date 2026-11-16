@@ -8,7 +8,7 @@ APKLAYER_JOPTS=-Dapklayer.runms=60000 bin/apklayer run hello.acediff > "$out" 2>
 grep -q '\[acediff\] DONE' "$out"
 sed -n 's/^.*\[acediff\] //p' "$out" | grep -v -e '^info' -e '^DONE' > "$out.x86"
 # the differences still known, not fixed (known-diffs.txt: SHA512/SM4 are not in the emulated HWCAP; the negative default NaN of an invalid operation and FPCR.DN in
-# translated (not interpreted) code, kill(getpid()) timing (the signal is taken by another thread: "pending has usr1"), prctl, ID and PMU registers): a new difference fails the group
+# translated (not interpreted) code, kill(getpid()) timing (the signal is taken by another thread: "pending has usr1"), prctl, ID and PMU registers; "selftext libc:" lines exist only in the app (the real run is a static program): the open of libc by the path the guest maps name fails with ENOENT, a known tell, not hidden by being masked here): a new difference fails the group
 f=tests/apps/hello-acediff/known-diffs.txt
 grep -v -f "$f" tests/apps/hello-acediff/real-arm64.txt > "$out.real"
 grep -v -f "$f" "$out.x86" > "$out.x86f"

@@ -2,7 +2,7 @@
 // (libanogs.so offsets from the maps copied at the first event). Translated route only (uprobe on RunGuestSyscall, as ace-creat.bt); needs --unsafe.
 // Filter: munmap of exactly 0x4000 bytes, any mremap, and mprotect that removes PROT_READ (0) of a range inside the libc text window printed by the caller.
 // Guest arm64 syscall numbers: munmap 215, mremap 216, mmap 222, mprotect 226, mincore 232, madvise 233.
-// ThreadState offsets (as ace-creat.bt): x0 +0x00, x1 +0x08, x2 +0x10, x8 +0x40, x29 +0xe8, x30 +0xf0, pc +0x100.
+// ThreadState offsets (as ace-creat.bt): x0 +0x00, x1 +0x08, x2 +0x10, x8 +0x40, x19..x22 +0x98..+0xb0, x29 +0xe8, x30 +0xf0. The "pc" printed from +0x100 is NOT the guest pc (it read 0x91): use x30 and the frames.
 
 uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
 {
