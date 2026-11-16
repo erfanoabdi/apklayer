@@ -12,12 +12,13 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 conf=$repo/tests/vm/local.conf
 get() { sed -n "s/^$1=//p" "$conf" | head -1; }
 case $os in
-    ut)   host=$(get UBPORTS);  A=/opt/click.ubuntu.com/apklayer.erfanoabdi/current/usr/bin/apklayer; R=/home/${host%@*}/apklayer-phone-test ;;
-    sfos) host=$(get SAILFISH); A=/usr/bin/apklayer; R=/userdata/apklayer/phone-test-${host%@*} ;;  # the Quintus' home is on a small partition
+    ut)   host=$(get UBPORTS);  A=/opt/click.ubuntu.com/apklayer.erfanoabdi/current/usr/bin/apklayer; R=/home/${host%@*}/apklayer-phone-test${PTEST_ID:+-$PTEST_ID} ;;
+    sfos) host=$(get SAILFISH); A=/usr/bin/apklayer; R=/userdata/apklayer/phone-test-${host%@*}${PTEST_ID:+-$PTEST_ID} ;;  # the Quintus' home is on a small partition
     *) echo "phone-test: ut or sfos" >&2; exit 2 ;;
 esac
 [ -n "$host" ] || { echo "phone-test: no phone in $conf" >&2; exit 2; }
 apks=${APKLAYER_APKS:-$repo/build}
+inst=ptest${PTEST_ID:+-$PTEST_ID}  # PTEST_ID: a second run at the same time on the same phone (another agent) has its own scratch directory and instance
 ssh() { command ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" "$@"; }
 h=$repo/tools/halium
 ssh "mkdir -p $R/apks" || exit 2
@@ -27,8 +28,8 @@ woke=0
 out=$($h/unlock.sh $os); echo "unlock: $out"
 [ "$out" = unlocked ] && woke=1
 [ $os = ut ] && [ "$out" != unlocked ] && { echo "phone-test ut: FAIL (not unlocked)"; ssh "rm -rf $R"; exit 1; }  # apps are stopped behind the lock screen
-ssh "A=$A R=$R bash $R/phone-checks.sh $os $*"; rc=$?
+ssh "A=$A R=$R PTEST_INSTANCE=$inst bash $R/phone-checks.sh $os $*"; rc=$?
 [ $woke = 1 ] && [ $os = ut ] && echo "ut-lock: $($h/unlock.sh ut off)"
-ssh "APKLAYER_INSTANCE=ptest $A stop >/dev/null 2>&1; APKLAYER_INSTANCE=ptest $A instance remove ptest >/dev/null 2>&1; pkill -f '[-]-instance ptest ' >/dev/null 2>&1; [ -n '${KEEP:-}' ] || rm -rf $R"  # KEEP=1 leaves the scratch directory (the groups' logs) for a look, remove it by hand; a delayed app-spare outlives stop and blocks the next race run
+ssh "APKLAYER_INSTANCE=$inst $A stop >/dev/null 2>&1; APKLAYER_INSTANCE=$inst $A instance remove $inst >/dev/null 2>&1; pkill -f '[-]-instance $inst ' >/dev/null 2>&1; [ -n '${KEEP:-}' ] || rm -rf $R"  # KEEP=1 leaves the scratch directory (the groups' logs) for a look, remove it by hand; a delayed app-spare outlives stop and blocks the next race run
 echo "phone-test $os: $([ $rc = 0 ] && echo PASS || echo FAIL)"
 exit $rc

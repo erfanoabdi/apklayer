@@ -113,18 +113,12 @@ export component UpdateBanner {
                     color: MaterialPalette.on_surface_variant;
                     wrap: word-wrap;
                 }
-                // as the busy bar of app.slint: a fixed-height Rectangle holds it (the indicator alone let the card take the free height on the phone)
-                if Backend.updating : Rectangle {
+                if Backend.updating : LinearProgressIndicator {
                     height: MaterialStyleMetrics.size_4;
-                    LinearProgressIndicator {
-                        width: 100%;
-                        height: 100%;
-                        progress: Backend.update-progress;
-                        indeterminate: Backend.update-progress < 0;
-                    }
+                    progress: Backend.update-progress;
+                    indeterminate: Backend.update-progress < 0;
                 }
-                // not an empty layout while updating (no button): it took the card's whole free height on the phone (the banner grew to half the screen)
-                if !Backend.updating || Backend.update-notes-url != "" : HorizontalLayout {
+                HorizontalLayout {
                     alignment: end;
                     spacing: MaterialStyleMetrics.spacing_8;
                     if Backend.update-notes-url != "" : TextButton { text: "What's new"; clicked => { Backend.open-notes(); } }

@@ -69,9 +69,9 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Tester PC: run `kde-window.py` once at 150% on its KWin (the prebuilts there are current; the new deb is built, not installed).
 - Quintus: re-run `phone-test.sh sfos` groups with the current RPM (the lock code is `SAILFISH_LOCK` in `local.conf` since 2026-11-16, `tools/halium/unlock.sh sfos`).
 - AMD: Vulkan presentation and host ES1 untested.
-- Halium: vendor HALs, `media = device`, NewPipe network, the new native changes on the phones.
+- Halium: vendor HALs, `media = device`, NewPipe network; wheel/stylus, text-input and the layout subtype cannot run under Lomiri (no pointer or tablet, Maliit): a Sailfish/KDE check only.
 - Sailfish: geoclue fix, Lipstick switcher with two apps, a finger on the host dialog.
-- Ubuntu Touch: turning by hand (the fake accelerometer of `tools/halium/ut-rotate.sh` did not reach sensorfwd on the 0.4.101 click: orientation stayed 5); the look of the manager's Install dialog (its path field fills half the screen).
+- Ubuntu Touch: turning by hand (the fake accelerometer of `tools/halium/ut-rotate.sh` did not reach sensorfwd on the 0.4.101 click: orientation stayed 5); the look of the manager's Install dialog (its path field fills half the screen); the update banner is half a screen tall while it runs (a screenshot on the X23; not the empty button row, not the bar's height: look at the card's layout in `manager/ui/setup.slint` `UpdateBanner`); `HubIncoming/<n>` of a Share whose dialog was replaced by "Choose file…" stays (the manager removes only the installed file's folder).
 - Bluetooth PIN dialog on a legacy device. A real USB serial adapter.
 - Push: a real Telegram/WhatsApp message with microG; the unit starting the stack at login.
 - By eye: window raise, text magnifier, portal file chooser, pkexec, Google sign-in, playback, audio, colours, IME look.

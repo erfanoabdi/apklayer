@@ -6,7 +6,7 @@
 # Lipstick turned by its orientation lock: the shell turns the display; the lock is put back).
 os=$1; shift
 A=${A:-apklayer} R=${R:-$(dirname "$0")}
-export APKLAYER_INSTANCE=ptest
+export APKLAYER_INSTANCE=${PTEST_INSTANCE:-ptest}
 fail=0
 report() { if [ "$1" = 0 ]; then echo "PASS $2: $3"; else echo "FAIL $2: $3"; fail=1; fi; }
 run_app() { APKLAYER_JOPTS="-Dapklayer.runms=${3:-30000} $4" $A run "$1" > "$R/$2.out" 2>&1; }  # pkg, log, ms, extra options
