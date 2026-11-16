@@ -61,8 +61,9 @@ def picture(name, w, h, scale):
 
 def fullscreen(name):
     w, h, scale, bar = configure()
-    ow, oh = (int(n) for n in re.search(r'first configure: .* output (\d+)x(\d+) @', shell_log()).groups())
-    assert (w, h, bar) == (ow, oh, 0), '%s: configure %s, expected the whole %dx%d output, no title bar' % (name, configure(), ow, oh)
+    ow, oh, oscale = (int(n) for n in re.search(r'first configure: .* output (\d+)x(\d+) @(\d+)%', shell_log()).groups())
+    ow, oh = ow * oscale // scale, oh * oscale // scale  # the log's size is the mode over the integer wl_output scale: a fractional scale (KDE 150%) shows it smaller
+    assert abs(w - ow) <= 1 and abs(h - oh) <= 1 and bar == 0, '%s: configure %s, expected the whole %dx%d output, no title bar' % (name, configure(), ow, oh)
     picture('fullscreen-' + name, w, h, scale)
     checks.append('%s: %dx%d, no bar' % (name, w, h))
 

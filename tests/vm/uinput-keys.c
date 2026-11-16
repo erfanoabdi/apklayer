@@ -5,6 +5,7 @@
  *   click | rclick          left / right button at the pointer      wheel:<notches> (+ = up)
  *   drag:<x1>,<y1>,<x2>,<y2>      left-button drag (title bar move, edge resize)
  *   altdrag:<x1>,<y1>,<x2>,<y2>   hold Alt, right button down at (x1,y1), drag to (x2,y2), release
+ *   res:<n>               the unit of abs/drag/altdrag coordinates from now on: 1/n of the screen (default 1000; 32767 = the device's own steps, a pixel on any screen)
  *   sleep:<ms>
  */
 #include <fcntl.h>
@@ -14,6 +15,7 @@
 #include <string.h>
 #include <unistd.h>
 
+static int res = 1000; /* the unit of the pointer steps' coordinates: 1/res of the screen */
 static int fd, pfd; /* keyboard device, absolute pointer device */
 static void evd(int d, int type, int code, int val)
 {
@@ -26,8 +28,8 @@ static void psyn(void) { evd(pfd, EV_SYN, SYN_REPORT, 0); }
 static void pbtn(int code, int down) { evd(pfd, EV_KEY, code, down); psyn(); usleep(30000); }
 static void pabs(int px, int py)
 {
-    evd(pfd, EV_ABS, ABS_X, px * 32767 / 1000);
-    evd(pfd, EV_ABS, ABS_Y, py * 32767 / 1000);
+    evd(pfd, EV_ABS, ABS_X, (long)px * 32767 / res);
+    evd(pfd, EV_ABS, ABS_Y, (long)py * 32767 / res);
     psyn();
     usleep(60000);
 }
@@ -77,6 +79,7 @@ int main(int argc, char **argv)
         } else if (sscanf(a, "wheel:%d", &x) == 1) { ev(EV_REL, REL_WHEEL, x); syn(); usleep(100000); }
         else if (sscanf(a, "sleep:%d", &x) == 1) usleep((useconds_t)x * 1000);
         else if (sscanf(a, "abs:%d,%d", &x, &y) == 2) pabs(x, y);
+        else if (sscanf(a, "res:%d", &x) == 1 && x > 0) res = x;
         else if (!strcmp(a, "click")) { pbtn(BTN_LEFT, 1); usleep(50000); pbtn(BTN_LEFT, 0); usleep(100000); }
         else if (!strcmp(a, "rclick")) { pbtn(BTN_RIGHT, 1); usleep(50000); pbtn(BTN_RIGHT, 0); usleep(100000); }
         else if (sscanf(a, "wheel:%d", &x) == 1) {

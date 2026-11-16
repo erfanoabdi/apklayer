@@ -24,7 +24,8 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 
 ## Graphics
 - Multi-GPU: tested on the MacBookPro16,1 (Intel UHD 630 + AMD Pro 5500M, the desktop's KWin on the AMD one) and with a nested KWin on the Intel one (`APKLAYER_COMPOSITOR_GPU`, a virtual KWin names no device); needs a person or hardware: a real KWin session on the iGPU (`KWIN_DRM_DEVICES`), NVIDIA + Intel (Optimus), two dGPUs. A different GPU per app is not built (one stack, one GPU per instance: use two instances).
-- KDE, needs a human eye: edge/corner drag resize, Alt+F8, snap by dragging, the look of KDE's title bar around the app, a real second monitor, fractional scale on the real display, `fullscreen-key` (F11) on a private session.
+- KDE, needs a human eye (the rest is automated on KWin 5.27, MacBook, `kde-interact`, `kde-scales`, `kde-output`, `kde-navbar`: CHANGELOG 2026-11-16): a real second (physical) monitor; whether KWin's title bar around the app looks right (its icon is the generic Wayland one: the window's app id is `apklayer:<pid>:<instance>:<package>`, no desktop file).
+- KDE Plasma 6 (KWin 6): the same groups never ran on it; `tests/lib/kwin.py` keeps the 6 branch (windowList, output, maximizeMode) as it was, untested since the rewrite.
 - Lipstick: a mouse over the navigation-bar strip (pointer.c `in_remote_strip`) is the bar's since 2026-11-15; needs a human check (no pointer device on the phone to try it).
 
 ## Camera
@@ -32,7 +33,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Large tasks parked: `
 - Halium camera: preview rotation needs a human check (preview and still agree on both phones; whether the picture is upright was not judged). `camera`/`media = device` work (libhidl 0005, `tools/halium/hidl-list.sh`). NewPipe playback with `media = device` is blocked by YouTube extraction ("Could not parse website") on the phones' network, not by the stack. The X23 `hello.camera` large still is cut by the landscape-to-portrait activity recreation (test-app race).
 
 ## Input / IME
-- KDE navigation bar (the mobile bar under server-side decorations, `navbar auto|on|off`): pixel-check the light scheme.
 - Wheel and stylus: written from the protocols and Android docs, never run on real hardware (touchpad, tablet); the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) are delivered through the test input only (AXIS choice is ours: Android has no stylus-specific ones).
 - Non-Latin input: RTL cursor, selection and bidi in an EditText (needs a test app and a human look); layout hotkeys on a real compositor (the xkb group reaches the app as its input method subtype, tested with the injected keymap); `getUnicodeChar()` of a non-Latin key is the shell's character with no meta variants (no per-layout .kcm: dead keys, Shift/AltGr levels through `getUnicodeChar(meta)`).
 - text-input-v3 has no show/hide request and no enter-key hint (labels are the keyboard's own): hide = disable until show/new field and MULTILINE only without an action are sent, never run against a real compositor (GNOME/KWin/Phosh OSK); a desktop input method (fcitx) stops composing while hidden. Fn keys (F1-F12) have no Android keycode in `keysym_to_android`.

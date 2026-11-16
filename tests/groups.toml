@@ -348,6 +348,20 @@ needs = ["com.android.test.uibench"]
 optional = true
 run = ["python3 -u tests/vm/kde-window.py"]
 
+[kde-scales]
+# kde-window and kde-interact on the desktop session's own output at 100%, 150% and 200% (kscreen-doctor), the display's scale put back afterwards
+needs = ["com.android.test.uibench"]
+optional = true
+alone = true
+run = ["python3 -u tests/vm/kde-scales.py"]
+
+[kde-interact]
+# real pointer and keys (uinput) on the session's KWin: title bar move, edge and corner resize, Alt+F8, drag-to-edge snap (tile, maximize), F11; the shell follows KWin's geometry
+needs = ["com.android.test.uibench"]
+optional = true
+alone = true
+run = ["python3 -u tests/vm/kde-interact.py"]
+
 [kde-output]
 # two outputs of different scale under a KWin of its own (kwin_wayland --virtual): the window moves between them, one is disabled; the scale follows
 needs = ["com.android.test.uibench"]

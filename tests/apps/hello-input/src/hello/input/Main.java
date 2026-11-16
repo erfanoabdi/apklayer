@@ -154,6 +154,9 @@ public class Main extends Activity {
             System.out.println("[hello-input] fields off");
         });
         layout.addView(plain, new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
+        // its centre in the window's logical pixels (the tests tap there: the window's size and the host's decorations move it)
+        layout.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> { int[] at = new int[2]; plain.getLocationInWindow(at);
+            System.out.println("[hello-input] plain keys at " + (int) ((at[0] + plain.getWidth() / 2) / dp) + "," + (int) ((at[1] + plain.getHeight() / 2) / dp)); });
         clipboard.addPrimaryClipChangedListener(() -> {
             ClipData clip = clipboard.getPrimaryClip();
             if (clip != null && clip.getItemCount() > 0) {
