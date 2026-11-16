@@ -670,6 +670,11 @@ run = ["tests/vm/spawn.sh"]
 apps = ["hello-acediff"]
 run = ["tests/vm/acediff.sh"]
 
+[procsem]
+# read semantics of the served proc/sys files (maps, smaps, numa_maps, mounts, mountinfo: whole lines, at most 4095 bytes per read, size 0, lseek END EINVAL, as the kernel's seq_files) and a canary guard past every read's count; x86_64 hosts (the translated route), bridge/native/seq_read.c
+apps = ["hello-procsem"]
+run = ["tests/vm/procsem.sh"]
+
 [termux-sandbox]
 # real Termux (a user-supplied APK) in the per-app sandbox: its first launch bootstraps /data/data/com.termux/files (an own uid, a mount view of its own), then the
 # corpus probes: owner names and getprop, hardware punctuation, exec failures, the environment of children. Needs tools/host-setup/sandbox.sh once
