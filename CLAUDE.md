@@ -36,6 +36,9 @@ Never upload more than 100 MB in total (per task, all transfers added up) from t
 ## MUST: never delete app data on hosts in use (owner, 2026-11-16)
 No `clear-data`, uninstall or `rm` of an app's data, `app-data`, `storage` or `Android/data|obb` on the owner's, the tester's or AWS hosts without asking first (say what it deletes, with `du` size). A game's downloaded resources cost the owner tens of GB (PGR 60 GB lost on the tester PC, 2026-11-16). Test with a separate instance or a copy. Every agent brief repeats this.
 
+## MUST: one login of the owner's game account at a time (owner, 2026-11-16)
+The PGR data on the tester PC (instances 0 and pgrshared) and on AWS (pgr, pgrtest) carries the owner's real account. Never log it in at more than one place at the same time and never tap or script past the login screen ("TAP ANYWHERE TO ENTER GAME") without the owner's say-so: no lobby/stage tests, no parallel runs on two hosts or two instances. Runs that stop at the login screen are fine one at a time; ask first for anything that enters the game. Every agent brief repeats this.
+
 ## Before writing or downloading anything
 1. Read `STATUS.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer (ATL) and the AOSP tree are all **local**; never clone or download what is there.
 2. Look for real code to copy or reuse first (those projects, Mesa, AOSP). Write new code only if nothing fits, and say why in the commit message.
