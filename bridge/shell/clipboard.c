@@ -23,7 +23,11 @@ static void offer_mime(void *d, struct wl_data_offer *o, const char *mime)
         || !strcmp(mime, "UTF8_STRING"))
         ((struct offer_info *)d)->text = 1;
 }
-static const struct wl_data_offer_listener offer_listener = { .offer = offer_mime };
+/* version 3 offers also say which drag actions they allow and which was chosen: an event without a listener function aborts libwayland (KWin sends source_actions
+ * for the clipboard selection too, klipper's: the shell died with the lock screen's unlock) */
+static void offer_source_actions(void *d, struct wl_data_offer *o, uint32_t actions) { (void)d; (void)o; (void)actions; }
+static void offer_action(void *d, struct wl_data_offer *o, uint32_t action) { (void)d; (void)o; (void)action; }
+static const struct wl_data_offer_listener offer_listener = { .offer = offer_mime, .source_actions = offer_source_actions, .action = offer_action };
 
 static void dd_data_offer(void *d, struct wl_data_device *dev, struct wl_data_offer *o)
 {

@@ -315,6 +315,9 @@ static void on_wild(int s, siginfo_t *si, void *ucv)
 }
 static void child_dead(int s) { _exit(40 + s); }
 static void child_bus(int s, siginfo_t *si, void *u) { (void)s; (void)u; _exit(100 + si->si_code); }  /* SIGBUS handler: the exit status names the si_code */
+static volatile uintptr_t brk_pc;
+/* SIGTRAP handler of a BRK: 50 = si_code TRAP_BRKPT and si_addr = the BRK (hardware), 51 = the code only, 60 = another code (translation before 0045: SI_TKILL) */
+static void child_brk(int s, siginfo_t *si, void *u) { (void)s; (void)u; _exit(si->si_code == TRAP_BRKPT ? (si->si_addr == (void *)brk_pc ? 50 : 51) : 60); }
 static uint64_t t_signals(void)
 {
     uint64_t h = 0; stack_t ss = {.ss_sp = altstack, .ss_size = sizeof altstack}, old_ss;
@@ -345,6 +348,11 @@ static uint64_t t_signals(void)
     pid = fork();
     if (pid == 0) { struct sigaction sb = {.sa_sigaction = child_bus, .sa_flags = SA_SIGINFO}; sigemptyset(&sb.sa_mask); sigaction(SIGBUS, &sb, NULL); struct sigaction s3 = {.sa_flags = 0}; s3.sa_handler = (void (*)(int))((uintptr_t)on_wild | 2); sigemptyset(&s3.sa_mask); sigaction(SIGUSR1, &s3, NULL); raise(SIGUSR1); _exit(7); }
     if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal misaligned-handler child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
+    /* BRK #imm: SIGTRAP with the architectural siginfo (apklayer 0045) */
+    pid = fork();
+    if (pid == 0) { struct sigaction sk = {.sa_sigaction = child_brk, .sa_flags = SA_SIGINFO}; sigemptyset(&sk.sa_mask); sigaction(SIGTRAP, &sk, NULL);
+        __asm__ volatile("adr x9, 1f\n str x9, [%0]\n 1: brk #0x123\n" :: "r"(&brk_pc) : "x9", "memory"); _exit(7); }
+    if (pid > 0) { int st = 0; waitpid(pid, &st, 0); say("signal brk-siginfo child: %s %d", WIFSIGNALED(st) ? "killed by signal" : "exited", WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st)); }
     /* a signal the process sends itself, with the default disposition (reset with signal(), the handler run() left is gone): the process ends with that signal
      * (WIFSIGNALED, the same number), not in HotSpot's crash handler (SIGABRT) */
     static const int dsigs[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT}; static const char *dvia[] = {"kill", "raise", "tgkill", "abort"};

@@ -46,9 +46,12 @@ in
           fi
       done
 
-      # the WebView provider is installed as a system app, not with `apklayer install`
+      # the WebView provider is a system app (tools/sysapps.list), so it takes install --system.
+      # tools/host-setup/webview.sh does exactly that, but reaches the CLI as ../../bin/apklayer from
+      # its own directory -- share/apklayer/bin/apklayer, which no meson install writes (meson.build
+      # installs the symlink into bindir). It would exit 127 and take the stamp below with it.
       if [ -e "${systemApps}/webview.apk" ]; then
-          sh ${apklayer}/share/apklayer/tools/host-setup/webview.sh "${systemApps}/webview.apk"
+          apklayer install --system "${systemApps}/webview.apk"
       fi
 
       mkdir -p "$(dirname "$stamp")"

@@ -54,6 +54,7 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
         IBinder own = HostPackageService.binder(name);
         if (own != null) return own;
         if (android.content.Context.VPN_MANAGEMENT_SERVICE.equals(name)) return RealBinder.lookup(HubVpn.SERVICE);
+        if (HubNfc.SERVICE.equals(name)) return HostNfc.present() ? RealBinder.await(name, 5000) : null;  // the hub publishes it before READY; none on a host without a source
         if (!android.content.Context.ACCOUNT_SERVICE.equals(name)) return null;
         HubClient.attachEarly();  // the accounts service knows its callers by their registration (an app may ask from attachBaseContext)
         return RealBinder.lookup(HubAccounts.SERVICE);

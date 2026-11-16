@@ -20,8 +20,8 @@ if [ $os = ut ]; then
 else
     [ "$mode" = on ] || { echo "unlock: off is ut only" >&2; S "rm -rf $R"; exit 2; }
     code=$(get SAILFISH_LOCK); [ -n "$code" ] || { echo "unlock: no SAILFISH_LOCK in $conf" >&2; S "rm -rf $R"; exit 2; }
-    # root for uinput/mce: devel-su takes the password first, then the script reads the code
-    { get SAILFISH_PASSWORD; echo "$code"; } | S "devel-su sh $R/sf-unlock.sh $R" >/dev/null 2>&1
+    # root for uinput and mce, as phone-test.sh does (key auth); the code goes over stdin
+    echo "$code" | command ssh -o BatchMode=yes -o ConnectTimeout=10 "root@${host#*@}" "sh $R/sf-unlock.sh $R" >/dev/null 2>&1
     out=$(S 'mcetool 2>/dev/null' | sed -n 's/^Display state: *on.*/on/p;s/^Tklock mode: *\(.*\)/\1/p' | tr '\n' ' ')
     case $out in *on*unlocked*) out=unlocked;; esac
 fi

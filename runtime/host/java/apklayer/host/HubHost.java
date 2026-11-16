@@ -48,6 +48,7 @@ public final class HubHost {
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
         HubBatteryStats.publishIfSensors();  // SensorService's battery notes: without it every sensor enable and disable waits 5 s
         directory.usb.watch();
+        HubNfc.publishIfPresent(directory);  // an NFC source (the mock directory, a PC/SC reader): the "nfc" service
         Thread volumes = new Thread(directory.volumes::watch, "hub-volumes");  // the desktop's drives as they come and go (its first look walks the volumes for the media watch)
         volumes.setDaemon(true);
         volumes.start();

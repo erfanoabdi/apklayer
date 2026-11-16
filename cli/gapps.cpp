@@ -1,7 +1,8 @@
 // Google's own apps (LiteGapps "lite", the framework's SDK 37) as the instance's system apps, in place of microG: the zip is downloaded and checked,
-// tools/gapps.sh takes its APKs and XMLs out, the XMLs go into the runtime's android-root (the privileged allowlist that makes GmsCore a privileged
-// system app holding its signature permissions, sysconfig, default grants) and each APK is installed `--system` as the bundle's system apps are.
-// No Google code is in apklayer: LiteGapps' official SourceForge files, pinned by sha256 (APKLAYER_GAPPS_URL and APKLAYER_GAPPS_SHA256 override).
+// tools/gapps.sh takes its APKs and XMLs out, the XMLs stay in <data>/apklayer/google-apps/etc -- the privileged allowlist that makes GmsCore a
+// privileged system app holding its signature permissions, sysconfig and default grants, read from there (gappsEtcDir) rather than copied into the
+// runtime's android-root, which a package build serves read-only -- and each APK is installed `--system` as the bundle's system apps are.
+// No Google code is in apklayer: LiteGapps' official SourceForge files, pinned by sha256 in downloads.json (APKLAYER_GAPPS_URL and APKLAYER_GAPPS_SHA256 override).
 #include "gapps.h"
 
 #include <cstdio>
@@ -16,12 +17,6 @@ namespace apklayer {
 
 namespace {
 struct Zip { std::string url, sha256; };
-Zip zipFor(const std::string& cpu) {
-    const std::string base = "https://sourceforge.net/projects/litegapps/files/litegapps/";
-    if (cpu == "arm64") return {base + "arm64/37/lite/2026-10-12/LiteGapps-arm64-17.0-20261012-official.zip/download", "f7e3a2097fad2e2f739c6708333d15fa9bc2cf7971a9041a6a621b4f3c8a1e37"};
-    if (cpu == "amd64") return {base + "x86_64/37/lite/2026-10-01/LiteGapps-x86_64-17.0-20261001-official.zip/download", "61e891cbb826b7fbdc8839ac925de323147dba66c39b8ae34f1e9c3a12fc21fa"};
-    return {};
-}
 // the install order: the Services Framework before Play services (its gservices provider), then the Play Store, then the sync adapters
 const char* const kApks[] = {"GoogleServicesFramework.apk", "GmsCore.apk", "Phonesky.apk", "GoogleContactsSyncAdapter.apk", "GoogleCalendarSyncAdapter.apk"};
 std::string gappsDir(const Layout& layout) { return join(layout.dataHome, "apklayer/google-apps"); }  // a reserved instance name (cli/manage.cpp)
@@ -32,20 +27,12 @@ int cli(const Layout& layout, const std::vector<std::string>& args) {
     s.env = currentEnv();
     return runAndWait(s);
 }
-// <data>/apklayer/google-apps/etc into the runtime's android-root
-void copyConfig(const Layout& layout) {
-    const std::string etc = join(gappsDir(layout), "etc");
-    if (!isDir(etc)) return;
-    Spawn s;
-    s.argv = {"cp", "-r", etc + "/.", join(layout.native, "android-root/system/etc") + "/"};
-    s.env = currentEnv();
-    runAndWait(s);
-}
-// Google's XMLs out of the runtime's android-root again: the files <data>/apklayer/google-apps/etc holds (the runtime ships none of those names)
-void removeConfig(const Layout& layout, const std::string& from, const std::string& rel = "") {
+// Migration: an earlier build copied these XMLs into the runtime's android-root; a removal takes any such copy out, or microG's GmsCore (same package
+// name) would stay a privileged system app. Nothing writes there any more; a read-only package runtime has none and unlink just fails.
+void removeCopiedConfig(const Layout& layout, const std::string& from, const std::string& rel = "") {
     for (const std::string& name : listDir(join(from, rel))) {
         const std::string sub = rel.empty() ? name : join(rel, name);
-        if (isDir(join(from, sub))) removeConfig(layout, from, sub);
+        if (isDir(join(from, sub))) removeCopiedConfig(layout, from, sub);
         else unlink(join(join(layout.native, "android-root/system/etc"), sub).c_str());
     }
 }
@@ -54,7 +41,19 @@ const char* const kPackages[] = {"com.google.android.syncadapters.calendar", "co
                                  "com.google.android.gms", "com.google.android.gsf"};
 }  // namespace
 
+std::string loadDownloads(const Layout& layout, manager::Downloads& d) {
+    std::string base = join(layout.root, "downloads.json");
+    if (!exists(base)) base = join(layout.root, "data/downloads.json");
+    return d.load(base, manager::userDownloadsFile());
+}
+
 bool gappsInstalled(const Layout& layout) { return exists(appDir(layout, "com.google.android.gsf")); }
+
+// gapps.h: where the allowlists are read from, so nothing has to be written into the runtime tree
+std::string gappsEtcDir(const Layout& layout) {
+    const std::string etc = join(gappsDir(layout), "etc");
+    return isDir(etc) && gappsInstalled(layout) ? etc : "";
+}
 
 std::string removeGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report) {
     for (const char* pkg : kPackages) {
@@ -62,26 +61,23 @@ std::string removeGapps(const Layout& layout, const Instance& instance, const st
         report(std::string("Removing Google's ") + pkg);
         if (cli(layout, {"--instance", instance.id, "uninstall", pkg}) != 0) return std::string("Could not remove Google's ") + pkg;
     }
-    const std::string etc = join(gappsDir(layout), "etc");
-    if (isDir(etc)) removeConfig(layout, etc);
-    removeTree(gappsDir(layout));  // its allowlists and the installed build's marker: a later --gapps downloads again
+    if (isDir(join(gappsDir(layout), "etc"))) removeCopiedConfig(layout, join(gappsDir(layout), "etc"));
+    // the allowlists and the installed build's marker (a later --gapps downloads again)
+    removeTree(gappsDir(layout));
     return "";
 }
 
-// only while Google's own apps are installed (the Services Framework is theirs alone): after a removal a new runtime stays without them
-void applyGappsConfig(const Layout& layout) {
-    if (exists(appDir(layout, "com.google.android.gsf"))) copyConfig(layout);
-}
-
 std::string installGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report, const manager::Progress& progress) {
-    Zip zip = zipFor(manager::cpuNames()[0]);
+    manager::Downloads sources;
+    if (std::string e = loadDownloads(layout, sources); !e.empty()) return e;
+    const std::string cpu = manager::cpuNames()[0];
+    Zip zip{sources.str({"gapps", cpu, "url"}), sources.str({"gapps", cpu, "sha256"})};
     zip.url = getenvOr("APKLAYER_GAPPS_URL", zip.url);
     zip.sha256 = getenvOr("APKLAYER_GAPPS_SHA256", zip.sha256);
     if (zip.url.empty()) return "No Google apps build for this CPU";
     const std::string dir = gappsDir(layout), marker = join(dir, "installed");
     const bool gms = exists(appDir(layout, "com.google.android.gms"));
     if (gms && trim(readFile(marker).value_or("")) == zip.sha256) {
-        copyConfig(layout);
         report("Up to date");
         return "";
     }
@@ -111,7 +107,6 @@ std::string installGapps(const Layout& layout, const Instance& instance, const s
     if (rc != 0) { removeTree(work); return "Unpacking the Google apps failed"; }
     removeTree(join(dir, "etc"));
     if (rename(join(work, "etc").c_str(), join(dir, "etc").c_str()) != 0) { removeTree(work); return "Could not keep the Google apps' configuration in " + dir; }
-    copyConfig(layout);
     std::string error;
     int n = 0;
     for (const char* apk : kApks) {

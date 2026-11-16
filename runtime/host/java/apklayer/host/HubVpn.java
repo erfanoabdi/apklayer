@@ -36,7 +36,7 @@ final class HubVpn extends IVpnManager.Stub {
 
     /** The running VPN. */
     private record Active(String owner, int uid, String session, long since, VpnConfig config, String iface, boolean everything, String underlying, HubVpnNet.Made made,
-                          android.app.IServiceConnection connection) {}
+                          android.app.IServiceConnection connection, java.util.concurrent.CountDownLatch protectedOnce) {}
 
     private final HubDirectory directory;
     private final HubPackages packages;
@@ -153,7 +153,8 @@ final class HubVpn extends IVpnManager.Stub {
         String connection = "apklayer-vpn-" + instance + "-" + (char) ('a' + gen);
         HubVpnNet.Spec spec = spec(config, ifname, connection, uid);
         HubVpnNet.Made made;
-        try { made = HubVpnNet.create(spec); }
+        boolean early = guard.protectedBefore();  // OpenVPN: its transport socket is protected before establish(): the routes come with the device
+        try { made = HubVpnNet.create(spec, !early); }
         catch (IOException failure) { System.out.println("[apklayer-hub] vpn: cannot establish for " + pkg + ": " + failure.getMessage()); return null; }
         FileDescriptor tun;
         try { tun = guard.start(ifname, underlying == null ? "-" : underlying, !config.blocking, made.teardown()); }
@@ -168,14 +169,30 @@ final class HubVpn extends IVpnManager.Stub {
         config.interfaze = ifname;
         config.startTime = since;
         ownerService = null;
-        active = new Active(pkg, 0, session, since, config, ifname, spec.everything(), underlying, made, bindOwner(pkg, config.user));
+        active = new Active(pkg, 0, session, since, config, ifname, spec.everything(), underlying, made, bindOwner(pkg, config.user), new java.util.concurrent.CountDownLatch(early ? 0 : 1));
         writeActive();
+        if (!made.lateRoutes().isEmpty()) {
+            Active mine = active;
+            Thread routes = new Thread(() -> lateRoutes(mine), "hub-vpn-routes");
+            routes.setDaemon(true);
+            routes.start();
+        }
         ui.show(pkg, session);
         ParcelFileDescriptor given;
         try { given = ParcelFileDescriptor.dup(tun); } catch (IOException failure) { return null; }
         closeQuietly(tun);  // only the owner's copy keeps the device: it ends with the owner's descriptor
         System.out.println("[apklayer-hub] vpn: " + pkg + " established " + ifname + " through " + made.how() + (spec.everything() ? " (all traffic)" : "") + ", protect() binds to " + underlying);
         return given;
+    }
+
+    /** The routes of a VPN made without them: once the owner protected a socket (WireGuard's Go library sends its first handshake datagram before it does, which
+     *  the tunnel would swallow: a 5 s retry), or after a grace of 1.5 s for apps that never protect. */
+    private void lateRoutes(Active mine) {
+        try { mine.protectedOnce.await(1500, java.util.concurrent.TimeUnit.MILLISECONDS); } catch (InterruptedException interrupted) { return; }
+        synchronized (this) {
+            if (active != mine) return;  // the VPN ended meanwhile
+            try { mine.made.installRoutes(); } catch (IOException failure) { System.out.println("[apklayer-hub] vpn: routes of " + mine.iface + ": " + failure.getMessage()); }
+        }
     }
 
     private static void closeQuietly(FileDescriptor fd) {
@@ -186,7 +203,15 @@ final class HubVpn extends IVpnManager.Stub {
     boolean protect(String caller, FileDescriptor socket) {
         Active a;
         synchronized (this) { a = active; }
-        return a != null && a.owner.equals(caller) && guard.protect(socket);
+        if (a != null) {
+            boolean done = a.owner.equals(caller) && guard.protect(socket, null);
+            if (done) a.protectedOnce.countDown();  // the routes may come now (lateRoutes)
+            return done;
+        }
+        String before = caller != null && ui.authorized(caller) ? underlying() : null;  // before establish(): the host's own interface now
+        boolean done = before != null && guard.protect(socket, before);
+        System.out.println("[apklayer-hub] vpn: protect before establish() for " + caller + ": " + (done ? "bound to " + before : before == null ? "refused (no consent or no host interface)" : "failed"));
+        return done;
     }
 
     /** The owner's VpnService, bound so that its onRevoke can be called (VpnService.Callback: LAST_CALL_TRANSACTION). */
@@ -239,10 +264,12 @@ final class HubVpn extends IVpnManager.Stub {
     }
 
     /** The TUN lost its carrier: the owner closed it or died. The VPN is over; no onRevoke (the owner ended it itself). */
-    private void ownerClosed(String iface) {
+    private void ownerClosed(String event) {
+        boolean revoked = event.startsWith("revoked ");
+        String iface = event.substring(event.indexOf(' ') + 1);
         synchronized (this) { if (active == null || !active.iface.equals(iface)) return; }
-        System.out.println("[apklayer-hub] vpn: the owner closed " + iface);
-        disconnect(false);
+        System.out.println("[apklayer-hub] vpn: " + (revoked ? "the connection of " + iface + " was deleted from outside: onRevoke" : "the owner closed " + iface));
+        disconnect(revoked);  // revoked: the owner still thinks the tunnel is up
     }
 
     private void writeActive() {

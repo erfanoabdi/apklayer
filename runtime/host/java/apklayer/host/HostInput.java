@@ -92,6 +92,8 @@ final class HostInput {
         this.onConfigure = onConfigure;
     }
 
+    final HostGamepad gamepad = new HostGamepad(this);
+
     /** Shell input {type, a, b, 0} (bridge/shell/shell.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
     void onHostEvent(int[] ev) {
         long now = SystemClock.uptimeMillis();
@@ -119,6 +121,8 @@ final class HostInput {
                     new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
                     ev.length > 5 ? ev[5] : 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
             main.post(() -> HostWindows.dispatchToTopWindow(scroll));
+        } else if (ev[0] == 18 || ev[0] == 19) { // gamepad added or removed {18, ...}, its evdev events {19, dev, {type, code, value}*} (HostGamepad)
+            gamepad.onEvent(now, ev);
         } else if (ev[0] == 17) { // pen: {17, action, x, y, tool, buttons, pressure, distance, tilt x, tilt y, rotation, slider, wheel clicks} (ShellClient)
             pen(now, ev);
         } else if (ev[0] == 16) { // touch: {16, action, finger, x, y}
@@ -236,7 +240,7 @@ final class HostInput {
      * channel: focus navigation (Tab, arrows), key shortcuts and the IME run there, whereas
      * UiAutomation's injector only calls decor.dispatchKeyEvent.
      */
-    void injectKey(KeyEvent event, boolean navigation) {
+    void injectKey(InputEvent event, boolean navigation) {
         main.post(() -> {
             Object wmg = android.view.WindowManagerGlobal.getInstance();
             List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");

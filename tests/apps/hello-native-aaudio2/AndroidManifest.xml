@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.nativeaaudio2">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+  <application android:label="native-aaudio-check2">
+    <activity android:name="hello.nativeaaudio.Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

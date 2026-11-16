@@ -515,7 +515,7 @@ weston's VNC backend stops repainting (no frame callbacks, no buffer releases) w
   `hello` (hello.input, SurfaceFlinger's picture), `providers` (graphics, camera, media, vibrator are `device` by default), `hidl` (`hidl-list.sh`),
   `hidl-host` (hello.hidl: the instance's own manager and marker, an own service; `hidltool manager|local`), `camera` (hello.camera lists cameras, none is FAIL),
   `sensors` (hello.hardware), `fullscreen` (UiBench hides and shows the system bars: the navigation bar inset 84, 0, 84), `navbar` (ut: touches on the bar's
-  Back reach the app and the hub logs the vibrator's click), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's orientation lock turns the
+  Back reach the app and the hub logs the vibrator's click), `notify` (`hello.notify`: every kind of notification reaches the shell's notification service, hints, replace, cancel, a tap on the Lipstick banner; Lomiri closes all of them at once: SKIP click; Lipstick pictures in `build/phone-shots`), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's orientation lock turns the
   shell's display; the lock is put back). It copies what it needs, removes it and the instance, and wakes and unlocks the phone first with
   `tools/halium/unlock.sh <ut|sfos>` (apps are stopped while it is locked): the X23's PIN is `UBPORTS_PASSWORD` (swipe to the keypad, press the digits, then
   Lomiri's greeter `IsActive` must be false), the Quintus' lock code `SAILFISH_LOCK` in `local.conf` (never committed). The X23 is locked again afterwards. A

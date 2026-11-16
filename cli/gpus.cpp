@@ -8,6 +8,9 @@ namespace apklayer {
 namespace {
 // The compositor's GPU as a sysfs device path: the shell asks linux-dmabuf v4 for its main device (bridge/shell/feedback.c). Once per session.
 std::string compositorDevice(const Layout& l) {
+    // APKLAYER_COMPOSITOR_GPU=<id|node>: for a compositor that names no device (a nested or virtual KWin reports 0:0), and for tests
+    if (std::string want = getenvOr("APKLAYER_COMPOSITOR_GPU", ""); !want.empty())
+        return realPath("/sys/class/drm/" + baseName(want[0] == '/' ? want : realPath("/dev/dri/by-path/" + want + "-render")) + "/device");
     std::string cache = join(l.runtimeHome, "apklayer-compositor-gpu");
     if (auto cached = readFile(cache)) return trim(*cached) == "-" ? "" : trim(*cached);
     std::string device;
@@ -103,11 +106,13 @@ const Gpu* instanceGpu(const std::vector<Gpu>& gpus, const Instance& inst) {
 int gpusCommand(const Layout& l, const Instance& inst) {
     std::vector<Gpu> gpus = listGpus(l);
     const Gpu* chosen = instanceGpu(gpus, inst);
-    printf("id\tnode\tdriver\tvendor:device\tcompositor\tinstance\tname\n");
+    bool chosenByUser = exists(gpuChoiceFile(inst)) || !getenvOr("APKLAYER_GPU", "").empty();  // else the default: the manager offers "Automatic"
+    printf("id\tnode\tdriver\tvendor:device\tcompositor\tinstance\tname\tchoice\n");
     for (const Gpu& g : gpus) {
         std::string name = pciName(g.vendorDevice);
-        printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\n", g.id.c_str(), g.node.c_str(), g.driver.c_str(), g.vendorDevice.empty() ? "-" : g.vendorDevice.c_str(),
-               g.compositor ? "yes" : "no", &g == chosen ? "yes" : "no", (!name.empty() ? name : g.vendorDevice.empty() ? baseName(g.device) : g.driver).c_str());
+        printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", g.id.c_str(), g.node.c_str(), g.driver.c_str(), g.vendorDevice.empty() ? "-" : g.vendorDevice.c_str(),
+               g.compositor ? "yes" : "no", &g == chosen ? "yes" : "no", (!name.empty() ? name : g.vendorDevice.empty() ? baseName(g.device) : g.driver).c_str(),
+               &g == chosen && chosenByUser ? "yes" : "no");
     }
     return 0;
 }

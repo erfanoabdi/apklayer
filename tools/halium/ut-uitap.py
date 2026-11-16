@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""ut-uitap.py (X Y | X1,Y1,X2,Y2 | wait:MS)...: taps and swipes at screen pixels (720x1560) through a temporary uinput touchscreen (root)."""
-import fcntl, os, struct, sys, time
+"""ut-uitap.py (X Y | X1,Y1>X2,Y2 | X1,Y1,X2,Y2 | wait:MS)...: taps and swipes at screen pixels (720x1560) through a temporary uinput touchscreen (root); a swipe is one argument, not a pair."""
+import fcntl, os, re, struct, sys, time
 W, H = 720, 1560
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045565, 0x40045567, 0x4004556e
 UI_DEV_CREATE, UI_DEV_DESTROY = 0x5501, 0x5502
@@ -29,8 +29,8 @@ args, n = sys.argv[1:], 0
 while args:
     n += 1
     if args[0].startswith('wait:'): time.sleep(int(args.pop(0)[5:]) / 1000); continue
-    if ',' in args[0]:  # a swipe X1,Y1,X2,Y2: 10 steps in 0.4 s
-        x1, y1, x2, y2 = [int(v) for v in args.pop(0).split(',')]
+    if ',' in args[0]:  # a swipe X1,Y1>X2,Y2 or X1,Y1,X2,Y2: 10 steps in 0.4 s
+        x1, y1, x2, y2 = [int(v) for v in re.split('[,>]', args.pop(0))]
         touch(x1, y1, n, True)
         for k in range(1, 11):
             time.sleep(0.04); touch(x1 + (x2 - x1) * k // 10, y1 + (y2 - y1) * k // 10, n, False)

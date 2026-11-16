@@ -4,7 +4,7 @@
 // it to the VPN app: Builder.establish), then serves VpnService.protect(): the hub sends it a socket (SCM_RIGHTS) on <protect-sock> and it binds the socket to the
 // underlying interface (SO_BINDTODEVICE, allowed unprivileged since Linux 5.7), so the app's tunnel sockets leave through it and not into the VPN.
 // It ends the VPN on its own: when the TUN loses its carrier (the app closed it or died) or its stdin closes (the hub ended, however it did), it runs the
-// teardown command (nmcli connection delete ...) and exits. stdout: "ready <ifname>", "gone <ifname>", "error <why>".
+// teardown command (nmcli connection delete ...) and exits. stdout: "ready <ifname>", "gone <ifname>" (the owner closed the TUN), "revoked <ifname>" (the connection was deleted from outside), "error <why>".
 #include "vpn.h"
 
 #include <cerrno>
@@ -105,6 +105,11 @@ void serveProtect(int listener, const std::string& underlying) {
                 int sock;
                 memcpy(&sock, CMSG_DATA(c), sizeof sock);
                 ok = setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, underlying.c_str(), underlying.size() + 1) == 0;
+                if (!ok && errno == EPERM) {  // unprivileged binding works once: a socket protected before (OpenVPN protects again after establish()) is bound already
+                    char bound[IFNAMSIZ] = {};
+                    socklen_t n = sizeof bound;
+                    ok = getsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, bound, &n) == 0 && underlying == bound;
+                }
                 if (!ok) fprintf(stderr, "vpn-guard: protect: %s\n", strerror(errno));
                 close(sock);
             }
@@ -127,7 +132,29 @@ void teardown(const std::vector<std::string>& command) {
 }
 }  // namespace
 
+// `vpn-guard --protect-only <protect-sock> <underlying>`: protect() before the VPN exists (OpenVPN protects its transport socket first): the protect server
+// alone, until the hub's stdin closes. The VPN's own guard takes the socket path over when establish() comes.
+static int protectOnly(const std::string& protectSock, const std::string& underlying) {
+    signal(SIGPIPE, SIG_IGN);
+    int listener = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    unlink(protectSock.c_str());
+    sockaddr_un addr = unixAddr(protectSock);
+    if (listener < 0 || bind(listener, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0 || listen(listener, 4) != 0) return fail("protect socket: " + std::string(strerror(errno))), 1;
+    chmod(protectSock.c_str(), 0600);
+    printf("ready protect\n");
+    fflush(stdout);
+    pollfd fds[2] = {{STDIN_FILENO, POLLIN, 0}, {listener, POLLIN, 0}};
+    for (;;) {
+        while (poll(fds, 2, -1) < 0 && errno == EINTR) {}
+        if (fds[1].revents) serveProtect(listener, underlying);
+        char buf[256];
+        if (fds[0].revents && read(STDIN_FILENO, buf, sizeof buf) <= 0) break;
+    }
+    return 0;  // the socket file is the VPN guard's by then: left alone
+}
+
 int vpnGuard(const std::vector<std::string>& args) {
+    if (args.size() == 3 && args[0] == "--protect-only") return protectOnly(args[1], args[2]);
     if (args.size() < 5) { fprintf(stderr, "usage: apklayer vpn-guard <sock> <ifname> <underlying> <protect-sock> <nonblock> [-- teardown...]\n"); return 2; }
     const std::string &sock = args[0], &name = args[1], &underlying = args[2], &protectSock = args[3];
     std::vector<std::string> command;
@@ -142,7 +169,7 @@ int vpnGuard(const std::vector<std::string>& args) {
     int link = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);  // before the TUN attaches: the carrier going up is seen
     sockaddr_nl nl{};
     nl.nl_family = AF_NETLINK;
-    nl.nl_groups = RTMGRP_LINK;
+    nl.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR;
     if (link < 0 || bind(link, reinterpret_cast<sockaddr*>(&nl), sizeof nl) != 0) return fail("netlink: " + std::string(strerror(errno))), 1;
     int tun = openTun(name, args[4] == "1");
     if (tun < 0) return 1;
@@ -169,15 +196,20 @@ int vpnGuard(const std::vector<std::string>& args) {
         if (fds[1].revents) {
             char buf[8192];
             ssize_t got = recv(link, buf, sizeof buf, 0);
-            bool gone = false;
+            bool gone = false, revoked = false;
             for (nlmsghdr* h = reinterpret_cast<nlmsghdr*>(buf); got > 0 && NLMSG_OK(h, static_cast<size_t>(got)); h = NLMSG_NEXT(h, got)) {
+                if (h->nlmsg_type == RTM_DELADDR) {  // the connection was deleted from outside (nmcli, the desktop's network settings): NetworkManager took the addresses off
+                    const ifaddrmsg* a = reinterpret_cast<ifaddrmsg*>(NLMSG_DATA(h));
+                    if (a->ifa_index == index && (a->ifa_family == AF_INET || a->ifa_scope == RT_SCOPE_UNIVERSE)) revoked = true;
+                    continue;
+                }
                 if (h->nlmsg_type != RTM_NEWLINK && h->nlmsg_type != RTM_DELLINK) continue;
                 const ifinfomsg* info = reinterpret_cast<ifinfomsg*>(NLMSG_DATA(h));
                 if (static_cast<unsigned>(info->ifi_index) != index) continue;
                 if (h->nlmsg_type == RTM_DELLINK || (seenUp && !(info->ifi_flags & IFF_LOWER_UP))) gone = true;
                 else if (info->ifi_flags & IFF_LOWER_UP) seenUp = true;
             }
-            if (gone) { printf("gone %s\n", name.c_str()); fflush(stdout); break; }
+            if (gone || revoked) { printf("%s %s\n", revoked ? "revoked" : "gone", name.c_str()); fflush(stdout); break; }
         }
     }
     teardown(command);

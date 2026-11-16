@@ -185,6 +185,8 @@ public final class AppHost implements Runnable {
                     } catch (InterruptedException e) {
                         break;
                     }
+                } else if (ev[0] == 18) {  // a gamepad that was there before the app connected
+                    input.onHostEvent(ev);
                 } else if (ev[0] == 14) {
                     outputPxW = ev.length > 7 ? ev[6] : 0;
                     outputPxH = ev.length > 7 ? ev[7] : 0;
@@ -198,6 +200,7 @@ public final class AppHost implements Runnable {
         }
         StartTrace.mark("window configured by the shell");
         this.shell = shell;
+        input.gamepad.shell = shell;
         if (shell != null) org.robolectric.shadows.NavigationBarInset.onVisibility(shell::sendNavigationBar);  // immersive mode: the shell hides its bar
         if (shell != null) org.robolectric.shadows.NavigationBarInset.onFullscreen(shell::sendFullscreen);  // the shell makes the window fullscreen
         if (shell != null && HostConfiguration.night() != null) shell.sendDecorDark(HostConfiguration.night());

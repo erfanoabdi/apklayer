@@ -170,10 +170,17 @@ public:
         b.set_status(info(s.status));
         auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
         gpuIds_.clear();
-        int chosen = -1;
-        for (const auto& r : s.gpus) {  // id, node, driver, vendor:device, compositor, instance, name (the first row: the header)
+        int chosen = 0;  // "Automatic" (the desktop's GPU) unless a row says the instance's choice is explicit
+        if (s.gpus.size() > 2) {  // the header and two GPUs: the menu shows only where there is a choice
+            gpuIds_.push_back("");
+            MenuItem a;
+            a.text = "Automatic (the desktop's GPU)";
+            a.enabled = true;
+            gpus->push_back(a);
+        }
+        for (const auto& r : s.gpus) {  // id, node, driver, vendor:device, compositor, instance, name, choice (the first row: the header)
             if (field(r, 0) == "id") continue;
-            if (field(r, 5) == "yes") chosen = static_cast<int>(gpuIds_.size());
+            if (field(r, 7) == "yes") chosen = static_cast<int>(gpuIds_.size());
             gpuIds_.push_back(field(r, 0));
             MenuItem m;
             m.text = slint::SharedString(field(r, 6));
@@ -482,7 +489,7 @@ private:
             b.set_busy(true);
             b.set_busy_text("Changing the GPU");
             // the choice applies from the stack's next start: stop it, the next app launch starts it on the new GPU
-            later([cli = cli_, id = gpuIds_[i]] { Result r = cli.run({"gpu", "set", id}); if (r.status == 0) cli.run({"stop"}); return r; },
+            later([cli = cli_, id = gpuIds_[i]] { Result r = id.empty() ? cli.run({"gpu", "unset"}) : cli.run({"gpu", "set", id}); if (r.status == 0) cli.run({"stop"}); return r; },
                   [this](const Result& r) { ui_->global<Backend>().set_busy(false); message(summary(r)); refresh(); });
         });
         b.on_set_binder([this](bool kernel) {

@@ -165,7 +165,11 @@ in
     mesonInstallFlags = ["--skip-subprojects"];
 
     postInstall = ''
+      # APKLAYER_CLI: wrapProgram moves the binary to .apklayer-wrapped, which is what /proc/self/exe
+      # resolves to; without this the .desktop entries, the always-on unit and -Dapklayer.cli would all
+      # name that inner binary and run it without this wrapper's PATH and APKLAYER_NATIVE_JAVA.
       wrapProgram "$out/lib/apklayer/cli/apklayer" \
+        --set-default APKLAYER_CLI "$out/bin/apklayer" \
         --prefix PATH : "${lib.makeBinPath runtimePath}" \
         --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" gst}" \
         --set-default APKLAYER_NATIVE_JAVA "${jdk21}/bin/java"

@@ -111,6 +111,9 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
 #define MSG_LAYOUT 118        /* shell -> app: {i32 id} + utf8 language tag of the keyboard layout in use (keyboard.c): the input method subtype */
 #define MSG_TABLET 117        /* shell -> app: a pen's event (tablet.c) */
+#define MSG_PAD_DEVICE 119    /* shell -> app: {i32 dev, i32 added (0: removed, nothing follows), vendor, product, version, naxes, has rumble, {code, min, max, flat, value}[naxes]} utf8 name (gamepad.c) */
+#define MSG_PAD_EVENT 120     /* shell -> app: {i32 dev, {i32 evdev type, code, value}*}: EV_KEY, EV_ABS and SYN_REPORT of a gamepad, to the focused window's app */
+#define MSG_PAD_RUMBLE 19     /* app -> shell: {i32 dev, strong 0..65535, weak 0..65535, ms (0: stop)} */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 enum { NB_AUTO = 0, NB_ON = 1, NB_OFF = 2 };  /* the navbar setting: a desktop window gets the navigation bar when the compositor draws its title bar (auto), always, never */
 #define KEYMETA_NAVBAR 0x40000000  /* MSG_KEY meta bit: the Back key is a navigation bar press (the host gives a haptic tick) */
@@ -326,6 +329,14 @@ void window_gralloc_frame(struct window *w, const int32_t *m, uint32_t len, cons
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
 /* test input (testinput.c): the seat's and the compositor's events, injected into one window */
 void test_input(struct client *c, const uint8_t *p, uint32_t len);
+
+/* game controllers (gamepad.c) */
+#define GAMEPAD_FDS 9  /* the inotify watch and up to eight pads */
+void gamepad_init(void);
+void gamepad_client_hello(struct client *c);
+void gamepad_pollfds(struct pollfd *p);
+void gamepad_dispatch(struct pollfd *p);
+void gamepad_rumble(const int32_t *v, uint32_t len);
 void activate_message(const uint8_t *p, uint32_t len);  /* activation.c */
 extern struct xdg_activation_v1 *activation;  /* activation.c */
 extern struct zxdg_decoration_manager_v1 *deco_mgr;  /* decoration.c */

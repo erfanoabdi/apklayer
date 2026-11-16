@@ -4,7 +4,10 @@
  * libraries it loads in one 4 GiB window (apklayer_guest_window_take, below); one seccomp-bpf filter turns the few syscalls that carry
  * identity into SIGSYS when the instruction pointer is in that window, and the handler answers them through the views the libc path has
  * (syscall() of paths_preload.c: the path layer, the /proc projections; apklayer_app_uid and groups: paths.c). Host code (the JVM, glibc, bionic's libc here)
- * is outside the window: the filter costs it one compare. Only the app process (APKLAYER_OWN_DATA) gets the window; x86_64 hosts translate
+ * is outside the window: the filter costs it one compare. mkdirat/unlinkat/bind/connect/inotify_add_watch (a Go runtime's, at /data/data/<pkg>) are answered
+ * by a handler that uses no libc at all (fast_syscall below): the libc-based handler corrupts a Go thread's state ("systemstack called from unexpected
+ * goroutine" after an openat of /proc/sys/net/core/somaxconn, so /proc/sys opens are fast too), and a thread that waits for a supervisor (seccomp user
+ * notification was tried) makes Go's scheduler take its processor away ("stoplockedm: inconsistent locking"). Only the app process (APKLAYER_OWN_DATA) gets the window; x86_64 hosts translate
  * guest code, whose syscalls the translator already sees. APKLAYER_RAW_SYSCALL_VIEW=off turns it off. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -20,6 +23,8 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/utsname.h>
 #include <ucontext.h>
 #include <unistd.h>
@@ -110,10 +115,142 @@ static long guest_syscall(long nr, const long a[6])
     return r == -1 ? -errno : r;
 }
 
+
+/* The libc-free answers (see the header): the app's own data path spellings mapped into a stack buffer, the call made again with a bare `svc`. Anything else
+ * of these numbers is made as it is (the kernel's view). */
+static char fast_pkg[256], fast_dir[1024], fast_device[1024];
+static size_t fast_pkg_len;
+static int fast_debug;
+bool apklayer_own_data_paths(char *pkg, size_t pn, char *dir, size_t dn, char *device, size_t vn);  /* paths.c */
+
+static void fast_paths_init(void)
+{
+    fast_debug = getenv("APKLAYER_RAW_SYSCALL_TRACE") != NULL;
+    if (apklayer_own_data_paths(fast_pkg, sizeof fast_pkg, fast_dir, sizeof fast_dir, fast_device, sizeof fast_device)) fast_pkg_len = strlen(fast_pkg);
+}
+
+#if defined(__has_attribute)
+#if __has_attribute(no_stack_protector)
+#define NO_CANARY __attribute__((no_stack_protector))
+#endif
+#endif
+#ifndef NO_CANARY
+#define NO_CANARY
+#endif
+
+static NO_CANARY long bare_svc(long nr, long a0, long a1, long a2, long a3, long a4)
+{
+    register long x8 __asm__("x8") = nr, x0 __asm__("x0") = a0, x1 __asm__("x1") = a1, x2 __asm__("x2") = a2, x3 __asm__("x3") = a3, x4 __asm__("x4") = a4;
+    __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4) : "memory");
+    return x0;
+}
+
+static NO_CANARY bool starts(const char *s, const char *prefix)
+{
+    for (; *prefix; s++, prefix++) if (*s != *prefix) return false;
+    return true;
+}
+
+/* in under /data/data/<pkg>, /data/user/0/<pkg> or /data/user_de/0/<pkg> of the app: out is the host path (the same rule as paths.c own_data_path) */
+static NO_CANARY bool fast_map(const char *in, size_t len, char *out, size_t cap)
+{
+    static const char *const spellings[] = { "/data/data/", "/data/user/0/", "/data/user_de/0/" };
+    if (!fast_pkg_len || len >= cap) return false;
+    for (int i = 0; i < 3; i++) {
+        size_t n = 0;
+        while (spellings[i][n]) n++;
+        if (!starts(in, spellings[i])) continue;
+        const char *rest = in + n;
+        if (!starts(rest, fast_pkg) || (rest[fast_pkg_len] && rest[fast_pkg_len] != '/')) return false;
+        const char *base = i == 2 ? fast_device : fast_dir, *tail = rest + fast_pkg_len;
+        size_t o = 0;
+        for (; base[o]; o++) { if (o + 1 >= cap) return false; out[o] = base[o]; }
+        for (; *tail; tail++, o++) { if (o + 1 >= cap) return false; out[o] = *tail; }
+        out[o] = 0;
+        return true;
+    }
+    return false;
+}
+
+static NO_CANARY size_t cstr_len(const char *s, size_t limit)
+{
+    size_t n = 0;
+    while (n < limit && s[n]) n++;
+    return n;
+}
+
+static NO_CANARY bool fast_syscall(long nr, const long a[6], long *r)
+{
+    char buf[1100];
+    switch (nr) {
+    case __NR_mkdirat: case __NR_unlinkat: case __NR_inotify_add_watch: {
+        const char *path = (const char *)a[1];
+        if (!path) return false;
+        size_t n = cstr_len(path, sizeof buf);
+        const char *use = fast_map(path, n, buf, sizeof buf) ? buf : path;
+        *r = bare_svc(nr, a[0], (long)use, a[2], a[3], a[4]);
+        return true;
+    }
+    case __NR_openat:  /* /proc/sys: the kernel's own file (Go's net package reads somaxconn before it listens), nothing in it to project */
+        if (!starts((const char *)a[1], "/proc/sys/")) return false;
+        *r = bare_svc(nr, a[0], a[1], a[2], a[3], 0);
+        return true;
+    case __NR_bind: case __NR_connect: {
+        const struct sockaddr_un *in = (const struct sockaddr_un *)a[1];
+        size_t head = __builtin_offsetof(struct sockaddr_un, sun_path), len = (size_t)a[2];
+        struct sockaddr_un out;
+        if (in && len > head + 1 && len <= sizeof out && in->sun_family == AF_UNIX && in->sun_path[0] == '/') {
+            size_t n = cstr_len(in->sun_path, len - head);
+            char path[sizeof out.sun_path + 1];
+            if (n < sizeof out.sun_path && n < sizeof path) {
+                for (size_t i = 0; i < n; i++) path[i] = in->sun_path[i];
+                path[n] = 0;
+                if (fast_map(path, n, buf, sizeof buf)) {
+                    size_t m = cstr_len(buf, sizeof buf);
+                    if (m < sizeof out.sun_path) {
+                        for (size_t i = 0; i < sizeof out; i++) ((char *)&out)[i] = 0;
+                        out.sun_family = AF_UNIX;
+                        for (size_t i = 0; i <= m; i++) out.sun_path[i] = buf[i];
+                        *r = bare_svc(nr, a[0], (long)&out, (long)(head + m + 1), 0, 0);
+                        return true;
+                    }
+                }
+            }
+        }
+        *r = bare_svc(nr, a[0], a[1], a[2], 0, 0);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
 static void on_sigsys(int sig, siginfo_t *info, void *context)
 {
     (void)sig;
     ucontext_t *uc = context;
+    if (info->si_code == SYS_SECCOMP) {  /* before errno or any libc: the thread may be a Go runtime's */
+        long fast_a[6], fast_r;
+        for (int i = 0; i < 6; i++) fast_a[i] = (long)uc->uc_mcontext.regs[i];
+        if (fast_syscall((long)uc->uc_mcontext.regs[8], fast_a, &fast_r)) { uc->uc_mcontext.regs[0] = (unsigned long)fast_r; return; }
+    }
+    if (fast_debug) {  /* APKLAYER_RAW_SYSCALL_TRACE: the number and path of what the libc handler is about to answer, written without libc */
+        char msg[32] = "[sigsys nr ";
+        long v = (long)uc->uc_mcontext.regs[8];
+        int n = 11;
+        char d[8]; int k = 0;
+        do { d[k++] = (char)('0' + v % 10); v /= 10; } while (v);
+        while (k) msg[n++] = d[--k];
+        msg[n++] = ']'; msg[n++] = '\n';
+        bare_svc(__NR_write, 2, (long)msg, n, 0, 0);
+        long pv = (long)uc->uc_mcontext.regs[8];
+        if (pv == __NR_openat || pv == __NR_newfstatat || pv == __NR_readlinkat) {
+            const char *pp = (const char *)uc->uc_mcontext.regs[1];
+            size_t pl = cstr_len(pp, 200);
+            bare_svc(__NR_write, 2, (long)pp, (long)pl, 0, 0);
+            bare_svc(__NR_write, 2, (long)"\n", 1, 0, 0);
+        }
+    }
     int saved = errno;
     if (info->si_code != SYS_SECCOMP) {  /* not our trap (kill(SIGSYS) or a program's own): the default */
         errno = saved;
@@ -143,7 +280,8 @@ static void on_sigsys(int sig, siginfo_t *info, void *context)
 static int install_filter(unsigned long base)
 {
     static const int numbers[] = { __NR_getuid, __NR_geteuid, __NR_getgid, __NR_getegid, __NR_getresuid, __NR_getresgid, __NR_getgroups,
-        __NR_openat, __NR_readlinkat, __NR_uname, __NR_newfstatat, __NR_statx, __NR_rt_sigprocmask };
+        __NR_openat, __NR_readlinkat, __NR_uname, __NR_newfstatat, __NR_statx, __NR_rt_sigprocmask,
+        __NR_mkdirat, __NR_unlinkat, __NR_bind, __NR_connect, __NR_inotify_add_watch };
     enum { N = sizeof numbers / sizeof *numbers };
     struct sock_filter f[8 + N + 6];  /* rt_sigprocmask passes the SIGSYS test below only for numbers listed above, so it is trapped for every call */
     int n = 0;
@@ -198,6 +336,7 @@ static void reserve_and_install(void)
         window_base = 0;
         return;
     }
+    fast_paths_init();
     apklayer_raw_syscall_active = 1;
     if (debug()) fprintf(stderr, "[raw-syscall] guest libraries in %#lx..%#lx, raw syscalls viewed\n", window_base, window_base + WINDOW_SIZE);
 }

@@ -1,7 +1,8 @@
 #!/bin/sh
 # gapps.sh <LiteGapps zip> <out dir>: the parts of a LiteGapps "lite" zip (Magisk/recovery module: files/files.tar.xz holds <cpu>/<sdk>/system/...)
 # apklayer uses, for `apklayer setup --gapps` (cli/gapps.cpp): <out>/apks/*.apk (system_ext and product priv-app/app) and <out>/etc/{permissions,
-# sysconfig,default-permissions}/*.xml (both partitions in one, as HostSystemConfig reads <android-root>/system/etc). Left out: the Pixel feature
+# sysconfig,default-permissions}/*.xml (both partitions in one, where HostSystemConfig reads them through APKLAYER_EXTRA_ETC: not copied into
+# <android-root>/system/etc, which a package build serves read-only). Left out: the Pixel feature
 # lists (pixel_experience_*: Pixel-only features) and the dialer support library (its jar is not installed).
 set -eu
 [ $# -eq 2 ] || { sed -n '2,5p' "$0" >&2; exit 2; }

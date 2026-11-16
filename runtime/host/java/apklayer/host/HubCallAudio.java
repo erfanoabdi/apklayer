@@ -91,9 +91,9 @@ final class HubCallAudio {
      * AudioService.getAudioModeOwnerHandler over the requests. Its activity (SetModeDeathHandler.isActive): privileged requesters, MODE_RINGTONE and
      * MODE_CALL_SCREENING always; MODE_IN_COMMUNICATION while the requester plays or records (the processes' reports, activity) or in its first 6 s
      * (GRACE_MS), and the newest such requester wins. A native (AAudio/OpenSL) stream sends no report: a requester whose process never reported counts
-     * as playing while the audio policy has a voice call stream or a voice communication capture active (it cannot say whose it is).
-     * shortcut: that policy answer is the instance's, not the process's, and is looked for every NATIVE_POLL_MS while it can matter (two or more
-     * communication requesters, one of them silent in reports); upgrade with the per-client playback configurations of the policy service.
+     * as playing while the audio policy has a started voice communication player or recorder of its uid or process (the policy's answer, as AudioService's monitors).
+     * shortcut: that answer is looked for every NATIVE_POLL_MS while it can matter (two or more
+     * communication requesters, one of them silent in reports): the policy sends no event.
      * With no active requester the oldest MODE_IN_COMMUNICATION one stays the owner (a lone native call app keeps its mode).
      */
     private Request owner() {
@@ -103,7 +103,7 @@ final class HubCallAudio {
             if (request.privileged() && request.mode() != AudioSystem.MODE_ASSISTANT_CONVERSATION) privileged = request;
             else if (request.mode() == AudioSystem.MODE_IN_COMMUNICATION) {
                 if (oldestCommunication == null) oldestCommunication = request;
-                if (playing.contains(request.peer().pid()) || now - request.since() < GRACE_MS || (!reporters.contains(request.peer().pid()) && nativeActive())) active = request;
+                if (playing.contains(request.peer().pid()) || now - request.since() < GRACE_MS || (!reporters.contains(request.peer().pid()) && nativeActive(request.peer()))) active = request;
             }
             else if (request.mode() == AudioSystem.MODE_RINGTONE || request.mode() == AudioSystem.MODE_CALL_SCREENING) active = request;
             else if (request.mode() == AudioSystem.MODE_ASSISTANT_CONVERSATION) assistant = request;
@@ -111,20 +111,32 @@ final class HubCallAudio {
         return privileged != null ? privileged : active != null ? active : oldestCommunication != null ? oldestCommunication : assistant;
     }
 
-    private Boolean nativeActive;  // the policy's answer within one owner() pass
-    private boolean nativeActive() {
-        if (nativeActive == null) {
-            NativeMedia.ensureInitialized();
-            nativeActive = AudioSystem.isStreamActive(AudioSystem.STREAM_VOICE_CALL, 0) || AudioSystem.isSourceActive(7);  // MediaRecorder.AudioSource.VOICE_COMMUNICATION
+    private final java.util.Map<Integer, Boolean> nativeActive = new java.util.HashMap<>();  // the policy's answer per pid within one owner() pass
+    private boolean nativeActive(HubDirectory.Peer peer) { return nativeActive.computeIfAbsent(peer.pid(), pid -> policyActive(peer.appUid(), pid)); }
+
+    /** The policy service's answer (patches/aosp/frameworks/av/0004: a started voice communication player or recorder of that uid, as AudioService's
+     *  activity monitors say, or of that process: a native client's attribution carries the stack's uid); an audioserver without it, or none: the instance-wide stream and source activity as before. */
+    private boolean policyActive(int uid, int pid) {
+        android.os.IBinder policy = RealBinder.lookup("media.audio_policy");
+        if (policy != null) {
+            android.os.Parcel data = android.os.Parcel.obtain(), reply = android.os.Parcel.obtain();
+            try {
+                data.writeInt(uid);
+                data.writeInt(pid);
+                if (policy.transact(0x00fffff0, data, reply, 0) && reply.dataAvail() >= 4) return reply.readInt() != 0;
+            } catch (android.os.RemoteException | RuntimeException refused) {
+                System.out.println("[apklayer-hub] per-uid audio activity: " + refused);
+            } finally { data.recycle(); reply.recycle(); }
         }
-        return nativeActive;
+        NativeMedia.ensureInitialized();
+        return AudioSystem.isStreamActive(AudioSystem.STREAM_VOICE_CALL, 0) || AudioSystem.isSourceActive(7);  // MediaRecorder.AudioSource.VOICE_COMMUNICATION
     }
 
     private synchronized void recheck() { polling = false; apply(null); }
 
     /** Sets what the requests ask on the policy; a change goes to every app but {@code requester} (its own listeners run in its process). */
     private void apply(HubDirectory.Peer requester) {
-        nativeActive = null;
+        nativeActive.clear();
         Request owner = owner();
         if (!polling && nativeAmbiguous()) { polling = true; timer.schedule(this::recheck, NATIVE_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS); }
         int mode = owner == null ? AudioSystem.MODE_NORMAL : owner.mode();

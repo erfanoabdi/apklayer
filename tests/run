@@ -101,6 +101,22 @@ def run_watched(argv, out, silence):
             return -1
 
 
+def refused_retry(argv, out, silence):
+    """run_watched, again while ssh itself was refused (a password host refuses about every other connection: "Permission denied (publickey,password)"
+    before the command ran, status 255, nothing else in the log): parallel groups hit it at the start of a command."""
+    for _ in range(5):
+        out.flush()
+        start = os.fstat(out.fileno()).st_size
+        status = run_watched(argv, out, silence)
+        out.flush()
+        with open(out.name, errors='replace') as f:
+            f.seek(start)
+            text = f.read()
+        if status != 255 or 'Permission denied (publickey,password)' not in text: return status
+        os.ftruncate(out.fileno(), start); os.lseek(out.fileno(), start, 0)
+    return status
+
+
 def run_group(name, slot):
     group = GROUPS[name]
     t = time.monotonic()
@@ -108,12 +124,14 @@ def run_group(name, slot):
     env = vm.instance_env(slot, '%s/out/%s' % (vm.WORK, name))
     if group.get('binder'): env += 'export APKLAYER_BINDER=%s; ' % group['binder']  # a group pinned to one binder (the kernel's next to the default)
     ok = True
+    # files an earlier (sandboxed) group left in this slot under an app uid: given back to the user before the group (stop() does it after)
+    vm.ssh(env + 'python3 -c "import sys; sys.path.insert(0, \'tests/lib\'); import instance; instance.reclaim()"', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     with log.open('w') as out:
         commands = [(c, [*vm.SSH, env + c]) for c in group.get('run', [])] + [(c, ['sh', '-c', c]) for c in group.get('mac', [])]
         for command, argv in commands:
             out.write('$ ' + command + '\n')
             out.flush()
-            if run_watched(argv, out, group.get('silence', SILENCE_S)) != 0:
+            if refused_retry(argv, out, group.get('silence', SILENCE_S)) != 0:
                 out.flush()
                 # a script that cannot run here ends with a last line `SKIP <why>` (sys.exit('SKIP ...')): a skip, not a failure
                 last = log.read_text(errors='replace').rstrip().rsplit('\n', 1)[-1]

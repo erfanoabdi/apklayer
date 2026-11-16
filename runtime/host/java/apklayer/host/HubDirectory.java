@@ -127,6 +127,7 @@ final class HubDirectory extends Binder {
     HubProviders providers() { return providers; }
     HubServiceBindings bindings() { return bindings; }
     HubVpn vpn() { return vpn; }
+    HubPendingIntents pendingIntents() { return pendingIntents; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }
     /** The installer finished its work: a hub that lost its last app meanwhile (an installer that updated itself) ends as it would have. */

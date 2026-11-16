@@ -18,6 +18,8 @@ import org.w3c.dom.NodeList;
  * The build's own system configuration, read like SystemConfig does: system features ({@code etc/permissions/*.xml} and {@code etc/sysconfig},
  * {@code <feature>}), the privileged-permission allowlist ({@code <privapp-permissions>}) and the default grants ({@code etc/default-permissions}).
  * They feed the package manager instead of ad hoc grants: a package listed in the allowlist is a privileged system app and holds exactly what it lists.
+ * Read from two roots: the build's own ({ ANDROID_ROOT}) and, while Google's apps are installed, { APKLAYER_EXTRA_ETC} (cli/gapps.cpp),
+ * whose allowlists stay in the data home because a package build serves the runtime tree read-only.
  */
 final class HostSystemConfig {
     final Set<String> features = new HashSet<>();
@@ -61,6 +63,13 @@ final class HostSystemConfig {
         for (String dir : new String[] {"etc/permissions", "etc/sysconfig"}) config.readDir(new File(root, dir), false);
         config.readDir(new File(new File(root).getParentFile(), "vendor/etc/permissions"), false);  // the vendor half: what this device's host layers provide
         config.readDir(new File(root, "etc/default-permissions"), true);
+        // Google's own apps (cli/gapps.cpp): their allowlists stay in the data home, since a package build serves android-root read-only.
+        // cli/env.cpp sets this only while they are installed, and cli/sandbox.cpp binds the directory into a sandboxed app's view.
+        String gapps = System.getenv("APKLAYER_EXTRA_ETC");
+        if (gapps != null) {
+            for (String dir : new String[] {"permissions", "sysconfig"}) config.readDir(new File(gapps, dir), false);
+            config.readDir(new File(gapps, "default-permissions"), true);
+        }
         // the vendor's public libraries and the partitions' public.libraries-<company>.txt (the plain public.libraries.txt is every app's anyway)
         java.util.List<File> lists = new java.util.ArrayList<>(java.util.List.of(new File(new File(root).getParentFile(), "vendor/etc/public.libraries.txt")));
         for (String dir : new String[] {"etc", "system_ext/etc", "product/etc"}) {
@@ -75,6 +84,7 @@ final class HostSystemConfig {
         String[] adapters = new File("/sys/class/bluetooth").list();  // the host has a Bluetooth adapter: BlueZ through the hub (HubBluetooth)
         if (adapters != null && adapters.length > 0)
             config.features.addAll(java.util.List.of("android.hardware.bluetooth", "android.hardware.bluetooth_le"));
+        if (HostNfc.present()) config.features.add("android.hardware.nfc");  // an NFC source (HubNfc); no HCE
         if (HostCameraShadows.declared())  // the stack runs cameraserver over a camera HAL (providers.toml)
             config.features.addAll(java.util.List.of("android.hardware.camera", "android.hardware.camera.any"));
         try {  // the sensors HAL's list (aosp/hals/sensors/Service.cpp)

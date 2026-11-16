@@ -102,6 +102,9 @@ try:
                 waited = matched = 0
                 if shot: field(shot)
                 step += 1
+                # the "Plain keys" button where the app says it is (injected coordinates are the content's: 520 was the edge of the Hide keyboard button above it)
+                plain = [l for l in seen if '[hello-input] plain keys at ' in l]
+                if plain and steps == ['tap:240,520']: steps = ['tap:240,' + plain[-1].rsplit(',', 1)[1].strip()]
                 if steps: instance.inject(PKG, *steps)
     compare('ru1', 'ru2', 'Cyrillic'); compare('ara1', 'ara2', 'Arabic'); compare('deva1', 'deva2', 'Devanagari')
     langs = [line.split('input layout: ')[1] for line in seen if 'input layout: ' in line]  # the input method subtype the host got from the xkb group
