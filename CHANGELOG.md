@@ -37,6 +37,10 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Differences left that were not A/B-ed: install record (`nativeRoute=bridge-arm64` vs `native`, uid 10014 vs 10001, `converterAbi` 11 vs 9), host kernel/CPU (`/proc/cpuinfo` reads: the translated cpuinfo thread makes 157 k syscalls), and the guest-visible JNI `Build` / property values of the two routes.
 - Cleaned: tester `~/envT` removed.
 
+## 2026-11-17: PGR guest control-flow differential: interpreter branch trace (patch 0049), build log
+
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: every syscall/file/property differential found nothing, ACE decides in guest code; two interpreted runs of the same code (survivor vs death) must be compared by control flow. Edit: cpu_emulation/interpreter/arm64/interpreter-main.cc only (`BERBERIS_TRACE_BB=<dir>`: per-thread varint trace of taken branches into libanogs.so; no effect without it).
+
 ## 2026-11-16: PGR timing lead: no CNTVCT reads at all; syscall-level trace: translated ACE probes emulator artefacts that native does not (first 38 s)
 
 - Interpreter knob build (patch 0048, libberberis_arm64 `c057908a`, build log above). With `berberis.count_mrs=1` PGR (microG copy on the tester PC, died at 39.9 s) printed **no** `mrs cntvct_el0` line in 40 s; control `hello.acediff` in the same instance printed 35 lines (16384+ reads from one pc, 59-69 ns each). So no timer scale or fast-CNTVCT can change the verdict; ACE's time sources are syscalls (clock_gettime 113, gettimeofday 169: 16 and 427 calls in 35 s translated; native 2908 and 431, native counts include libc-level calls, see below).
