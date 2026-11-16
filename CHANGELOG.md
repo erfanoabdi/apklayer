@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-16: PGR maps/file view: names in the served maps did not open (17 ENOENT); making them open does not stop the death
+
+- Served maps (patch 0049 dump on `pgrshared`, 3537 lines, 229 KB) vs native AWS (3132 lines, 319 KB): 0043 strips `arm64/` from names, so the maps list `/system/lib64/<x>.so` (269 names) and `/apex/com.android.runtime/lib64/bionic/lib{c,dl,m}.so`, but the guest's file view had those libs only under `/system/lib64/arm64/` and no apex runtime dir: ACE's 17 `openat` of such names at 19.8 s returned ENOENT. Also: one x86 name in the maps (`libclang_rt.ubsan_standalone-x86_64-android.so`), 2361 anonymous lines (native 1533). Native maps show host paths and JDK libs too, so "hide the host" is not what native does.
+- A/B (private copy, microG only, runtime copy with symlinks `system/lib64/<x>.so -> arm64/<x>.so`, `system/bin/<x>`, `apex/com.android.runtime/lib64/bionic/lib{c,dl,m}.so`, `apex/com.android.runtime/bin/linker64`): the traced run shows ACE's opens now succeed (fd 177 for all 17 names); EXIT 36.8, 34.7, 35.6, 34.2, 35.0 s: 5 of 5 die. So the missing files are not the (sole) trigger; open remains: maps `dev:inode` vs `fstat`/`map_files` link, mapped text bytes vs file bytes (agent B's libc-text hole), exec-region bookkeeping of munmap/MAP_FIXED over guest text.
+- Cleaned: tester `~/envT` removed.
+
 ## 2026-11-16: PGR maps lead: dump knob for the served /proc/self/maps (patch 0049), build log
 
 - Build log (`gsi_x86_64 userdebug`, incremental, `flock -n ~/los24-build.lock`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: the maps text the guest reads can only be compared with native if it is captured; edit: kernel_api/open_emulation.cc only (`berberis.dump_maps=<dir>` / BERBERIS_DUMP_MAPS writes each served maps text to `<dir>/maps-<pid>-<n>.txt`; default off). Measured before: ACE reads maps in ~1 KiB pieces: translated 252-278 KB, native (AWS) 295-319 KB, so the translated text is smaller, not longer.
