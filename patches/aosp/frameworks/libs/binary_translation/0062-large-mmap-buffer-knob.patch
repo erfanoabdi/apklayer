@@ -1,0 +1,41 @@
+From: wesley van neck
+Subject: [PATCH] apklayer: berberis.large_mmap, the translator's 16 GB buffer reserved or absent
+
+The translator's large-allocation buffer (InitLargeMmap: 16 GB MAP_NORESERVE, rw-p) is an unnamed rw-p pair of 8 GB + 5.8 GB in the
+guest's /proc/self/maps (PGR on an x86_64 PC); no device process has it. berberis.large_mmap (BERBERIS_LARGE_MMAP) = "reserve" maps it
+PROT_NONE (---p, like ART's reservations; LargeMmapImplOrDie maps every piece MAP_FIXED with its own protections), "off" makes no buffer
+(allocations go to mmap directly). Default unchanged. Module libberberis_arm64.
+
+--- a/base/large_mmap.cc
++++ b/base/large_mmap.cc
+@@ -20,6 +20,10 @@
+ 
+ #include "berberis/base/mmap.h"
+ 
++#include <string.h>
++
++#include "berberis/base/config_globals.h"
++
+ namespace berberis {
+ 
+ #if defined(__LP64__)
+@@ -60,8 +64,18 @@
+   constexpr size_t kSpacingSize = size_t(1) << 35;  // 32gb
+ 
+   // As explained above we expect mmap to work top-to-down, so spacing is at the higher addresses.
++  // apklayer patch (0062): berberis.large_mmap (BERBERIS_LARGE_MMAP). The buffer is 16 GB of unnamed rw-p in the guest's
++  // /proc/self/maps (PGR's 8 GB + 5.8 GB pair), which no device process has. "reserve" maps it PROT_NONE (---p, as ART's
++  // reservations on a device; every piece is mapped MAP_FIXED with its own protections), "off" makes no buffer (allocations
++  // go to mmap directly). Default: upstream's rw-p buffer.
++  static const ConfigStr large_mmap("BERBERIS_LARGE_MMAP", "berberis.large_mmap");
++  const char* mode = large_mmap.get();
++  if (mode != nullptr && strcmp(mode, "off") == 0) {
++    return;
++  }
++  int prot = (mode != nullptr && strcmp(mode, "reserve") == 0) ? PROT_NONE : PROT_READ | PROT_WRITE;
+   auto* ptr = static_cast<uint8_t*>(MmapImplOrDie(
+-      {.size = kBufferSize + kSpacingSize, .flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE}));
++      {.size = kBufferSize + kSpacingSize, .prot = prot, .flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE}));
+   MunmapOrDie(ptr + kBufferSize, kSpacingSize);
+ 
+   g_buffer.store(ptr);
