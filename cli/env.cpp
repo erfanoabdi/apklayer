@@ -407,6 +407,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     }
     if (useAngle) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
+        env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
         // Android's EGL loader dlopens /system/lib{,64}/lib*_angle.so. bionic_translation
         // searches only BIONIC_LD_LIBRARY_PATH for Android-linked libraries, even for absolute paths.
         env["BIONIC_LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:" + env["BIONIC_LD_LIBRARY_PATH"];
