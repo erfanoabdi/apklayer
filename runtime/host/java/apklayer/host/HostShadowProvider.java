@@ -24,7 +24,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.net.ConnectivityManager", ShadowHostConnectivityManager.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),
                 Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),
-                Map.entry("android.app.ActivityThread", ShadowHostActivityThread.class.getName()),  // getApplication: null (not the dummy "android" one) before the app's own exists
+                Map.entry("android.content.ContextWrapper", ShadowHostContextWrapper.class.getName()),  // getPackageName of the dummy initial application, for native callers
                 Map.entry("android.app.SystemServiceRegistry", ShadowHostSystemServiceRegistry.class.getName()),
                 Map.entry("android.app.LoadedApk", ShadowHostLoadedApk.class.getName()),
                 Map.entry("android.view.Display", ShadowHostDisplay.class.getName()),
