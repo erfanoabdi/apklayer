@@ -407,6 +407,9 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     }
     if (useAngle) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
+        // Android's EGL loader dlopens /system/lib{,64}/lib*_angle.so. bionic_translation
+        // searches only BIONIC_LD_LIBRARY_PATH for Android-linked libraries, even for absolute paths.
+        env["BIONIC_LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:" + env["BIONIC_LD_LIBRARY_PATH"];
         std::string vendorLib = layout.java.empty() ? "lib64" : "lib";
         env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/" + vendorLib + ":/vendor/" + vendorLib + "/egl:/vendor/" + vendorLib + "/hw";
         std::vector<std::string> shared = split(getenvOr("BIONIC_VENDOR_SHARED_LIBS", ""), ':');

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17: ANGLE libraries are visible to bionic_translation
+
+- The isolated NVIDIA run used the new CLI and confirmed that the system links were present, but bionic_translation could not find `/system/lib64/libEGL_angle.so`: it only searches directories listed in `BIONIC_LD_LIBRARY_PATH`. ANGLE mode now adds Android's system library directories to that search path.
+- Build log: pending `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out`, then repeat the isolated smoke run with `--no-daemon`.
+
 ## 2026-11-17: ANGLE system suffix directory
 
 - Corrected the ANGLE runtime links to `/system/lib` and `/system/lib64`. Android 17's loader's `SYSTEM_LIB_PATH` is those directories directly; the previous build put them under a nested `egl/` directory, so its lookup still failed.
