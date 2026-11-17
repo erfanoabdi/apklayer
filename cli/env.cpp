@@ -399,6 +399,18 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
             fprintf(stderr, "apklayer: ANGLE GLES libraries are unavailable (%s); using native GLES\n", reason.c_str());
             useAngle = false;
         }
+        // ANGLE's Vulkan renderer needs the guest Vulkan presentation path too. Treat ANGLE as
+        // vulkan=on, including when the general Vulkan setting is off or its optional probe did
+        // not find a device. The Vulkan HAL will report a real initialization failure if the
+        // host driver cannot provide it; other instances keep the normal auto/off behavior.
+        if (useAngle && env.count("APKLAYER_VULKAN_HOST") && !env.count("APKLAYER_VULKAN_PRESENT")) {
+            std::string vulkan = hostVulkan(layout, env);
+            if (size_t sp = vulkan.find(' '); sp != std::string::npos)
+                env["APKLAYER_VULKAN_LEVEL"] = vulkan.substr(sp + 1), vulkan.resize(sp);
+            env["APKLAYER_VULKAN_PRESENT"] = "1";
+            env["APKLAYER_VULKAN_VERSION"] = vulkan.empty() ? "1.1" : vulkan;
+            fprintf(stderr, "apklayer: enabling Vulkan presentation for ANGLE GLES\n");
+        }
         if (useAngle && (!env.count("APKLAYER_VULKAN_HOST") || !env.count("APKLAYER_VULKAN_PRESENT"))) {
             if (angleMode == "on") die("ANGLE GLES needs the host Vulkan presentation driver; enable a supported Vulkan presentation path");
             fprintf(stderr, "apklayer: ANGLE GLES needs Vulkan presentation; using native GLES\n");

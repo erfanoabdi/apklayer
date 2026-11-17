@@ -14,7 +14,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 |---|---|---|---|---|
 | `gl-hide` | `APKLAYER_GL_HIDE` | empty | GL extensions hidden from Android code (a driver that advertises a format it decodes wrongly) | yes |
 | `gles-claim` | `APKLAYER_GLES_OVERRIDE` | auto | auto: apps are told OpenGL ES 3.2 where the host driver is older but copes; off: the driver's version | |
-| `gles-angle` | `APKLAYER_GLES_ANGLE` | auto | auto: ANGLE on NVIDIA, native GLES elsewhere; on: ANGLE on the selected GPU; off: native GLES. Requires host Vulkan presentation | |
+| `gles-angle` | `APKLAYER_GLES_ANGLE` | auto | auto: ANGLE on NVIDIA, native GLES elsewhere; on: ANGLE on the selected GPU; off: native GLES. ANGLE enables Vulkan presentation for its Vulkan renderer, even when the general Vulkan setting is off | |
 | `vulkan` | `APKLAYER_VULKAN_PRESENT` | auto | auto: Vulkan where the host can present; off: none; on: also where the probe finds no device | yes |
 | `aot` | `APKLAYER_AOT` | on | JDK 25 AOT cache for the app JVMs; off: the class data cache only | |
 | `jvm-mem` | `APKLAYER_JVM_MEM` | tuned | tuned: apklayer's heap and compiler sizing; default: the JVM's own | yes |

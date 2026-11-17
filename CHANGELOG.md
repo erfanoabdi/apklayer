@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17: ANGLE enables Vulkan presentation
+
+- ANGLE now forces the guest Vulkan presentation path on when ANGLE is selected, including when the general Vulkan setting is off or its optional host probe finds no device. Other instances keep the existing Vulkan auto/off behavior; general Vulkan remains `auto` by default and is not NVIDIA-specific.
+- Build log: `ninja -C b cli/apklayer` succeeded. An environment smoke with ANGLE on and Vulkan explicitly off reports `APKLAYER_VULKAN_PRESENT=1` and `APKLAYER_ANGLE_ACTIVE=1`. The installed test runtime has no staged Vulkan HAL, so this only verifies the selection logic, not Vulkan initialization or Android services.
+
 ## 2026-11-17: Build Google ANGLE Android x86 libraries
 
 - Build log: Google ANGLE `f0d596b6f9e3dfe7a068786790516c035b1dfde4`, GN Android API 37, `angle_enable_vulkan=true`, `angle_libs_suffix="_angle"`, static release configuration. `autoninja -C out/Android64 -j8 libEGL libGLESv2 libGLESv1_CM` and matching `Android32` x86 build succeeded (1699 steps each); source-built x86_64/x86 EGL/GLES libraries replace the Android 13 Waydroid binaries in `runtime/angle/vendor`.
