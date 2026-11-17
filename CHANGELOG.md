@@ -6,6 +6,7 @@
 - Build log: incrementally rebuilt the Android 17 x86_64 Vulkan HAL with temporary image-import logging and tested it in the isolated `angle-bionic` overlay. No import log appeared because the crash is earlier, in the deferred-allocation `vkCreateImage` call. Stopped the test instance after capture.
 - Added ANGLE patch 0002 to disable deferred swapchain allocation on NVIDIA Android WSI. Rebuilt `Android64`; the GLES test now initializes ANGLE and draws/reads back its expected pattern. GLES 3.2 is not yet confirmed: this app probe reports ES 1.1 and SurfaceFlinger's context reports ES 3.1. The next failure is SurfaceFlinger aborting in Skia after `eglCreateImage` returns `EGL_BAD_PARAMETER` for virtual-display buffers. The app's later null dereference in `SurfaceComposerClient::Transaction::apply` follows SurfaceFlinger death.
 - Build log (before build): rebuild `libapklayer_surfaceflinger` for `gsi_x86_64 userdebug` from the already-patched frameworks/native source (patch 0008 skips non-importable client layers instead of aborting); use only this module in the isolated `angle-bionic` overlay, then rerun GLES 3.2 and Files startup. Do not update the shipped runtime until both succeed.
+- Build (pending): `flock -n ~/los24-build.lock bash -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_surfaceflinger'` in the Mac OrbStack VM; build only this existing module and leave `out/` intact.
 
 ## 2026-11-17: Diagnose ANGLE GLES crash
 
