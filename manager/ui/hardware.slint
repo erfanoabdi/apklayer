@@ -145,6 +145,39 @@ component BinderRow {
     }
 }
 
+component GlesCard {
+    OutlinedCard {
+        VerticalLayout {
+            padding: MaterialStyleMetrics.padding_16;
+            spacing: MaterialStyleMetrics.spacing_8;
+            MaterialText { text: "GLES"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
+            MaterialText {
+                text: "ANGLE translates GLES through the host Vulkan presentation driver. Automatic uses ANGLE on NVIDIA and native GLES on other GPUs. Switch on to use ANGLE on the selected GPU; switch off for native GLES. Changes apply at the next instance start.";
+                style: MaterialTypography.body_medium;
+                color: MaterialPalette.on_surface_variant;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                VerticalLayout { alignment: center; MaterialText { text: Backend.gles-angle-enabled ? "ANGLE" : "Native GLES"; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface; } }
+                Switch {
+                    width: MaterialStyleMetrics.size_52;
+                    checked: Backend.gles-angle-enabled;
+                    enabled: !Backend.busy;
+                    accessible-label: "Use ANGLE for GLES";
+                    checked-state-changed(on) => { Backend.set-config("", "gles-angle", on ? "on" : "off"); }
+                }
+                if Backend.gles-angle-mode != "auto" : TonalButton {
+                    text: "Automatic";
+                    enabled: !Backend.busy;
+                    clicked => { Backend.set-config("", "gles-angle", "auto"); }
+                }
+            }
+        }
+    }
+}
+
 export component HardwarePage {
     ScrollView {
         init => { self.content_y = -Backend.scroll-y; }
@@ -157,6 +190,7 @@ export component HardwarePage {
                 spacing: MaterialStyleMetrics.spacing_8;
                 alignment: start;
                 BinderRow { }  // the page's introduction, with the binder switch beside it
+                GlesCard { }
                 for d in Backend.hardware : DomainCard { domain: d; }
             }
         }

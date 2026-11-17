@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-17: ANGLE GLES option on the Hardware page
+
+- Added `gles-angle` (`auto|off|on`): auto selects ANGLE for an NVIDIA instance GPU, on selects it for any GPU, and off keeps native GLES. The Hardware page has a new GLES card with a switch and an Automatic reset button; changes apply at the next instance start.
+- Added unmodified x86_64 and x86 ANGLE vendor libraries from Waydroid NVIDIA v0.2.0 under `runtime/angle/vendor`; Meson installs them into the Android vendor EGL folders on x86_64 builds. ANGLE uses the Android EGL loader and apklayer's Vulkan presentation path. Automatic mode falls back to native GLES if libraries or Vulkan presentation are unavailable.
+- Not run: tests or builds.
+
 ## 2026-11-17: PGR agent VIRAPP: the ACE wait loop at VM 0x1d20c is a HIT on our own package; fix = no dummy 'android' application for JNI callers
 
 - **Result.** VM 0x1d1c8 (the 'wait 30 or 600 s' loop polling +2d4994, a bool in the ACE singleton +0x2b0, 0 on both routes the whole run) is only entered when a scanner of VM 0x11290 (vtable 0xd6e8) reports a hit (this[0x49]=1, name at this+0x4a). Read live on the translated route the name is our OWN package. The scanner is 0x15148 ('uis_va'): candidates = package names cut from /proc/self/maps, fd and map_files lines under /data/data|/data/app|/data/user/0 ending .so/.apk, minus an own-name set (0x15310: the cached key 'package_name' via +2d216c, and the first line of /proc/<pid>/cmdline) and 'com.google*'; per candidate 0x17640 compares st_uid of /proc/<pid> and /data/data/<name> (equal = hit; the own package matches by construction). The cached key was 'android': ACE's static init calls ActivityThread.currentActivityThread().getApplication().getFilesDir()/getPackageName() and Robolectric's dummy initial application (package android) answered (getFilesDir threw 'No data directory found for package android'; a device answers null there). Natively the candidate list is empty (host paths in the raw maps), so the loop never runs. kvcache8 decodes (XOR with '0123456789ABCD..', records [u32 klen][key][u32 vlen][val]): '*#20250421.1'='0', 'is_history_x86'='0', 'vm_app_ver'='4.9.1.179267863': the 3rd record (97 B vs native 64 B) is written by VM 0x1d2a8 inside the hit path; no x86 detector fires on either route.

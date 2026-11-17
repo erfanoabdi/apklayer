@@ -105,6 +105,12 @@ public:
 
     void apply(const Snapshot& s) {
         auto& b = ui_->global<Backend>();
+        std::string angleMode = "auto";
+        Rows settings;
+        for (const auto& r : s.config) {
+            if (field(r, 0) == "gles-angle") angleMode = field(r, 3);
+            else settings.push_back(r);
+        }
         auto apps = std::make_shared<slint::VectorModel<AppEntry>>();
         for (const auto& r : s.apps) {
             AppEntry e{};  // value-initialized: the generated struct leaves its bools uninitialized
@@ -196,6 +202,11 @@ public:
         }
         b.set_gpus(gpus);
         b.set_gpu_index(chosen);
+        bool nvidiaSelected = false;
+        for (const auto& r : s.gpus)
+            if (field(r, 0) != "id" && field(r, 5) == "yes" && field(r, 3).rfind("10de:", 0) == 0) nvidiaSelected = true;
+        b.set_gles_angle_mode(slint::SharedString(angleMode));
+        b.set_gles_angle_enabled(angleMode == "on" || (angleMode == "auto" && nvidiaSelected));
         bool kernel = false;
         std::string setup;
         for (const auto& r : s.binder) {  // binder <kind> <from>; kernel ready | kernel missing <command>
@@ -206,7 +217,7 @@ public:
         b.set_binder_kernel_setup(slint::SharedString(setup));
         if (hardware_) hardware_->show(s.providers);
         if (addons_) addons_->show(s.apps);
-        b.set_config(manager::configModel(s.config));
+        b.set_config(manager::configModel(settings));
         if (!current_.empty() && s.detail) showDetail(*s.detail);
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);

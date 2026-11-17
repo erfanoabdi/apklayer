@@ -7,6 +7,7 @@
 #include "halium.h"
 #include "providers.h"
 
+#include <algorithm>
 #include <glob.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -65,6 +66,20 @@ std::string hostGles(const Layout& layout, const Env& env) {
     if (version.rfind("2.", 0) == 0 || version == "3.0")
         fprintf(stderr, "apklayer: the host GLES is %s; apps get a 3.2 claim (APKLAYER_GLES_OVERRIDE=off to disable)\n", version.c_str());
     return version;
+}
+
+// ANGLE's Android EGL/GLES drivers are shipped in the project and installed into this runtime vendor tree by Meson.
+bool angleVendorAvailable(const Layout& layout, std::string& reason) {
+    std::string vendor = join(layout.native, "android-root/vendor");
+    static const char* libs[] = {"libEGL_angle.so", "libGLESv1_CM_angle.so", "libGLESv2_angle.so"};
+    for (const char* abi : {"lib64", "lib"}) {
+        std::string dir = join(vendor, std::string(abi) + "/egl");
+        for (const char* name : libs) {
+            std::string path = join(dir, name);
+            if (!exists(path)) { reason = "missing " + path; return false; }
+        }
+    }
+    return true;
 }
 
 // Vulkan presentation (VK_ANDROID_native_buffer in aosp/hals/graphics/vulkan/Driver.cpp) where the host has a GPU device that imports dma-bufs:
@@ -336,7 +351,8 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     // the instance's GPU (cli/gpus.cpp): the graphics HAL's GBM device and with it EGL's (Egl.cpp), Vulkan's device (vulkan/Driver.cpp),
     // the codecs' VA device (bridge/hals/media); the compositor's node tells the HAL when window buffers cross GPUs (graphics.c)
     std::vector<Gpu> gpus = listGpus(layout);
-    if (const Gpu* gpu = instanceGpu(gpus, instance)) {
+    const Gpu* gpu = instanceGpu(gpus, instance);
+    if (gpu) {
         env["APKLAYER_RENDER_NODE"] = gpu->node;
         // gstreamer-vaapi reads its device from here; the va plugin's decoders follow APKLAYER_RENDER_NODE by rank (gst_start, bridge/hals/media/codec.c;
         // untested with two VA GPUs)
@@ -344,13 +360,56 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         for (const Gpu& g : gpus)
             if (g.compositor) env["APKLAYER_COMPOSITOR_NODE"] = g.node;
     }
-    std::string gles = hostGles(layout, env);
+    std::string angleMode = getenvOr("APKLAYER_GLES_ANGLE", "auto");
+    if (angleMode != "auto" && angleMode != "on" && angleMode != "off") die("APKLAYER_GLES_ANGLE: auto, on, or off");
+    bool nvidiaGpu = gpu && gpu->vendorDevice.rfind("10de:", 0) == 0;
+    bool useAngle = angleMode == "on" || (angleMode == "auto" && nvidiaGpu);
+    if (useAngle && deviceGraphics(layout, instance)) {
+        if (angleMode == "on") die("ANGLE GLES is unavailable with graphics = device");
+        fprintf(stderr, "apklayer: ANGLE GLES needs the host graphics provider; using the device GLES driver\n");
+        useAngle = false;
+    }
+    if (useAngle) {
+        std::string reason;
+        if (!angleVendorAvailable(layout, reason)) {
+            if (angleMode == "on") die("ANGLE GLES libraries are not installed (" + reason + ")");
+            fprintf(stderr, "apklayer: ANGLE GLES libraries are unavailable (%s); using native GLES\n", reason.c_str());
+            useAngle = false;
+        }
+        if (useAngle && (!env.count("APKLAYER_VULKAN_HOST") || !env.count("APKLAYER_VULKAN_PRESENT"))) {
+            if (angleMode == "on") die("ANGLE GLES needs the host Vulkan presentation driver; enable a supported Vulkan presentation path");
+            fprintf(stderr, "apklayer: ANGLE GLES needs Vulkan presentation; using native GLES\n");
+            useAngle = false;
+        }
+    }
+    if (useAngle) {
+        env["APKLAYER_ANGLE_ACTIVE"] = "1";
+        std::string vendorLib = layout.java.empty() ? "lib64" : "lib";
+        env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/" + vendorLib + ":/vendor/" + vendorLib + "/egl:/vendor/" + vendorLib + "/hw";
+        std::vector<std::string> shared = split(getenvOr("BIONIC_VENDOR_SHARED_LIBS", ""), ':');
+        for (const char* name : {"libnativewindow.so", "liblog.so", "libvulkan.so"})
+            if (std::find(shared.begin(), shared.end(), name) == shared.end()) shared.emplace_back(name);
+        std::string sharedLibs;
+        for (const std::string& name : shared) if (!name.empty()) sharedLibs += (sharedLibs.empty() ? "" : ":") + name;
+        env["BIONIC_VENDOR_SHARED_LIBS"] = sharedLibs;
+        std::string share = join(instance.root, "angle/share");
+        makeDirs(join(share, "bionic_translation/cfg.d"));
+        writeFile(join(share, "bionic_translation/cfg.d/angle.cfg"),
+                  "# Android's EGL loader selects the ANGLE vendor libraries from ro.hardware.egl=angle\n"
+                  "libEGL.so libEGL.so\n"
+                  "libGLESv1_CM.so libGLESv1_CM.so\n"
+                  "libGLESv2.so libGLESv2.so\n"
+                  "libGLESv3.so libGLESv3.so\n");
+        env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
+        fprintf(stderr, "apklayer: ANGLE GLES enabled (Vulkan backend, %s)\n", gpu ? gpu->node.c_str() : "automatic GPU");
+    }
+    std::string gles = useAngle ? "3.2" : hostGles(layout, env);
     if (size_t sp = gles.find(' '); sp != std::string::npos) gles.resize(sp), env["APKLAYER_GLES_AEP"] = "1";
-    if (!env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
+    if (!useAngle && !env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
         // eglinfo probes a device of its own choosing: with several GPUs the claim is made anyway (a no-op on a 3.2 driver)
         if (gles.rfind("2.", 0) == 0 || gles == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";
     }
-    if (env.count("MESA_GLES_VERSION_OVERRIDE")) gles = env["MESA_GLES_VERSION_OVERRIDE"];
+    if (!useAngle && env.count("MESA_GLES_VERSION_OVERRIDE")) gles = env["MESA_GLES_VERSION_OVERRIDE"];
     if (!gles.empty()) env["APKLAYER_GLES_VERSION"] = gles;  // the stack's ro.opengles.version (cli/stack.cpp)
     return result;
 }

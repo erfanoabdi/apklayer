@@ -5,6 +5,7 @@
 | Path | Origin | License |
 |---|---|---|
 | `runtime/dex2jvm/` (`io.github.kksimp.dex2jvm`) | kksimp/dex2jvm (https://github.com/kksimp/dex2jvm, commit in `.dex2jvm-commit`), copied with one marked patch (interface checkcasts, docs/PATCHES.md) plus apklayer's own `HostDefaults.java`; its LICENSE and NOTICE are beside it | Apache-2.0 |
+| `runtime/angle/vendor/` | Unmodified x86_64 and x86 Android ANGLE GLES libraries from Waydroid NVIDIA v0.2.0's Android 20.0 vendor image; provenance and checksums in `runtime/angle/README.md` | ANGLE source: BSD-style; Waydroid NVIDIA package declares GPL-3.0-or-later |
 | `tests/uibench/uibench.apk` | AOSP UiBench test app | Apache-2.0 |
 | `archive/**` (removed; git tag `archive-last`) | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
 

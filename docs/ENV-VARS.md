@@ -1,6 +1,6 @@
 # Environment variables and JVM properties
 
-A user sets **settings** (below), in the manager's Settings page (global, and per app in the app's page) or with
+A user sets **settings** (below), in the manager's Settings page (global, and per app in the app's page; GLES ANGLE is in Hardware) or with
 `apklayer config list | get KEY | set KEY VALUE | unset KEY [--app <package>]`. They live in `~/.config/apklayer/config` (`key=value`, or
 `<package>:key=value`), one table in `cli/config.cpp` feeds the CLI and the manager. Every apklayer command reads the file, and the launcher hands a
 setting on to the runtime as the variable of the table's second column; a variable already set in the environment wins over the file (that is how
@@ -14,6 +14,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 |---|---|---|---|---|
 | `gl-hide` | `APKLAYER_GL_HIDE` | empty | GL extensions hidden from Android code (a driver that advertises a format it decodes wrongly) | yes |
 | `gles-claim` | `APKLAYER_GLES_OVERRIDE` | auto | auto: apps are told OpenGL ES 3.2 where the host driver is older but copes; off: the driver's version | |
+| `gles-angle` | `APKLAYER_GLES_ANGLE` | auto | auto: ANGLE on NVIDIA, native GLES elsewhere; on: ANGLE on the selected GPU; off: native GLES. Requires host Vulkan presentation | |
 | `vulkan` | `APKLAYER_VULKAN_PRESENT` | auto | auto: Vulkan where the host can present; off: none; on: also where the probe finds no device | yes |
 | `aot` | `APKLAYER_AOT` | on | JDK 25 AOT cache for the app JVMs; off: the class data cache only | |
 | `jvm-mem` | `APKLAYER_JVM_MEM` | tuned | tuned: apklayer's heap and compiler sizing; default: the JVM's own | yes |
@@ -72,7 +73,7 @@ switches above the same way.
 
 Paths and ids the launcher computes and the native and Java sides read: `APKLAYER_INSTANCE`, `_INSTANCE_ROOT`, `_NATIVE`, `_ANDROID_LIBS`, `_ANDROID_ROOT`,
 `_BT`, `_DEPS`, `_ROOT`, `_BUILD`, `_JAVA`, `_CLI`, `_LOGS`, `_STORAGE`, `_DATA`, `_OWN_DATA`, `_PROPERTIES`, `_APK_PATHS`, `_HOST_LIBS`,
-`_HOST_BINDER`, `_HOST_HWBINDER`, `_BINDER`, `_BINDER_DIR`, `_RENDER_NODE`, `_COMPOSITOR_NODE`, `_GLES_VERSION`, `_VULKAN_HOST`, `_VULKAN_VERSION`,
+`_HOST_BINDER`, `_HOST_HWBINDER`, `_BINDER`, `_BINDER_DIR`, `_RENDER_NODE`, `_COMPOSITOR_NODE`, `_GLES_VERSION`, `_ANGLE_ACTIVE`, `_VULKAN_HOST`, `_VULKAN_VERSION`,
 `_NO_SYSTEM_SERVER`, `_WINDOW_MODE`, `_SHELL`, `_APP_SHELL`, `_APP_ID_PREFIX`; per launch: `_INTENT_FILE`, `_INTENT_TEXT`, `_RESULT_FILE`,
 `_COMPONENT_HOST`, `_ISOLATED`, `_PROCESS`; pipes between our processes: `_DAEMON_READY_FD`, `_HUB_READY_FD`, `_SHELL_READY_FD`, `_STARTED_FD`,
 `_SPARE_FD`, `_GUEST_ENV_FD`, `_STACK_PREPARED`; services started on first use: `_LAZY_NAMES`, `_LAZY_FIFO`, `_LAZY_SERVICE`; the sandbox and

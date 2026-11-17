@@ -355,6 +355,11 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
+    if (ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
+        std::string file = join(inst.runtimeDir, "gles-angle.prop");
+        writeFile(file, "ro.hardware.egl=angle\ndebug.angle.backend=2\n");
+        propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
+    }
     if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 3), deviceGraphicsProperties(inst));  // after the overrides' first copy
     if (int density = displayDensity(l); density > 0 && density != 160) {  // ro.sf.lcd_density: this display's, before apklayer.prop's 160 (write-once)
         std::string file = join(inst.root, "display.prop");

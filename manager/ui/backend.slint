@@ -65,6 +65,8 @@ export global Backend {
     in property <int> gpu-index: -1;
     in property <bool> binder-kernel;      // `apklayer binder`: the selected instance runs on the kernel's binder (else the userspace one, the default)
     in property <string> binder-kernel-setup;  // the command that makes its kernel binder devices, "" when they exist
+    in property <bool> gles-angle-enabled;  // explicit mode wins; auto is on only for the selected NVIDIA GPU
+    in property <string> gles-angle-mode: "auto";
     in property <AppEntry> current-app;   // the app selected with select-app, and its info rows
     in property <bool> has-current-app;
     in property <[InfoEntry]> app-info;
