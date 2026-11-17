@@ -76,7 +76,7 @@ if get_option('android_runtime')
   # the runtime's JDK image with the java.base patch built in, for class data sharing (a no-op while it is current; the deb's: setup-runtime.sh)
   meson.add_install_script('sh', '-c', 'exec sh "$1" "$2" "$MESON_INSTALL_DESTDIR_PREFIX/$3"', 'sh', meson.project_source_root() / 'tools/release/jdk-image.sh',
     java.full_path(), fs.relative_to(native_dir, get_option('prefix')))
-  install_symlink('android-libs', pointing_to: android_libs, install_dir: native_dir)
+  # the install's android-libs link is declared in the top-level meson.build, before bridge/native (install order)
   # the files Android processes read at fixed paths: the prebuilts' and apklayer's own (bridge/native/android-root, which wins). Copied as cp -a
   # does: Meson's install_subdir fails on the tree's links (data/media/0, links to the libraries)
   # chmod: cp -a keeps the prebuilts' modes, and a read-only tree (a distribution's package build

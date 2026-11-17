@@ -111,6 +111,11 @@ if host_machine.system() == 'linux'
   # translated code goes through it
   bt = subproject('bionic_translation', default_options: ['buildtype=debugoptimized', 'warning_level=1'])
   subdir('bridge/binderd')  # the userspace binder's daemon (docs/BINDER.md)
+  # the install's android-libs link comes first: Meson installs symlinks in declaration order and needs a relative link's target to exist, and
+  # bridge/native's libjavacore.so link goes through this one (declared in runtime/meson.build it came too late: "Tried to install symlink to missing file")
+  if get_option('android_runtime') and android_libs != '' and prebuilts != ''
+    install_symlink('android-libs', pointing_to: android_libs, install_dir: native_dir)
+  endif
   subdir('bridge/native')  # the native runtime: JNI shim, btload, the path layer, bionic_translation's library mapping
   subdir('bridge/ndk')
   subdir('bridge/hals/graphics/gles1')  # OpenGL ES 1 for hosts without it (-Dgfxstream)
