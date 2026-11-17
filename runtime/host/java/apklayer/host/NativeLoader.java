@@ -238,9 +238,12 @@ public final class NativeLoader {
         String nativeRoot = System.getProperty("apklayer.native");
         if (nativeRoot != null) {
             String system = new File(nativeRoot, "android-root/system").getAbsolutePath();
-            if (new File(system, "lib64/libEGL_angle.so").isFile() || new File(system, "lib/libEGL_angle.so").isFile()) {
-                // EGL loads its ANGLE driver in the app namespace; add the runtime's driver dirs so its absolute /system/lib{,64} path resolves.
-                String anglePath = new File(system, "lib64") + ":" + new File(system, "lib");
+            String abiDir = "32".equals(System.getProperty("sun.arch.data.model")) ? "lib" : "lib64";
+            if (new File(system, abiDir + "/libEGL_angle.so").isFile()) {
+                // SurfaceFlinger and app EGL load ANGLE from their own linker namespaces. Preserve both namespace paths when the
+                // runtime's Android libEGL loader replaces the environment paths with its device-library paths.
+                String anglePath = new File(system, abiDir).getAbsolutePath();
+                systemPath = systemPath.isEmpty() ? anglePath : systemPath + ":" + anglePath;
                 appPath = appPath.isEmpty() ? anglePath : appPath + ":" + anglePath;
             }
         }

@@ -5,6 +5,26 @@
 - ANGLE now forces the guest Vulkan presentation path on when ANGLE is selected, including when the general Vulkan setting is off or its optional host probe finds no device. Other instances keep the existing Vulkan auto/off behavior; general Vulkan remains `auto` by default and is not NVIDIA-specific.
 - Build log: `ninja -C b cli/apklayer` succeeded. An environment smoke with ANGLE on and Vulkan explicitly off reports `APKLAYER_VULKAN_PRESENT=1` and `APKLAYER_ANGLE_ACTIVE=1`. The installed test runtime has no staged Vulkan HAL, so this only verifies the selection logic, not Vulkan initialization or Android services.
 
+## 2026-11-17: Rebuild ANGLE app linker paths
+
+- Service startup succeeds with the freshly built bionic linker, but the GLES app still cannot load `libEGL_angle.so`. The runtime bundle's `aosp/host-classes.jar` lacks the `NativeLoader` ANGLE system-library search-path code already present in source. Build the updated host classes and test with a private native overlay so the shared runtime bundle is not changed.
+- The first app retry still reported the driver missing; build a temporary `NativeLoader` path trace to check that the updated class is active and sees the system ANGLE library.
+- Confirmed the Mac has Android SDK 36.1 plus NDK 29.0.14206865 and 30.0.16138531.
+- Diagnostic builds: add temporary ANGLE-only bionic linker traces around the absolute-path mapping and each app/system search candidate; use them to see which namespace path fails before changing lookup behavior.
+- The bionic trace showed SurfaceFlinger asks for ANGLE in the system namespace, whose paths had been reset to `android-libs`; the runtime system library directory was only added to the app namespace. Add the ABI-correct runtime driver directory to both namespaces, then rebuild the host classes and clean bionic linker before the smoke.
+- The service trace still shows only `android-libs` after that host-class change. Print the final ANGLE `BIONIC_LD_LIBRARY_PATH` from `nativeEnv` to distinguish a stale runtime environment from a linker-side reset.
+- SurfaceFlinger is launched by `btload` with a separate explicit search-path argument. Ensure that argument and environment carry the runtime's 64-bit system-library directory whenever ANGLE is active, even if `nativeEnv`'s path is narrowed before the service starts.
+- The service still cannot open the driver after that change. Re-run the ANGLE-only linker trace to capture the actual `btload` paths and whether each mapped driver file opens.
+- The trace still receives only `android-libs`; log the path assembled at `stack.cpp`'s `btload` call site to confirm the rebuilt CLI takes the ANGLE branch.
+- Build log (before build): add a one-run ANGLE-only service-launch trace in `stack.cpp` to identify the final `btload` search-path argument; remove it after diagnosis.
+- The desktop's running `apklayerd` can forward `run` to its installed CLI, bypassing the source-tree build. Use `--no-daemon` for this source-tree smoke so the rebuilt stack path is actually exercised.
+- The source-tree smoke also needs `APKLAYER_ANDROID_LIBS` pointed at the test runtime bundle; the desktop env file points at a nonexistent arm64 library directory on this x86_64 PC, hiding its Vulkan HAL.
+- AIDA64 is already installed in the isolated `angle-bionic` instance; use its GPU screen as the GLES smoke after SurfaceFlinger starts.
+- For the source-tree app JVM, explicitly set `APKLAYER_DEPS` to the same private runtime overlay so its Android stub jar matches the framework jars.
+- Files (`com.android.documentsui`) launched and exited cleanly with ANGLE forced on and Vulkan present on the RTX 5060 Ti. AIDA64 also started and identified ANGLE 2.1.28324 / Vulkan 1.4.351 / RTX 5060 Ti, then its ARM-bridge RenderThread faulted inside ANGLE's `GL_GetString` path; `debug.hwui.renderer=skiavk` did not prevent that fault. The isolated renderer override was removed afterward.
+- Build log (before build): remove the temporary `stack.cpp` and bionic linker traces, then rebuild the clean bionic linker and CLI. Keep the ANGLE search-path fixes for service and app namespaces.
+- Build log (before smoke): launch Android Files (`com.android.documentsui`) in the isolated ANGLE instance with the corrected private runtime paths; capture EGL and app-start logs, then stop the instance.
+
 ## 2026-11-17: Build Google ANGLE Android x86 libraries
 
 - Build log: Google ANGLE `f0d596b6f9e3dfe7a068786790516c035b1dfde4`, GN Android API 37, `angle_enable_vulkan=true`, `angle_libs_suffix="_angle"`, static release configuration. `autoninja -C out/Android64 -j8 libEGL libGLESv2 libGLESv1_CM` and matching `Android32` x86 build succeeded (1699 steps each); source-built x86_64/x86 EGL/GLES libraries replace the Android 13 Waydroid binaries in `runtime/angle/vendor`.

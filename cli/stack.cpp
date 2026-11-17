@@ -439,7 +439,15 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     std::vector<Service> running;
     auto spec = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args, const std::string& backend = "") {
         Spawn s;
-        s.argv = {l.btload(), ne.env.at("BIONIC_LD_LIBRARY_PATH"), lib, "--main"};
+        std::string bionicPath = ne.env.at("BIONIC_LD_LIBRARY_PATH");
+        if (ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
+            // Services load ANGLE from the system namespace. btload takes its own explicit
+            // search path, so retain the runtime system directory there as well as in env.
+            std::string anglePath = join(join(n, "android-root/system"), "lib64");
+            if (bionicPath.find(anglePath) == std::string::npos) bionicPath = anglePath + ":" + bionicPath;
+            ne.env["BIONIC_LD_LIBRARY_PATH"] = bionicPath;
+        }
+        s.argv = {l.btload(), bionicPath, lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
         if (!backend.empty()) s.env["APKLAYER_HOST_LIBS"] += (s.env["APKLAYER_HOST_LIBS"].empty() ? "" : ":") + backend;  // a HAL front's backend (bridge/hals/<domain>)
