@@ -251,10 +251,6 @@ VkResult createNativeBufferImage(VkDevice device, const VkImageCreateInfo* info,
     if (last) last->pNext = nullptr;
     drm.pNext = first;
     host.pNext = &external;
-    ALOGI("native-buffer image: format=%u fourcc=0x%x extent=%ux%u usage=0x%x tiling=%u modifier=0x%llx planes=%u stride=%u/%u offset=%u/%u fds=%d",
-          static_cast<unsigned>(info->format), data.fourcc, info->extent.width, info->extent.height, info->usage,
-          static_cast<unsigned>(host.tiling), static_cast<unsigned long long>(data.modifier), data.numPlanes,
-          data.stride[0], data.stride[1], data.offset[0], data.offset[1], buffer->handle->numFds);
     VkResult result = createImage(device, &host, allocator, image);
     for (auto& entry : original) entry.first->pNext = entry.second;
     if (result != VK_SUCCESS) return result;

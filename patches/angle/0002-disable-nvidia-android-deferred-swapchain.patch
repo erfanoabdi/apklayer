@@ -1,0 +1,16 @@
+From: apklayer
+Subject: [PATCH] ANGLE: avoid deferred swapchain allocation on NVIDIA Android WSI
+
+apklayer uses Android's Vulkan WSI to present native buffers to a host Vulkan driver. ANGLE's deferred swapchain path asks Android's loader to create
+an unbound VkImage with VkImageSwapchainCreateInfoKHR, whose swapchain handle is owned by the Android loader. The host NVIDIA driver receives this
+loader-private handle through apklayer's Vulkan HAL and crashes in vkCreateImage before GLES rendering starts. Use the normal eager native-buffer
+swapchain path for NVIDIA when ANGLE is built for Android; keep upstream's existing NVIDIA/Wayland workaround.
+
+--- a/src/libANGLE/renderer/vulkan/vk_renderer.cpp
++++ b/src/libANGLE/renderer/vulkan/vk_renderer.cpp
+@@ -6497,4 +6497,5 @@
+     ANGLE_FEATURE_CONDITION(
+         &mFeatures, swapchainDeferredMemoryAllocation,
+         mFeatures.supportsSwapchainMaintenance1.enabled &&
++            !(nativeWindowSystem == angle::NativeWindowSystem::Android && isNvidia) &&
+             !(nativeWindowSystem == angle::NativeWindowSystem::Wayland && isNvidia));

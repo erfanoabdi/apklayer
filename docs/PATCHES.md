@@ -46,6 +46,7 @@ and list it here. (2026-11-14: JdkIdentityPatch also rewrites plain IndexOutOfBo
 | 0085-angle-absolute-driver-path | resolve ANGLE's absolute `/system/lib{,64}` driver name by basename in bionic_translation's host search paths |
 | 0086-angle-system-namespace-fallback | search the system library paths for ANGLE's public drivers when EGL requests them from an app namespace |
 | ANGLE 0001-use-host-safe-tls-for-vulkan | Android Vulkan ANGLE uses thread_local context storage because Android's GL TLS slot overlaps glibc's `multiple_threads` field on apklayer's x86_64 host |
+| ANGLE 0002-disable-nvidia-android-deferred-swapchain | avoid passing Android loader-owned swapchain handles to the host NVIDIA Vulkan driver during deferred image creation |
 - Robolectric 0028-window-add-requested-visible-types: `addToDisplay` takes the window's own requested visible types from the call (IWindowSession's `requestedVisibleTypes` argument, SDK 34+) instead of a fresh default (every bar visible): ViewRootImpl applies FLAG_FULLSCREEN and the theme's fullscreen before the add, so each new activity window had left fullscreen (PGR: fullscreen at the splash, a window again with its main activity); and only an application window filling the display decides the bars (DisplayPolicy's top fullscreen window): a dialog, popup or toast keeps the activity's.
 | 0028-getenv-home-set-by-app | `getenv("HOME")` returns a HOME the app set itself |
 | compat/gcc-before-13-cxx2b | `-std=c++2b` for gcc before 13 |
