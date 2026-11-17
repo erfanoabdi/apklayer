@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-17: Build Google ANGLE Android x86 libraries
+
+- Build log: Google ANGLE `f0d596b6f9e3dfe7a068786790516c035b1dfde4`, GN Android API 37, `angle_enable_vulkan=true`, `angle_libs_suffix="_angle"`, release static configuration. `autoninja -C out/Android64 -j8 libEGL libGLESv2 libGLESv1_CM` succeeded (1699 steps, 2m43s); generated Android x86_64 EGL/GLES libraries. Configure and build the x86 ABI next, then runtime-smoke both before replacing the vendor libraries.
+
 ## 2026-11-17: GLES switch also appears in Graphics
 
 - Reused the GLES switch and Automatic reset inside the Graphics provider card, beside the backend choice, while retaining the standalone GLES card.
