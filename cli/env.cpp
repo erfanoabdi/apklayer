@@ -412,7 +412,9 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         // searches only BIONIC_LD_LIBRARY_PATH for Android-linked libraries, even for absolute paths.
         env["BIONIC_LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:" + env["BIONIC_LD_LIBRARY_PATH"];
         std::string vendorLib = layout.java.empty() ? "lib64" : "lib";
-        env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/" + vendorLib + ":/vendor/" + vendorLib + "/egl:/vendor/" + vendorLib + "/hw";
+        // Android 17's EGL loader resolves the ANGLE driver under /system, through the vendor namespace.
+        // Expose those driver dirs there too, before the ordinary vendor libraries.
+        env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/system/" + vendorLib + ":/system/" + vendorLib + "/egl:/vendor/" + vendorLib + ":/vendor/" + vendorLib + "/egl:/vendor/" + vendorLib + "/hw";
         std::vector<std::string> shared = split(getenvOr("BIONIC_VENDOR_SHARED_LIBS", ""), ':');
         for (const char* name : {"libnativewindow.so", "liblog.so", "libvulkan.so"})
             if (std::find(shared.begin(), shared.end(), name) == shared.end()) shared.emplace_back(name);
