@@ -68,15 +68,37 @@ std::string hostGles(const Layout& layout, const Env& env) {
     return version;
 }
 
-// ANGLE's Android EGL/GLES drivers are shipped in the project and installed into this runtime vendor tree by Meson.
+// ANGLE ships with the package, while the Debian Android runtime is unpacked per user. Link the package-owned drivers into
+// that runtime's vendor tree on demand; a full local runtime build already installs them there directly.
 bool angleVendorAvailable(const Layout& layout, std::string& reason) {
     std::string vendor = join(layout.native, "android-root/vendor");
+    std::string packaged = join(layout.build, "angle/vendor");
     static const char* libs[] = {"libEGL_angle.so", "libGLESv1_CM_angle.so", "libGLESv2_angle.so"};
+    // Prefer the runtime's own copy (e.g. Meson installs with android_runtime=true).
+    bool complete = true;
     for (const char* abi : {"lib64", "lib"}) {
         std::string dir = join(vendor, std::string(abi) + "/egl");
         for (const char* name : libs) {
             std::string path = join(dir, name);
-            if (!exists(path)) { reason = "missing " + path; return false; }
+            complete = complete && exists(path);
+        }
+    }
+    if (complete) return true;
+    // A downloaded Android runtime is user-owned; expose packaged binaries by symlink without replacing existing files.
+    for (const char* abi : {"lib64", "lib"})
+        for (const char* name : libs) {
+            std::string source = join(join(packaged, std::string(abi) + "/egl"), name);
+            if (!exists(source)) { reason = "missing packaged ANGLE library " + source; return false; }
+        }
+    for (const char* abi : {"lib64", "lib"}) {
+        std::string dir = join(vendor, std::string(abi) + "/egl");
+        makeDirs(dir);
+        for (const char* name : libs) {
+            std::string path = join(dir, name);
+            if (!exists(path) && symlink(join(join(packaged, std::string(abi) + "/egl"), name).c_str(), path.c_str()) != 0) {
+                reason = "cannot link packaged ANGLE library " + path;
+                return false;
+            }
         }
     }
     return true;

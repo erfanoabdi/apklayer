@@ -134,6 +134,15 @@ install_data('tools/release/versions', 'data/downloads.json', install_dir: share
 install_data('tools/sysapps.list', 'tools/release/setup-runtime.sh', 'tools/release/jdk-image.sh', 'tools/release/StripHashes.java', 'tools/release/gapps.sh', install_dir: share_dir / 'tools')
 install_subdir('tools/host-setup', install_dir: share_dir / 'tools')
 install_data('runtime/host/jvm.args', install_dir: share_dir / 'runtime/host')
+# ANGLE is part of the host package even when the Android runtime is downloaded separately (the Debian build).
+if not arm32_only and host_machine.cpu_family() == 'x86_64'
+  foreach abi : ['lib64', 'lib']
+    install_data(files('runtime/angle/vendor/' + abi + '/egl/libEGL_angle.so',
+                       'runtime/angle/vendor/' + abi + '/egl/libGLESv1_CM_angle.so',
+                       'runtime/angle/vendor/' + abi + '/egl/libGLESv2_angle.so'),
+      install_dir: pkg_lib / 'angle/vendor' / abi / 'egl')
+  endforeach
+endif
 install_data('bridge/native/apklayer.prop', 'bridge/native/bionic_translation.cfg', install_dir: share_dir / 'bridge/native')
 install_data('bridge/native/profiles/pixel5.prop', 'bridge/native/profiles/pixel5-extra.prop', 'bridge/native/profiles/desktop.prop', install_dir: share_dir / 'bridge/native/profiles')  # tools/device-profile.sh
 # (its links to the libraries are copied as links: Meson's install_subdir fails on a link whose target is missing when it installs again)

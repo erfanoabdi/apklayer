@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17: Debian package ships ANGLE for downloaded Android runtimes
+
+- The package installs the x86_64/x86 Waydroid ANGLE libraries under `/usr/lib/apklayer/angle`; launch setup links them into the per-user Android runtime vendor EGL directories when needed. This fixes the earlier Debian package omission caused by `-Dandroid_runtime=false`.
+- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` (incremental packaging build; no clean of shared output). Verify the resulting deb contains all six `*_angle.so` files.
+
 ## 2026-11-17: ANGLE GLES option on the Hardware page
 
 - Added `gles-angle` (`auto|off|on`): auto selects ANGLE for an NVIDIA instance GPU, on selects it for any GPU, and off keeps native GLES. The Hardware page has a new GLES card with a switch and an Automatic reset button; changes apply at the next instance start.
