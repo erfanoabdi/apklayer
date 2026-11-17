@@ -3,7 +3,7 @@
 ## 2026-11-17: GLES toggle row matches Hardware controls
 
 - The GLES card now follows the reference layout: inline explanatory text, the switch at the right edge, and a reset-to-automatic action only for explicit modes.
-- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` (incremental packaging build; verify updated manager UI is in the deb).
+- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` succeeded (incremental packaging build; 20,473,420-byte apklayer deb). Confirmed all six ANGLE binaries are packaged. Install/runtime verification is pending: local sudo requires a password and the documented SSH host was unreachable.
 
 ## 2026-11-17: ANGLE loader path and Hardware switch layout
 
