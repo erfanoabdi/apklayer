@@ -82,6 +82,7 @@ component DomainCard {
                 color: MaterialPalette.on_surface_variant;
                 wrap: word-wrap;
             }
+            if root.domain.name == "graphics" : GlesSettingsRow { }
             for o in root.domain.backends[root.chosen].options : OptionField { option: o; domain: root.domain.name; backend: root.chosen; }
             HorizontalLayout {
                 alignment: start;
@@ -101,6 +102,47 @@ component DomainCard {
             }
         }
     } }
+}
+
+component GlesSettingsRow {
+    VerticalLayout {
+        spacing: MaterialStyleMetrics.spacing_8;
+        HorizontalLayout {
+            spacing: MaterialStyleMetrics.spacing_16;
+            MaterialText {
+                horizontal-stretch: 1;
+                text: "GLES: ANGLE translates through Vulkan. Automatic uses ANGLE on NVIDIA; switch on for ANGLE on any GPU, or off for native GLES. Applies at the next instance start.";
+                style: MaterialTypography.body_medium;
+                color: MaterialPalette.on_surface_variant;
+                wrap: word-wrap;
+            }
+            VerticalLayout {
+                alignment: start;
+                Switch {
+                    width: MaterialStyleMetrics.size_52;
+                    height: MaterialStyleMetrics.size_32;
+                    checked: Backend.gles-angle-enabled;
+                    enabled: !Backend.busy;
+                    accessible-label: "Use ANGLE for GLES";
+                    checked-state-changed(on) => { Backend.set-config("", "gles-angle", on ? "on" : "off"); }
+                }
+            }
+        }
+        if Backend.gles-angle-mode != "auto" : HorizontalLayout {
+            spacing: MaterialStyleMetrics.spacing_8;
+            MaterialText {
+                horizontal-stretch: 1;
+                text: Backend.gles-angle-enabled ? "ANGLE forced on" : "Native GLES forced on";
+                style: MaterialTypography.body_medium;
+                color: MaterialPalette.on_surface_variant;
+            }
+            TonalButton {
+                text: "Reset to automatic";
+                enabled: !Backend.busy;
+                clicked => { Backend.set-config("", "gles-angle", "auto"); }
+            }
+        }
+    }
 }
 
 // the page's introduction and the instance's binder: userspace (the default, no kernel devices) or the kernel's driver; a change restarts
@@ -149,42 +191,7 @@ component GlesCard {
     OutlinedCard {
         VerticalLayout {
             padding: MaterialStyleMetrics.padding_16;
-            spacing: MaterialStyleMetrics.spacing_8;
-            HorizontalLayout {
-                spacing: MaterialStyleMetrics.spacing_16;
-                MaterialText {
-                    horizontal-stretch: 1;
-                    text: "GLES: ANGLE translates through Vulkan. Automatic uses ANGLE on NVIDIA; switch on for ANGLE on any GPU, or off for native GLES. Applies at the next instance start.";
-                    style: MaterialTypography.body_medium;
-                    color: MaterialPalette.on_surface_variant;
-                    wrap: word-wrap;
-                }
-                VerticalLayout {
-                    alignment: start;
-                    Switch {
-                        width: MaterialStyleMetrics.size_52;
-                        height: MaterialStyleMetrics.size_32;
-                        checked: Backend.gles-angle-enabled;
-                        enabled: !Backend.busy;
-                        accessible-label: "Use ANGLE for GLES";
-                        checked-state-changed(on) => { Backend.set-config("", "gles-angle", on ? "on" : "off"); }
-                    }
-                }
-            }
-            if Backend.gles-angle-mode != "auto" : HorizontalLayout {
-                spacing: MaterialStyleMetrics.spacing_8;
-                MaterialText {
-                    horizontal-stretch: 1;
-                    text: Backend.gles-angle-enabled ? "ANGLE forced on" : "Native GLES forced on";
-                    style: MaterialTypography.body_medium;
-                    color: MaterialPalette.on_surface_variant;
-                }
-                TonalButton {
-                    text: "Reset to automatic";
-                    enabled: !Backend.busy;
-                    clicked => { Backend.set-config("", "gles-angle", "auto"); }
-                }
-            }
+            GlesSettingsRow { }
         }
     }
 }

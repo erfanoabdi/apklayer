@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-17: GLES switch also appears in Graphics
+
+- Reused the GLES switch and Automatic reset inside the Graphics provider card, beside the backend choice, while retaining the standalone GLES card.
+- Compared ANGLE with the Pixel 5 profile and an isolated desktop/x86 profile: both select the RTX 5060 Ti Vulkan renderer and crash at the same ANGLE GLES entry during Skia interface assembly. The spoofed CPU/ABI profile is not the cause of this SurfaceFlinger crash.
+- ANGLE GLES 3.2 remains the requested version; the runtime advertises 3.2 when ANGLE is active, and Google's current ANGLE docs record GLES 3.2 certification over Vulkan. Source-build status and runtime version verification remain open.
+- Build log: pending `ninja -C debian/build-manager apklayer-manager`; package rebuild follows the ANGLE fix.
+
 ## 2026-11-17: ANGLE driver paths reach direct btload services
 
 - The first retry showed that adding Android's system library directories to `BIONIC_LD_LIBRARY_PATH` alone had no effect: stack services and tools call `btload` directly with `layout.androidLibs`, bypassing that variable. All three direct `btload` call sites now pass the active runtime search path, which includes `/system/lib64` and `/system/lib` when ANGLE is active.
