@@ -68,16 +68,16 @@ std::string hostGles(const Layout& layout, const Env& env) {
     return version;
 }
 
-// ANGLE ships with the package, while the Debian Android runtime is unpacked per user. Link the package-owned drivers into
-// that runtime's vendor tree on demand; a full local runtime build already installs them there directly.
-bool angleVendorAvailable(const Layout& layout, std::string& reason) {
-    std::string vendor = join(layout.native, "android-root/vendor");
+// Android 17's EGL loader searches /system/lib{,64}/egl for the "angle" driver suffix. ANGLE ships with the package,
+// while Debian's Android runtime is unpacked per user; link the package-owned drivers into that runtime on demand.
+bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
+    std::string system = join(layout.native, "android-root/system");
     std::string packaged = join(layout.build, "angle/vendor");
     static const char* libs[] = {"libEGL_angle.so", "libGLESv1_CM_angle.so", "libGLESv2_angle.so"};
     // Prefer the runtime's own copy (e.g. Meson installs with android_runtime=true).
     bool complete = true;
     for (const char* abi : {"lib64", "lib"}) {
-        std::string dir = join(vendor, std::string(abi) + "/egl");
+        std::string dir = join(system, std::string(abi) + "/egl");
         for (const char* name : libs) {
             std::string path = join(dir, name);
             complete = complete && exists(path);
@@ -91,7 +91,7 @@ bool angleVendorAvailable(const Layout& layout, std::string& reason) {
             if (!exists(source)) { reason = "missing packaged ANGLE library " + source; return false; }
         }
     for (const char* abi : {"lib64", "lib"}) {
-        std::string dir = join(vendor, std::string(abi) + "/egl");
+        std::string dir = join(system, std::string(abi) + "/egl");
         makeDirs(dir);
         for (const char* name : libs) {
             std::string path = join(dir, name);
@@ -394,7 +394,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     }
     if (useAngle) {
         std::string reason;
-        if (!angleVendorAvailable(layout, reason)) {
+        if (!angleLibrariesAvailable(layout, reason)) {
             if (angleMode == "on") die("ANGLE GLES libraries are not installed (" + reason + ")");
             fprintf(stderr, "apklayer: ANGLE GLES libraries are unavailable (%s); using native GLES\n", reason.c_str());
             useAngle = false;

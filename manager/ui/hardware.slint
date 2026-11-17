@@ -150,26 +150,40 @@ component GlesCard {
         VerticalLayout {
             padding: MaterialStyleMetrics.padding_16;
             spacing: MaterialStyleMetrics.spacing_8;
-            MaterialText { text: "GLES"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
-            MaterialText {
-                text: "ANGLE translates GLES through the host Vulkan presentation driver. Automatic uses ANGLE on NVIDIA and native GLES on other GPUs. Switch on to use ANGLE on the selected GPU; switch off for native GLES. Changes apply at the next instance start.";
-                style: MaterialTypography.body_medium;
-                color: MaterialPalette.on_surface_variant;
-                wrap: word-wrap;
+            HorizontalLayout {
+                spacing: MaterialStyleMetrics.spacing_16;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    MaterialText { text: "GLES"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
+                    MaterialText {
+                        text: "ANGLE translates GLES through Vulkan. Automatic uses ANGLE on NVIDIA; switch on for ANGLE on any GPU, or off for native GLES. Applies at the next instance start.";
+                        style: MaterialTypography.body_medium;
+                        color: MaterialPalette.on_surface_variant;
+                        wrap: word-wrap;
+                    }
+                }
+                VerticalLayout {
+                    alignment: start;
+                    Switch {
+                        width: MaterialStyleMetrics.size_52;
+                        height: MaterialStyleMetrics.size_32;
+                        checked: Backend.gles-angle-enabled;
+                        enabled: !Backend.busy;
+                        accessible-label: "Use ANGLE for GLES";
+                        checked-state-changed(on) => { Backend.set-config("", "gles-angle", on ? "on" : "off"); }
+                    }
+                }
             }
             HorizontalLayout {
                 spacing: MaterialStyleMetrics.spacing_8;
-                alignment: start;
-                VerticalLayout { alignment: center; MaterialText { text: Backend.gles-angle-enabled ? "ANGLE" : "Native GLES"; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface; } }
-                Switch {
-                    width: MaterialStyleMetrics.size_52;
-                    checked: Backend.gles-angle-enabled;
-                    enabled: !Backend.busy;
-                    accessible-label: "Use ANGLE for GLES";
-                    checked-state-changed(on) => { Backend.set-config("", "gles-angle", on ? "on" : "off"); }
+                MaterialText {
+                    horizontal-stretch: 1;
+                    text: Backend.gles-angle-mode == "auto" ? "Automatic" : (Backend.gles-angle-enabled ? "ANGLE" : "Native GLES");
+                    style: MaterialTypography.body_medium;
+                    color: MaterialPalette.on_surface_variant;
                 }
                 if Backend.gles-angle-mode != "auto" : TonalButton {
-                    text: "Automatic";
+                    text: "Reset to automatic";
                     enabled: !Backend.busy;
                     clicked => { Backend.set-config("", "gles-angle", "auto"); }
                 }

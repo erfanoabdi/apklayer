@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-17: ANGLE loader path and Hardware switch layout
+
+- Fixed the Android 17 EGL driver lookup: its `angle` suffix searches `/system/lib{,64}/egl`, while the Waydroid files had only been placed under `/vendor`, causing SurfaceFlinger to abort before apps started. Package-owned libraries are now linked to the loader's system EGL directories.
+- Reworked the GLES card to use the same right-aligned 52x32 switch layout as the binder control, with a clear automatic reset action.
+- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` (incremental packaging build; no clean of shared output). Verify package contents include all six drivers.
+
 ## 2026-11-17: Debian package ships ANGLE for downloaded Android runtimes
 
 - The package installs the x86_64/x86 Waydroid ANGLE libraries under `/usr/lib/apklayer/angle`; launch setup links them into the per-user Android runtime vendor EGL directories when needed. This fixes the earlier Debian package omission caused by `-Dandroid_runtime=false`.
