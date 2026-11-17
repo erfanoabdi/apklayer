@@ -72,6 +72,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 0.5.2 (release notes; apklayer 0.5.2, Android runtime stays 0.5.0 from prebuilts 1d63908b; the changes are in the package)
+- Java 25 everywhere: the packages build with and depend on OpenJDK 25 only (Ubuntu 24.04, Debian 13, Flatpak, Sailfish `temurin-25-jdk`, nix). Fixes `apklayer install` dying at VM start ("Invalid layout of well-known class java.lang.Class") on a machine that had JDK 25 next to the JDK 21 the patched java.base was built from; `findJava` and `apklayer setup` now use the JDK major the patch was cut from. Phones installed with `--ignore-depends` and a JDK 21 need a JDK 25 (docs/HALIUM.md).
+- New: Ubuntu 26.04 (resolute) debs for amd64 and arm64.
+- Fix: a fresh tree's `meson install` no longer fails with "Tried to install symlink to missing file ... libjavacore.so" (the `android-libs` link is declared before the links that go through it).
+
 ## 0.5.1 (release notes; apklayer 0.5.1, Android runtime stays 0.5.0 from prebuilts 1d63908b; the fixes are in the package: host classes and the preload)
 - Unity games on x86_64 (Punishing: Gray Raven among them) start, log in and play: native code that asked for the app's package name got the name of the runtime's placeholder application (`android`); it now gets the app's own. `-Dapklayer.noDummyApp=false` switches the change off.
 - Instance data: a `data/user/0/<package>` (and `user_de`) link that points at another instance's data (instance directories copied with absolute links) is replaced by one to the instance's own data; `tools/relink-instance-data.sh` repairs existing instances (prints the commands, `APPLY=1` runs them). Before this, a game in one instance could write into another instance's app data.
