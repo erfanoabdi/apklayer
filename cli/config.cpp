@@ -24,7 +24,7 @@ const Setting kSettings[] = {
     {"jvm-mem", "APKLAYER_JVM_MEM", "choice", "tuned", "tuned,default", "", "JVM memory",
      "tuned: apklayer's heap and compiler sizing; default: the JVM's own", true},
     {"jvm-options", "APKLAYER_JOPTS", "text", "", "", "", "Extra JVM options", "Options for the app's JVM, separated by spaces", true},
-    {"java", "APKLAYER_NATIVE_JAVA", "text", "", "", "", "Java 21 program", "The java the apps run on, when it is not the system's (a phone's small root file system)", false},
+    {"java", "APKLAYER_NATIVE_JAVA", "text", "", "", "", "Java 25 program", "The java the apps run on, when it is not the system's (a phone's small root file system)", false},
     {"permissions", "APKLAYER_PERMISSIONS", "choice", "ask", "ask,grant", "", "Runtime permissions",
      "ask: the permission prompt; grant: every runtime permission a started app requests is granted without asking", true},
     {"proc-view", "APKLAYER_PROC_VIEW", "choice", "app", "app,host", "", "/proc seen by apps",

@@ -175,14 +175,15 @@ std::string findJava(const Layout& l) {
     if (!l.runtimeVersion.empty() && isExecutable(own)) return own;
     glob_t found{};
     std::string result = "java";
-    // JDK 25 first (the AOT cache replaces the CDS archive, cdsArgs; tools/release/jdk-image.sh builds its image without jmods), then 21, any
-    // architecture's package name (arm64, amd64) (temurin-21-jdk: Adoptium's RPM path, also the Sailfish OS package's: rpm/temurin-21-jdk.spec)
+    // JDK 25 (the AOT cache replaces the CDS archive, cdsArgs; tools/release/jdk-image.sh builds its image without jmods), any architecture's
+    // package name (arm64, amd64) (temurin-25-jdk: Adoptium's RPM path, also the Sailfish OS package's: rpm/temurin-25-jdk.spec). 21 stays in the list only as the
+    // safety net of a runtime a user built on 21 (the matching below picks it); no package of ours is built for it
     if ((glob("/usr/lib/jvm/java-25-openjdk-*/bin/java", 0, nullptr, &found) == 0 ||
          glob("/usr/lib/jvm/temurin-25-jdk*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||
          glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||
          glob("/usr/lib/jvm/temurin-21-jdk*/bin/java", GLOB_APPEND, nullptr, &found) == 0) && found.gl_pathc > 0) result = found.gl_pathv[0];
-    // apklayer patch (docs/PATCHES.md): the JDK of the major jdk-patch was built from, when the machine has it (a noble deb is built on 21, a user's
-    // machine may also have 25)
+    // apklayer patch (docs/PATCHES.md): the JDK of the major jdk-patch was built from, when the machine has it (a runtime built on another JDK, a
+    // user's own build)
     std::string major = patchMajor(l);
     for (size_t i = 0; !major.empty() && i < found.gl_pathc; i++) {
         std::string rel = readFile(join(dirName(dirName(realPath(found.gl_pathv[i]))), "release")).value_or("");

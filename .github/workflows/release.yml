@@ -54,6 +54,7 @@ jobs:
         os:
           - {codename: noble, image: 'ubuntu:24.04'}
           - {codename: trixie, image: 'debian:trixie'}
+          - {codename: resolute, image: 'ubuntu:26.04'}  # Ubuntu 26.04 LTS; never built before: a failed leg is read before the release is trusted
         cpu:
           - {arch: arm64, runner: ubuntu-24.04-arm, experimental: false}
           - {arch: amd64, runner: ubuntu-24.04, experimental: true}  # never run on x86_64 hardware (docs/X86_64.md)
@@ -88,7 +89,7 @@ jobs:
       - name: Tools
         run: |
           apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq click dpkg-dev openjdk-21-jdk-headless >/dev/null
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq click dpkg-dev openjdk-25-jdk-headless >/dev/null
       - uses: actions/checkout@v4
         with: {path: src}
       - uses: actions/download-artifact@v4

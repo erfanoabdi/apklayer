@@ -12,7 +12,7 @@
   ninja,
   pkg-config,
   python3,
-  jdk21,
+  jdk25,
   wayland-scanner,
   git,
   makeWrapper,
@@ -60,7 +60,7 @@
   # root, which a store copy is not; the system's own (NixOS puts them in /run/wrappers/bin) have
   # to stay ahead on PATH, and a copy here would hide them.
   runtimePath = [
-    jdk21
+    jdk25
     python
     zip
     unzip
@@ -97,7 +97,7 @@ in
       ninja
       pkg-config
       python
-      jdk21 # javac and jar: meson.build declares java as a language
+      jdk25 # javac and jar: meson.build declares java as a language
       wayland-scanner
       git # patches/apply uses git apply
       makeWrapper
@@ -120,7 +120,7 @@ in
         pipewire
         wayland
         wayland-protocols
-        jdk21
+        jdk25
       ]
       ++ gst;
 
@@ -144,7 +144,7 @@ in
     env = {
       # tools/gen/fetch-dep.py takes deps.lock's artifacts from here instead of Maven Central
       APKLAYER_DEPS_LOCAL = "${mavenDeps}";
-      JAVA_HOME = "${jdk21}";
+      JAVA_HOME = "${jdk25}";
     };
 
     postUnpack = ''
@@ -172,7 +172,7 @@ in
         --set-default APKLAYER_CLI "$out/bin/apklayer" \
         --prefix PATH : "${lib.makeBinPath runtimePath}" \
         --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" gst}" \
-        --set-default APKLAYER_NATIVE_JAVA "${jdk21}/bin/java"
+        --set-default APKLAYER_NATIVE_JAVA "${jdk25}/bin/java"
     '';
 
     # the modules install the system providers from here: meson installs no system-apps

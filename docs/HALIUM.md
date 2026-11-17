@@ -280,11 +280,11 @@ The Volla X23 runs Ubuntu Touch 24.04 (noble, glibc 2.39, arm64): the normal `ap
 Install (needs root once, as any deb on Ubuntu Touch; the rootfs is read-only and 4 GB with ~540 MB free):
 ```sh
 sudo mount -o remount,rw /
-sudo apt install ./apklayer_<version>_arm64.deb     # pulls openjdk-21-jre-headless (~200 MB); `sudo apt-get clean` afterwards
+sudo apt install ./apklayer_<version>_arm64.deb     # pulls openjdk-25-jre-headless (~200 MB); `sudo apt-get clean` afterwards
 sudo mount -o remount,ro /
 ```
 The rootfs is `/dev/mapper/system_a`: an OTA update replaces it, and the deb (with its Java) must be installed again; `/home` is separate and keeps the
-runtime, the apps and their data. Without the Java dependency (`dpkg -i --ignore-depends=openjdk-21-jre-headless`, as on the test phone) name a Java 21 with
+runtime, the apps and their data. Without the Java dependency (`dpkg -i --ignore-depends=openjdk-25-jre-headless`, as on the test phone) name a Java 25 with
 `apklayer config set java <jdk>/bin/java`; `apklayer setup` says when there is none.
 
 What needs root, and where it happens (nothing at runtime):
@@ -407,7 +407,7 @@ come from Sailfish's own repositories (zypper in the container). Toolchain: gcc 
 `docker rmi apklayer-sailfish-build:5.0.0.62` frees the image. CI: job `sailfish` in `.github/workflows/release.yml` (the `*.aarch64.rpm` release assets).
 
 RPMs (`rpm/*.spec`): `apklayer` (meson `--prefix=/usr -Dandroid_runtime=false`, like debian/rules, and apklayer-manager, below) and `apklayer-devel`, plus what Sailfish 5.0's repositories and Chum lack: `temurin-25-jdk` (Adoptium's aarch64 JDK 25.0.5+8, runs on the Quintus' glibc 2.30 (checked),
-repackaged unchanged at `/usr/lib/jvm/temurin-25-jdk`; `rpm/temurin-21-jdk.spec` stays for a 21 build, `findJava` takes 25 first and the apklayer RPM requires either: building OpenJDK from source in the target is hours of work for the same bits),
+repackaged unchanged at `/usr/lib/jvm/temurin-25-jdk`; the apklayer RPM requires it: building OpenJDK from source in the target is hours of work for the same bits),
 `libmd`, `libbsd`, `libunwind` (built from source). Sailfish-specific changes the tree needed: libdl linked explicitly (glibc < 2.34), linux_compat.h
 for the new mount API and pidfd_open, SYS_statx, bionic_translation compat patches (no `Elf64_Relr`, gcc 10's `-std=c++20`), and the runtime
 bundle unpacked as `zstd -dc | tar -x` (BusyBox tar has no `--zstd`; gnu-tar conflicts with busybox-symlinks-tar).

@@ -18,7 +18,7 @@ Nothing else is a user option. The rest of this page is for people who work on a
 | `aot` | `APKLAYER_AOT` | on | JDK 25 AOT cache for the app JVMs; off: the class data cache only | |
 | `jvm-mem` | `APKLAYER_JVM_MEM` | tuned | tuned: apklayer's heap and compiler sizing; default: the JVM's own | yes |
 | `jvm-options` | `APKLAYER_JOPTS` | empty | extra JVM options, space separated | yes |
-| `java` | `APKLAYER_NATIVE_JAVA` | the system's Java 21 | the java the apps run on (a phone's small root file system) | |
+| `java` | `APKLAYER_NATIVE_JAVA` | the system's Java 25 | the java the apps run on (a phone's small root file system) | |
 | `permissions` | `APKLAYER_PERMISSIONS` | ask | grant: every runtime permission an app requests is granted without the prompt | yes |
 | `proc-view` | `APKLAYER_PROC_VIEW` | app | host: /proc as the host has it, not only the app's own processes | yes |
 | `status-view` | `APKLAYER_STATUS_VIEW` | app | host: a translated (arm64 on x86_64) app's /proc/<pid>/status keeps the x86 kernel's lines (x86_Thread_features*, untag_mask, 32 Mems_allowed groups); default is an arm64 kernel's | yes |

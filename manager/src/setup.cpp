@@ -79,7 +79,7 @@ void Setup::firstRun(bool force) {
         steps_->push_back(SetupStep{id, title, slint::SharedString(detail), done ? "Done" : "", false});
     };
     add("binder", "Binder", binder ? "Ready for instance " + cli_.instance : "Kernel binder devices missing for instance " + cli_.instance, binder);
-    add("java", "Java", "Java 21 runs the apps", false);
+    add("java", "Java", "Java 25 runs the apps", false);
     add("runtime", "Android runtime", runtime.empty() ? "From the current release" : "Version " + runtime, !runtime.empty());
     add("instance", "Default instance", "Instance " + cli_.instance, false);
     add("system-apps", "System apps", "Providers, documents and the WebView", false);

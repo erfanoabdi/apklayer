@@ -43,7 +43,7 @@ The tree-host build reuses unchanged `FrameListener.class` and `ScreenUpdateHand
 
 | Package | Origin | License |
 |---|---|---|
-| temurin-21-jdk | Eclipse Adoptium's Temurin 21 aarch64 binary, unchanged | GPL-2.0 with Classpath Exception |
+| temurin-25-jdk | Eclipse Adoptium's Temurin 25 aarch64 binary, unchanged | GPL-2.0 with Classpath Exception |
 | libmd, libbsd | libbsd.freedesktop.org releases, built from source | BSD-style / ISC (per file) |
 | libunwind | github.com/libunwind/libunwind release, built from source | MIT |
 
