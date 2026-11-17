@@ -239,7 +239,9 @@ public final class NativeLoader {
             String nativeRoot = System.getProperty("apklayer.native");
             if (nativeRoot != null) {
                 String system = new File(nativeRoot, "android-root/system").getAbsolutePath();
-                systemPath = new File(system, "lib64") + ":" + new File(system, "lib") + (systemPath.isEmpty() ? "" : ":" + systemPath);
+                // EGL loads its ANGLE driver in the app namespace; add the runtime's driver dirs so its absolute /system/lib{,64} path resolves.
+                String anglePath = new File(system, "lib64") + ":" + new File(system, "lib");
+                appPath = appPath.isEmpty() ? anglePath : appPath + ":" + anglePath;
             }
         }
         setLibraryPath(systemPath, appPath); // the WebView provider's libs, then Android's
