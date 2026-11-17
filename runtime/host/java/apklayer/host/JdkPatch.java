@@ -42,6 +42,7 @@ public final class JdkPatch {
         limitAdjusted("java/util/ArrayList$Itr", "remove", -1, Path.of(args[0], "java/util/ArrayList$Itr.class"));  // Android: remove() lowers limit
         limitAdjusted("java/util/ArrayList$ListItr", "add", 1, Path.of(args[0], "java/util/ArrayList$ListItr.class"));  // and ListIterator.add() raises it
         for (var target : TARGETS.entrySet()) withMembers(target.getKey(), target.getValue(), Path.of(args[0], target.getValue() + ".class"));
+        Files.writeString(Path.of(args[0], "apklayer-jdk"), Runtime.version().feature() + "\n");  // the JDK these classes were cut from: cli/env.cpp runs them on that major only
         JdkIdentityPatch.write(Path.of(args[0]));  // runtime identity: traces, threads, messages, hidden members
     }
 

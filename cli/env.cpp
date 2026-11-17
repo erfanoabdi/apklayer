@@ -162,6 +162,10 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
 
 }  // namespace
 
+// The classes of jdk-patch are the build JDK's own, rewritten: another major's libjvm dies at VM init ("Invalid layout of well-known class
+// java.lang.Class"). JdkPatch records the major (apklayer-jdk); "" for a runtime without the record.
+std::string patchMajor(const Layout& l) { return trim(readFile(join(l.native, "jdk-patch/apklayer-jdk")).value_or("")); }
+
 std::string findJava(const Layout& l) {
     if (!l.java.empty()) return l.java;  // the 32-bit runtime's (Layout::arm32Layout)
     std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
@@ -177,6 +181,14 @@ std::string findJava(const Layout& l) {
          glob("/usr/lib/jvm/temurin-25-jdk*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||
          glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||
          glob("/usr/lib/jvm/temurin-21-jdk*/bin/java", GLOB_APPEND, nullptr, &found) == 0) && found.gl_pathc > 0) result = found.gl_pathv[0];
+    // apklayer patch (docs/PATCHES.md): the JDK of the major jdk-patch was built from, when the machine has it (a noble deb is built on 21, a user's
+    // machine may also have 25)
+    std::string major = patchMajor(l);
+    for (size_t i = 0; !major.empty() && i < found.gl_pathc; i++) {
+        std::string rel = readFile(join(dirName(dirName(realPath(found.gl_pathv[i]))), "release")).value_or("");
+        size_t ver = rel.find("JAVA_VERSION=\"");
+        if (ver != std::string::npos && std::to_string(atoi(rel.c_str() + ver + 14)) == major) { result = found.gl_pathv[i]; break; }
+    }
     globfree(&found);
     return result;
 }
