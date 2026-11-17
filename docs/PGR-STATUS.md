@@ -1,5 +1,7 @@
 # PGR (Punishing: Gray Raven) on the translated x86_64 route: status 2026-11-17
 
+> 2026-11-17 cleanup (owner): the investigation tools of the PGR work (tools/ace/vmread and the gate/fsdiff/RE/netdump scripts added since 7534944), the patches 0062 (large_mmap knob) and 0071 (gate trace), tests/apps hello-atomics, hello-neondiff, hello-filedump and docs/PGR-ACE-STATIC.md were removed from main: none of them fixed the game. They stay in git history (before this commit) and in the local branches pgr-*. Tool names in the text below refer to them.
+
 Short version: native arm64 works; the translated x86_64 route dies. The ACE anti-cheat (libanogs.so) runs a payload in its own arm64 VM. At about 80-90 s (about 29 s on an instance with ACE history) that payload enters a "net stage" that frees the same list of 64 blocks it already freed at start (a second free of the same 4 KiB blocks). Our free diagnostic refuses the frees ("no glibc chunk on entry", `BERBERIS_LOG_FREES=1`); the game freezes and dies 80-110 s later (SIGSEGV/SIGBUS). Native arm64 never takes that path.
 
 ## What is fixed (all in main)

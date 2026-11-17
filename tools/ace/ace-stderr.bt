@@ -1,8 +1,0 @@
-// What the game process writes to fd 2 (glibc abort messages, ACE's own text): first 120 writes, with thread and time.
-tracepoint:syscalls:sys_enter_openat / comm == "ng.grayraven.en" && !@g[pid] / { @g[pid] = 1; @t0 = nsecs; }
-tracepoint:syscalls:sys_enter_writev / @g[pid] && args->fd == 2 && @n < 120 /
-{ @n++; $iov = (uint64 *)args->vec; printf("%lu W2 %d writev len0 %lu: %s\n", (nsecs - @t0) / 1000000, tid, *($iov + 1), str(*$iov, 100)); }
-tracepoint:syscalls:sys_enter_write / @g[pid] && args->fd == 2 && @n < 120 /
-{ @n++; printf("%lu W2 %d write len %lu: %s\n", (nsecs - @t0) / 1000000, tid, args->count, str(args->buf, 100)); }
-BEGIN { printf("READY\n"); }
-END { clear(@g); clear(@t0); clear(@n); }

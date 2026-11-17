@@ -12,7 +12,6 @@ OUT="${2:-$PWD/../../../build/$NAME.apk}"; W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/cls" "$W/aidl" "$(dirname "$OUT")"
 LIBS=""
-[ ! -f gen.py ] || python3 gen.py > cases.inc  # gen.py: the generated sources of this app (hello-neondiff: cases.inc, cases_wide.inc; git-ignored)
 if ls *.c >/dev/null 2>&1; then
   API=26; [ ! -f lib.api ] || read -r API < lib.api  # lib.api: the NDK API level of the library (default 26)
   ABIS=x86_64; [ ! -f lib.abi ] || read -r ABIS < lib.abi; ABIS=${APP_ABI:-$ABIS}  # APP_ABI overrides (hello-identity: x86_64 for Waydroid); lib.abi: the ABI(s) of the library, space separated (arm64-v8a: an app only a native bridge runs on x86_64; armeabi-v7a: only the 32-bit app process)
