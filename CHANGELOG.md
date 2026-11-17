@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17: ANGLE system suffix directory
+
+- Corrected the ANGLE runtime links to `/system/lib` and `/system/lib64`. Android 17's loader's `SYSTEM_LIB_PATH` is those directories directly; the previous build put them under a nested `egl/` directory, so its lookup still failed.
+- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` (incremental packaging build; inspect all six ANGLE files and then run the isolated `angle-smoke` instance).
+
 ## 2026-11-17: GLES toggle row matches Hardware controls
 
 - The GLES card now follows the reference layout: inline explanatory text, the switch at the right edge, and a reset-to-automatic action only for explicit modes.

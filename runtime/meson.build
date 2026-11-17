@@ -79,7 +79,7 @@ if get_option('android_runtime')
       install_data(files('angle/vendor/' + abi + '/egl/libEGL_angle.so',
                          'angle/vendor/' + abi + '/egl/libGLESv1_CM_angle.so',
                          'angle/vendor/' + abi + '/egl/libGLESv2_angle.so'),
-      install_dir: native_dir / 'android-root/system' / abi / 'egl')
+      install_dir: native_dir / 'android-root/system' / abi)
     endforeach
   endif
   # the runtime's JDK image with the java.base patch built in, for class data sharing (a no-op while it is current; the deb's: setup-runtime.sh)

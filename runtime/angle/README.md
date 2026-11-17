@@ -4,7 +4,7 @@ These unchanged Android ANGLE binaries were copied from the installed Waydroid N
 `/usr/lib/waydroid-nvidia/guest/vendor/{lib64,lib}/egl/`. The package's vendor image is Android 20.0. They provide x86_64 and x86
 EGL/GLES libraries. Meson installs them into the runtime's `android-root/vendor` on x86_64 builds; the Android EGL loader selects them
 when an instance uses `ro.hardware.egl=angle`. Android 17's EGL loader looks for the `angle` suffix under
-`/system/lib/egl` or `/system/lib64/egl`, so Meson and Debian staging place the runtime links there.
+`/system/lib` or `/system/lib64`, so Meson and Debian staging place the runtime links there.
 
 Waydroid NVIDIA source: <https://github.com/Shiro836/waydroid-nvidia> (package v0.2.0, vendor image digest
 `692a0eeb45c288492f66ddba5b77ea15f00f88eca5354b048ec4b1e752aee29b`). ANGLE's source is BSD-style licensed. The Waydroid NVIDIA

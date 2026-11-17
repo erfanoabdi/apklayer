@@ -68,7 +68,7 @@ std::string hostGles(const Layout& layout, const Env& env) {
     return version;
 }
 
-// Android 17's EGL loader searches /system/lib{,64}/egl for the "angle" driver suffix. ANGLE ships with the package,
+// Android 17's EGL loader searches /system/lib{,64} for the "angle" driver suffix. ANGLE ships with the package,
 // while Debian's Android runtime is unpacked per user; link the package-owned drivers into that runtime on demand.
 bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
     std::string system = join(layout.native, "android-root/system");
@@ -77,7 +77,7 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
     // Prefer the runtime's own copy (e.g. Meson installs with android_runtime=true).
     bool complete = true;
     for (const char* abi : {"lib64", "lib"}) {
-        std::string dir = join(system, std::string(abi) + "/egl");
+        std::string dir = join(system, abi);
         for (const char* name : libs) {
             std::string path = join(dir, name);
             complete = complete && exists(path);
@@ -91,7 +91,7 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
             if (!exists(source)) { reason = "missing packaged ANGLE library " + source; return false; }
         }
     for (const char* abi : {"lib64", "lib"}) {
-        std::string dir = join(system, std::string(abi) + "/egl");
+        std::string dir = join(system, abi);
         makeDirs(dir);
         for (const char* name : libs) {
             std::string path = join(dir, name);
