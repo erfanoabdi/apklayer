@@ -3,7 +3,7 @@
 ## 2026-11-17: Debian package ships ANGLE for downloaded Android runtimes
 
 - The package installs the x86_64/x86 Waydroid ANGLE libraries under `/usr/lib/apklayer/angle`; launch setup links them into the per-user Android runtime vendor EGL directories when needed. This fixes the earlier Debian package omission caused by `-Dandroid_runtime=false`.
-- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` (incremental packaging build; no clean of shared output). Verify the resulting deb contains all six `*_angle.so` files.
+- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` succeeded (incremental packaging build; no clean of shared output). Verified all six `*_angle.so` files in `apklayer_0.5.2-1~noble1_amd64.deb` (20,473,680 bytes). The manager and CLI compiled; runtime ANGLE rendering still needs hardware verification.
 
 ## 2026-11-17: ANGLE GLES option on the Hardware page
 
