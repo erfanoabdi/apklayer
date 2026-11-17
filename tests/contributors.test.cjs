@@ -44,3 +44,8 @@ test('plan renderer escapes html and keeps lists', () => {
   const h = render('# T\n\n- a `<b>`\n- **x**\n\ntext <script>');
   assert.match(h, /<h1>T<\/h1><ul><li>a <code>&lt;b&gt;<\/code><\/li><li><strong>x<\/strong><\/li><\/ul><p>text &lt;script&gt;<\/p>/);
 });
+
+test('the roadmap is read from the main branch on GitHub, not from a local copy', () => {
+  const plan = require('../plan.js');
+  assert.strictEqual(plan.PLAN_URL, 'https://raw.githubusercontent.com/erfanoabdi/apklayer/main/docs/PLAN.md');
+});

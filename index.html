@@ -27,15 +27,15 @@
 <h1 id="t">Android apps.<br><em>Real Linux windows.</em></h1>
 <p>apklayer runs Android apps on Linux with Android's own libraries, the host's GPU and one Wayland window per app. No emulator. No virtual machine.</p>
 <div class="actions"><a class="button button-primary" data-release-link href="https://github.com/erfanoabdi/apklayer/releases/latest">Download <span data-download-version>latest</span></a><a class="button button-ghost" href="https://github.com/erfanoabdi/apklayer">View on GitHub</a></div>
-<p class="hero-meta">Open source, AGPL-3.0-or-later. Desktops and phones, arm64 and x86_64.</p>
+<p class="hero-meta">Open source, AGPL-3.0-or-later. Desktops and phones, arm64 and x86_64, with arm64-to-x86_64 binary translation (built on <a href="https://digitalisx64.github.io/">Digitalis</a>' Berberis fork).</p>
 </div>
 <figure class="frame"><img src="assets/screenshots/ubuntu-desktop.webp" width="2048" height="1612" fetchpriority="high" alt="An Ubuntu desktop with separate windows for Fennec, microG Settings, a game main menu and Open Camera with a camera preview, all Android apps run by apklayer."><figcaption>Real capture, 5 Nov 2026: Ubuntu 24.04 arm64 in a VM, a development build.</figcaption></figure>
 </section>
 
 <section class="strip" id="run" aria-labelledby="run-t"><div class="wrap">
 <span class="eyebrow">What you can run</span><h2 id="run-t">Real apps, measured one by one.</h2>
-<ul class="chips"><li>Thunderbird</li><li>Element</li><li>FluffyChat</li><li>Telegram</li><li>Firefox (Fennec)</li><li>NewPipe</li><li>VLC</li><li>mpv</li><li>Organic Maps</li><li>OsmAnd</li><li>LocalSend</li><li>Open Camera</li><li>OpenTTD</li><li>Google Meet (with microG)</li><li>A Unity game (title screen)</li></ul>
-<p class="note">Dozens of apps draw and run; results per app are public in the <a href="https://github.com/erfanoabdi/apklayer/blob/main/tests/corpus/results.md">compatibility table</a>. Not every app works: check it there. Honest status: <em>Punishing: Gray Raven</em> (an anti-cheat-protected Unity game) reaches its title screen on x86_64 in 0.5.1, but logging in and playing is not verified; Google sign-in through Google's own apps is still unverified end to end.</p>
+<ul class="chips"><li>Thunderbird</li><li>Element</li><li>FluffyChat</li><li>Telegram</li><li>Firefox (Fennec)</li><li>NewPipe</li><li>VLC</li><li>mpv</li><li>Organic Maps</li><li>OsmAnd</li><li>LocalSend</li><li>Open Camera</li><li>OpenTTD</li><li>Google Meet (with microG)</li><li>Unity games</li><li>Punishing: Gray Raven</li><li>Google Play (with sign-in)</li></ul>
+<p class="note">Dozens of apps draw and run; results per app are public in the <a href="https://github.com/erfanoabdi/apklayer/blob/main/tests/corpus/results.md">compatibility table</a>. Unity games work.</p>
 </div></section>
 
 <section class="section wrap" id="how" aria-labelledby="how-t">
@@ -52,6 +52,7 @@
 <section class="section wrap" id="features" aria-labelledby="f-t" style="padding-top:0">
 <div class="head"><span class="eyebrow">Features</span><h2 id="f-t">More than a window.</h2></div>
 <div class="cards">
+<article class="card"><span class="tag">Translation</span><h3>Arm64 apps on x86_64 PCs</h3><p>apklayer supports arm64-to-x86_64 binary translation, so apps and games that ship only arm64 code run on a regular x86_64 PC. The translator is Berberis from AOSP, built on the fork maintained by <a href="https://digitalisx64.github.io/">Digitalis</a>, with apklayer's own fixes on top. A lite mode is there for games whose 3D scene draws wrong.</p></article>
 <article class="card"><span class="tag">Graphics</span><h3>Your GPU, not a software renderer</h3><p>Host EGL/GLES, Vulkan presentation, OpenGL ES 1, a GPU choice per instance and multi-GPU hosts. Software rendering when there is no GPU.</p></article>
 <article class="card"><span class="tag">Windows</span><h3>Native Wayland windows</h3><p>Desktop windows or phone-style maximized apps with a navigation bar. Keyboard, mouse, touch, stylus, wheel and game controllers.</p></article>
 <article class="card"><span class="tag">Google</span><h3>Google apps, your choice</h3><p><code>apklayer setup --microg</code> or <code>--gapps</code> (Google Play services and Play Store). A Google Meet call with sound and video was checked with microG.</p></article>
@@ -86,9 +87,10 @@ apklayer setup</code></pre><button class="copy" type="button" data-copy="#cmd">C
 <section class="section wrap" id="faq" aria-labelledby="q-t">
 <div class="head"><span class="eyebrow">FAQ</span><h2 id="q-t">Questions people ask first.</h2></div>
 <details><summary>Is it an emulator?</summary><div><p>No. There is no emulated hardware and no virtual machine. The Android framework runs on the host's JVM, Android's own native libraries run as host processes, and graphics, audio and devices go through the host's standard interfaces.</p></div></details>
-<details><summary>Does it run the Play Store?</summary><div><p>Optionally. <code>apklayer setup --gapps</code> installs Google's Play services and Play Store from a LiteGapps package; <code>--microg</code> installs microG instead (one replaces the other). The 0.5.0 notes say the Play Store signs in and downloads; the project's plan still lists end-to-end Google sign-in with Google's own apps as unverified. Neither route is certified for Play Integrity or DRM.</p></div></details>
-<details><summary>Does every app work?</summary><div><p>No. Dozens of real apps are tested and the results, including failures, are public in the <a href="https://github.com/erfanoabdi/apklayer/blob/main/tests/corpus/results.md">compatibility table</a>. Games with anti-cheat, or apps that need Google integrity checks, may not work.</p></div></details>
+<details><summary>Does it run the Play Store?</summary><div><p>Yes, optionally. <code>apklayer setup --gapps</code> installs Google's Play services and Play Store from a LiteGapps package; <code>--microg</code> installs microG instead (one replaces the other). Google Play and Google sign-in work. Neither route is certified for Play Integrity or DRM.</p></div></details>
+<details><summary>Does every app work?</summary><div><p>No. Dozens of real apps are tested and the results, including failures, are public in the <a href="https://github.com/erfanoabdi/apklayer/blob/main/tests/corpus/results.md">compatibility table</a>. Apps that need Google's integrity checks or DRM may not work.</p></div></details>
 <details><summary>Is it safe to run untrusted APKs?</summary><div><p>Not by default. Apps run as your user; instances separate app data but are not a VM security boundary. A per-app sandbox exists but is opt-in (<code>APKLAYER_SANDBOX=1</code>) and has documented gaps. Install apps you would trust on your desktop.</p></div></details>
+<details><summary>Can I run arm64-only apps on an x86_64 PC?</summary><div><p>Yes. apklayer supports arm64-to-x86_64 binary translation: the app's arm64 code is translated on the fly by Berberis, using the fork maintained by <a href="https://digitalisx64.github.io/">Digitalis</a>. Unity games work this way too. A lite translation mode (per app, in the manager) helps games whose 3D scene draws wrong.</p></div></details>
 <details><summary>Which systems and CPUs?</summary><div><p>Release packages: Ubuntu 24.04 and Debian 13 on arm64 and amd64, a Flatpak, an Ubuntu Touch click, Sailfish RPMs. You need a Wayland desktop and a GPU with host EGL/GLES. Apps built for arm64 run natively on arm64 hosts and through a binary translator on x86_64.</p></div></details>
 <details><summary>How fast is it?</summary><div><p>There are no published benchmarks, so none are claimed here.</p></div></details>
 <details><summary>Is it free?</summary><div><p>Yes, AGPL-3.0-or-later. Commercial licenses are also offered; see the repository's <a href="https://github.com/erfanoabdi/apklayer/blob/main/COMMERCIAL.md">COMMERCIAL.md</a>.</p></div></details>
@@ -133,6 +135,6 @@ apklayer setup</code></pre><button class="copy" type="button" data-copy="#cmd">C
 
 <section class="section wrap" style="padding-top:0"><div class="roadmap"><div><h2 style="font-size:1.5rem">What is next</h2><p class="note" style="margin:6px 0 0">Open work only, straight from the project's plan.</p></div><div class="actions"><a class="button button-ghost" href="plan.html">Roadmap</a><a class="button button-primary" href="https://t.me/apklayer_chat">Join the Telegram chat</a></div></div></section>
 </main>
-<footer class="wrap"><div>apklayer, free software (AGPL-3.0-or-later). Not affiliated with Google or the Android Open Source Project.</div><nav aria-label="Footer"><a href="https://github.com/erfanoabdi/apklayer">GitHub</a><a href="https://github.com/erfanoabdi/apklayer/issues">Issues</a><a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md">Docs</a><a href="https://github.com/erfanoabdi/apklayer/blob/main/LICENSE">License</a><a href="releases.json">Release feed</a></nav></footer>
+<footer class="wrap"><div>apklayer, free software (AGPL-3.0-or-later). Binary translation: Berberis, with the Digitalis fork. Not affiliated with Google or the Android Open Source Project.</div><nav aria-label="Footer"><a href="https://github.com/erfanoabdi/apklayer">GitHub</a><a href="https://github.com/erfanoabdi/apklayer/issues">Issues</a><a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md">Docs</a><a href="https://github.com/erfanoabdi/apklayer/blob/main/LICENSE">License</a><a href="releases.json">Release feed</a></nav></footer>
 </body>
 </html>
