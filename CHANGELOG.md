@@ -1,8 +1,8 @@
 # Changelog
 
-## 2026-11-17: ANGLE libraries are visible to bionic_translation
+## 2026-11-17: ANGLE driver paths reach direct btload services
 
-- The isolated NVIDIA run used the new CLI and confirmed that the system links were present, but bionic_translation could not find `/system/lib64/libEGL_angle.so`: it only searches directories listed in `BIONIC_LD_LIBRARY_PATH`. ANGLE mode now adds Android's system library directories to that search path.
+- The first retry showed that adding Android's system library directories to `BIONIC_LD_LIBRARY_PATH` alone had no effect: stack services and tools call `btload` directly with `layout.androidLibs`, bypassing that variable. All three direct `btload` call sites now pass the active runtime search path, which includes `/system/lib64` and `/system/lib` when ANGLE is active.
 - Build log: pending `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out`, then repeat the isolated smoke run with `--no-daemon`.
 
 ## 2026-11-17: ANGLE system suffix directory

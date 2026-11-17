@@ -439,7 +439,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     std::vector<Service> running;
     auto spec = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args, const std::string& backend = "") {
         Spawn s;
-        s.argv = {l.btload(), l.androidLibs, lib, "--main"};
+        s.argv = {l.btload(), ne.env.at("BIONIC_LD_LIBRARY_PATH"), lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
         if (!backend.empty()) s.env["APKLAYER_HOST_LIBS"] += (s.env["APKLAYER_HOST_LIBS"].empty() ? "" : ":") + backend;  // a HAL front's backend (bridge/hals/<domain>)
@@ -544,7 +544,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     std::vector<int> waiters;
     for (const std::string& svc : waitFor) {
         Spawn w;
-        w.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "wait", svc};
+        w.argv = {l.btload(), ne.env.at("BIONIC_LD_LIBRARY_PATH"), "libapklayer_servicetool.so", "--main", "wait", svc};
         w.env = ne.env;
         w.logFile = join(inst.logs(), "ready-" + svc + ".log");
         waiters.push_back(spawn(w));
@@ -695,7 +695,7 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
     if (args.empty()) die("exec <library> [args...]");
     NativeEnv ne = nativeEnv(l, inst);
     Spawn s;
-    s.argv = {l.btload(), l.androidLibs, args[0], "--main"};
+    s.argv = {l.btload(), ne.env.at("BIONIC_LD_LIBRARY_PATH"), args[0], "--main"};
     s.argv.insert(s.argv.end(), args.begin() + 1, args.end());
     s.env = ne.env;
     // without a stack the tool still sees a device's properties (the store stays for the next tool; a stack's start makes its own)
