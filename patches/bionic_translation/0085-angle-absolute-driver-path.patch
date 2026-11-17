@@ -1,0 +1,36 @@
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -953,6 +953,15 @@
+ 	char *path_normalized_name;
+ 	char *tmp_name;
+ 
++	const char *search_name = name;
++	/* apklayer patch: EGL's absolute system path for ANGLE must be searched by basename on the host. */
++	if (name && (!strncmp(name, "/system/lib64/", 13) || !strncmp(name, "/system/lib/", 12))) {
++		const char *base = strrchr(name, '/');
++		if (base && (!strcmp(base + 1, "libEGL_angle.so") || !strcmp(base + 1, "libGLESv1_CM_angle.so") ||
++		             !strcmp(base + 1, "libGLESv2_angle.so")))
++			search_name = base + 1;
++	}
++
+ 	TRACE("[ %5d opening %s ]\n", apkenv_pid, name);
+ 
+ 	if (name == 0)
+@@ -1011,7 +1020,7 @@
+ 			WARN("realpath returned NULL: can't compare path_normalized_name('%s') vs ldpath_normalized('%s')\n", path_normalized_name, ldpath_normalized);
+ 		}
+ 
+-		n = format_buffer(buf, sizeof(buf), "%s/%s", *path, name);
++		n = format_buffer(buf, sizeof(buf), "%s/%s", *path, search_name);
+ 		if (n < 0 || n >= (int)sizeof(buf)) {
+ 			WARN("Ignoring very long library path: %s/%s\n", *path, name);
+ 			continue;
+@@ -1027,7 +1036,7 @@
+ 	free(path_normalized_name);
+ 
+ 	for (path = apkenv_sopaths; sopaths && *path; path++) {
+-		n = format_buffer(buf, sizeof(buf), "%s/%s", *path, name);
++		n = format_buffer(buf, sizeof(buf), "%s/%s", *path, search_name);
+ 		if (n < 0 || n >= (int)sizeof(buf)) {
+ 			WARN("Ignoring very long library path: %s/%s\n", *path, name);
+ 			continue;
