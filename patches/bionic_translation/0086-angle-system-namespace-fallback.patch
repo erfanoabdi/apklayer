@@ -1,0 +1,36 @@
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1510,7 +1510,15 @@
+ apkenv_load_library(const char *name, const bool app, const bool vendor, const bool try_glibc, int glibc_flag, void **_glibc_handle)
+ {
+ 	char fullpath[512];
++	bool library_app = app;
+ 	int fd = apkenv_open_library(name, fullpath, vendor ? apkenv_vendor_ldpaths : app ? apkenv_app_ldpaths : apkenv_ldpaths, !app && !vendor);
++	/* apklayer patch: EGL's three public ANGLE drivers may be in the system search path, even from the app namespace. */
++	const char *base = strrchr(name, '/');
++	base = base ? base + 1 : name;
++	if (fd == -1 && app && (!strcmp(base, "libEGL_angle.so") || !strcmp(base, "libGLESv1_CM_angle.so") || !strcmp(base, "libGLESv2_angle.so"))) {
++		fd = apkenv_open_library(name, fullpath, apkenv_ldpaths, true);
++		if (fd >= 0) library_app = false;
++	}
+ 	/* apklayer patch: Android's linker opens an absolute path the app's namespace permits (its own data: FCL's game JRE, its
+ 	 * libjvm.so and the JDK's System.loadLibrary of <java.home>/lib/libjava.so); here it was refused outside the search path.
+ 	 * shortcut: any absolute path from the app namespace, not only the app's data; narrow it if a host library gets in the way. */
+@@ -1551,7 +1559,7 @@
+ 	if (fstat(fd, &st) == 0) {
+ 		for (soinfo *l = apkenv_solist; l; l = l->next) {
+ 			if ((l->flags & FLAG_LINKED) && l->st_ino == st.st_ino && l->st_dev == st.st_dev) {
+-				if (strcmp(l->fullpath, fullpath) || l->app_ns != app || l->vendor_ns != vendor)
++				if (strcmp(l->fullpath, fullpath) || l->app_ns != library_app || l->vendor_ns != vendor)
+ 					fprintf(stderr, "[bionic_linker] %s: already loaded as %s (app %d vendor %d), not loaded again\n", fullpath, l->fullpath, l->app_ns, l->vendor_ns);
+ 				close(fd);
+ 				return l;
+@@ -1591,7 +1599,7 @@
+ 	if (si == NULL)
+ 		goto fail;
+ 
+-	si->app_ns = app;
++	si->app_ns = library_app;
+ 	si->vendor_ns = vendor;
+ 	si->st_dev = st.st_dev;
+ 	si->st_ino = st.st_ino;
