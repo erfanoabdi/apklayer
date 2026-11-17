@@ -235,10 +235,10 @@ public final class NativeLoader {
         appPath = System.getProperty("apklayer.libdir", "");
         // only Android (bionic) libraries: apklayer's native dir holds glibc ones, which bionic_translation's dlopen leaves to glibc (LD_LIBRARY_PATH) when they are not here
         systemPath = (provider == null ? "" : provider + "/lib") + (androidLibs != null ? (provider == null ? "" : ":") + androidLibs : "");
-        if ("1".equals(System.getenv("APKLAYER_ANGLE_ACTIVE"))) {
-            String nativeRoot = System.getProperty("apklayer.native");
-            if (nativeRoot != null) {
-                String system = new File(nativeRoot, "android-root/system").getAbsolutePath();
+        String nativeRoot = System.getProperty("apklayer.native");
+        if (nativeRoot != null) {
+            String system = new File(nativeRoot, "android-root/system").getAbsolutePath();
+            if (new File(system, "lib64/libEGL_angle.so").isFile() || new File(system, "lib/libEGL_angle.so").isFile()) {
                 // EGL loads its ANGLE driver in the app namespace; add the runtime's driver dirs so its absolute /system/lib{,64} path resolves.
                 String anglePath = new File(system, "lib64") + ":" + new File(system, "lib");
                 appPath = appPath.isEmpty() ? anglePath : appPath + ":" + anglePath;

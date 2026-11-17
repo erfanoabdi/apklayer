@@ -9,6 +9,7 @@
 - `debug.renderengine.vulkan=true` made SurfaceFlinger avoid its Skia GLES initialization, so the Android services came up; the app's EGL loader then could not find `libEGL_angle.so`. The ANGLE driver paths must be added to the app JVM's system linker namespace as well as the initial process environment.
 - Follow-up: the app JVM's `NativeLoader.init()` replaces the initial system linker path with `android-libs`, dropping the runtime's `android-root/system/lib{,64}` directory where ANGLE is linked. The driver must be reachable from EGL's app namespace.
 - Follow-up correction: ANGLE is opened by EGL from the app namespace, so the driver dirs must be added to `NativeLoader`'s app path, not its system path. Build the host classes and smoke this adjustment with the Google ANGLE binaries.
+- The active-mode environment guard did not make the directory visible to EGL. Detect the packaged runtime symlink instead and append its system library dirs to the app path whenever ANGLE is installed; rebuild host classes and smoke again.
 
 ## 2026-11-17: GLES switch also appears in Graphics
 
