@@ -12,7 +12,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- ANGLE GLES (Google Android 17 x86_64/x86 build, Vulkan on): on the RTX 5060 Ti ANGLE initializes, then SurfaceFlinger SIGSEGVs in `egl::ContextMutex::lock()` while Skia assembles its GLES interface. It persists without the Pixel 5 CPU profile. Find/fix the invalid context pointer; only then make ANGLE NVIDIA's forced/default path and add its source build to the Debian packaging flow.
+- ANGLE GLES (Google Android 17 x86_64/x86 build, Vulkan on): the first smoke crashed in `egl::ContextMutex::lock()` while Skia assembled its GLES interface. The follow-up avoided that path with `debug.renderengine.vulkan=true`, but then EGL could not load `/system/lib64/libEGL_angle.so`. Google binaries and GLES 3.2 override stay in the project/package; keep the Debian build binary-only. Recent bionic linker fixes compiled, but the isolated smoke still failed before services came up. Diagnose the exact linker search path and validate SurfaceFlinger plus app EGL before forcing ANGLE as NVIDIA's only/default option.
 - Play Store install failed intermittently with `INSTALL_FAILED_INVALID_APK: no base APK` (HubInstaller.staged); cause unknown; the error now names the session's files: read it at the next failure.
 - Play services replies of exactly 8388608 bytes (`Large reply transaction`): which call, and whether its caller copes, is unknown; read hub.log at the next one.
 - YouTube 21.45: check the signed-in feed and a video with the ApklayerBuffers fix; signed out, the EU consent page looked wider than the window.
