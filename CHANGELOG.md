@@ -3,9 +3,9 @@
 ## 2026-11-17: GLES switch also appears in Graphics
 
 - Reused the GLES switch and Automatic reset inside the Graphics provider card, beside the backend choice, while retaining the standalone GLES card.
-- Compared ANGLE with the Pixel 5 profile and an isolated desktop/x86 profile: both select the RTX 5060 Ti Vulkan renderer and crash at the same ANGLE GLES entry during Skia interface assembly. The spoofed CPU/ABI profile is not the cause of this SurfaceFlinger crash.
-- ANGLE GLES 3.2 remains the requested version; the runtime advertises 3.2 when ANGLE is active, and Google's current ANGLE docs record GLES 3.2 certification over Vulkan. Source-build status and runtime version verification remain open.
-- Build log: pending `ninja -C debian/build-manager apklayer-manager`; package rebuild follows the ANGLE fix.
+- Compared ANGLE with the Pixel 5 profile and an isolated desktop/x86 profile: both select the RTX 5060 Ti Vulkan renderer and crash at the same ANGLE GLES entry during Skia interface assembly. The spoofed CPU/ABI profile is not the cause. The vendor binaries are from Android 13, while apklayer's guest runtime is Android 17, a likely ABI/platform mismatch.
+- ANGLE GLES 3.2 remains the requested version; apklayer advertises 3.2 when ANGLE is active, and Google's current ANGLE docs record GLES 3.2 certification over Vulkan. Source-built Android x86_64/x86 ANGLE libraries will replace the incompatible Waydroid binaries only after the runtime smoke succeeds.
+- Build log: Slint manager compiled successfully with `ninja -C debian/build-manager apklayer-manager`. ANGLE source build is next: check out Google ANGLE with depot_tools, sync Android dependencies/NDK, build Release for Android x64 and x86 with Vulkan and GLES 3.2 enabled, then test on the RTX 5060 Ti before rebuilding the package.
 
 ## 2026-11-17: ANGLE driver paths reach direct btload services
 

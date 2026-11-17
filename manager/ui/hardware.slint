@@ -23,87 +23,6 @@ component OptionField {
     } }
 }
 
-component DomainCard {
-    in property <HwDomain> domain;
-    property <int> chosen: root.domain.current;  // the menu's choice until Apply
-    changed domain => { root.chosen = root.domain.current; }
-
-    function icon(name: string) -> image {
-        if name == "sensors" { return AppIcons.sensors; }
-        if name == "gnss" { return AppIcons.location; }
-        if name == "vibrator" { return AppIcons.vibration; }
-        if name == "camera" { return AppIcons.camera; }
-        if name == "audio" { return AppIcons.audio; }
-        if name == "graphics" { return AppIcons.memory; }
-        if name == "media" { return AppIcons.play; }
-        AppIcons.board
-    }
-
-    VerticalLayout { OutlinedCard {
-        VerticalLayout {
-            padding: MaterialStyleMetrics.padding_16;
-            spacing: MaterialStyleMetrics.spacing_12;
-            HorizontalLayout {
-                spacing: MaterialStyleMetrics.spacing_16;
-                VerticalLayout {
-                    alignment: center;
-                    Icon { width: MaterialStyleMetrics.icon_size_24; source: root.icon(root.domain.name); colorize: MaterialPalette.on_surface_variant; }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    MaterialText { text: root.domain.title; style: MaterialTypography.body_large; color: MaterialPalette.on_surface; overflow: elide; }
-                    MaterialText {
-                        text: root.domain.configured;
-                        style: MaterialTypography.body_medium;
-                        color: MaterialPalette.on_surface_variant;
-                        overflow: elide;
-                    }
-                }
-            }
-            DropDownMenu {
-                // DropDownMenu shows no text of its own before a selection
-                label: "Backend" + (root.chosen >= 0 && root.chosen < root.domain.menu.length ? ": " + root.domain.menu[root.chosen].text : "");
-                items: root.domain.menu;
-                current_index: root.chosen;
-                enabled: !Backend.busy;
-                selected(i) => { root.chosen = i; }
-            }
-            // what the selected choice is, or why it cannot be picked (the CLI's note)
-            if root.chosen >= 0 && root.chosen < root.domain.notes.length && root.domain.notes[root.chosen] != "" : MaterialText {
-                text: root.domain.notes[root.chosen];
-                style: MaterialTypography.body_small;
-                color: MaterialPalette.on_surface_variant;
-                wrap: word-wrap;
-            }
-            if root.domain.unavailable != "" : MaterialText {
-                text: "Not available here:\n" + root.domain.unavailable;
-                style: MaterialTypography.body_small;
-                color: MaterialPalette.on_surface_variant;
-                wrap: word-wrap;
-            }
-            if root.domain.name == "graphics" : GlesSettingsRow { }
-            for o in root.domain.backends[root.chosen].options : OptionField { option: o; domain: root.domain.name; backend: root.chosen; }
-            HorizontalLayout {
-                alignment: start;
-                spacing: MaterialStyleMetrics.spacing_8;
-                FilledButton {
-                    text: "Apply";
-                    accessible-label: "Apply " + root.domain.name;
-                    enabled: !Backend.busy;
-                    clicked => { Backend.set-provider(root.domain.name, root.chosen); }
-                }
-                if root.domain.test != "" : TonalButton {
-                    text: root.domain.test;
-                    icon: AppIcons.play;
-                    enabled: Backend.instance-running && root.chosen == root.domain.current;
-                    clicked => { Backend.test-provider(root.domain.name); }
-                }
-            }
-        }
-    } }
-}
-
 component GlesSettingsRow {
     VerticalLayout {
         spacing: MaterialStyleMetrics.spacing_8;
@@ -185,6 +104,88 @@ component BinderRow {
             accessible-label: "Kernel binder setup command";
         } }
     }
+}
+
+
+component DomainCard {
+    in property <HwDomain> domain;
+    property <int> chosen: root.domain.current;  // the menu's choice until Apply
+    changed domain => { root.chosen = root.domain.current; }
+
+    function icon(name: string) -> image {
+        if name == "sensors" { return AppIcons.sensors; }
+        if name == "gnss" { return AppIcons.location; }
+        if name == "vibrator" { return AppIcons.vibration; }
+        if name == "camera" { return AppIcons.camera; }
+        if name == "audio" { return AppIcons.audio; }
+        if name == "graphics" { return AppIcons.memory; }
+        if name == "media" { return AppIcons.play; }
+        AppIcons.board
+    }
+
+    VerticalLayout { OutlinedCard {
+        VerticalLayout {
+            padding: MaterialStyleMetrics.padding_16;
+            spacing: MaterialStyleMetrics.spacing_12;
+            HorizontalLayout {
+                spacing: MaterialStyleMetrics.spacing_16;
+                VerticalLayout {
+                    alignment: center;
+                    Icon { width: MaterialStyleMetrics.icon_size_24; source: root.icon(root.domain.name); colorize: MaterialPalette.on_surface_variant; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    MaterialText { text: root.domain.title; style: MaterialTypography.body_large; color: MaterialPalette.on_surface; overflow: elide; }
+                    MaterialText {
+                        text: root.domain.configured;
+                        style: MaterialTypography.body_medium;
+                        color: MaterialPalette.on_surface_variant;
+                        overflow: elide;
+                    }
+                }
+            }
+            DropDownMenu {
+                // DropDownMenu shows no text of its own before a selection
+                label: "Backend" + (root.chosen >= 0 && root.chosen < root.domain.menu.length ? ": " + root.domain.menu[root.chosen].text : "");
+                items: root.domain.menu;
+                current_index: root.chosen;
+                enabled: !Backend.busy;
+                selected(i) => { root.chosen = i; }
+            }
+            // what the selected choice is, or why it cannot be picked (the CLI's note)
+            if root.chosen >= 0 && root.chosen < root.domain.notes.length && root.domain.notes[root.chosen] != "" : MaterialText {
+                text: root.domain.notes[root.chosen];
+                style: MaterialTypography.body_small;
+                color: MaterialPalette.on_surface_variant;
+                wrap: word-wrap;
+            }
+            if root.domain.unavailable != "" : MaterialText {
+                text: "Not available here:\n" + root.domain.unavailable;
+                style: MaterialTypography.body_small;
+                color: MaterialPalette.on_surface_variant;
+                wrap: word-wrap;
+            }
+            if root.domain.name == "graphics" : GlesSettingsRow { }
+            for o in root.domain.backends[root.chosen].options : OptionField { option: o; domain: root.domain.name; backend: root.chosen; }
+            HorizontalLayout {
+                alignment: start;
+                spacing: MaterialStyleMetrics.spacing_8;
+                FilledButton {
+                    text: "Apply";
+                    accessible-label: "Apply " + root.domain.name;
+                    enabled: !Backend.busy;
+                    clicked => { Backend.set-provider(root.domain.name, root.chosen); }
+                }
+                if root.domain.test != "" : TonalButton {
+                    text: root.domain.test;
+                    icon: AppIcons.play;
+                    enabled: Backend.instance-running && root.chosen == root.domain.current;
+                    clicked => { Backend.test-provider(root.domain.name); }
+                }
+            }
+        }
+    } }
 }
 
 component GlesCard {
