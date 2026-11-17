@@ -8,6 +8,10 @@ if [ -n "$SCOPED" ]; then  # another package's files on the instance's external 
     n=${APKLAYER_INSTANCE:-default}; [ $n != default ] || n=0; ext=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$n/storage/emulated/0
     mkdir -p $ext/Android/data/hello.scopedother/files $ext/Android/obb/hello.scopedother; echo s > $ext/Android/data/hello.scopedother/files/secret; echo s > $ext/Android/obb/hello.scopedother/secret
 fi
+if [ -n "$OWNDATA" ]; then  # a stale link into another instance's data (an instance dir copied with its absolute links) must be replaced by the own one
+    n=${APKLAYER_INSTANCE:-default}; [ $n != default ] || n=0; dh=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer; stale=$dh/$n/stale-decoy
+    mkdir -p $stale $dh/$n/data/user/0; ln -sfn $stale $dh/$n/data/user/0/hello.files
+fi
 APKLAYER_JOPTS="-Dapklayer.runms=60000 -Dhello.authority=$A -Dhello.doc=$D ${3:+-Dhello.uri=$3} ${READ:+-Dhello.read=$READ} ${OWNDATA:+-Dhello.owndata=1} ${LIBCORE:+-Dhello.libcore=1} ${VOLUMES:+-Dhello.volumes=1} ${SCOPED:+-Dhello.scoped=1 -Dhello.scoped.other=hello.scopedother}" bin/apklayer run hello.files > $out 2>&1 || true
 grep -a "\[volumes\]" $out
 grep -a "\[files\]" $out | grep -av "\] entry" -A12 | head -40
@@ -20,5 +24,6 @@ volumes() { grep -aq "\[volumes\] external /storage/emulated/0 state=mounted man
 if [ -n "$LIBCORE" ]; then grep -a "\[libcore\]" $out; grep -aq "\[libcore\] cleaner ran=true" $out && grep -aq "shm prot=5 perms=r-xs" $out && grep -aq "shm prot=0 perms=---s" $out && grep -aq "shm prot=3 perms=rw-s" $out && grep -aq "\[libcore\] DONE" $out; exit; fi
 if [ -n "$VOLUMES" ]; then volumes; exit; fi
 if [ -n "$SCOPED" ]; then rm -rf $ext/Android/data/hello.scopedother $ext/Android/obb/hello.scopedother; grep -a "\[files\] scoped" $out; grep -aq "\[files\] scoped own=true dataHidden=true obbHidden=true" $out && grep -aq "\[files\] scoped link=true" $out; exit; fi
+[ -z "$OWNDATA" ] || { [ "$(readlink $dh/$n/data/user/0/hello.files)" = $dh/$n/app-data/hello.files/app ] && [ -z "$(ls -A $stale)" ]; rc=$?; rmdir $stale 2>/dev/null; [ $rc = 0 ] || { echo "stale data link kept"; exit 1; }; }
 grep -aq "\[files\] DONE" $out && { [ -z "$OWNDATA" ] || grep -aq "\[files\] owndata java=java os=os nio=true other=false" $out; }
 

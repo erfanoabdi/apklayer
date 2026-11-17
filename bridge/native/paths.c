@@ -175,6 +175,19 @@ static void push_app_uid(void)
     if (set_groups && uid >= 0) set_groups(o->ngroups, o->groups);
 }
 
+/* link -> target, replacing a link that points elsewhere (an instance dir copied from another keeps absolute links into the first one: the app would write there) */
+static void relink(const char *target, const char *link)
+{
+    char cur[PATH_MAX], *tmp = NULL;
+    ssize_t n = syscall(SYS_readlinkat, AT_FDCWD, link, cur, sizeof cur - 1);
+    if (n >= 0) { cur[n] = 0; if (!strcmp(cur, target)) return; }
+    if (syscall(SYS_symlinkat, target, AT_FDCWD, link) == 0 || errno != EEXIST || n < 0) return;  /* n < 0: not a link (a directory stays) */
+    if (asprintf(&tmp, "%s.%ld.tmp", link, (long)getpid()) >= 0) {
+        if (syscall(SYS_symlinkat, target, AT_FDCWD, tmp) == 0 && syscall(SYS_renameat, AT_FDCWD, tmp, AT_FDCWD, link)) syscall(SYS_unlinkat, AT_FDCWD, tmp, 0);
+        free(tmp);
+    }
+}
+
 /* groups: the app's supplementary gids, comma separated ("" or NULL: none) */
 void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const char *root)
 {
@@ -236,7 +249,7 @@ void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const 
             symlink("user/0", dl);  /* EEXIST: another process of the app made it, or the directory has files in it and stays (then it holds this app's link, as before) */
             if (lstat(dl, &st) == 0 && S_ISDIR(st.st_mode)) {
                 char *own = NULL;
-                if (asprintf(&own, "%s/%s", dl, pkg) >= 0) symlink(o->dir, own);
+                if (asprintf(&own, "%s/%s", dl, pkg) >= 0) relink(o->dir, own);
                 free(own);
             }
             free(dl);
@@ -246,7 +259,7 @@ void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const 
         char *top = NULL, *dir = NULL, *link = NULL;
         if (asprintf(&top, "%s/%s", data_env, links[i][0]) >= 0) mkdir(top, 0771);
         if (asprintf(&dir, "%s/%s%s", data_env, links[i][0], links[i][1]) >= 0) mkdir(dir, 0771);
-        if (asprintf(&link, "%s/%s%s/%s", data_env, links[i][0], links[i][1], pkg) >= 0) symlink(links[i][2], link);
+        if (asprintf(&link, "%s/%s%s/%s", data_env, links[i][0], links[i][1], pkg) >= 0) relink(links[i][2], link);
         free(top);
         free(dir);
         free(link);
