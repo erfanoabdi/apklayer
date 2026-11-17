@@ -66,6 +66,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-17: 0.5.0 released (tag v0.5.0 on 9db36939, prebuilts-v0.5.0 on 1d63908b)
+- Two dry runs (the first found a broken Flatpak metainfo line from the version bump, fixed in 9db36939), then the real run: all 11 jobs green, assets complete, SHA256SUMS matches GitHub's digests, releases.json latest 0.5.0 (converter ABI 11, data format 1, runtime 0.5.0 from prebuilts 1d63908b, debs noble and trixie). Not done: an install test of the released arm64 noble deb and bundle on a test host. Known issue shipped: PGR on the x86_64 translated route still dies (docs/PGR-STATUS.md); the fix work goes to 0.5.1.
+
 ## 0.5.0 (release notes; apklayer 0.5.0 and Android runtime 0.5.0; steps: docs/RELEASE-0.5.0.md)
 Since v0.4.18 (2026-11-10): about 900 commits. Runtime 0.4.19 was never released; the bundle is 0.5.0 from `prebuilts` 1d63908b. Converter ABI 3 -> 11 (apps converted by 0.4.18 are stale: the CLI converts each again on its next launch, data stays; `apklayer reconvert --all-stale` does all at once), data format stays 1.
 - Google Play: `apklayer setup --gapps` (LiteGapps, Android 17 builds) and `--microg`, each replacing the other; Play services stays up, Play Store signs in and downloads, account setup completes.
