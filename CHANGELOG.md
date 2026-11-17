@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-18: Trace the ANGLE Vulkan swapchain crash
+
+- The patched Google ANGLE build passes its earlier `GL_GetString` TLS fault. Its next crash occurs during `rx::WindowSurfaceVk::createSwapchain`; the native stack reaches NVIDIA's `vkCreateImage` through Android's loader while importing a `VK_ANDROID_native_buffer` image. This happens before ANGLE renders GLES commands. The latest retry could not start SurfaceFlinger because the private overlay lacked a resolvable ANGLE library, so it was not a valid GLES 3.2 A/B.
+- Build log (before build): add temporary diagnostics to `aosp/hals/graphics/vulkan/Driver.cpp` for the gralloc handle, image format/extent/usage, DRM modifier, planes, strides, and offsets immediately before the host `vkCreateImage` call. Sync only this module into `~/los24/vendor/apklayer/hals/graphics/vulkan`, then incrementally replay the existing `gsi_x86_64 userdebug` Vulkan build with `tools/lib/orb-build-vulkan.py`. Install the diagnostic HAL into a private test overlay and reproduce once on the NVIDIA PC; use the logged image fields to fix the pre-GLES crash.
+
+## 2026-11-17: Diagnose ANGLE GLES crash
+
+- The crash reproduces with the project GLES 1 test app as well as AIDA64, and does not reproduce in AIDA64 with native GLES. ANGLE’s `GL_GetString` reads its current context from Android’s `TLS_SLOT_OPENGL`; on apklayer’s x86_64 host that TLS slot overlaps glibc’s `multiple_threads` field. Disable ANGLE’s Android TLS-slot optimization in the Android build, retain normal thread-local storage, rebuild x86_64/x86 and verify before packaging.
+- Build log (before build): add the ANGLE source patch and docs, apply it to the pinned Google ANGLE checkout, then rebuild both Android ABIs with Vulkan enabled. Do not replace the working runtime binaries until the GLES test passes.
+
 ## 2026-11-17: ANGLE enables Vulkan presentation
 
 - ANGLE now forces the guest Vulkan presentation path on when ANGLE is selected, including when the general Vulkan setting is off or its optional host probe finds no device. Other instances keep the existing Vulkan auto/off behavior; general Vulkan remains `auto` by default and is not NVIDIA-specific.

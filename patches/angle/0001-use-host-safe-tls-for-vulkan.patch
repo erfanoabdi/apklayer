@@ -1,0 +1,16 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] apklayer: avoid Android's OpenGL TLS slot on the x86_64 host
+
+ANGLE's Android Vulkan backend puts its current-context pointer in TLS_SLOT_OPENGL. On apklayer's x86_64 host that slot aliases glibc's
+multiple_threads field. The next GL_GetString reads the corrupted host TLS value as a Context pointer and crashes the RenderThread. Use
+ANGLE's normal thread_local context storage for the Android x86_64/x86 libraries bundled by apklayer.
+
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -80,4 +80,4 @@
+   if (is_android) {
+-    # Use Android TLS slot to store current context.
+-    angle_use_android_tls_slot = !build_with_chromium
++    # apklayer patch: the Android TLS slot aliases glibc's multiple_threads field on the host.
++    angle_use_android_tls_slot = false
+   }
