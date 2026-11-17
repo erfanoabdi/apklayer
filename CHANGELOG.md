@@ -3835,3 +3835,7 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Build log (before build): compile the bionic linker and CLI with the ANGLE basename lookup, then smoke `angle-smoke` on the RTX 5060 Ti. A passing smoke is required before rebuilding the release deb.
 - Build log (before build): incremental bionic linker and CLI build, then rerun the serialized `angle-smoke` DocumentsUI startup with the NVIDIA ANGLE path. This check will confirm whether the explicit app-to-system ANGLE fallback gets EGL through driver loading.
 - Outcome: the incremental CLI and bionic linker builds succeeded, but the RTX 5060 Ti smoke still stops before Android services start: EGL reports `library 'libEGL_angle.so' not found` for `/system/lib64/libEGL_angle.so`. The linker visibility/path changes have not been validated as a fix; no new deb was produced. Removed the isolated `angle-smoke` instance and temporary build symlink.
+
+## 2026-11-17: Build bionic host libraries for public prebuilts
+
+- Build log (before build): reuse the existing x86_64 Meson build on the NVIDIA PC, apply patches 0084–0086, rebuild bionic host `.so` libraries and run the bionic regression suite. If they pass, publish the outputs under `x86_64/bionic_translation/b` on the `prebuilts` branch.
