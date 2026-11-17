@@ -25,12 +25,12 @@ import org.robolectric.shadows.ShadowContextImpl;
 @Implements(className = "android.app.ContextImpl")
 public class ShadowHostContextImpl extends ShadowContextImpl {
     @RealObject private Context real;
-    private static final boolean NO_DUMMY_APP = Boolean.getBoolean("apklayer.noDummyApp");
+    private static final boolean NO_DUMMY_APP = !"false".equals(System.getProperty("apklayer.noDummyApp"));  // on unless -Dapklayer.noDummyApp=false
     /**
      * Until the app's own Application exists, ActivityThread.getApplication() is Robolectric's dummy initial application, whose base is the system
      * context (package "android"). Native code asking it for the package name (Tencent ACE at its static init: it caches the answer for good as its
      * own name, then cannot tell its own package from a virtual container's host) gets the app's package, as on a device. Null for native callers
-     * (stalled the game's start) and null for Java callers (patch 0029: KrApplication's MMKV.initialize) were tried. Off unless -Dapklayer.noDummyApp=true.
+     * (stalled the game's start) and null for Java callers (patch 0029: KrApplication's MMKV.initialize) were tried. On; -Dapklayer.noDummyApp=false turns it off.
      */
     @Implementation protected String getPackageName() {
         String name = Shadow.directlyOn(real, "android.app.ContextImpl", "getPackageName");
