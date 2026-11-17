@@ -12,5 +12,5 @@ swapchain path for NVIDIA when ANGLE is built for Android; keep upstream's exist
      ANGLE_FEATURE_CONDITION(
          &mFeatures, swapchainDeferredMemoryAllocation,
          mFeatures.supportsSwapchainMaintenance1.enabled &&
-+            !(nativeWindowSystem == angle::NativeWindowSystem::Android && isNvidia) &&
++            !(IsAndroid() && isNvidia) &&
              !(nativeWindowSystem == angle::NativeWindowSystem::Wayland && isNvidia));
