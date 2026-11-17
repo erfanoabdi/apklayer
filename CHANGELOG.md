@@ -6,6 +6,12 @@
 - Added unmodified x86_64 and x86 ANGLE vendor libraries from Waydroid NVIDIA v0.2.0 under `runtime/angle/vendor`; Meson installs them into the Android vendor EGL folders on x86_64 builds. ANGLE uses the Android EGL loader and apklayer's Vulkan presentation path. Automatic mode falls back to native GLES if libraries or Vulkan presentation are unavailable.
 - Not run: tests or builds.
 
+## 2026-11-17: JDK 25 is the one JDK (build and run); Ubuntu 26.04 (resolute) deb legs
+
+- debs: Build-Depends `openjdk-25-jdk-headless`, Depends `openjdk-25-jre-headless` (no 21 alternative; noble-updates/universe, trixie main and resolute have 25). rpm: `temurin-25-jdk` only (temurin-21-jdk spec and source dropped). nix: `jdk25`. click CI job builds on 25. Flatpak was on 25 already.
+- `apklayer setup` checks for the major jdk-patch was cut from (25 without a record) instead of "21 or newer" (docs/PATCHES.md); findJava keeps its 25-first order and the major match, 21 stays in its list only for a runtime a user built on 21.
+- release.yml: deb legs for `resolute` (ubuntu:26.04, arm64 + amd64), version suffix `~resolute1`; build-deb.sh knows its binder suggestion. Not run (no Actions access): needs a workflow_dispatch dry run.
+
 ## 2026-11-17: PGR agent VIRAPP: the ACE wait loop at VM 0x1d20c is a HIT on our own package; fix = no dummy 'android' application for JNI callers
 
 - **Result.** VM 0x1d1c8 (the 'wait 30 or 600 s' loop polling +2d4994, a bool in the ACE singleton +0x2b0, 0 on both routes the whole run) is only entered when a scanner of VM 0x11290 (vtable 0xd6e8) reports a hit (this[0x49]=1, name at this+0x4a). Read live on the translated route the name is our OWN package. The scanner is 0x15148 ('uis_va'): candidates = package names cut from /proc/self/maps, fd and map_files lines under /data/data|/data/app|/data/user/0 ending .so/.apk, minus an own-name set (0x15310: the cached key 'package_name' via +2d216c, and the first line of /proc/<pid>/cmdline) and 'com.google*'; per candidate 0x17640 compares st_uid of /proc/<pid> and /data/data/<name> (equal = hit; the own package matches by construction). The cached key was 'android': ACE's static init calls ActivityThread.currentActivityThread().getApplication().getFilesDir()/getPackageName() and Robolectric's dummy initial application (package android) answered (getFilesDir threw 'No data directory found for package android'; a device answers null there). Natively the candidate list is empty (host paths in the raw maps), so the loop never runs. kvcache8 decodes (XOR with '0123456789ABCD..', records [u32 klen][key][u32 vlen][val]): '*#20250421.1'='0', 'is_history_x86'='0', 'vm_app_ver'='4.9.1.179267863': the 3rd record (97 B vs native 64 B) is written by VM 0x1d2a8 inside the hit path; no x86 detector fires on either route.
@@ -71,6 +77,11 @@
 
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
+
+## 0.5.2 (release notes; apklayer 0.5.2, Android runtime stays 0.5.0 from prebuilts 1d63908b; the changes are in the package)
+- Java 25 everywhere: the packages build with and depend on OpenJDK 25 only (Ubuntu 24.04, Debian 13, Flatpak, Sailfish `temurin-25-jdk`, nix). Fixes `apklayer install` dying at VM start ("Invalid layout of well-known class java.lang.Class") on a machine that had JDK 25 next to the JDK 21 the patched java.base was built from; `findJava` and `apklayer setup` now use the JDK major the patch was cut from. Phones installed with `--ignore-depends` and a JDK 21 need a JDK 25 (docs/HALIUM.md).
+- New: Ubuntu 26.04 (resolute) debs for amd64 and arm64.
+- Fix: a fresh tree's `meson install` no longer fails with "Tried to install symlink to missing file ... libjavacore.so" (the `android-libs` link is declared before the links that go through it).
 
 ## 0.5.1 (release notes; apklayer 0.5.1, Android runtime stays 0.5.0 from prebuilts 1d63908b; the fixes are in the package: host classes and the preload)
 - Unity games on x86_64 (Punishing: Gray Raven among them) start, log in and play: native code that asked for the app's package name got the name of the runtime's placeholder application (`android`); it now gets the app's own. `-Dapklayer.noDummyApp=false` switches the change off.

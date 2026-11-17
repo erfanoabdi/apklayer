@@ -17,10 +17,10 @@ root="$(mktemp -d)" && trap 'rm -rf "$root"' EXIT
 dpkg-deb -x "$deb" "$root"
 # the deb's root-side files have no use in a click (no postinst runs): the sandbox's AppArmor profile and udev rule, the units, /etc
 rm -rf "$root/etc" "$root/usr/lib/udev" "$root/usr/lib/systemd" "$root/usr/share/apklayer/apparmor" "$root/usr/share/doc"
-# the image's JDK: JDK 25 when this machine has one (APKLAYER_CLICK_JAVA, or a java-25/temurin-25 under /usr/lib/jvm; the AOT cache, cli/env.cpp cdsArgs), else 21
-java="${APKLAYER_CLICK_JAVA:-$(ls /usr/lib/jvm/java-25-openjdk-arm64/bin/java /usr/lib/jvm/temurin-25-jdk/bin/java /usr/lib/jvm/java-21-openjdk-arm64/bin/java 2>/dev/null | head -1)}"
+# the image's JDK: JDK 25 when this machine has one (APKLAYER_CLICK_JAVA, or a java-25/temurin-25 under /usr/lib/jvm; the AOT cache, cli/env.cpp cdsArgs)
+java="${APKLAYER_CLICK_JAVA:-$(ls /usr/lib/jvm/java-25-openjdk-arm64/bin/java /usr/lib/jvm/temurin-25-jdk/bin/java 2>/dev/null | head -1)}"
 sh tools/release/jdk-image.sh "$java" "$root/usr/lib/apklayer/native"
-[ -f "$root/usr/lib/apklayer/native/jdk/apklayer-stamp" ] || { echo "click.sh: no JDK image (needs a JDK 25 or a JDK 21 with jmods: $java)" >&2; exit 1; }
+[ -f "$root/usr/lib/apklayer/native/jdk/apklayer-stamp" ] || { echo "click.sh: no JDK image (needs a JDK 25: $java)" >&2; exit 1; }
 # the manager's entry, paths relative to the click (lomiri-app-launch runs it from there)
 sed -e 's#^Exec=.*#Exec=usr/bin/apklayer-manager#' -e 's#^Icon=.*#Icon=usr/share/icons/hicolor/scalable/apps/apklayer.svg#' -e '/^MimeType=/d' \
     data/apklayer-manager.desktop > "$root/apklayer.desktop"

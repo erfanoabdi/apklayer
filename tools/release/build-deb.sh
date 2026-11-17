@@ -1,5 +1,5 @@
 #!/bin/sh
-# build-deb.sh <codename> <version> <prebuilts dir> <out dir>: the apklayer deb (and apklayer-dev) of this machine's CPU for one OS release (noble, trixie), the way
+# build-deb.sh <codename> <version> <prebuilts dir> <out dir>: the apklayer deb (and apklayer-dev) of this machine's CPU for one OS release (noble, trixie, resolute), the way
 # .github/workflows/release.yml builds it (docs/RELEASES.md). Run in the source tree on that OS, Build-Depends installed (apt-get build-dep ./).
 # Fetches Slint for the manager, writes debian/changelog (<version>-1~<codename>1) and debian/<codename>.substvars, then runs dpkg-buildpackage
 # (debian/rules: the Meson build, which fetches bionic_translation and the pinned jars itself; network); the deb lands in <out dir>.
@@ -17,6 +17,7 @@ manager/fetch-slint.sh "$slint"
 # Only the kernel binder (apklayer binder kernel) needs it, the userspace one is the default: a suggestion
 case "$codename" in
     noble) printf '%s\n' 'apklayer:Depends=' 'apklayer:Suggests=linux-modules-extra-generic | linux-image-generic | linux-image-generic-hwe-24.04' ;;
+    resolute) printf '%s\n' 'apklayer:Depends=' 'apklayer:Suggests=linux-modules-extra-generic | linux-image-generic' ;;
     *) printf '%s\n' 'apklayer:Depends=' 'apklayer:Suggests=' ;;
 esac > "debian/$codename.substvars"
 if [ -f "debian/patches/$codename/series" ]; then cp "debian/patches/$codename"/* debian/patches/; fi  # none so far

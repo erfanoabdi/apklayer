@@ -70,8 +70,8 @@ SystemApps systemApps(const std::string& dir, const std::string& record) {
     return r;
 }
 
-// "" when the JVM apps run on is Java 21 or newer, else what is wrong (the deb depends on openjdk-21-jre-headless; an install that skipped it,
-// as on a phone's small root file system, names another one with `apklayer config set java`)
+// "" when the JVM apps run on is the major jdk-patch was cut from (25 without a record), else what is wrong (the deb depends on
+// openjdk-25-jre-headless; an install that skipped it, as on a phone's small root file system, names another one with `apklayer config set java`)
 std::string javaProblem(const Layout& layout) {
     std::string java = findJava(layout);
     Spawn s;
@@ -81,9 +81,11 @@ std::string javaProblem(const Layout& layout) {
     std::string out = runCapture(s, &status);
     size_t at = out.find("version \"");
     int major = status == 0 && at != std::string::npos ? atoi(out.c_str() + at + 9) : 0;
-    if (major >= 21) return "";
-    std::string hint = " (sudo apt install openjdk-21-jre-headless, or apklayer config set java <java 21>)";
-    return major > 0 ? "Java " + std::to_string(major) + " is too old: apklayer needs 21" + hint : "No Java 21 found" + hint;
+    int need = atoi(patchMajor(layout).c_str());  // apklayer patch: a patched java.base runs only on the JDK it was cut from (cli/env.cpp findJava)
+    if (need == 0) need = 25;
+    if (major == need) return "";
+    std::string n = std::to_string(need), hint = " (sudo apt install openjdk-" + n + "-jre-headless, or apklayer config set java <java " + n + ">)";
+    return major > 0 ? "Java " + std::to_string(major) + " is not the one apklayer needs, " + n + hint : "No Java " + n + " found" + hint;
 }
 
 struct Options {
@@ -165,7 +167,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     step("binder", binder ? "done" : "failed", userspaceBinder(instance.root) ? "Userspace binder for instance " + instance.id + " (no kernel devices needed)"
                                                : binder ? "Kernel binder ready for instance " + instance.id : binderDeviceWhy(instance.id));
     std::string java = javaProblem(layout);
-    step("java", java.empty() ? "done" : "failed", java.empty() ? "Java 21" : java);
+    step("java", java.empty() ? "done" : "failed", java.empty() ? "Java 25" : java);
     std::string noSandbox = sandboxUnavailable();
     step("sandbox", sandboxOn() ? "done" : "skipped", sandboxOn() ? "Each app runs as its own user" : noSandbox.empty() ? "Off (APKLAYER_SANDBOX=1 turns it on)" : "Off: " + noSandbox);
 

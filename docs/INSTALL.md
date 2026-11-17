@@ -21,7 +21,7 @@ mkdir -p "$AL"
 
 ```sh
 sudo apt install build-essential meson ninja-build pkg-config git python3 curl zip unzip binutils \
-    openjdk-21-jdk \
+    openjdk-25-jdk \
     libwayland-dev wayland-protocols libxkbcommon-dev libcairo2-dev libpng-dev \
     libdrm-dev libgbm-dev libegl-dev libgles-dev mesa-utils \
     libpipewire-0.3-dev libpulse-dev libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
@@ -29,7 +29,7 @@ sudo apt install build-essential meson ninja-build pkg-config git python3 curl z
     libelf-dev libunwind-dev libbsd-dev libinput-dev   # libinput: the manager's Slint library
 ```
 
-JDK 21 is the tested one (the host patches `java.base`; other versions are untested).
+JDK 25 is the one apklayer builds with and runs on (Ubuntu 24.04 noble-updates and 26.04, Debian 13 trixie, Flatpak's openjdk25 extension, Sailfish's temurin-25-jdk). The host patches `java.base` with classes cut from the build JDK, so the runtime must run on that same major: a build on another JDK records it (`jdk-patch/apklayer-jdk`) and `findJava` then picks that JDK.
 
 ## 2. Kernel binder (optional)
 
