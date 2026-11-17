@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17: GLES toggle row matches Hardware controls
+
+- The GLES card now follows the reference layout: inline explanatory text, the switch at the right edge, and a reset-to-automatic action only for explicit modes.
+- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` (incremental packaging build; verify updated manager UI is in the deb).
+
 ## 2026-11-17: ANGLE loader path and Hardware switch layout
 
 - Fixed the Android 17 EGL driver lookup: its `angle` suffix searches `/system/lib{,64}/egl`, while the Waydroid files had only been placed under `/vendor`, causing SurfaceFlinger to abort before apps started. Package-owned libraries are now linked to the loader's system EGL directories.

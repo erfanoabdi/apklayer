@@ -152,15 +152,12 @@ component GlesCard {
             spacing: MaterialStyleMetrics.spacing_8;
             HorizontalLayout {
                 spacing: MaterialStyleMetrics.spacing_16;
-                VerticalLayout {
+                MaterialText {
                     horizontal-stretch: 1;
-                    MaterialText { text: "GLES"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
-                    MaterialText {
-                        text: "ANGLE translates GLES through Vulkan. Automatic uses ANGLE on NVIDIA; switch on for ANGLE on any GPU, or off for native GLES. Applies at the next instance start.";
-                        style: MaterialTypography.body_medium;
-                        color: MaterialPalette.on_surface_variant;
-                        wrap: word-wrap;
-                    }
+                    text: "GLES: ANGLE translates through Vulkan. Automatic uses ANGLE on NVIDIA; switch on for ANGLE on any GPU, or off for native GLES. Applies at the next instance start.";
+                    style: MaterialTypography.body_medium;
+                    color: MaterialPalette.on_surface_variant;
+                    wrap: word-wrap;
                 }
                 VerticalLayout {
                     alignment: start;
@@ -174,15 +171,15 @@ component GlesCard {
                     }
                 }
             }
-            HorizontalLayout {
+            if Backend.gles-angle-mode != "auto" : HorizontalLayout {
                 spacing: MaterialStyleMetrics.spacing_8;
                 MaterialText {
                     horizontal-stretch: 1;
-                    text: Backend.gles-angle-mode == "auto" ? "Automatic" : (Backend.gles-angle-enabled ? "ANGLE" : "Native GLES");
+                    text: Backend.gles-angle-enabled ? "ANGLE forced on" : "Native GLES forced on";
                     style: MaterialTypography.body_medium;
                     color: MaterialPalette.on_surface_variant;
                 }
-                if Backend.gles-angle-mode != "auto" : TonalButton {
+                TonalButton {
                     text: "Reset to automatic";
                     enabled: !Backend.busy;
                     clicked => { Backend.set-config("", "gles-angle", "auto"); }
