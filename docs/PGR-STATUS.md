@@ -53,3 +53,10 @@ Instruction-set features, ID registers, HWCAP, SIGILL/signal frames (D); timing/
 1. Use patch 0071 (GATE lib on prebuilts `experiments/pgr-gate/`) to find the VM branch right after the virtpipe stat on both routes and what memory it reads (ctx, FILE struct, sscanf out-parameters); on native the VM registers can only be read with the hardware breakpoints.
 2. Ask the translation-layer developer about the VM's reads that depend on the translator's behaviour (time sources, `/proc/self/stat`, task counts, FILE struct fields, `st_blksize` of /proc files: RE saw ACE's FILE layer size its buffer from `st_blksize`).
 3. Release 0.5.0 can ship with the known issue ("PGR on x86 dies about 1.5-3 minutes after launch; native arm64 works; Lite translation fixes the lobby noise").
+
+## Open (moved from PLAN.md, 2026-11-17)
+- In the tester's first in-game session (menu entry, default instance, 17:26 and 17:27) the game logged two `SIGSEGV`/`SI_TKILL` tombstones with the same `libil2cpp.so` backtrace (+0x42bdf60); the second process survived: a self-restart versus a real kill is undecided. The instance's app log stops at its 256 MB cap: next run with `APKLAYER_JNI_TRACE` and read the last minute before each tombstone.
+- ACE state written by earlier translated runs (`files/ano_tmp`, `ace_shell_di.dat`, key `mem_ava='va:2'`) makes ACE end the game at once: remove it once.
+- ISA fidelity (`tests/apps/hello-isa`; patches 0060/0061, knobs `berberis.sigill_code`, `berberis.sigframe`, `berberis.isa_gate`, all off): unaligned exclusives/atomics (no LSE2 on an A76), `dc zva` data semantics, AArch32 ID registers. Not the PGR cause.
+- Not run on the phones: x86_64 `libapklayer_egl` (sRGB fix) and the linked-GL query fix. Home scene on NVIDIA: block noise on 3D models, recheck with `apklayer app <package> translation-mode lite|default|interpret` (the 3D lobby was not seen in 0.5.x).
+

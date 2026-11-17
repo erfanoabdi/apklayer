@@ -13,3 +13,10 @@ Moved out of `docs/PLAN.md` on 2026-11-15: each is a large piece of work for an 
 - Binder devices of a removed instance stay until reboot.
 - Lomiri suspend policy (owner decided 2026-11-15: keep today's behaviour, never suspend; this is the rule to implement if wanted). Follow Android: a window that is visible on screen stays resumed and keeps rendering whether or not it has focus (multi-resume since Android 10; focus is only `onTopResumedActivityChanged`; camera and microphone follow focus in multi-window). A window that is hidden or minimised, or whose surface Lomiri occluded or suspended, gets `onPause` then `onStop`, stops producing frames and its process is frozen (cgroup freezer), unless it has a foreground service, audio playing or a call; it resumes on show. Merely unfocused windows are never suspended. Process lifetime stays a separate choice (no cached app processes: see the ground rules). Check first what Lomiri's own app lifecycle sends on the X23.
 - Turned-window keyboard inset needs a framework patch (new android-all): Android treats the IME as a bottom inset (reason in CHANGELOG).
+
+Parked by the owner's decision (moved from PLAN.md, 2026-11-17):
+- Biometrics, ModemManager telephony, screen capture portal.
+- Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory, tethering.
+- Several phone instances as a product; a JRE for the Ubuntu Touch deb.
+- Confirm `sandbox` (runms 60000) and `window-geometry` under two parallel groups on a real 4-CPU host (only simulated with busy loops).
+- Game controllers (`docs/GAMEPAD.md`, group `gamepad`, tested with a uinput pad only): needs a real pad: udev permissions (uaccess/`input` group and the retry when they change), a real DS4/DualSense/Xbox pad over USB and Bluetooth (axis layout, rumble motors), Halium phones; limits: events go only to the focused window's app, no gyro/touchpad/LED/battery, one vibrator id per pad.
