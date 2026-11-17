@@ -3,7 +3,7 @@
 ## 2026-11-17: ANGLE driver paths reach direct btload services
 
 - The first retry showed that adding Android's system library directories to `BIONIC_LD_LIBRARY_PATH` alone had no effect: stack services and tools call `btload` directly with `layout.androidLibs`, bypassing that variable. All three direct `btload` call sites now pass the active runtime search path, which includes `/system/lib64` and `/system/lib` when ANGLE is active.
-- Build log: pending `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out`, then repeat the isolated smoke run with `--no-daemon`.
+- Build log: `tools/release/build-deb.sh noble 0.5.2 /home/wesley/apklayer-build-deb/prebuilts /home/wesley/apklayer-build-deb/out` succeeded; `apklayer_0.5.2-1~noble1_amd64.deb` is 20,473,930 bytes. The isolated NVIDIA smoke now loads ANGLE and logs `Renderer (Vulkan 1.4.351 (NVIDIA NVIDIA GeForce RTX 5060 Ti))`, proving the loader path fix. SurfaceFlinger then segfaults in `libGLESv2_angle.so` while assembling Skia's GLES interface, so the Android services still do not start. Investigating the user's CPU-spoof build property before choosing the next fix.
 
 ## 2026-11-17: ANGLE system suffix directory
 
