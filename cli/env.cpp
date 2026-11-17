@@ -408,9 +408,10 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     if (useAngle) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
         env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
-        // Android's EGL loader dlopens /system/lib{,64}/lib*_angle.so. bionic_translation
-        // searches only BIONIC_LD_LIBRARY_PATH for Android-linked libraries, even for absolute paths.
-        env["BIONIC_LD_LIBRARY_PATH"] = "/system/lib64:/system/lib:" + env["BIONIC_LD_LIBRARY_PATH"];
+        // Android's EGL loader asks for /system/lib{,64}/lib*_angle.so, but bionic_translation
+        // opens libraries on the host filesystem. Add the runtime's mapped system dirs explicitly.
+        std::string androidSystem = join(layout.native, "android-root/system");
+        env["BIONIC_LD_LIBRARY_PATH"] = join(androidSystem, "lib64") + ":" + join(androidSystem, "lib") + ":" + env["BIONIC_LD_LIBRARY_PATH"];
         std::string vendorLib = layout.java.empty() ? "lib64" : "lib";
         env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/" + vendorLib + ":/vendor/" + vendorLib + "/egl:/vendor/" + vendorLib + "/hw";
         std::vector<std::string> shared = split(getenvOr("BIONIC_VENDOR_SHARED_LIBS", ""), ':');

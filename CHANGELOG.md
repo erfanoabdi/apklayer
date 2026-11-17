@@ -3831,3 +3831,4 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 
 - Added bionic linker public-library entries for the three packaged ANGLE driver names. This is needed because EGL opens its implementation driver from the app namespace, whose public-library check rejected ANGLE.
 - Build log (before build): incremental Debian/Meson build of the bionic translation linker, followed by an isolated ANGLE smoke with Android's Vulkan renderengine enabled. If startup succeeds, rebuild the Debian package with the Google ANGLE binaries already in `runtime/angle/vendor`.
+- The namespace-publicity smoke still failed because bionic_translation searches host paths, not virtual `/system/lib{,64}` paths. ANGLE's environment now adds the runtime's mapped host system-library directories; next build/smoke checks that path.
