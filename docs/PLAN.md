@@ -12,7 +12,6 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- GApps sign-in (GMS 26.44 / Android 17): end-to-end sign-in unverified; needs a human sign-in in `gwd` (owner's credentials), then read the remaining server error and the Dynamite `ImplVersion` / DroidGuard errors (`-Dapklayer.traceuncaught=true`).
 - Play Store install failed intermittently with `INSTALL_FAILED_INVALID_APK: no base APK` (HubInstaller.staged); cause unknown; the error now names the session's files: read it at the next failure.
 - Play services replies of exactly 8388608 bytes (`Large reply transaction`): which call, and whether its caller copes, is unknown; read hub.log at the next one.
 - YouTube 21.45: check the signed-in feed and a video with the ApklayerBuffers fix; signed out, the EU consent page looked wider than the window.
