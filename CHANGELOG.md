@@ -3826,3 +3826,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ### 2026-11-15 - gsi_arm64 and gsi_x86_64 libapklayer_vibrator (compose and PWLE through the backend)
 - Why: aosp/hals/vibrator/Service.cpp now plays compose/composePwle as timed steps through the backend and reports the compose capabilities only for backends that say so (apklayer_vibrator_compose). Source change only, no graph change. Command: `flock -w 570 ~/los24-build.lock bash -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_<arch> userdebug && m libapklayer_vibrator'` once per product (sources synced with `tools/sync-aosp.sh ... hals/vibrator`). Result: below.
 - Result 2026-11-15: arm64 `out/soong/.intermediates/vendor/apklayer/hals/vibrator/libapklayer_vibrator/android_arm64_armv8-a_shared/libapklayer_vibrator.so` sha256 `18e55a352fe49ce7a37007a9e522ffd243bbaa6554cc6aa0e70b7ba9baeeab85` 86112 bytes; x86_64 `.../android_x86_64_shared/libapklayer_vibrator.so` sha256 `0eca2e1af7126a0f5358c0420aae9a1584891bc02c9dac0d515ec6c3a560673e` 86032 bytes (both under ~/los24/out; the two deps locks carry the rows).
+
+## 2026-11-17: Expose packaged ANGLE drivers to EGL app namespace
+
+- Added bionic linker public-library entries for the three packaged ANGLE driver names. This is needed because EGL opens its implementation driver from the app namespace, whose public-library check rejected ANGLE.
+- Build log (before build): incremental Debian/Meson build of the bionic translation linker, followed by an isolated ANGLE smoke with Android's Vulkan renderengine enabled. If startup succeeds, rebuild the Debian package with the Google ANGLE binaries already in `runtime/angle/vendor`.

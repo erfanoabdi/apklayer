@@ -1,0 +1,10 @@
+diff --git a/linker/app_view.c b/linker/app_view.c
+--- a/linker/app_view.c
++++ b/linker/app_view.c
+@@ -70,4 +70,6 @@
+ {
++	/* apklayer patch: EGL loads the packaged ANGLE implementation from an app process' system namespace. */
++	if (!strcmp(base, "libEGL_angle.so") || !strcmp(base, "libGLESv1_CM_angle.so") || !strcmp(base, "libGLESv2_angle.so")) return true;
+ 	if (!public_read) read_public();
+ 	for (int i = 0; i < public_count; i++)
+ 		if (!strcmp(public_libs[i], base)) return true;
