@@ -15,7 +15,8 @@ PKG = 'com.android.test.uibench'
 print('locale', locale.setlocale(locale.LC_ALL, ''))  # raises when LANG/LC_ALL names a locale the host lacks: the run would test nothing
 # APKLAYER_RUNTIME_DEBUG=egl-import-fail (group gpu-import-fail): every dmabuf import of a window frame fails, the frames take the CPU copy
 DEBUG = os.environ.get('APKLAYER_RUNTIME_DEBUG', '1')
-env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG=DEBUG, APKLAYER_JOPTS='-Dapklayer.runms=12000 ' + instance.ENV.get('APKLAYER_EXTRA_JOPTS', ''))
+env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG=DEBUG, APKLAYER_GFX_DEBUG='1',
+           APKLAYER_JOPTS='-Dapklayer.runms=12000 ' + instance.ENV.get('APKLAYER_EXTRA_JOPTS', ''))
 proc = None
 try:
     instance.stop()

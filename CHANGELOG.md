@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18: Make successful EGL imports opt-in logging
+
+- Print successful DMA-BUF imports only with `APKLAYER_GFX_DEBUG` enabled. The GPU smoke test opts in because it uses these messages to time its screenshot. Failed imports still report the EGL error.
+- The NVIDIA log showed more than 1500 imports of distinct 667×279 buffers from the allocator process. Reducing log output leaves that allocation churn to investigate separately.
+
 ## 2026-11-18: Follow the monitor and reduce frame waits
 
 - The shell tracks refresh per Wayland output. Each window and its input client use their own output rate. The headless compositor clock uses the active window's output, so SurfaceFlinger can pace virtual displays on that clock.
@@ -3224,6 +3229,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - All owned test instances were checked clean on ARM and x86. The owner paused/cleared the goal and requested a handoff after current tasks finished. No additional build/test was launched afterward. Real Termux confirmation, Fennec painted content, remaining native launch APIs and broader runtime identity gaps remain open.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-18 - gsi_x86_64 libapklayer_egl (quiet successfully imported buffers)
+- Sync `hals/graphics/egl/Egl.cpp` and replay the existing module under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp`.
+
 ### 2026-11-18 - gsi_x86_64 display and EGL pacing
 - Sync the x86_64 EGL attach and window sources and the virtual display source. Replay the existing graph under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py` for `libapklayer_egl hals/graphics/egl EglAttach.cpp EglWindow.cpp` and `libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp`. Build the Linux shell with Meson/Ninja.
 - Result: both x86_64 modules built from vendor/apklayer `0fdeaa8` and passed the artifact hash check. EGL SHA-256 `431cd3f4adfba1fa8e8ce9618c3d8b47c5e07713c2adbc0a3617baae7b0c3ee6`, virtual display SHA-256 `747c83bb57a9d644339a6de96b68a5cb0a2b547f07a319c0c40bf6b68eb8e93a`. The rebuilt Linux shell reported 180 Hz on the local Wayland monitor using a private socket. The Noble amd64 package and both runtime libraries are staged locally under `frame-pacing-a2c4b9ed`. PGR comparison and switching between monitors with different modes are still open.

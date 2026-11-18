@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "../../HostEnvironment.h"
 #include "EglHost.h"
 #include "gralloc_handle.h"
 #include "Gles1.h"
@@ -116,6 +117,14 @@ std::string withoutColorspace(const char* list) {
 
 static unsigned displayRefs;  // initialize/terminate count, below
 
+bool logBufferImports() {
+    static const bool enabled = [] {
+        const char* value = apklayer::hostGetenv("APKLAYER_GFX_DEBUG");
+        return value && *value && strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
 }  // namespace
 
 // An ANativeWindowBuffer of our gralloc as a dmabuf EGLImage on the host.
@@ -163,7 +172,7 @@ EGLImage apklayer::egl::imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffe
     if (image == EGL_NO_IMAGE)
         ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x (display refs %u)", d.width, d.height,
               d.fourcc, d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")(), displayRefs);
-    else
+    else if (logBufferImports())
         ALOGI("imported buffer id %llx: %ux%u fourcc 0x%x android format %u usage 0x%llx planes %u stride %u modifier 0x%llx", (unsigned long long)d.id,
               d.width, d.height, d.fourcc, d.androidFormat, (unsigned long long)d.usage, d.numPlanes, d.stride[0], (unsigned long long)d.modifier);
     return image;
