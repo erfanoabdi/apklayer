@@ -199,12 +199,10 @@ class ApklayerMapper final : public vendor::mapper::IMapperV5Impl {
     int32_t getStandardMetadata(buffer_handle_t buffer, int64_t type, void* out, size_t outSize) override {
         HandleData d;
         if (!decode(buffer, &d)) return -AIMAPPER_ERROR_BAD_BUFFER;
-        SharedMetadata* meta = mapMetadata(buffer);
-        if (meta == nullptr) return -AIMAPPER_ERROR_NO_RESOURCES;
-        auto provider = [&]<StandardMetadataType T>(auto&& provide) -> int32_t { return get(d, *meta, provide, StandardMetadata<T>{}); };
-        int32_t r = provideStandardMetadata(static_cast<StandardMetadataType>(type), out, outSize, provider);
-        unmapMetadata(meta);
-        return r;
+        auto provider = [&]<StandardMetadataType T>(auto&& provide) -> int32_t {
+            return get(buffer, d, provide, StandardMetadata<T>{});
+        };
+        return provideStandardMetadata(static_cast<StandardMetadataType>(type), out, outSize, provider);
     }
 
     AIMapper_Error setMetadata(buffer_handle_t buffer, AIMapper_MetadataType type, const void* data, size_t size) override {
@@ -284,9 +282,8 @@ class ApklayerMapper final : public vendor::mapper::IMapperV5Impl {
     }
 
     template <typename F, StandardMetadataType T>
-    int32_t get(const HandleData& d, const SharedMetadata& m, F&& provide, StandardMetadata<T>) {
+    int32_t get(buffer_handle_t buffer, const HandleData& d, F&& provide, StandardMetadata<T>) {
         if constexpr (T == StandardMetadataType::BUFFER_ID) return provide(d.id);
-        if constexpr (T == StandardMetadataType::NAME) return provide(std::string(m.name));
         if constexpr (T == StandardMetadataType::WIDTH) return provide(static_cast<uint64_t>(d.width));
         if constexpr (T == StandardMetadataType::HEIGHT) return provide(static_cast<uint64_t>(d.height));
         if constexpr (T == StandardMetadataType::LAYER_COUNT) return provide(static_cast<uint64_t>(d.layerCount));
@@ -322,6 +319,22 @@ class ApklayerMapper final : public vendor::mapper::IMapperV5Impl {
             std::vector<Rect> crops(d.numPlanes, Rect{0, 0, static_cast<int32_t>(d.width), static_cast<int32_t>(d.height)});
             return provide(crops);
         }
+        // Dimensions, layout and other handle fields need no mapping. Only values stored in
+        // the shared page need to see that page at the time of the query.
+        if constexpr (T == StandardMetadataType::NAME || T == StandardMetadataType::DATASPACE ||
+                      T == StandardMetadataType::BLEND_MODE || T == StandardMetadataType::SMPTE2086 ||
+                      T == StandardMetadataType::CTA861_3) {
+            return getShared<T>(buffer, provide);
+        }
+        return -AIMAPPER_ERROR_UNSUPPORTED;
+    }
+
+    template <StandardMetadataType T, typename F>
+    static int32_t getShared(buffer_handle_t buffer, F&& provide) {
+        const std::unique_ptr<SharedMetadata, decltype(&unmapMetadata)> meta(mapMetadata(buffer), unmapMetadata);
+        if (!meta) return -AIMAPPER_ERROR_NO_RESOURCES;
+        const SharedMetadata& m = *meta;
+        if constexpr (T == StandardMetadataType::NAME) return provide(std::string(m.name));
         if constexpr (T == StandardMetadataType::DATASPACE) return provide(static_cast<Dataspace>(m.dataspace));
         if constexpr (T == StandardMetadataType::BLEND_MODE) return provide(static_cast<BlendMode>(m.blendMode));
         if constexpr (T == StandardMetadataType::SMPTE2086) {
