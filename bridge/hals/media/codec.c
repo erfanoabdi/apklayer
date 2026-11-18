@@ -199,8 +199,17 @@ int apklayer_codec_open(const struct apklayer_codec_config *cfg, struct apklayer
     GstCaps *caps = input_caps(cfg->mime);
     gst_caps_set_simple(caps, "width", G_TYPE_INT, (int)cfg->width, "height", G_TYPE_INT, (int)cfg->height, NULL);
     codec_data(caps, cfg->codec_data, cfg->codec_data_size);
-    // I420 in system memory, what the Codec2 side copies: a hardware decoder decodebin prefers (VA on Intel: NV12) is converted, a software one passes through
-    int result = open_caps(caps, "appsrc name=input format=time ! decodebin ! videoconvert ! appsink name=output sync=false max-buffers=8",
+    // Codec2's VP9 bridge waits for output before submitting another visible
+    // frame. Prefer libvpx here because hardware decoders can buffer frames.
+    const char *pipeline = "appsrc name=input format=time ! decodebin ! videoconvert ! appsink name=output sync=false max-buffers=8";
+    if (!strcmp(cfg->mime, "video/x-vnd.on2.vp9")) {
+        GstElementFactory *vp9 = gst_element_factory_find("vp9dec");
+        if (vp9) {
+            pipeline = "appsrc name=input format=time ! vp9dec ! videoconvert ! appsink name=output sync=false max-buffers=8";
+            gst_object_unref(vp9);
+        }
+    }
+    int result = open_caps(caps, pipeline,
                            "video/x-raw,format=I420", out);
     gst_caps_unref(caps);
     return result;
