@@ -291,27 +291,6 @@ static void deviceGraphicsEnv(const Instance& instance, Env& env, const std::str
     env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
 }
 
-// GL extensions hidden from Android code (APKLAYER_GL_HIDE="GL_KHR_texture_compression_astc_ldr ...", from the environment or
-// ~/.config/apklayer/env): libGLESv2.so maps to bridge/native/gles_filter.c's library, which answers the extension queries without them,
-// through a cfg.d in the instance's directory first in XDG_DATA_DIRS (the runtime's own cfg.d maps libGLESv2.so to the host's directly).
-// A driver can advertise a format it decodes wrongly (NVIDIA's ASTC, PGR's home scene): the engine then takes its fallback. The library is mapped
-// always (it also caps GL_MAX_TEXTURE_IMAGE_UNITS at 16: virgl claims 32 and Unciv's shaders then kill the context).
-static void glesFilterEnv(const Instance& instance, Env& env, const std::string& native) {
-    std::string lib = join(native, "libapklayer_gles.so");
-    if (!exists(lib)) return;
-    std::string share = join(instance.root, "gles-filter/share");
-    makeDirs(join(share, "bionic_translation/cfg.d"));
-    writeFile(join(share, "bionic_translation/cfg.d/gles-filter.cfg"),
-              "# the host's GLES with APKLAYER_GL_HIDE's extensions hidden and at most 16 fragment samplers (cli/env.cpp glesFilterEnv)\n"
-              // by name, not path: an absolute path that exists is loaded by bionic_translation's own ELF loader, whose dlsym on that handle skips the glibc-loaded
-              // DT_NEEDED libGLESv2.so.2 (a missing needed library becomes libdl's soinfo), so an app's dlsym(glGetIntegeri_v) was NULL (PGR/Unity, 2026-11-16). A name no
-              // bionic path has goes to glibc's dlopen (LD_LIBRARY_PATH holds the native dir): a glibc handle searches the dependencies.
-              "libGLESv2.so libapklayer_gles.so\nlibGLESv3.so libapklayer_gles.so\n"
-              // the filter opens the host's libGLESv2.so.2 itself (gles_filter.c): bionic_translation 0073 refuses an app-namespace dlopen of a host name the cfg does not map for the app ("app:" line)
-              "app:libGLESv2.so.2 libGLESv2.so.2\n");
-    env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
-}
-
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     layout.requireRuntime();
     NativeEnv result;
@@ -346,7 +325,6 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it
     env["XDG_DATA_DIRS"] = prepend(join(n, "share"), getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"));
     if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env, layout.java.empty() ? "lib64" : "lib");  // a layout with its own JVM: the 32-bit one
-    else glesFilterEnv(instance, env, n);
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
     env["BIONIC_LD_LIBRARY_PATH"] = l;
     if (!env.count("APKLAYER_CRASH_TRACE")) env["APKLAYER_CRASH_TRACE"] = "1";

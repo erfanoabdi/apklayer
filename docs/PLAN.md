@@ -32,6 +32,32 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Storage: scoped storage follows symlinks only in the process that made one (or its children) and cwd-relative paths only under the instance's Android/; earlier links and `openat(dirfd, ...)` into another package's directory are not seen (needs a fd-based check).
 - Call audio: the hub polls the audio policy each second while two communication requesters compete; a native client carries uid 1000, so another process of the same app does not count; run `audio-uid` and `audio-backend-swap` on the x86 PC.
 
+## Startup and memory
+- The spare key churns with launches from terminals with different environments (allowlist, or the hub deriving the environment per launch).
+- Hyphenator nInit off-CPU on cold starts; cold JNI_OnLoad ~150 ms; a SIGKILLed waiter leaves its JVM until stop; spare-born processes have cwd = appsDir.
+- An app's first hub call waits for the hub boot (4-8 s under load): fewer classes before READY.
+- A sandboxed instance cannot write its CDS archive; "Preload Warning: Verification failed" lines in the dumping app's log.
+- Native side: SurfaceFlinger's shader-cache priming; the composer's GL context (~80 MB once an app drew) and SurfaceFlinger's Mali block; libraries services never use.
+- Audio without a sound server: a server started later is used only from the next stack start; audio-late-install failed once per host during a CDS write.
+- Owner to decide: whether Lomiri should suspend an unfocused apklayer window.
+
+## Userspace binder
+- Fewer hops per call (futex doorbells, reply without a second replier wakeup, a busy-poll window); measure SurfaceFlinger per frame and audio.
+- A Halium device without binderfs (host context fixed at /dev/binder): isHalium() needs binderfs today.
+
+## Native bridge (x86_64)
+- PGR on the NVIDIA PC still aborts about 2 min in, now `double free or corruption (out)` with binary_translation 0006's munmap_chunk check
+  (2026-11-11): find which guest free passes 0006 (7 `free(...) of no glibc chunk` from one host caller before it; ~2900 `BAD proxy
+  PRE-EXTRACT: raw_x0=0x1` lines per run).
+- PGR's home scene on NVIDIA: the 3D character and some UI tiles (Missions) are block noise (correct texel blocks mixed with blocks of
+  random saturated pixels, the same places every run); the title screen is clean. Not the gralloc buffers: every buffer is tiled and the
+  CPU-drawn window round-trips exactly (checked with a logging HAL, 2026-11-11), and with the CPU-drawn buffers kept LINEAR (no tiled <->
+  linear GPU copy at all) the noise is the same; the title screen's capture through the same readback is clean. Unity's own GL textures
+  (compressed? sRGB in Linear color space?) are the suspects: hiding ASTC from the app needs a GLES string filter we do not have.
+- No translation cache across starts; Telegram (no x86_64 FOSS APK to test); the manager's "translated" label.
+- The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
+- Unity: Tencent ACE past the first screens, `hpatchz`; Gray Raven "Failed to load Il2CPP"; no backtrace in the fault note; app log cap misses Log lines.
+
 ## Sandbox (before it can be the default)
 - NVIDIA sandbox: broker and `nvidia-modprobe` (0660, missing nodes) run only on a real Debian-style NVIDIA box.
 - A release-candidate deb with the sandbox on for a day.
