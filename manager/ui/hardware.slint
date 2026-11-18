@@ -188,15 +188,6 @@ component DomainCard {
     } }
 }
 
-component GlesCard {
-    OutlinedCard {
-        VerticalLayout {
-            padding: MaterialStyleMetrics.padding_16;
-            GlesSettingsRow { }
-        }
-    }
-}
-
 export component HardwarePage {
     ScrollView {
         init => { self.content_y = -Backend.scroll-y; }
@@ -209,7 +200,6 @@ export component HardwarePage {
                 spacing: MaterialStyleMetrics.spacing_8;
                 alignment: start;
                 BinderRow { }  // the page's introduction, with the binder switch beside it
-                GlesCard { }
                 for d in Backend.hardware : DomainCard { domain: d; }
             }
         }
