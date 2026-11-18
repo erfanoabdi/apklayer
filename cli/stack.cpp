@@ -452,16 +452,19 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         s.env = ne.env;
         if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
             // SurfaceFlinger uses apklayer's Android EGL shim for ANativeWindowBuffer-to-dmabuf handling. Point its
-            // host EGL calls at Linux ANGLE too, so its compositor imports and samples app buffers on the same Vulkan path.
-            s.env["APKLAYER_COMPOSITOR_ANGLE_EGL"] = ne.env.at("APKLAYER_ANGLE_HOST_EGL");
+            // host EGL and GLES calls at Linux ANGLE too, so the compositor imports and samples app buffers on one Vulkan path.
+            const std::string& hostAngleEgl = ne.env.at("APKLAYER_ANGLE_HOST_EGL");
+            s.env["APKLAYER_COMPOSITOR_ANGLE_EGL"] = hostAngleEgl;
+            std::string hostAngleDir = dirName(hostAngleEgl);
+            s.env["LD_LIBRARY_PATH"] = hostAngleDir + ":" + s.env.at("LD_LIBRARY_PATH");
             std::string hostEglShare = join(inst.root, "host-egl/share");
             std::string hostEglCfg = join(hostEglShare, "bionic_translation/cfg.d/host-egl.cfg");
             makeDirs(dirName(hostEglCfg));
             writeFile(hostEglCfg,
                       "libEGL.so libapklayer_egl.so\n"
                       "libGLESv1_CM.so libGLESv1_CM.so\n"
-                      "libGLESv2.so libGLESv2.so.2\n"
-                      "libGLESv3.so libGLESv2.so.2\n");
+                      "libGLESv2.so libapklayer_hostGLESv2.so\n"
+                      "libGLESv3.so libapklayer_hostGLESv2.so\n");
             s.env["XDG_DATA_DIRS"] = hostEglShare + ":" + s.env["XDG_DATA_DIRS"];
         }
         if (!backend.empty()) s.env["APKLAYER_HOST_LIBS"] += (s.env["APKLAYER_HOST_LIBS"].empty() ? "" : ":") + backend;  // a HAL front's backend (bridge/hals/<domain>)
