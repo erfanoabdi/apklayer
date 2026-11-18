@@ -1,0 +1,12 @@
+From: apklayer
+Subject: ANGLE: avoid swapchain present fences on NVIDIA Android WSI
+
+AIDA64 on NVIDIA Android WSI reports VK_ERROR_OUT_OF_HOST_MEMORY from vkGetFenceStatus in WindowSurfaceVk::cleanUpPresentHistory, followed by
+VK_ERROR_DEVICE_LOST and EGL_CONTEXT_LOST. Disable VK_EXT_swapchain_maintenance1 for this path so ANGLE tracks present completion with queue serials
+instead of querying present fences created for the Android-loader swapchain.
+
+--- a/src/libANGLE/renderer/vulkan/vk_renderer.cpp
++++ b/src/libANGLE/renderer/vulkan/vk_renderer.cpp
+@@ -6491 +6491 @@
+-                                useVulkanSwapchain == UseVulkanSwapchain::Yes);
++                                useVulkanSwapchain == UseVulkanSwapchain::Yes && !(IsAndroid() && isNvidia));

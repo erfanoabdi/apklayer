@@ -451,8 +451,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
         if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
-            // ANGLE cannot import Android HardwareBuffers through this host Vulkan HAL. Keep ANGLE for apps, and have
-            // SurfaceFlinger use apklayer's GBM/EGL buffer importer via bionic_translation's per-process library map.
+            // SurfaceFlinger uses apklayer's Android EGL shim for ANativeWindowBuffer-to-dmabuf handling. Point its
+            // host EGL calls at Linux ANGLE too, so its compositor imports and samples app buffers on the same Vulkan path.
+            s.env["APKLAYER_COMPOSITOR_ANGLE_EGL"] = ne.env.at("APKLAYER_ANGLE_HOST_EGL");
             std::string hostEglShare = join(inst.root, "host-egl/share");
             std::string hostEglCfg = join(hostEglShare, "bionic_translation/cfg.d/host-egl.cfg");
             makeDirs(dirName(hostEglCfg));

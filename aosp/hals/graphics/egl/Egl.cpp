@@ -12,6 +12,7 @@
 #include <nativebase/nativebase.h>
 
 #include <cstring>
+#include <cstdlib>
 #include <initializer_list>
 #include <mutex>
 #include <algorithm>
@@ -40,8 +41,14 @@ ANativeWindowBuffer* AHardwareBuffer_to_ANativeWindowBuffer(AHardwareBuffer*);
 #endif
 
 void* apklayer::egl::hostLib() {
-    static void* h = dlopen("libEGL.so.1", RTLD_NOW | RTLD_GLOBAL);  // the host's glvnd EGL (bionic_dlopen falls back to glibc)
-    LOG_ALWAYS_FATAL_IF(h == nullptr, "no host libEGL.so.1");
+    static void* h = [] {
+        const char* angle = std::getenv("APKLAYER_COMPOSITOR_ANGLE_EGL");
+        const char* path = angle && *angle ? angle : "libEGL.so.1";
+        void* lib = dlopen(path, RTLD_NOW | RTLD_GLOBAL);  // bionic_dlopen falls back to glibc for host libraries
+        LOG_ALWAYS_FATAL_IF(lib == nullptr, "cannot load compositor EGL %s", path);
+        ALOGI("compositor EGL: %s", angle && *angle ? "Linux ANGLE (Vulkan)" : "host driver");
+        return lib;
+    }();
     return h;
 }
 

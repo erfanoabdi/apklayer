@@ -21,7 +21,7 @@ struct apklayer_gfx {
     int fd;
     struct gbm_device *gbm;
     bool other_gpu;  /* not the compositor's GPU: window buffers must be importable there */
-    bool angle;      /* ANGLE GLES instance: do not apply host NVIDIA tiling workarounds */
+    bool angle;      /* ANGLE GLES instance: CPU maps use host ANGLE; compositor tiling remains GPU-specific */
 };
 
 static int open_node(const char *path)
@@ -186,9 +186,9 @@ static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t 
     /* Intel's plain LINEAR buffer has the exact pitch (865 px: 3460 B) and AMD's compositor refuses to
      * import it ("importing the supplied dmabufs failed"); with SCANOUT too the pitch is 256-aligned, which every GPU imports */
     if (gfx->other_gpu && (usage & APKLAYER_GFX_SCANOUT) && gbm_device_is_format_supported(gfx->gbm, fourcc, f | GBM_BO_USE_SCANOUT)) f |= GBM_BO_USE_SCANOUT;
-    /* window buffers only (the composer's usage: a Surface the CPU draws through lock/unlock); every buffer is sampled (toGfxUsage), and an
-     * app's own CPU-written textures (PGR's Unity uploads) are written in ways that bypass the map's GPU copy: tiled, they were noise */
-    if (!gfx->angle && (f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SCANOUT) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
+    /* CPU-drawn windows need a tiled modifier when the compositor EGL can sample LINEAR only as an external texture. ANGLE handles their CPU
+     * lock/read/write through its Vulkan transfer path; SurfaceFlinger still imports the buffer through EGL, so it needs this layout. */
+    if ((f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SCANOUT) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
         && !gfx->other_gpu  /* another GPU's compositor needs LINEAR */
         && apklayer_gfx_transfer_supported(fourcc)  /* what readback.c copies (RGBA/BGRA/RGBX/BGRX, RGB888, RGB565) */
         && apklayer_gfx_linear_external_only(gfx->gbm, fourcc)) {

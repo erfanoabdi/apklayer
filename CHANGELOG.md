@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-18: Keep NVIDIA compositor buffers tiled with ANGLE
+
+- PGR's current ANGLE launch logs show SurfaceFlinger receiving LINEAR AB24 buffers (`fourcc 0x34324241`, usage `0x933`) and Skia failing `glEGLImageTargetTexture2DOES` with `GL_INVALID_OPERATION` (`0x502`). ANGLE mode had skipped the NVIDIA tiled-buffer allocation workaround, so SurfaceFlinger could not sample these buffers through host EGL.
+- Azur Lane's virtual display also has SurfaceFlinger `drawLayers: skipping a layer whose buffer could not be imported` entries while these LINEAR buffers are present; the same compositor fix is intended to cover it.
+- Restore tiled allocation for CPU-drawn, compositor-facing buffers on the NVIDIA GPU regardless of app ANGLE selection. CPU map/read/write still goes through the Linux ANGLE Vulkan transfer path; the compositor needs the tiled layout to import the output.
+- ANGLE-mode SurfaceFlinger was still forwarding compositor EGL to the native host driver. Route its apklayer EGL shim to the packaged Linux ANGLE EGL too, so compositor imports and samples app DMA-BUFs through ANGLE's Vulkan backend. This is the current fix for black PGR/Azur Lane layers and may also address 3DMark's black virtual-display output; 3DMark's vdisplay logs additionally show the six-buffer acquisition limit being reached and sync transactions timing out.
+- AIDA64's log is a separate Vulkan failure: ANGLE reports `VK_ERROR_OUT_OF_HOST_MEMORY` from `vkGetFenceStatus` in `WindowSurfaceVk::cleanUpPresentHistory`, then the NVIDIA device is lost and EGL reports `EGL_CONTEXT_LOST`. Added ANGLE patch 0003 to disable swapchain present-fence maintenance for NVIDIA Android WSI, falling back to queue-serial completion tracking.
+- Build `libapklayer_egl` for gsi_x86_64 first, then rebuild the Noble deb and verify PGR/Azur Lane/3DMark. The Android x86/x86_64 ANGLE library rebuilds have completed; their updated binaries still need copying into the project. PGR remains running in the owner's default instance; do not restart it or alter its game data during this diagnosis.
+
 ## 2026-11-18: Use Linux ANGLE for NVIDIA CPU-mapped buffers
 
 - The Android-target ANGLE Vulkan display advertises Linux DMA-BUF import but has no Linux external-image sibling, so using it in the host graphics HAL crashed during `eglCreateImage`. Added source-built Linux ANGLE EGL/GLES for the host HAL's GBM buffer transfers; app GLES remains on Android-target ANGLE.
@@ -3204,6 +3213,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - All owned test instances were checked clean on ARM and x86. The owner paused/cleared the goal and requested a handoff after current tasks finished. No additional build/test was launched afterward. Real Termux confirmation, Fennec painted content, remaining native launch APIs and broader runtime identity gaps remain open.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-18 - gsi_x86_64 libapklayer_egl (use Linux ANGLE EGL in SurfaceFlinger's compositor process)
+- Why: ANGLE-mode SurfaceFlinger was still routing DMA-BUF imports through NVIDIA's native EGL; PGR/Azur Lane logs show Skia rejecting LINEAR AB24 images, and 3DMark's virtual-display sink reports black output plus a saturated acquired-buffer queue. Updated `Egl.cpp` to select Linux ANGLE for compositor EGL when the per-process path is set, and `stack.cpp` to pass that path to SurfaceFlinger. The local PC has no OrbStack `orb` command, so the small AOSP source update will be synced from the clean Mac checkout at `erfanabdi@100.85.219.120`. Command there: `tools/sync-aosp.sh "compositor EGL uses host ANGLE" hals/graphics/egl`, then `orb -m ubuntu22-x86 bash -lc 'flock -n ~/los24-build.lock bash -c "cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_egl"'`. Incremental existing module, no clean; build result and staged SHA-256 to follow.
+
 ### 2026-11-16 - gsi_x86_64 libberberis_arm64 (binary_translation 0062: berberis.large_mmap knob)
 - `flock ~/los24-build.lock`, `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64`. Why: the translator's 16 GB allocation buffer (base/large_mmap.cc, MAP_NORESERVE rw-p) is the 8 GB + 5.8 GB unnamed rw-p pair in PGR's maps (hs_err maps: the JVM heap is the ---p region at 0x60f...). Edit: base/large_mmap.cc only; `berberis.large_mmap=reserve` maps the buffer PROT_NONE (pieces are MAP_FIXED with their own protections), `=off` no buffer; default unchanged.
 - Build 2 (same command and lock): result of build 1 (95c3c7d0): `reserve` made the 5.88 GB rest ---p, the 8 GB rw-p piece is the GuestMapShadow inside the buffer; PGR died at 41 s wall (SIGBUS). Adds `=hide`: reserved, and every maps line inside the buffer left out of the guest's maps (base/large_mmap.{h,cc}, kernel_api/open_emulation.cc).
