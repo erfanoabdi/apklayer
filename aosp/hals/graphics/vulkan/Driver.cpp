@@ -14,8 +14,10 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <string>
@@ -60,7 +62,15 @@ struct NativeImage {
 std::map<VkImage, NativeImage> gImages;  // native-buffer images
 std::map<VkQueue, VkDevice> gQueueDevice;
 std::map<VkQueue, VkSemaphore> gReleaseSemaphore;                 // one exportable semaphore per queue
-std::map<VkDevice, bool> gNativeBuffer;                           // devices created with VK_ANDROID_native_buffer
+struct NativeBufferDispatch {
+    PFN_vkQueueSubmit submit = nullptr;
+    PFN_vkImportSemaphoreFdKHR importSemaphore = nullptr;
+    PFN_vkImportFenceFdKHR importFence = nullptr;
+    PFN_vkCreateSemaphore createSemaphore = nullptr;
+    PFN_vkGetSemaphoreFdKHR exportSemaphore = nullptr;
+    VkQueue acquireQueue = VK_NULL_HANDLE;  // first queue in gQueueDevice's order, for the acquire fallback
+};
+std::map<VkDevice, NativeBufferDispatch> gNativeBuffer;  // devices created with VK_ANDROID_native_buffer
 
 template<class T> T hostDevice(VkDevice device, const char* name) {
     // the host loader's own entry point when it exports one (it dispatches on the handle), the driver's pointer otherwise
@@ -117,44 +127,31 @@ VKAPI_ATTR VkResult VKAPI_CALL getSwapchainGrallocUsage2ANDROID(VkDevice, VkForm
 }
 
 // The fence fd is ours to close in every case (vkAcquireImageANDROID's contract); the Vulkan import functions take it only on success.
-VkResult importPending(VkDevice device, VkImage image);
+VkResult importPending(VkDevice device, VkImage image, NativeBufferDispatch* dispatch);
 
 VKAPI_ATTR VkResult VKAPI_CALL acquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) {
-    VkResult imported = importPending(device, image);
+    NativeBufferDispatch dispatch;
+    VkResult imported = importPending(device, image, &dispatch);
     if (nativeFenceFd < 0 && (semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE)) {
         // nothing to wait for: signal the app's semaphore and fence with a real (empty) submission rather than a sync-fd import of -1,
         // which leaves Venus's semaphore unsignaled
-        auto submit = hostDevice<PFN_vkQueueSubmit>(device, "vkQueueSubmit");
-        VkQueue queue = VK_NULL_HANDLE;
-        {
-            std::lock_guard<std::mutex> lock(gLock);
-            for (const auto& q : gQueueDevice) if (q.second == device) { queue = q.first; break; }
-        }
-        if (!submit || !queue) return VK_ERROR_INITIALIZATION_FAILED;
+        if (!dispatch.submit || !dispatch.acquireQueue) return VK_ERROR_INITIALIZATION_FAILED;
         VkSubmitInfo signal = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
         signal.signalSemaphoreCount = semaphore != VK_NULL_HANDLE ? 1 : 0;
         signal.pSignalSemaphores = &semaphore;
-        return submit(queue, 1, &signal, fence);
+        return dispatch.submit(dispatch.acquireQueue, 1, &signal, fence);
     }
     if (imported != VK_SUCCESS) { if (nativeFenceFd >= 0) close(nativeFenceFd); return imported; }
-    auto importSemaphore = hostDevice<PFN_vkImportSemaphoreFdKHR>(device, "vkImportSemaphoreFdKHR");
-    auto importFence = hostDevice<PFN_vkImportFenceFdKHR>(device, "vkImportFenceFdKHR");
-    if (!importSemaphore) { if (nativeFenceFd >= 0) close(nativeFenceFd); return VK_ERROR_INITIALIZATION_FAILED; }
-    if (fence != VK_NULL_HANDLE && !importFence) {
+    if (!dispatch.importSemaphore) { if (nativeFenceFd >= 0) close(nativeFenceFd); return VK_ERROR_INITIALIZATION_FAILED; }
+    if (fence != VK_NULL_HANDLE && !dispatch.importFence) {
         // no fence fds on this host driver: wait for the window's fence here, then signal the app's fence with an empty submit
-        auto submit = hostDevice<PFN_vkQueueSubmit>(device, "vkQueueSubmit");
-        VkQueue queue = VK_NULL_HANDLE;
-        {
-            std::lock_guard<std::mutex> lock(gLock);
-            for (const auto& q : gQueueDevice) if (q.second == device) { queue = q.first; break; }
-        }
-        if (!submit || !queue) { if (nativeFenceFd >= 0) close(nativeFenceFd); return VK_ERROR_INITIALIZATION_FAILED; }
+        if (!dispatch.submit || !dispatch.acquireQueue) { if (nativeFenceFd >= 0) close(nativeFenceFd); return VK_ERROR_INITIALIZATION_FAILED; }
         if (nativeFenceFd >= 0) {
             struct pollfd wait = {nativeFenceFd, POLLIN, 0};
             while (poll(&wait, 1, -1) < 0 && errno == EINTR) {}
         }
         VkSubmitInfo signal = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
-        VkResult result = submit(queue, 1, &signal, fence);
+        VkResult result = dispatch.submit(dispatch.acquireQueue, 1, &signal, fence);
         if (result != VK_SUCCESS) { if (nativeFenceFd >= 0) close(nativeFenceFd); return result; }
         fence = VK_NULL_HANDLE;  // done: only the semaphore (if any) takes the fd now
     }
@@ -172,13 +169,13 @@ VKAPI_ATTR VkResult VKAPI_CALL acquireImageANDROID(VkDevice device, VkImage imag
     if (semaphore != VK_NULL_HANDLE) {
         VkImportSemaphoreFdInfoKHR info = {VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR, nullptr, semaphore, VK_SEMAPHORE_IMPORT_TEMPORARY_BIT,
                                            VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, semaphoreFd};
-        result = importSemaphore(device, &info);
+        result = dispatch.importSemaphore(device, &info);
         if (result == VK_SUCCESS) semaphoreFd = -1;
     }
     if (result == VK_SUCCESS && fence != VK_NULL_HANDLE) {
         VkImportFenceFdInfoKHR info = {VK_STRUCTURE_TYPE_IMPORT_FENCE_FD_INFO_KHR, nullptr, fence, VK_FENCE_IMPORT_TEMPORARY_BIT,
                                        VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT, fenceFd};
-        result = importFence(device, &info);
+        result = dispatch.importFence(device, &info);
         if (result == VK_SUCCESS) fenceFd = -1;
     }
     if (semaphoreFd >= 0) close(semaphoreFd);
@@ -189,32 +186,41 @@ VKAPI_ATTR VkResult VKAPI_CALL acquireImageANDROID(VkDevice device, VkImage imag
 VKAPI_ATTR VkResult VKAPI_CALL queueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitCount, const VkSemaphore* waits, VkImage, int* fenceFd) {
     if (waitCount == 0) { *fenceFd = -1; return VK_SUCCESS; }
     VkDevice device;
-    VkSemaphore signal;
+    NativeBufferDispatch dispatch;
+    VkSemaphore signal = VK_NULL_HANDLE;
     {
         std::lock_guard<std::mutex> lock(gLock);
         auto q = gQueueDevice.find(queue);
         if (q == gQueueDevice.end()) return VK_ERROR_INITIALIZATION_FAILED;
         device = q->second;
-        signal = gReleaseSemaphore.count(queue) ? gReleaseSemaphore[queue] : VK_NULL_HANDLE;
+        auto native = gNativeBuffer.find(device);
+        if (native == gNativeBuffer.end()) return VK_ERROR_INITIALIZATION_FAILED;
+        dispatch = native->second;
+        auto s = gReleaseSemaphore.find(queue);
+        if (s != gReleaseSemaphore.end()) signal = s->second;
     }
-    auto createSemaphore = hostDevice<PFN_vkCreateSemaphore>(device, "vkCreateSemaphore");
-    auto submit = hostDevice<PFN_vkQueueSubmit>(device, "vkQueueSubmit");
-    auto getFd = hostDevice<PFN_vkGetSemaphoreFdKHR>(device, "vkGetSemaphoreFdKHR");
-    if (!createSemaphore || !submit || !getFd) return VK_ERROR_INITIALIZATION_FAILED;
+    if (!dispatch.createSemaphore || !dispatch.submit || !dispatch.exportSemaphore) return VK_ERROR_INITIALIZATION_FAILED;
     if (signal == VK_NULL_HANDLE) {
         VkExportSemaphoreCreateInfo exportInfo = {VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO, nullptr, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT};
         VkSemaphoreCreateInfo info = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, &exportInfo, 0};
-        VkResult result = createSemaphore(device, &info, nullptr, &signal);
+        VkResult result = dispatch.createSemaphore(device, &info, nullptr, &signal);
         if (result != VK_SUCCESS) return result;
         std::lock_guard<std::mutex> lock(gLock);
         gReleaseSemaphore[queue] = signal;
     }
-    std::vector<VkPipelineStageFlags> stages(waitCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
-    VkSubmitInfo batch = {VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, waitCount, waits, stages.data(), 0, nullptr, 1, &signal};
-    VkResult result = submit(queue, 1, &batch, VK_NULL_HANDLE);
+    constexpr VkPipelineStageFlags kStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    static constexpr std::array<VkPipelineStageFlags, 4> kWaitStages = {kStage, kStage, kStage, kStage};
+    const VkPipelineStageFlags* stages = kWaitStages.data();
+    std::vector<VkPipelineStageFlags> extraStages;
+    if (waitCount > kWaitStages.size()) {
+        extraStages.assign(waitCount, kStage);
+        stages = extraStages.data();
+    }
+    VkSubmitInfo batch = {VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, waitCount, waits, stages, 0, nullptr, 1, &signal};
+    VkResult result = dispatch.submit(queue, 1, &batch, VK_NULL_HANDLE);
     if (result != VK_SUCCESS) return result;
     VkSemaphoreGetFdInfoKHR get = {VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR, nullptr, signal, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT};
-    return getFd(device, &get, fenceFd);
+    return dispatch.exportSemaphore(device, &get, fenceFd);
 }
 
 // A native-buffer image: created on the host with the gralloc buffer's DRM layout, its dma-buf imported as dedicated memory.
@@ -265,10 +271,13 @@ VkResult createNativeBufferImage(VkDevice device, const VkImageCreateInfo* info,
 }
 
 // The memory of a native-buffer image: the dma-buf imported as dedicated memory and bound.
-VkResult importPending(VkDevice device, VkImage image) {
+VkResult importPending(VkDevice device, VkImage image, NativeBufferDispatch* dispatch) {
     int fd;
     {
         std::lock_guard<std::mutex> lock(gLock);
+        auto native = gNativeBuffer.find(device);
+        if (native == gNativeBuffer.end()) return VK_ERROR_INITIALIZATION_FAILED;
+        *dispatch = native->second;
         auto it = gImages.find(image);
         if (it == gImages.end() || it->second.fd < 0) return VK_SUCCESS;  // not ours, or already imported
         fd = it->second.fd;
@@ -387,16 +396,24 @@ VKAPI_ATTR void VKAPI_CALL destroyImage(VkDevice device, VkImage image, const Vk
         if (auto fn = hostDevice<PFN_vkFreeMemory>(device, "vkFreeMemory")) fn(device, memory, allocator);
 }
 
+void registerQueue(VkDevice device, VkQueue queue) {
+    if (!queue) return;
+    std::lock_guard<std::mutex> lock(gLock);
+    gQueueDevice[queue] = device;
+    auto native = gNativeBuffer.find(device);
+    if (native == gNativeBuffer.end()) return;
+    auto& acquireQueue = native->second.acquireQueue;
+    if (!acquireQueue || std::less<VkQueue>{}(queue, acquireQueue)) acquireQueue = queue;
+}
+
 VKAPI_ATTR void VKAPI_CALL getDeviceQueue(VkDevice device, uint32_t family, uint32_t index, VkQueue* queue) {
     if (auto fn = hostDevice<PFN_vkGetDeviceQueue>(device, "vkGetDeviceQueue")) fn(device, family, index, queue);
-    std::lock_guard<std::mutex> lock(gLock);
-    if (*queue) gQueueDevice[*queue] = device;
+    registerQueue(device, *queue);
 }
 
 VKAPI_ATTR void VKAPI_CALL getDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* info, VkQueue* queue) {
     if (auto fn = hostDevice<PFN_vkGetDeviceQueue2>(device, "vkGetDeviceQueue2")) fn(device, info, queue);
-    std::lock_guard<std::mutex> lock(gLock);
-    if (*queue) gQueueDevice[*queue] = device;
+    registerQueue(device, *queue);
 }
 
 VKAPI_ATTR void VKAPI_CALL destroyDevice(VkDevice device, const VkAllocationCallbacks* allocator) {
@@ -422,8 +439,7 @@ PFN_vkVoidFunction getDeviceProcAddr(VkDevice device, const char* name) {
     bool native;
     {
         std::lock_guard<std::mutex> lock(gLock);
-        auto it = gNativeBuffer.find(device);
-        native = it != gNativeBuffer.end() && it->second;
+        native = gNativeBuffer.count(device) != 0;
     }
     struct { const char* name; PFN_vkVoidFunction function; bool needsNative; } ours[] = {
         {"vkGetDeviceProcAddr", reinterpret_cast<PFN_vkVoidFunction>(getDeviceProcAddr), false},
@@ -464,9 +480,17 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
     host.enabledExtensionCount = names.size();
     host.ppEnabledExtensionNames = names.data();
     VkResult result = fn(physical, &host, allocator, device);
-    if (result == VK_SUCCESS) {
+    if (result == VK_SUCCESS && native) {
+        // Resolve once while the device is being created. Extension functions may be driver-specific.
+        NativeBufferDispatch dispatch = {
+            hostDevice<PFN_vkQueueSubmit>(*device, "vkQueueSubmit"),
+            hostDevice<PFN_vkImportSemaphoreFdKHR>(*device, "vkImportSemaphoreFdKHR"),
+            hostDevice<PFN_vkImportFenceFdKHR>(*device, "vkImportFenceFdKHR"),
+            hostDevice<PFN_vkCreateSemaphore>(*device, "vkCreateSemaphore"),
+            hostDevice<PFN_vkGetSemaphoreFdKHR>(*device, "vkGetSemaphoreFdKHR"),
+        };
         std::lock_guard<std::mutex> lock(gLock);
-        gNativeBuffer[*device] = native;
+        gNativeBuffer[*device] = dispatch;
     }
     return result;
 }
