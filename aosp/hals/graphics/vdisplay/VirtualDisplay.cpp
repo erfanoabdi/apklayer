@@ -25,7 +25,6 @@
 #include <cstring>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <map>
 #include <vector>
 #include <string>
 #include <condition_variable>
@@ -198,6 +197,13 @@ class Sink : public ConsumerBase::FrameAvailableListener {
                 std::lock_guard<std::mutex> lock(mLock);
                 // The default also waits for the fence. Do that once, outside the release callback's lock.
                 if (mConsumer->acquireBuffer(&item, 0, /*waitForFence=*/false) != OK) continue;
+                // Return pre-resize frames with their acquire fence so the producer can reuse them
+                // when ready. There is no need to wait on the GPU for a frame we won't display.
+                const auto& buffer = item.mGraphicBuffer;
+                if (buffer == nullptr || buffer->getWidth() != mWidth || buffer->getHeight() != mHeight) {
+                    mConsumer->releaseBuffer(item, item.mFence);
+                    continue;
+                }
             }
             status_t fenceStatus = item.mFence != nullptr ? item.mFence->waitForever("apklayer-vdisplay") : OK;
             std::lock_guard<std::mutex> lock(mLock);
@@ -262,22 +268,27 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         mBusy[slot] = true;
     }
 
-    // Slots name buffers for the display HAL (its fds travel once per slot): one per distinct buffer, a free one reused.
+    // Keep released Wayland imports available for the next use of the same Android buffer.
+    // Use every slot before replacing the oldest released import.
     int slotFor(uint64_t id) {
-        auto it = mSlotOf.find(id);
-        if (it != mSlotOf.end()) return it->second;
+        int unused = -1, oldest = -1;
         for (int s = 0; s < kSlots; s++) {
-            if (mUsed[s] && mBusy[s]) continue;
-            if (mUsed[s]) {
-                mSlotOf.erase(mIdOf[s]);
-                apklayer_display_invalidate_slot(mDisplay, s);
+            if (!mUsed[s]) {
+                if (unused < 0) unused = s;
+            } else if (mIdOf[s] == id) {
+                mLastUsed[s] = ++mSlotClock;
+                return s;
+            } else if (!mBusy[s] && (oldest < 0 || mLastUsed[s] < mLastUsed[oldest])) {
+                oldest = s;
             }
-            mUsed[s] = true;
-            mIdOf[s] = id;
-            mSlotOf[id] = s;
-            return s;
         }
-        return -1;
+        int slot = unused >= 0 ? unused : oldest;
+        if (slot < 0) return -1;
+        if (mUsed[slot]) apklayer_display_invalidate_slot(mDisplay, slot);
+        mUsed[slot] = true;
+        mIdOf[slot] = id;
+        mLastUsed[slot] = ++mSlotClock;
+        return slot;
     }
 
     static void onReleased(void* user, int slot) {
@@ -327,7 +338,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     BufferItem mHeld[kSlots];
     bool mUsed[kSlots] = {}, mBusy[kSlots] = {};
     uint64_t mIdOf[kSlots] = {};
-    std::map<uint64_t, int> mSlotOf;
+    uint64_t mLastUsed[kSlots] = {}, mSlotClock = 0;
 };
 
 }  // namespace

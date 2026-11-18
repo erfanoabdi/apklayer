@@ -503,7 +503,9 @@ bool apklayer_gfx_linear_external_only(struct gbm_device *gbm, uint32_t fourcc)
     }
     if (dpy && query && gl.initialize(dpy, &major, &minor) && query(dpy, (int)fourcc, 0, NULL, NULL, &n) && n > 0 && n <= 256) {
         uint64_t mods[256];
-        unsigned ext[256];
+        // ANGLE's Vulkan modifier query can return the list without filling external_only.
+        // Start with the same ordinary texture import assumption as the no-query path.
+        unsigned ext[256] = {0};
         if (query(dpy, (int)fourcc, n, mods, ext, &n)) {
             answer = true;
             for (int i = 0; i < n; i++) if (mods[i] == DRM_FORMAT_MOD_LINEAR && !ext[i]) answer = false;

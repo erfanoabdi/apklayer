@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-18: Reuse virtual-display imports and map linear buffers directly
+
+- Keep released DMA-BUF and Halium gralloc imports until their slot is needed. Reuse unused slots first, then replace the oldest released slot. Return old-size frames with their original fence before waiting on the GPU.
+- Return superseded Halium frames before the shell's first configure. Each window's virtual display still passes its original buffer to Wayland.
+- Try direct GBM mapping for linear buffers in ANGLE mode. Keep ANGLE's GPU transfer for tiled buffers and buffers that cannot be mapped. Initialize the external-only modifier flags because Linux ANGLE may leave them untouched.
+
 ## 2026-11-18: Cache DRM modifiers in the Linux ANGLE Vulkan backend
 
 - Reuse the modifier list for each Vulkan format across DMA-BUF imports and EGL modifier queries. Reset the cache when the EGL display terminates.
@@ -3236,6 +3242,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - All owned test instances were checked clean on ARM and x86. The owner paused/cleared the goal and requested a handoff after current tasks finished. No additional build/test was launched afterward. Real Termux confirmation, Fennec painted content, remaining native launch APIs and broader runtime identity gaps remain open.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-18 - gsi_x86_64 libapklayer_vdisplay (retain reusable Wayland imports)
+- Sync `hals/graphics/vdisplay/VirtualDisplay.cpp` with `tools/sync-aosp.sh`. Replay `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp` under `flock -n ~/los24-build.lock`. The existing build graph is sufficient.
+
 ### 2026-11-18 - gsi_x86_64 libapklayer_egl (quiet successfully imported buffers)
 - Sync `hals/graphics/egl/Egl.cpp` and replay the existing module under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp`.
 

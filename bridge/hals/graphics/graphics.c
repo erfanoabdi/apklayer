@@ -21,7 +21,7 @@ struct apklayer_gfx {
     int fd;
     struct gbm_device *gbm;
     bool other_gpu;  /* not the compositor's GPU: window buffers must be importable there */
-    bool angle;      /* ANGLE GLES instance: CPU maps use host ANGLE; compositor tiling remains GPU-specific */
+    bool angle;      /* ANGLE handles GPU transfers when a CPU buffer needs staging */
 };
 
 static int open_node(const char *path)
@@ -346,25 +346,10 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             fd_data.format = plane_format(sp, plane);
         }
         uint32_t map_stride = 0;
-        bool angle_copy = gfx->angle && !buf->packed && buf->num_planes == 1 && apklayer_gfx_transfer_supported(fd_data.format);
-        if (angle_copy) {
-            /* ANGLE owns this transfer: import the dma-buf through ANGLE's Vulkan EGL driver even when GBM could CPU-map it. */
-            log_angle_map_once(fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->modifier);
-            m->stage = malloc((size_t)buf->stride[0] * fd_data.height);
-            if (!m->stage) errno = ENOMEM;
-            else {
-                int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
-                                              buf->modifier, m->stage, buf->stride[0]);
-                if (r) { free(m->stage); m->stage = NULL; errno = -r; }
-                else {
-                    addr = m->stage; offset = 0; map_stride = buf->stride[0];
-                    if (write) {
-                        m->upload_gbm = gfx->gbm; m->upload_fd = fd_data.fd; m->upload_w = fd_data.width; m->upload_h = fd_data.height;
-                        m->upload_fourcc = fd_data.format; m->upload_stride = buf->stride[0]; m->upload_offset = buf->offset[0]; m->upload_modifier = buf->modifier;
-                    }
-                }
-            }
-        } else {
+        bool can_transfer = !buf->packed && buf->num_planes == 1 && apklayer_gfx_transfer_supported(fd_data.format);
+        // A LINEAR buffer can be mapped directly even when ANGLE is rendering the app.
+        // Tiled buffers in an ANGLE instance still use its GPU transfer path.
+        if (!gfx->angle || buf->modifier == DRM_FORMAT_MOD_LINEAR || !can_transfer) {
             /* A tiled buffer (e.g. SurfaceFlinger's capture) needs its modifier on import before GBM can map it. */
             if (!buf->packed && buf->num_planes == 1 && buf->modifier != DRM_FORMAT_MOD_INVALID && buf->modifier != DRM_FORMAT_MOD_LINEAR) {
                 struct gbm_import_fd_modifier_data md = { .width = fd_data.width, .height = fd_data.height, .format = fd_data.format, .num_fds = 1,
@@ -382,13 +367,18 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
                 if (!addr && getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[gfx] gbm_bo_map %ux%u: %s\n", fd_data.width, fd_data.height, strerror(errno));
                 if (!addr) { gbm_bo_destroy(m->bo); m->bo = NULL; }
             }
-            /* Native GLES path: use host GL if a tiled buffer cannot be CPU-mapped; ANGLE uses its own path above. */
-            if (!addr && !gfx->angle && !buf->packed && buf->num_planes == 1 && apklayer_gfx_transfer_supported(fd_data.format)
-                && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
-                int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
-                                              buf->modifier, m->stage, buf->stride[0]);
-                if (r) { free(m->stage); m->stage = NULL; errno = -r; } else { addr = m->stage; offset = 0; }
-                if (!r && write) {
+        }
+        if (!addr && can_transfer && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
+            if (gfx->angle)
+                log_angle_map_once(fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->modifier);
+            int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
+                                          buf->modifier, m->stage, buf->stride[0]);
+            if (r) { free(m->stage); m->stage = NULL; errno = -r; }
+            else {
+                addr = m->stage;
+                offset = 0;
+                map_stride = buf->stride[0];
+                if (write) {
                     m->upload_gbm = gfx->gbm; m->upload_fd = fd_data.fd; m->upload_w = fd_data.width; m->upload_h = fd_data.height;
                     m->upload_fourcc = fd_data.format; m->upload_stride = buf->stride[0]; m->upload_offset = buf->offset[0]; m->upload_modifier = buf->modifier;
                 }

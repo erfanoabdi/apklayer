@@ -44,6 +44,8 @@ void window_gralloc_frame(struct window *w, const int32_t *m, uint32_t len, cons
     }
     if (!w->dbufs[buf]) return;
     if (!w->configured) {
+        if (w->pending_dbuf >= 0 && w->pending_dbuf != buf)
+            send_msg(w->client, MSG_DMABUF_RELEASE, (int32_t[]){ w->id, w->pending_dbuf }, 2);
         w->pending_dbuf = buf;
         memcpy(w->pending_ddamage, m + 9, sizeof w->pending_ddamage);
         return;
