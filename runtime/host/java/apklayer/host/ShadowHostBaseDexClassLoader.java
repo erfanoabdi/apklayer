@@ -135,7 +135,11 @@ public class ShadowHostBaseDexClassLoader {
     protected Class<?> findClass(String name) throws ClassNotFoundException {
         if (session != null) {
             String internal = name.replace('.', '/');
-            synchronized (this) {
+            // Defining a class can re-enter the loader. Use the JVM's class-loading
+            // lock instead of a separate shadow monitor, which can invert lock order.
+            Object lock = ReflectionHelpers.callInstanceMethod(real, "getClassLoadingLock",
+                    ClassParameter.from(String.class, name));
+            synchronized (lock) {
                 Class<?> loaded = ReflectionHelpers.callInstanceMethod(real, "findLoadedClass",
                         ClassParameter.from(String.class, name.replace('/', '.')));
                 if (loaded != null) return loaded;
@@ -143,9 +147,12 @@ public class ShadowHostBaseDexClassLoader {
                 // Original java.* names cannot be defined by a non-boot JVM loader; converted
                 // references already request the relocated name, just like installed jars.
                 if (!transformer.mappedName(source).equals(internal)) throw new ClassNotFoundException(name);
-                byte[] bytes = session.classBytes(source);
+                byte[] bytes;
+                synchronized (this) {
+                    bytes = session.classBytes(source);
+                    if (bytes != null) bytes = transformer.transform(bytes);
+                }
                 if (bytes != null) {
-                    bytes = transformer.transform(bytes);
                     return ReflectionHelpers.callInstanceMethod(real, "defineClass",
                             ClassParameter.from(String.class, transformer.mappedName(source).replace('/', '.')),
                             ClassParameter.from(byte[].class, bytes), ClassParameter.from(int.class, 0),
