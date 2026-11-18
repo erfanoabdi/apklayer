@@ -24,8 +24,8 @@
 #include <climits>
 #include <cstring>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
-#include <vector>
 #include <string>
 #include <condition_variable>
 #include <mutex>
@@ -43,6 +43,10 @@ constexpr int kSlots = 8;
 
 class Sink : public ConsumerBase::FrameAvailableListener {
   public:
+    ~Sink() override {
+        if (mBarPx) munmap(mBarPx, mBarPxSize);
+    }
+
     bool start(const char* title, uint32_t stack, uint32_t w, uint32_t h) {
         mStack = stack;
         mWidth = w;
@@ -95,7 +99,13 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         Rect frame = mTurn ? Rect(mHeight, mWidth) : Rect(mWidth, mHeight);
         t.setDisplayProjection(mToken, mTurn == 90 ? ui::ROTATION_90 : mTurn == 270 ? ui::ROTATION_270 : ui::ROTATION_0, stack, frame);
         if (mBar != nullptr) {
-            if (mBarGb != nullptr) t.setBuffer(mBar, buildBar());  // the strip's turn changed
+            if (mBarShown && mBarGb != nullptr && mBarBufferTurn != mTurn) {
+                if (auto gb = buildBar(); gb != nullptr) {
+                    mBarGb = gb;
+                    mBarBufferTurn = mTurn;
+                    t.setBuffer(mBar, gb);
+                }
+            }
             placeBar(t);
         }
         // Resizing runs on the socket reader, which also handles Wayland buffer releases.
@@ -128,7 +138,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
                 int32_t bx = x, by = y;
                 if (mTurn == 90) { bx = w - 1 - y; by = x; }
                 else if (mTurn == 270) { bx = y; by = h - 1 - x; }
-                const uint8_t* s = mBarPx.data() + (static_cast<size_t>(by) * w + bx) * 4;
+                const uint8_t* s = static_cast<const uint8_t*>(mBarPx) + (static_cast<size_t>(by) * w + bx) * 4;
                 d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = 0xff;
             }
         }
@@ -136,7 +146,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         return gb;
     }
 
-    // The shell's navigation bar (fd: w x h XRGB8888, -1: hidden): copied into a buffer of a layer over the app's, at the bottom edge.
+    // Keep the shell's navigation-bar memfd mapped so rebuilding the overlay can read it directly.
     static void onNavbar(void* user, int fd, int32_t w, int32_t h) {
         auto* self = static_cast<Sink*>(user);
         std::lock_guard<std::mutex> lock(self->mLock);
@@ -147,19 +157,27 @@ class Sink : public ConsumerBase::FrameAvailableListener {
             if (self->mBarShown) { self->mBarShown = false; if (self->mTurn == 270) self->applyDisplay(); }
             return;
         }
-        size_t len = static_cast<size_t>(w) * h * 4;
-        void* px = mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
+        uint64_t len = static_cast<uint64_t>(w) * h * 4;
+        struct stat st;
+        if (len > SIZE_MAX || fstat(fd, &st) != 0 || st.st_size < 0 || static_cast<uint64_t>(st.st_size) < len) {
+            close(fd);
+            return;
+        }
+        void* px = mmap(nullptr, static_cast<size_t>(len), PROT_READ, MAP_SHARED, fd, 0);
         close(fd);
         if (px == MAP_FAILED) return;
-        self->mBarPx.assign(static_cast<const uint8_t*>(px), static_cast<const uint8_t*>(px) + len);
-        munmap(px, len);
+        if (self->mBarPx) munmap(self->mBarPx, self->mBarPxSize);
+        self->mBarPx = px;
+        self->mBarPxSize = static_cast<size_t>(len);
         bool turnedShape = self->mBarShown != true || self->mBarImgW != w || self->mBarH != h;
         self->mBarImgW = w;
         self->mBarH = h;
         self->mBarShown = true;
+        self->mBarBufferTurn = -1;  // a failed allocation leaves the previous overlay in use
         auto gb = self->buildBar();
         if (gb == nullptr) return;
         self->mBarGb = gb;
+        self->mBarBufferTurn = self->mTurn;
         if (self->mBar == nullptr) {
             self->mBar = SurfaceComposerClient::getDefault()->createSurface(String8("apklayer-navbar"), w, h, PIXEL_FORMAT_RGBA_8888,
                                                                             ISurfaceComposerClient::eFXSurfaceBufferState);
@@ -324,7 +342,9 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     sp<IBinder> mToken;
     sp<SurfaceControl> mBar;  // the navigation bar's layer, once the shell sent one
     sp<GraphicBuffer> mBarGb;
-    std::vector<uint8_t> mBarPx;  // its XRGB8888 pixels, mBarImgW x mBarH, in the panel's frame
+    void* mBarPx = nullptr;  // read-only mapping of the original XRGB8888 pixels
+    size_t mBarPxSize = 0;
+    int32_t mBarBufferTurn = 0;
     int32_t mBarH = 0, mBarImgW = 0;
     bool mBarShown = false;
     bool mFramed = false;  // the display presented a frame: until then the bar stays hidden, or its layer alone makes the first frame (no splash)
