@@ -46,6 +46,7 @@ public class ShadowHostPackageInstaller extends ShadowPackageInstaller {
     @Override protected int createSession(PackageInstaller.SessionParams params) throws IOException {
         if (!HubClient.connected()) throw new IOException("No package installer: the app runs without its instance hub");
         int id = hub().installSession(HubInstallSessions.CREATE, request -> {
+            request.writeInt(params.mode);
             request.writeString(params.appPackageName); request.writeString(params.appLabel == null ? null : params.appLabel.toString());
         }, reply -> reply.readInt());
         each(callback -> callback.onCreated(id));
@@ -82,7 +83,7 @@ public class ShadowHostPackageInstaller extends ShadowPackageInstaller {
         PackageInstaller.SessionInfo info = new PackageInstaller.SessionInfo();
         info.sessionId = reply.readInt(); info.installerPackageName = reply.readString(); info.appPackageName = reply.readString(); info.appLabel = reply.readString();
         info.isCommitted = info.sealed = reply.readBoolean();
-        info.active = true; info.mode = PackageInstaller.SessionParams.MODE_FULL_INSTALL;
+        info.active = true; info.mode = reply.readInt();
         return info;
     }
 

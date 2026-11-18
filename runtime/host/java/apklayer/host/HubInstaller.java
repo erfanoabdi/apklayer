@@ -12,14 +12,19 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL;
+import static android.content.pm.PackageInstaller.SessionParams.MODE_INHERIT_EXISTING;
 
 /**
  * The instance's package installer, the part PackageInstallerService and the PackageInstaller app play on a phone. A committed session's APKs (written
@@ -36,7 +41,7 @@ final class HubInstaller {
             REQUEST_INSTALL = "android.permission.REQUEST_INSTALL_PACKAGES", REQUEST_DELETE = "android.permission.REQUEST_DELETE_PACKAGES";
 
     private enum Kind { INSTALL, PREAPPROVE, UNINSTALL }
-    private record Request(Kind kind, String installer, int sessionId, String pkg, String label, Path staged, IBinder status) {}
+    private record Request(Kind kind, String installer, int sessionId, String pkg, String label, Path staged, IBinder status, int mode) {}
 
     private final HubDirectory directory;
     private final HubPackages packages;
@@ -68,31 +73,52 @@ final class HubInstaller {
                 Files.copy(in, dir.resolve(i + "-" + (name.endsWith(".apk") ? name : name + ".apk")));
             }
         }
-        staged(caller, 0, null, null, null, dir, files.size(), status, true);
+        staged(caller, 0, null, null, null, MODE_FULL_INSTALL, dir, status, true);
     }
 
-    /** A committed session: installed from the session's directory, which goes with its final status (PackageInstallerSession: the session ends then). */
-    void commitSession(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, Path session, List<Path> apks, IBinder status) throws IOException {
-        staged(caller, sessionId, expected, label, approved, session, apks.size(), status, false);
+    /** A committed session goes away with its final status. */
+    void commitSession(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, int mode, Path session, IBinder status) {
+        staged(caller, sessionId, expected, label, approved, mode, session, status, false);
     }
 
-    private void staged(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, Path dir, int count, IBinder status, boolean now) throws IOException {
-        String pkg = null;
-        java.util.List<String> seen = new java.util.ArrayList<>();
+    private void staged(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, int mode, Path dir, IBinder status, boolean now) {
+        String pkg = expected;
+        List<Path> apks;
+        String invalid = "INSTALL_FAILED_INVALID_APK: ";
         try {
-            for (Path apk : HubInstallSessions.apks(dir)) {
-                seen.add(apk.getFileName() + " (" + Files.size(apk) + " bytes)");
-                PackageParser.ApkLite lite = PackageParser.parseApkLite(apk.toFile(), 0);
-                if (lite.splitName == null) pkg = lite.packageName;
+            apks = HubInstallSessions.apks(dir);
+            if (mode == MODE_INHERIT_EXISTING) {
+                for (Path apk : apks) {
+                    PackageParser.ApkLite lite = PackageParser.parseApkLite(apk.toFile(), 0);
+                    if (pkg == null) pkg = lite.packageName;
+                    if (!pkg.equals(lite.packageName)) throw new IOException("The session is for " + pkg + ", found " + lite.packageName);
+                }
+                if (apks.isEmpty() && HubInstallSessions.removedSplits(dir).isEmpty()) throw new IOException("No APKs or split removals");
+            } else {
+                pkg = null;
+                for (Path apk : apks) {
+                    PackageParser.ApkLite lite = PackageParser.parseApkLite(apk.toFile(), 0);
+                    if (lite.splitName == null) pkg = lite.packageName;
+                }
+                if (pkg == null) throw new IOException("No base APK among " + apks);
+                if (expected != null && !expected.equals(pkg)) {
+                    invalid = "INSTALL_FAILED_PACKAGE_CHANGED: ";
+                    throw new IOException("the session is for " + expected);
+                }
             }
-        } catch (PackageParser.PackageParserException | IOException | RuntimeException unreadable) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_PARSE_FAILED: " + unreadable.getMessage()); return; }
-        if (pkg == null) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_INVALID_APK: no base APK among " + seen); return; }
-        if (expected != null && !expected.equals(pkg)) { finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_PACKAGE_CHANGED: the session is for " + expected); return; }
+            if (pkg == null) throw new IOException("No target package");
+        } catch (PackageParser.PackageParserException | RuntimeException unreadable) {
+            finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_PARSE_FAILED: " + unreadable.getMessage());
+            return;
+        } catch (IOException unreadable) {
+            finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE_INVALID, invalid + unreadable.getMessage());
+            return;
+        }
         String denied = mayRequest(caller.name(), REQUEST_INSTALL, 26);
         if (denied != null) { finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE, denied); return; }
-        Request request = new Request(Kind.INSTALL, caller.name(), sessionId, pkg, label != null ? label : labelOf(pkg, pkg), dir, status);
+        Request request = new Request(Kind.INSTALL, caller.name(), sessionId, pkg, label != null ? label : labelOf(pkg, pkg), dir, status, mode);
         boolean silent = packages.holds(caller.name(), INSTALL_PACKAGES) || pkg.equals(approved);
-        System.out.println("[apklayer-hub] install of " + pkg + " committed by " + caller.name() + " (session " + sessionId + ", " + count + " APKs" + (silent ? ", no question needed" : "") + ")");
+        System.out.println("[apklayer-hub] install of " + pkg + " committed by " + caller.name() + " (session " + sessionId + ", " + apks.size() + " APKs" + (silent ? ", no question needed" : "") + ")");
         if (silent) submit(() -> install(request));
         else if (now) submit(() -> confirmed(request));
         else askLater(request);
@@ -103,7 +129,7 @@ final class HubInstaller {
         if (!sessions.owns(caller.name(), sessionId)) throw new SecurityException("Caller has no access to session " + sessionId);
         String denied = mayRequest(caller.name(), REQUEST_INSTALL, 26);
         if (denied != null) { send(status, sessionId, pkg, PackageInstaller.STATUS_FAILURE, denied, null); return; }
-        askLater(new Request(Kind.PREAPPROVE, caller.name(), sessionId, pkg, label != null ? label : labelOf(pkg, pkg), null, status));
+        askLater(new Request(Kind.PREAPPROVE, caller.name(), sessionId, pkg, label != null ? label : labelOf(pkg, pkg), null, status, MODE_FULL_INSTALL));
     }
 
     void uninstall(HubDirectory.Peer caller, String pkg, IBinder status, boolean now) {
@@ -111,7 +137,7 @@ final class HubInstaller {
         if (packages.system(pkg)) { send(status, 0, pkg, PackageInstaller.STATUS_FAILURE_BLOCKED, "DELETE_FAILED_SYSTEM_APP: " + pkg + " is part of the system", null); return; }
         String denied = mayRequest(caller.name(), REQUEST_DELETE, 28);
         if (denied != null) { send(status, 0, pkg, PackageInstaller.STATUS_FAILURE, denied, null); return; }
-        Request request = new Request(Kind.UNINSTALL, caller.name(), 0, pkg, labelOf(pkg, pkg), null, status);
+        Request request = new Request(Kind.UNINSTALL, caller.name(), 0, pkg, labelOf(pkg, pkg), null, status, MODE_FULL_INSTALL);
         if (packages.holds(caller.name(), DELETE_PACKAGES)) submit(() -> remove(request));
         else if (now) submit(() -> confirmed(request));
         else askLater(request);
@@ -195,13 +221,111 @@ final class HubInstaller {
         return "Installer " + caller + " does not declare " + permission;
     }
 
+    record InstallApk(Path path, String pkg, String split, long version) {
+        static InstallApk read(Path path) throws PackageParser.PackageParserException {
+            PackageParser.ApkLite lite = PackageParser.parseApkLite(path.toFile(), 0);
+            return new InstallApk(path, lite.packageName, lite.splitName, lite.getLongVersionCode());
+        }
+    }
+
+    /** Key by manifest split name, with null representing the base. The CLI still verifies certificates and update policy. */
+    static List<Path> mergeInherited(String pkg, List<InstallApk> installed, List<InstallApk> staged, List<String> removals) throws IOException {
+        Map<String, InstallApk> effective = indexApks(pkg, installed);
+        Map<String, InstallApk> additions = indexApks(pkg, staged);
+        if (additions.isEmpty() && removals.isEmpty()) throw new IOException("No APKs or split removals");
+        for (String split : removals) {
+            if (additions.containsKey(split) || effective.remove(split) == null)
+                throw new IOException("Cannot remove split " + split);
+        }
+        effective.putAll(additions);
+        InstallApk base = effective.get(null);
+        if (base == null) throw new IOException("No base APK for " + pkg);
+        List<Path> result = new ArrayList<>(List.of(base.path()));
+        for (InstallApk apk : effective.values()) {
+            if (apk.version() != base.version()) throw new IOException("Mismatched version for split " + apk.split());
+            if (apk.split() != null) result.add(apk.path());
+        }
+        return result;
+    }
+
+    private static Map<String, InstallApk> indexApks(String pkg, List<InstallApk> apks) throws IOException {
+        Map<String, InstallApk> index = new LinkedHashMap<>();
+        for (InstallApk apk : apks) {
+            if (!pkg.equals(apk.pkg()) || index.putIfAbsent(apk.split(), apk) != null)
+                throw new IOException("Unexpected package or duplicate split in " + apk.path());
+        }
+        return index;
+    }
+
+    private record FileStamp(Object key, java.nio.file.attribute.FileTime modified, long size) {
+        static FileStamp read(Path path) throws IOException {
+            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+            return new FileStamp(attrs.fileKey(), attrs.lastModifiedTime(), attrs.size());
+        }
+    }
+
+    private static List<Path> installedApks(Path dir) throws IOException {
+        try (var files = Files.list(dir)) {
+            return files.filter(path -> path.getFileName().toString().matches("base\\.apk|split_.+\\.apk")).sorted().toList();
+        }
+    }
+
+    /** Resolve on the installer queue, after confirmation and prior queued installs. Copy into private staging so CLI inputs stay stable. */
+    private List<Path> inherit(Request request, Path snapshot) throws IOException, PackageParser.PackageParserException {
+        List<InstallApk> staged = new ArrayList<>();
+        List<String> removals = HubInstallSessions.removedSplits(request.staged);
+        for (Path apk : HubInstallSessions.apks(request.staged)) {
+            Path copy = snapshot.resolve("staged-" + staged.size() + ".apk");
+            staged.add(InstallApk.read(Files.copy(apk, copy)));
+        }
+        List<InstallApk> inherited = new ArrayList<>();
+        Path dir = Path.of(System.getProperty("apklayer.apps"), request.pkg);
+        Path published = dir.resolve("info.properties");
+        if (Files.exists(dir)) {
+            FileStamp generation = FileStamp.read(published);
+            List<Path> paths = installedApks(dir);
+            Map<Path, FileStamp> stamps = new HashMap<>();
+            for (Path apk : paths) stamps.put(apk, FileStamp.read(apk));
+            for (Path apk : paths) {
+                Path copy = snapshot.resolve("installed-" + inherited.size() + ".apk");
+                inherited.add(InstallApk.read(Files.copy(apk, copy)));
+            }
+            if (!generation.equals(FileStamp.read(published)) || !paths.equals(installedApks(dir)))
+                throw new IOException("Installed package changed while resolving splits");
+            for (Path apk : paths) {
+                if (!stamps.get(apk).equals(FileStamp.read(apk))) throw new IOException("Installed APK changed: " + apk);
+            }
+        }
+        return mergeInherited(request.pkg, inherited, staged, removals);
+    }
+
     private void install(Request request) {
         boolean update = packages.get(request.pkg) != null;
         List<String> command = new ArrayList<>(List.of(System.getProperty("apklayer.cli"), "install", "--installer", request.installer()));
-        try { HubInstallSessions.apks(request.staged).forEach(apk -> command.add(apk.toString())); }
-        catch (IOException failure) { send(request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_FAILURE, failure.toString(), null); return; }
+        Path snapshot = null;
         int[] exit = {0};
-        String output = run(command, exit);
+        String output;
+        try {
+            List<Path> apks;
+            if (request.mode == MODE_INHERIT_EXISTING) {
+                snapshot = Files.createTempDirectory(Files.createDirectories(staging), "inherit-");
+                apks = inherit(request, snapshot);
+            } else {
+                apks = HubInstallSessions.apks(request.staged);
+            }
+            apks.forEach(apk -> command.add(apk.toString()));
+            output = run(command, exit);
+        } catch (IOException | PackageParser.PackageParserException failure) {
+            if (request.mode == MODE_INHERIT_EXISTING) {
+                finish(request.staged, request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_FAILURE_INVALID,
+                        "INSTALL_FAILED_INVALID_APK: " + failure.getMessage());
+            } else {
+                send(request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_FAILURE, failure.toString(), null);
+            }
+            return;
+        } finally {
+            delete(snapshot);
+        }
         delete(request.staged);
         if (exit[0] != 0) {
             int status = exit[0] == 3 ? PackageInstaller.STATUS_FAILURE_CONFLICT : exit[0] == 4 || exit[0] == 5 ? PackageInstaller.STATUS_FAILURE_INVALID : exit[0] == 6 ? PackageInstaller.STATUS_FAILURE_INCOMPATIBLE : PackageInstaller.STATUS_FAILURE;  // cli/apps.h kInstall*

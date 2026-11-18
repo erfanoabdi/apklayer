@@ -1,8 +1,8 @@
 package apklayer.host;
 
+import android.content.pm.PackageInstaller.SessionParams;
 import android.os.IBinder;
 import android.os.Parcel;
-import android.os.ParcelFileDescriptor;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
@@ -36,8 +36,10 @@ final class HubInstallSessions {
         int op = request.readInt();
         switch (op) {
             case CREATE -> {
+                int mode = request.readInt();
                 String pkg = request.readString(), label = request.readString(); request.enforceNoDataAvail();
-                reply.writeNoException(); reply.writeInt(create(caller.name(), pkg, label));
+                int id = create(caller.name(), pkg, label, mode);
+                reply.writeNoException(); reply.writeInt(id);
             }
             case INFO -> {
                 int id = request.readInt(); request.enforceNoDataAvail();
@@ -54,7 +56,7 @@ final class HubInstallSessions {
             }
             case OPEN_WRITE -> {
                 int id = request.readInt(); String name = request.readString(); long offset = request.readLong(); request.enforceNoDataAvail();
-                if (!name.matches("[A-Za-z0-9_.-]+") || name.matches("\\.\\.?|session\\.properties.*")) throw new IllegalArgumentException("Invalid name: " + name);
+                if (!name.matches("[A-Za-z0-9_.-]+") || name.matches("\\.\\.?|session\\.properties.*|.*\\.removed")) throw new IllegalArgumentException("Invalid name: " + name);
                 Path dir = open(caller, id);
                 try (RandomAccessFile file = new RandomAccessFile(dir.resolve(name).toFile(), "rw")) {
                     file.seek(Math.max(0, offset));  // the descriptor shares this position: writing goes on from the offset, as the session's file on Android
@@ -63,11 +65,17 @@ final class HubInstallSessions {
             }
             case NAMES -> {
                 int id = request.readInt(); request.enforceNoDataAvail();
-                reply.writeNoException(); reply.writeStringArray(apks(owned(caller, id)).stream().map(p -> p.getFileName().toString()).toArray(String[]::new));
+                reply.writeNoException(); reply.writeStringArray(names(caller, id).stream().map(p -> p.getFileName().toString()).toArray(String[]::new));
             }
             case REMOVE -> {
                 int id = request.readInt(); String name = request.readString(); request.enforceNoDataAvail();
-                if (name.matches("[A-Za-z0-9_.-]+") && !name.matches("\\.\\.?|session\\.properties.*")) Files.deleteIfExists(open(caller, id).resolve(name));
+                Path dir = open(caller, id);
+                if (name == null || !name.matches("[A-Za-z0-9_.]+") || name.equals(".") || name.equals(".."))
+                    throw new IllegalArgumentException("Invalid split name: " + name);
+                Properties session = read(id);
+                if (mode(session) != SessionParams.MODE_INHERIT_EXISTING || session.getProperty("package") == null)
+                    throw new IllegalStateException("Removing a split requires an inherit session with a target package");
+                Files.write(dir.resolve(name + ".removed"), new byte[0]);
                 reply.writeNoException();
             }
             case ABANDON -> {
@@ -81,7 +89,7 @@ final class HubInstallSessions {
                 // committed, it stays a session (getSessionInfo, isCommitted) until its final status, across hub restarts; a commit again (a new status
                 // receiver, as PackageInstallerSession.markAsSealed allows) asks the person again
                 if (session.setProperty("committed", "true") == null) store(id, session);
-                installer.commitSession(caller, id, session.getProperty("package"), session.getProperty("label"), session.getProperty("preapproved"), dir, apks(dir), status);
+                installer.commitSession(caller, id, session.getProperty("package"), session.getProperty("label"), session.getProperty("preapproved"), mode(session), dir, status);
                 reply.writeNoException();
             }
             default -> throw new IllegalArgumentException("Unknown install session operation " + op);
@@ -99,7 +107,9 @@ final class HubInstallSessions {
     /** Whether the installer owns this session (requestUserPreapproval is for its own). */
     boolean owns(String installer, int id) { Properties session = read(id); return session != null && installer.equals(session.getProperty("installer")); }
 
-    private int create(String installer, String pkg, String label) throws IOException {
+    private int create(String installer, String pkg, String label, int mode) throws IOException {
+        if (mode != SessionParams.MODE_FULL_INSTALL && mode != SessionParams.MODE_INHERIT_EXISTING)
+            throw new IllegalArgumentException("Invalid install session mode: " + mode);
         Files.createDirectories(root);
         for (;;) {
             int id = random.nextInt(Integer.MAX_VALUE - 1) + 1;
@@ -107,6 +117,7 @@ final class HubInstallSessions {
             catch (java.nio.file.FileAlreadyExistsException taken) { continue; }
             Properties session = new Properties();
             session.setProperty("installer", installer);
+            session.setProperty("mode", Integer.toString(mode));
             if (pkg != null) session.setProperty("package", pkg);
             if (label != null) session.setProperty("label", label);
             store(id, session);
@@ -119,6 +130,11 @@ final class HubInstallSessions {
         Path dir = owned(caller, id);
         if (read(id).getProperty("committed") != null) throw new SecurityException("Session " + id + " is already committed");
         return dir;
+    }
+
+    private List<Path> names(HubDirectory.Peer caller, int id) throws IOException {
+        Path dir = owned(caller, id);
+        return mode(read(id)) == SessionParams.MODE_INHERIT_EXISTING ? entries(dir) : apks(dir);
     }
 
     private Properties read(int id) {
@@ -142,19 +158,33 @@ final class HubInstallSessions {
     /** The session's APKs: PackageInstallerSession's sAddedApkFilter leaves out dex metadata (.dm, Play Store sends one with an app; no ART
      *  here to use its profile), fs-verity signatures, checksum files and remove markers. */
     static List<Path> apks(Path dir) throws IOException {
+        return entries(dir).stream().filter(f -> !f.getFileName().toString().endsWith(".removed")).toList();
+    }
+
+    static List<String> removedSplits(Path dir) throws IOException {
+        return entries(dir).stream().map(f -> f.getFileName().toString()).filter(n -> n.endsWith(".removed"))
+                .map(n -> n.substring(0, n.length() - ".removed".length())).toList();
+    }
+
+    private static List<Path> entries(Path dir) throws IOException {
         try (var files = Files.list(dir)) { return files.filter(f -> !Files.isDirectory(f) && !auxiliary(f.getFileName().toString())).sorted().toList(); }
     }
 
     private static boolean auxiliary(String name) {
         return name.startsWith("session.properties") || name.endsWith(".dm") || name.endsWith(".fsv_sig") || name.endsWith(".digests")
-            || name.endsWith(".signature") || name.endsWith(".removed");
+            || name.endsWith(".signature");
     }
 
-    /** A SessionInfo's fields (ShadowHostPackageInstaller makes one of them): present, then id, installer, package, label, committed. */
+    static int mode(Properties session) {
+        return Integer.parseInt(session.getProperty("mode", Integer.toString(SessionParams.MODE_FULL_INSTALL)));
+    }
+
+    /** A SessionInfo's fields (ShadowHostPackageInstaller makes one of them): present, then id, installer, package, label, committed, mode. */
     private static void write(Parcel reply, int id, Properties session) {
         reply.writeBoolean(session != null);
         if (session == null) return;
         reply.writeInt(id); reply.writeString(session.getProperty("installer")); reply.writeString(session.getProperty("package")); reply.writeString(session.getProperty("label"));
         reply.writeBoolean(session.getProperty("committed") != null);
+        reply.writeInt(mode(session));
     }
 }
