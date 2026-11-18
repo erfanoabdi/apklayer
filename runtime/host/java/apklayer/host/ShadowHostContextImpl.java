@@ -53,8 +53,16 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         Context app = Shadow.directlyOn(real, "android.app.ContextImpl", "getApplicationContext");
         return app != null ? app : android.app.ActivityThread.currentApplication();
     }
-    /** The app's own class loader (AppClassLoader), as LoadedApk's on Android; Robolectric answers with the sandbox's. */
+    /** Keeps the process app loader for local contexts and uses the framework context flags for foreign code. */
     @Implementation @Override protected ClassLoader getClassLoader() {
+        android.app.LoadedApk apk = ReflectionHelpers.getField(real, "mPackageInfo");
+        if (ShadowHostLoadedApk.isForeign(apk)) {
+            ClassLoader explicit = ReflectionHelpers.getField(real, "mClassLoader");
+            if (explicit != null) return explicit;
+            ShadowHostLoadedApk shadow = Shadow.extract(apk);
+            ClassLoader foreign = shadow.classLoaderForContext(ReflectionHelpers.<Integer>getField(real, "mFlags"));
+            return foreign != null ? foreign : Shadow.directlyOn(real, "android.app.ContextImpl", "getClassLoader");
+        }
         return AppClassLoader.app != null ? AppClassLoader.app : super.getClassLoader();
     }
     @Implementation protected Object getSystemService(String name) {
