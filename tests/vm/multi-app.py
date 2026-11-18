@@ -42,7 +42,9 @@ stop()
 try:
     for package in PACKAGES:
         steps = '+'.join(f'{t}:clipcopy:{package}-{t}' for t in range(1000, 21000, 2000))
-        env = dict(ENV, APKLAYER_JOPTS='-Dapklayer.runms=22000 -Dapklayer.script=' + steps)
+        # Saved JVM options must leave each app on the display the launcher created for it.
+        env = dict(ENV, APKLAYER_JOPTS='-Dapklayer.layerstack=0 -Dapklayer.displaywindow=stale -Dapklayer.shell=/no-apklayer-shell '
+                   '-Dapklayer.runms=22000 -Dapklayer.script=' + steps)
         p = subprocess.Popen(['bin/apklayer', 'run', package], env=env, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, start_new_session=True)
         processes[package] = p

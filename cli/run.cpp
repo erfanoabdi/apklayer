@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <string_view>
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -42,6 +43,12 @@ void webviewSandboxOff(const Instance& inst) {
 // The title of a launch's window (its virtual display's): identifies instance and launch. Cut to the host display HAL's title limit.
 std::string windowTitle(const Instance& inst, const std::string& launcher, const std::string& package) {
     return ("apklayer:" + launcher + ":" + inst.id + ":" + package).substr(0, 60);
+}
+
+// The launcher assigns these properties to both ends of the window or keeps them unset for a component host.
+bool isWindowRoutingOption(std::string_view option) {
+    std::string_view name = option.substr(0, option.find('='));
+    return name == "-Dapklayer.layerstack" || name == "-Dapklayer.displaywindow" || name == "-Dapklayer.shell";
 }
 
 // The Android process a window JVM of the package runs: its command line once named (AppEnvironment.startRuntime), its option before that, else the package's.
@@ -143,7 +150,7 @@ std::vector<std::string> windowJvmArgs(const Layout& l, const Instance& inst, Na
     if (!provider.empty()) jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));  // its classes get a loader of their own (ShadowHostWebViewFactory)
     if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");
     for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' '))
-        if (!o.empty() && o.rfind("-Dapklayer.runms=", 0) != 0) jvm.push_back(o);  // the run time is the launch's own (launchOptions)
+        if (!o.empty() && o.rfind("-Dapklayer.runms=", 0) != 0 && !isWindowRoutingOption(o)) jvm.push_back(o);  // run time belongs to the launch (launchOptions)
     jvm.insert(jvm.end(), {"-cp", hostClasspath(l), "apklayer.host.Main"});
     return jvm;
 }
@@ -154,7 +161,8 @@ namespace {
 std::vector<std::string> launchOptions(const std::vector<std::string>& window, const std::vector<std::string>& own) {
     std::vector<std::string> a = window;
     a.insert(a.end(), own.begin(), own.end());
-    for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (o.rfind("-D", 0) == 0) a.push_back(o);
+    for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' '))
+        if (o.rfind("-D", 0) == 0 && !isWindowRoutingOption(o)) a.push_back(o);
     return a;
 }
 }  // namespace
