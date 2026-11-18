@@ -159,6 +159,28 @@ class SwitchTest(unittest.TestCase):
         self.assertIn("Phonesky.apk", self.switch("gapps", success=False))
         self.assertFalse((self.root / "calls").exists())
 
+    def test_gapps_unpack_failure_preserves_microg_until_retry(self):
+        provider_data = b"existing microG data"
+        for package in [SERVICES, STORE]:
+            self.seed(package, MICROG)
+            (self.apps / package / "fixture-data").write_bytes(provider_data)
+
+        # switch() pins the hash of these bytes so the failure happens in the unpacker.
+        self.bundle.write_bytes(b"not a ZIP archive")
+        self.assertIn("Unpacking the Google apps failed", self.switch("gapps", success=False))
+        self.assertFalse((self.root / "calls").exists())
+        self.assertFalse(self.marker.exists())
+        for package in [SERVICES, STORE]:
+            installed = self.apps / package
+            self.assertEqual((installed / "info.properties").read_text(), metadata(package, MICROG, 1000))
+            self.assertEqual((installed / "fixture-data").read_bytes(), provider_data)
+
+        self.make_bundle()
+        self.switch("gapps")
+        self.assertEqual(self.marker.read_text().strip(), hashlib.sha256(self.bundle.read_bytes()).hexdigest())
+        for package in [SERVICES, STORE, FRAMEWORK]:
+            self.assertEqual((self.apps / package / "info.properties").read_text(), metadata(package, GOOGLE, 100))
+
     def test_missing_config_preserves_existing_marker_and_config(self):
         self.seed(SERVICES, MICROG)
         self.seed(STORE, MICROG)
