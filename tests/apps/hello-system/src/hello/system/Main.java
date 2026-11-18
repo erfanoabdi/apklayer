@@ -36,6 +36,7 @@ public final class Main extends Activity {
         CHECKS.put("sysprops", new SysPropsCheck());
         CHECKS.put("hiddenservices", new HiddenServicesCheck());
         CHECKS.put("accounts", new AccountsCheck());
+        CHECKS.put("accountnullbinding", new AccountNullBindingCheck());
         CHECKS.put("accountremoval", new AccountRemovalCheck());
         CHECKS.put("location", new LocationCheck());
         CHECKS.put("ime", new ImeCheck());

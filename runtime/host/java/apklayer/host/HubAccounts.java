@@ -132,41 +132,99 @@ final class HubAccounts extends IAccountManager.Stub {
         return o;
     }
 
-    /** AccountManagerService.Session: binds the type's authenticator through the hub, runs one call, hands its answer to the client and unbinds. */
-    private void session(String type, IAccountManagerResponse response, Call call, java.util.function.Consumer<Bundle> onResult) {
-        session(caller(), type, response, call, onResult);
+    /** Bind the type's authenticator and keep interactive requests open until their final reply. */
+    private void session(String type, IAccountManagerResponse response, boolean expectActivityLaunch,
+            Call call, java.util.function.Consumer<Bundle> onResult) {
+        session(caller(), type, response, expectActivityLaunch, call, onResult);
     }
-    private void session(HubDirectory.Peer caller, String type, IAccountManagerResponse response, Call call, java.util.function.Consumer<Bundle> onResult) {
+
+    private void session(HubDirectory.Peer caller, String type, IAccountManagerResponse response,
+            boolean expectActivityLaunch, Call call, java.util.function.Consumer<Bundle> onResult) {
         HubAuthenticators.Authenticator authenticator = type == null ? null : authenticators.all().get(type);
         if (authenticator == null) { error(response, AccountManager.ERROR_CODE_BAD_ARGUMENTS, "no authenticator for account type " + type); return; }
-        IServiceConnection.Stub connection = new IServiceConnection.Stub() {
-            private boolean called;
+
+        class Connection extends IServiceConnection.Stub {
+            private boolean invoked;
+            private boolean finished;
+
             @Override public void connected(ComponentName name, IBinder service, IBinderSession session, boolean dead) {
-                synchronized (this) { if (service == null || called) return; called = true; }
+                if (dead || service == null) {
+                    fail(AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "authenticator unavailable for " + type);
+                    return;
+                }
+                synchronized (this) {
+                    if (invoked || finished) return;
+                    invoked = true;
+                }
                 try {
                     call.run(IAccountAuthenticator.Stub.asInterface(service), new IAccountAuthenticatorResponse.Stub() {
-                        private final java.util.concurrent.atomic.AtomicBoolean answered = new java.util.concurrent.atomic.AtomicBoolean();
-                        // AccountManagerService.Session.getResponseAndClose: the client gets one answer; a second onResult/onError of the authenticator is dropped
-                        @Override public void onResult(Bundle result) {
-                            if (answered.getAndSet(true)) return;
-                            if (result != null && onResult != null) onResult.accept(result);
-                            reply(response, result);
-                            done();
-                        }
+                        @Override public void onResult(Bundle result) { deliver(result); }
                         @Override public void onRequestContinued() { /* the authenticator answers later */ }
-                        @Override public void onError(int code, String message) { if (answered.getAndSet(true)) return; error(response, code, message); done(); }
+                        @Override public void onError(int code, String message) { fail(code, message); }
                     });
                 } catch (RemoteException | RuntimeException failure) {
-                    error(response, AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "authenticator of " + type + ": " + failure);
+                    fail(AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "cannot invoke authenticator for " + type);
+                }
+            }
+
+            private synchronized void deliver(Bundle result) {
+                if (finished) return;
+                boolean interactive;
+                try {
+                    interactive = expectActivityLaunch && result != null
+                            && result.getParcelable(AccountManager.KEY_INTENT, Intent.class) != null;
+                } catch (RuntimeException failure) {
+                    fail(AccountManager.ERROR_CODE_INVALID_RESPONSE, "invalid authenticator intent for " + type);
+                    return;
+                }
+                if (interactive) {
+                    reply(response, result);
+                    return;
+                }
+
+                finished = true;
+                try {
+                    if (result != null && onResult != null) {
+                        try {
+                            onResult.accept(result);
+                        } catch (RuntimeException failure) {
+                            error(response, AccountManager.ERROR_CODE_INVALID_RESPONSE, "invalid authenticator result for " + type);
+                            return;
+                        }
+                    }
+                    reply(response, result);
+                } finally {
                     done();
                 }
             }
-            private void done() { bindings.unbind(caller, asBinder()); }
-        };
+
+            private synchronized void fail(int code, String message) {
+                if (finished) return;
+                finished = true;
+                try {
+                    error(response, code, message);
+                } finally {
+                    done();
+                }
+            }
+
+            private void done() {
+                try {
+                    bindings.unbind(caller, asBinder());
+                } catch (IllegalArgumentException alreadyRemoved) {
+                    // A rejected bind, failed launch or departed caller may leave no binding to release.
+                }
+            }
+        }
+        Connection connection = new Connection();
         Intent intent = new Intent(AccountManager.ACTION_AUTHENTICATOR_INTENT).setComponent(authenticator.service());
-        // as AccountManagerService binds from system_server: Play services' authenticator (its AccountAuthenticator service) is not exported
-        if (!bindings.bind(caller, intent, connection, Context.BIND_AUTO_CREATE, null, true))
-            error(response, AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "cannot bind the authenticator " + authenticator.service());
+        // Bind as the system because authenticators such as Play services may not be exported.
+        try {
+            if (bindings.bind(caller, intent, connection, Context.BIND_AUTO_CREATE, null, true)) return;
+        } catch (RuntimeException failure) {
+            // A bind can fail after registering its connection. Use the same cleanup path.
+        }
+        connection.fail(AccountManager.ERROR_CODE_REMOTE_EXCEPTION, "cannot bind the authenticator " + authenticator.service());
     }
 
     // The store
@@ -208,7 +266,7 @@ final class HubAccounts extends IAccountManager.Stub {
     /** AccountManagerService.RemoveAccountSession: the authenticator's getAccountRemovalAllowed decides; an allowed removal answers whether the store had it. */
     @Override public void removeAccountAsUser(IAccountManagerResponse response, Account account, boolean expectActivityLaunch, int userId) {
         owner(account.type);
-        session(account.type, response, (a, r) -> a.getAccountRemovalAllowed(r, account), result -> {
+        session(account.type, response, expectActivityLaunch, (a, r) -> a.getAccountRemovalAllowed(r, account), result -> {
             if (!result.getBoolean(AccountManager.KEY_BOOLEAN_RESULT) || result.containsKey(AccountManager.KEY_INTENT)) return;
             boolean removed = store.remove(account);
             if (removed) changed(account);
@@ -302,15 +360,16 @@ final class HubAccounts extends IAccountManager.Stub {
                     return;
                 }
                 store.update(account, e -> e.grants.add(grant));
-                token(caller, response, account, authTokenType, options, false);
+                token(caller, response, account, authTokenType, options, false, expectActivityLaunch);
             }, "hub-account-grant");
             ask.setDaemon(true);
             ask.start();
             return;
         }
-        token(caller, response, account, authTokenType, options, custom);
+        token(caller, response, account, authTokenType, options, custom, expectActivityLaunch);
     }
-    private void token(HubDirectory.Peer caller, IAccountManagerResponse response, Account account, String authTokenType, Bundle options, boolean custom) {
+    private void token(HubDirectory.Peer caller, IAccountManagerResponse response, Account account, String authTokenType, Bundle options,
+            boolean custom, boolean expectActivityLaunch) {
         String cached = custom ? null : store.read(account, e -> e.tokens.get(authTokenType));
         if (cached != null) {
             Bundle result = accountResult(account);
@@ -319,46 +378,46 @@ final class HubAccounts extends IAccountManager.Stub {
             return;
         }
         Bundle o = withCaller(options, caller);
-        session(caller, account == null ? null : account.type, response, (a, r) -> a.getAuthToken(r, account, authTokenType, o), result -> {
+        session(caller, account == null ? null : account.type, response, expectActivityLaunch, (a, r) -> a.getAuthToken(r, account, authTokenType, o), result -> {
             String token = result.getString(AccountManager.KEY_AUTHTOKEN);
             if (!custom && token != null) store.update(account, e -> e.tokens.put(authTokenType, token));  // AccountManagerService.saveAuthTokenToDatabase
         });
     }
     @Override public void addAccount(IAccountManagerResponse response, String accountType, String authTokenType, String[] requiredFeatures, boolean expectActivityLaunch, Bundle options) {
         Bundle o = withCaller(options, caller());
-        session(accountType, response, (a, r) -> a.addAccount(r, accountType, authTokenType, requiredFeatures, o), null);
+        session(accountType, response, expectActivityLaunch, (a, r) -> a.addAccount(r, accountType, authTokenType, requiredFeatures, o), null);
     }
     @Override public void addAccountAsUser(IAccountManagerResponse response, String accountType, String authTokenType, String[] requiredFeatures, boolean expectActivityLaunch, Bundle options, int userId) {
         addAccount(response, accountType, authTokenType, requiredFeatures, expectActivityLaunch, options);
     }
     @Override public void updateCredentials(IAccountManagerResponse response, Account account, String authTokenType, boolean expectActivityLaunch, Bundle options) {
-        session(account.type, response, (a, r) -> a.updateCredentials(r, account, authTokenType, options), null);
+        session(account.type, response, expectActivityLaunch, (a, r) -> a.updateCredentials(r, account, authTokenType, options), null);
     }
     @Override public void editProperties(IAccountManagerResponse response, String accountType, boolean expectActivityLaunch) {
-        session(accountType, response, (a, r) -> a.editProperties(r, accountType), null);
+        session(accountType, response, expectActivityLaunch, (a, r) -> a.editProperties(r, accountType), null);
     }
     @Override public void confirmCredentialsAsUser(IAccountManagerResponse response, Account account, Bundle options, boolean expectActivityLaunch, int userId) {
-        session(account.type, response, (a, r) -> a.confirmCredentials(r, account, options), null);
+        session(account.type, response, expectActivityLaunch, (a, r) -> a.confirmCredentials(r, account, options), null);
     }
     @Override public void getAuthTokenLabel(IAccountManagerResponse response, String accountType, String authTokenType) {
-        session(accountType, response, (a, r) -> a.getAuthTokenLabel(r, authTokenType), null);
+        session(accountType, response, false, (a, r) -> a.getAuthTokenLabel(r, authTokenType), null);
     }
     @Override public void hasFeatures(IAccountManagerResponse response, Account account, String[] features, int userId, String opPackageName) {
-        session(account.type, response, (a, r) -> a.hasFeatures(r, account, features), null);
+        session(account.type, response, false, (a, r) -> a.hasFeatures(r, account, features), null);
     }
     @Override public void startAddAccountSession(IAccountManagerResponse response, String accountType, String authTokenType, String[] requiredFeatures, boolean expectActivityLaunch, Bundle options) {
         Bundle o = withCaller(options, caller());
-        session(accountType, response, (a, r) -> a.startAddAccountSession(r, accountType, authTokenType, requiredFeatures, o), null);
+        session(accountType, response, expectActivityLaunch, (a, r) -> a.startAddAccountSession(r, accountType, authTokenType, requiredFeatures, o), null);
     }
     @Override public void startUpdateCredentialsSession(IAccountManagerResponse response, Account account, String authTokenType, boolean expectActivityLaunch, Bundle options) {
-        session(account.type, response, (a, r) -> a.startUpdateCredentialsSession(r, account, authTokenType, options), null);
+        session(account.type, response, expectActivityLaunch, (a, r) -> a.startUpdateCredentialsSession(r, account, authTokenType, options), null);
     }
     @Override public void finishSessionAsUser(IAccountManagerResponse response, Bundle sessionBundle, boolean expectActivityLaunch, Bundle appInfo, int userId) {
         String type = sessionBundle == null ? null : sessionBundle.getString(AccountManager.KEY_ACCOUNT_TYPE);
-        session(type, response, (a, r) -> a.finishSession(r, type, sessionBundle), null);
+        session(type, response, expectActivityLaunch, (a, r) -> a.finishSession(r, type, sessionBundle), null);
     }
     @Override public void isCredentialsUpdateSuggested(IAccountManagerResponse response, Account account, String statusToken) {
-        session(account.type, response, (a, r) -> a.isCredentialsUpdateSuggested(r, account, statusToken), null);
+        session(account.type, response, false, (a, r) -> a.isCredentialsUpdateSuggested(r, account, statusToken), null);
     }
     /** The visible accounts of the type that have the features: the authenticator's hasFeatures for each (AccountManagerService.GetAccountsByTypeAndFeatureSession). */
     @Override public void getAccountsByFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
@@ -386,6 +445,6 @@ final class HubAccounts extends IAccountManager.Stub {
                 withFeatures(caller, type, accounts, features, i + 1, found, response, done);
             }
             @Override public void onError(int code, String message) { error(response, code, message); }
-        }, (a, r) -> a.hasFeatures(r, accounts[i], features), null);
+        }, false, (a, r) -> a.hasFeatures(r, accounts[i], features), null);
     }
 }
