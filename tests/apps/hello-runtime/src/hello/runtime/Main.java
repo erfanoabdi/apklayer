@@ -1,6 +1,10 @@
 package hello.runtime;
 
 import android.app.Activity;
+import android.app.usage.NetworkStats;
+import android.app.usage.NetworkStatsManager;
+import android.content.Context;
+import android.net.ConnectivityManager;
 import android.os.Bundle;
 import android.widget.TextView;
 import java.lang.invoke.MethodHandle;
@@ -23,6 +27,7 @@ public final class Main extends Activity {
         TextView text = new TextView(this);
         setContentView(text);
         try {
+            networkStats();
             properties();
             ArtRuntimeChecks.run();
             LoaderChecks.run(this);
@@ -36,6 +41,21 @@ public final class Main extends Activity {
             System.out.println("[hello-runtime] Runtime identity FAIL " + failure);
         }
     }
+    private void networkStats() throws Exception {
+        Object namedService = getSystemService(Context.NETWORK_STATS_SERVICE);
+        check(namedService instanceof NetworkStatsManager, "named NetworkStatsManager lookup");
+        NetworkStatsManager manager = getSystemService(NetworkStatsManager.class);
+        check(manager != null, "typed NetworkStatsManager lookup");
+
+        // The host fallback has no usage records. A fixed Wi-Fi query needs no network or SIM.
+        try (NetworkStats stats = manager.querySummary(ConnectivityManager.TYPE_WIFI, null,
+                1_700_000_000_000L, 1_700_000_060_000L)) {
+            check(stats != null, "NetworkStatsManager returned a summary");
+            check(!stats.hasNextBucket(), "host network summary is empty");
+        }
+        System.out.println("[hello-runtime] NetworkStatsManager fallback PASS");
+    }
+
     private static void properties() throws Throwable {
         if (Boolean.getBoolean("hello.runtime.flag")) {
             check(Boolean.getBoolean("java.net.preferIPv4Stack"), "application java.net flag preserved");
