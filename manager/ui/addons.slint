@@ -28,6 +28,16 @@ export component AddonsSection {
                         clickable: false;
                         if a.installed && a.complete && !a.running : Tag { text: "Installed"; }
                     }
+                    if !a.running && a.detail != "" : HorizontalLayout {
+                        padding-left: MaterialStyleMetrics.padding_16;
+                        padding-right: MaterialStyleMetrics.padding_16;
+                        MaterialText {
+                            text: a.detail;
+                            style: MaterialTypography.body_medium;
+                            color: MaterialPalette.on_surface_variant;
+                            wrap: word-wrap;
+                        }
+                    }
                     if a.running : LinearProgressIndicator {
                         height: MaterialStyleMetrics.size_4;
                         progress: Backend.addon-progress;
@@ -46,11 +56,14 @@ export component AddonsSection {
                             clicked => { root.confirm("remove-addon", a.title); }
                         }
                         TonalButton {
-                            text: a.installed && a.complete ? "Update" : "Install";
+                            text: a.switch-provider ? "Switch…" : a.installed && a.complete ? "Update" : "Install";
                             icon: a.installed && a.complete ? AppIcons.refresh : AppIcons.add;
-                            accessible-label: (a.installed && a.complete ? "Update " : "Install ") + a.title;
+                            accessible-label: (a.switch-provider ? "Switch to " : a.installed && a.complete ? "Update " : "Install ") + a.title;
                             enabled: Backend.addon-running == "" && !Backend.busy;
-                            clicked => { Backend.addon-install(a.id); }
+                            clicked => {
+                                if a.switch-provider { root.confirm("switch-addon", a.title); }
+                                else { Backend.addon-install(a.id); }
+                            }
                         }
                     }
                 }

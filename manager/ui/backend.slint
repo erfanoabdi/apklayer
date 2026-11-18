@@ -16,7 +16,7 @@ export struct PermEntry { name: string, title: string, runtime: bool, granted: b
 // a first-run step (src/setup.cpp): id binder|runtime|instance|system-apps|microg|gapps|fdroid; state: "", "Done", "Failed", "Skipped"
 // an add-on of the Apps page (src/addons.cpp): id microg|gapps|fdroid; installed: any of its packages, complete: all of them; detail: what its
 // install or removal is doing; icon: the installed app's
-export struct AddonEntry { id: string, title: string, description: string, detail: string, version: string, icon: image, installed: bool, complete: bool, running: bool }
+export struct AddonEntry { id: string, title: string, description: string, detail: string, version: string, icon: image, installed: bool, complete: bool, running: bool, switch-provider: bool }
 
 export struct SetupStep { id: string, title: string, detail: string, state: string, running: bool }
 
@@ -44,7 +44,7 @@ export global Backend {
     in property <string> addon-running;    // the add-on whose install or removal runs ("" none): one at a time
     in property <string> addon-detail;
     in property <float> addon-progress;
-    callback addon-install(string);        // id: install, or update (the CLI skips what is current)
+    callback addon-install(string);        // id or title: install, update or confirmed switch
     callback addon-remove(string);         // id or title
     // the update banner (UpdateBanner): an update of apklayer or its runtime, or stale apps to convert again; title "" hides it
     in property <string> update-title;

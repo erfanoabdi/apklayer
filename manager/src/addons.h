@@ -3,6 +3,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 #include <string>
 
 #include "app.h"
@@ -24,6 +25,7 @@ private:
     std::function<void()> refresh_;
     std::function<void(const std::string&)> message_;
     Rows apps_;
+    std::map<std::string, std::string> feedback_;
 };
 
 }  // namespace manager
