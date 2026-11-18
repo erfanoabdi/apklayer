@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-18: Follow the monitor and reduce frame waits
+
+- The shell tracks refresh per Wayland output. Each window and its input client use their own output rate. The headless compositor clock uses the active window's output, so SurfaceFlinger can pace virtual displays on that clock.
+- Replace the earlier virtual display queue rewrite with the original frame notifications. Wait on the acquire fence once outside the release lock, update geometry asynchronously, and return unshown Wayland buffers when a newer frame replaces them before configure.
+- Reclaim released GBM buffers before the native GLES swap. Keep unsignaled buffers locked and block on a release only when GBM is out of free buffers. Cache native fence support for the process's GBM display.
+
 ## 2026-11-18: Keep virtual display releases moving during resize
 
 - PGR hit the six-buffer acquire limit during a drag resize and then logged SurfaceFlinger commit timeouts. The virtual display's socket reader handled resize and release callbacks, but resize waited for a synchronous commit. The present thread also held the sink lock while `acquireBuffer` waited for a fence by default.
@@ -3218,6 +3224,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - All owned test instances were checked clean on ARM and x86. The owner paused/cleared the goal and requested a handoff after current tasks finished. No additional build/test was launched afterward. Real Termux confirmation, Fennec painted content, remaining native launch APIs and broader runtime identity gaps remain open.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-18 - gsi_x86_64 display and EGL pacing
+- Sync the x86_64 EGL attach and window sources and the virtual display source. Replay the existing graph under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py` for `libapklayer_egl hals/graphics/egl EglAttach.cpp EglWindow.cpp` and `libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp`. Build the Linux shell with Meson/Ninja.
+
 ### 2026-11-18 - gsi_x86_64 libapklayer_vdisplay (resize and buffer release stalls)
 - Sync `hals/graphics/vdisplay/VirtualDisplay.cpp` and replay the existing x86_64 graph under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp`. The buffer wait change is contained in this module.
 - Result: built and installed in the NVIDIA PC's 0.5.0 runtime from vendor/apklayer `89b290d`. The 37168-byte library has SHA-256 `602f29db20681cf8e1e150d09a04f6b7f47ccf908d80ab4102d8e720a11ad58b`. The previous library is backed up beside it. The next PGR launch loaded the new library and changed size three times without a buffer limit error or commit timeout in its display log. Sustained resizing and the chapter menu's frame rate still need separate checks.

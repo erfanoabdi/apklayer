@@ -28,14 +28,41 @@ static void done(void *data, struct wl_callback *cb, uint32_t ms)
 }
 static const struct wl_callback_listener listener = { .done = done };
 
-void vsync_source_changed(void)
+static struct window *timing_window(void)
 {
     struct window *chosen = NULL;
-    if (pending()) for (int i = 0; i < MAX_WINDOWS; i++) {
+    for (int i = 0; i < MAX_WINDOWS; i++) {
         struct window *w = &windows[i];
         if (!w->client || !w->surface || !w->configured || w->minimized) continue;
         if (!chosen || w->activated || !chosen->activated) chosen = w;
     }
+    return chosen;
+}
+
+void client_display_refresh(struct client *c, int mhz)
+{
+    if (c->fd < 0 || c->refresh_mhz == mhz) return;
+    if (send_msg(c, MSG_DISPLAY, &(int32_t){ mhz }, 1) == 0) c->refresh_mhz = mhz;
+}
+
+void display_refresh_changed(void)
+{
+    int window_rates[MAX_CLIENTS] = { 0 };
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+        const struct window *w = &windows[i];
+        if (!w->client) continue;
+        int mhz = window_refresh_mhz(w);
+        window_rates[w->client - clients] = mhz;
+        if (w->proxy) window_rates[w->proxy - clients] = mhz;
+    }
+    int active_rate = window_refresh_mhz(timing_window());
+    for (int i = 0; i < MAX_CLIENTS; i++)
+        client_display_refresh(&clients[i], window_rates[i] ? window_rates[i] : active_rate);
+}
+
+void vsync_source_changed(void)
+{
+    struct window *chosen = pending() ? timing_window() : NULL;
     struct wl_surface *next = chosen ? chosen->surface : NULL;
     if (callback && source == next) return;
     if (callback) wl_callback_destroy(callback);

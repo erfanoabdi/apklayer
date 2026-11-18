@@ -32,13 +32,14 @@ static const struct wl_seat_listener seat_listener = { .capabilities = seat_caps
 struct wp_viewporter *viewporter;
 struct wp_fractional_scale_manager_v1 *fscale_mgr;
 #define MAX_OUTPUTS 8
-static struct out { struct wl_output *o; uint32_t name; int w, h, scale, mm_w, mm_h, tf; } outs[MAX_OUTPUTS];
+static struct out { struct wl_output *o; uint32_t name; int w, h, scale, mm_w, mm_h, tf, refresh_mhz; } outs[MAX_OUTPUTS];
 int output_tf;
 int output_px_w, output_px_h, output_mm_w, output_mm_h;
 
 static void outputs_changed(void)
 {
     int scale = 0, mw = 0, mh = 0;
+    output_refresh_mhz = 60000;
     output_px_w = output_px_h = output_mm_w = output_mm_h = 0;
     for (int i = 0; i < MAX_OUTPUTS; i++) {
         if (!outs[i].o) continue;
@@ -47,6 +48,8 @@ static void outputs_changed(void)
         if (outs[i].w / s * (outs[i].h / s) > mw * mh) {
             mw = outs[i].w / s; mh = outs[i].h / s;
             output_tf = outs[i].tf;
+            if (outs[i].refresh_mhz > 0) output_refresh_mhz = outs[i].refresh_mhz;
+            else output_refresh_mhz = 60000;
             output_px_w = outs[i].w; output_px_h = outs[i].h; output_mm_w = outs[i].mm_w; output_mm_h = outs[i].mm_h;
         }
     }
@@ -57,6 +60,14 @@ static void outputs_changed(void)
         if (windows[i].client && windows[i].shell_surface) wlshell_orient(&windows[i]);
     for (int i = 0; i < MAX_WINDOWS; i++)   /* style (auto), density, scale (without a per-surface preferred one) follow the outputs */
         if (windows[i].client) window_display_changed(&windows[i]);
+    display_refresh_changed();
+}
+
+int window_refresh_mhz(const struct window *w)
+{
+    if (w && w->out) for (int i = 0; i < MAX_OUTPUTS; i++)
+        if (outs[i].o == w->out && outs[i].refresh_mhz > 0) return outs[i].refresh_mhz;
+    return output_refresh_mhz;
 }
 
 /* The output w is on (its pixels and integer scale in percent), else the largest. */
@@ -76,6 +87,7 @@ int window_output_inject(struct window *w, int index)
     if (index >= 0 && !o) return -2;
     w->out = o;
     window_display_changed(w);
+    display_refresh_changed();
     return 0;
 }
 
@@ -86,21 +98,18 @@ static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int
 static void out_mode(void *d, struct wl_output *o, uint32_t f, int32_t w, int32_t h,
                      int32_t refresh)
 {
-    (void)o;
+    if (!(f & WL_OUTPUT_MODE_CURRENT)) return;
     struct out *out = d;
-    if ((f & WL_OUTPUT_MODE_CURRENT) && refresh > 0) output_refresh_mhz = refresh;
-    if (f & WL_OUTPUT_MODE_CURRENT) { out->w = w; out->h = h; }
+    out->w = w;
+    out->h = h;
+    out->refresh_mhz = refresh;
+    if (wl_output_get_version(o) < WL_OUTPUT_DONE_SINCE_VERSION) outputs_changed();
 }
 static void out_scale(void *d, struct wl_output *o, int32_t s)
 { (void)o; ((struct out *)d)->scale = s; }
 static void out_done(void *d, struct wl_output *o)
 {
     (void)d; (void)o;
-    static int told_refresh;
-    if (told_refresh != output_refresh_mhz) {   /* the output's mode changed: apps follow the real refresh rate */
-        told_refresh = output_refresh_mhz;
-        for (int i = 0; i < MAX_CLIENTS; i++) send_msg(&clients[i], MSG_DISPLAY, &(int32_t){ output_refresh_mhz }, 1);
-    }
     outputs_changed();
 }
 static const struct wl_output_listener out_listener = {
@@ -149,7 +158,7 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     } else if (!strcmp(iface, wl_output_interface.name)) {
         for (int i = 0; i < MAX_OUTPUTS; i++)
             if (!outs[i].o) {
-                outs[i] = (struct out){ wl_registry_bind(r, name, &wl_output_interface, ver < 2 ? ver : 2), name, 0, 0, 1, 0, 0 }; /* scale/done */
+                outs[i] = (struct out){ .o = wl_registry_bind(r, name, &wl_output_interface, ver < 2 ? ver : 2), .name = name, .scale = 1 };
                 wl_output_add_listener(outs[i].o, &out_listener, &outs[i]);
                 break;
             }

@@ -285,6 +285,7 @@ EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
     Window* win = windowOf(surface);
     if (!win) return host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, surface);
     if (!win->native) return EGL_TRUE;  // a pbuffer is never presented
+    if (win->attach && !importForcedToFail()) win->attach->reclaim(win->gbmSurface);
     EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, win->host);
     if (!ok) return ok;
     presentToWindow(dpy, *win);
@@ -299,8 +300,10 @@ int apklayer::egl::gpuFence(EGLDisplay dpy) {
     auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
     auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
     // a software driver (llvmpipe/kms_swrast) has no native fences: asking raises EGL_BAD_ATTRIBUTE, which HWUI then reads as its own error
-    const char* ext = host<const char* (*)(EGLDisplay, EGLint)>("eglQueryString")(dpy, EGL_EXTENSIONS);
-    bool native = ext && strstr(ext, "EGL_ANDROID_native_fence_sync");
+    static const bool native = [dpy] {  // this shim has one process-wide GBM display
+        const char* ext = host<const char* (*)(EGLDisplay, EGLint)>("eglQueryString")(dpy, EGL_EXTENSIONS);
+        return ext && strstr(ext, "EGL_ANDROID_native_fence_sync");
+    }();
     EGLSyncKHR sync = native && createSync && dupFence ? createSync(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr) : EGL_NO_SYNC_KHR;
     int fd = -1;
     if (sync != EGL_NO_SYNC_KHR) {

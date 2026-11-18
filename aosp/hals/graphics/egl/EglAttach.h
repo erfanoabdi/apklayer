@@ -5,6 +5,7 @@
 #include <system/window.h>
 
 #include <list>
+#include <ui/Fence.h>
 #include <ui/GraphicBuffer.h>
 
 namespace apklayer::egl {
@@ -15,6 +16,7 @@ namespace apklayer::egl {
 class WindowAttach {
   public:
     static WindowAttach* create(ANativeWindow* nw);  // null when the window is not a libgui Surface: the caller copies every frame
+    void reclaim(void* gs);  // return released buffers to GBM before the next host swap
     // Presents `bo`, the locked front buffer of gbm surface `gs` (w x h): true when it was queued (the bo is ours then). False: the caller copies the
     // frame into a buffer of the window, into *dst (already dequeued, its fence *dstFence) when that is set, else into one it dequeues.
     bool present(EGLDisplay dpy, void* gs, void* bo, uint32_t w, uint32_t h, ANativeWindowBuffer** dst, int* dstFence);
@@ -27,9 +29,9 @@ class WindowAttach {
         int format;
         android::sp<android::GraphicBuffer> buffer;
         bool queued;  // in the BufferQueue (attached, not yet detached)
+        android::sp<android::Fence> releaseFence;  // detached, but the consumer can still be reading it
     };
     explicit WindowAttach(ANativeWindow* nw) : mNative(nw) {}
-    void reclaim();
     void giveBack(std::list<Entry>::iterator e);
     std::list<Entry>::iterator find(ANativeWindowBuffer* b);
     std::list<Entry>::iterator entryFor(void* gs, void* bo, int format, uint32_t w, uint32_t h);

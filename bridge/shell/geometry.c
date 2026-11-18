@@ -115,6 +115,7 @@ static void apply_configure(struct window *w)
         window_layout(w);  /* before the first buffer: the compositor maps a window that already fits */
         window_send_configure(w);
         window_show_first(w);
+        display_refresh_changed();
         vsync_source_changed();
     } else if (w->resized || w->state_changed) {
         window_layout(w);
@@ -198,9 +199,9 @@ static const struct xdg_toplevel_listener top_listener = { .configure = top_conf
 
 /* The surface moved to another output (wl_surface.enter/leave): its size and scale are the app's screen. */
 static void surf_enter(void *d, struct wl_surface *s, struct wl_output *o)
-{ (void)s; struct window *w = d; w->out = o; window_display_changed(w); }
+{ (void)s; struct window *w = d; w->out = o; window_display_changed(w); display_refresh_changed(); }
 static void surf_leave(void *d, struct wl_surface *s, struct wl_output *o)
-{ (void)s; struct window *w = d; if (w->out == o) w->out = NULL; }
+{ (void)s; struct window *w = d; if (w->out == o) { w->out = NULL; display_refresh_changed(); } }
 static const struct wl_surface_listener surf_listener = { surf_enter, surf_leave };
 
 /* The compositor prefers another scale for the window (pref: percent, 0 = follow the outputs): the bars redraw, the app re-renders. */

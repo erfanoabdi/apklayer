@@ -174,20 +174,36 @@ std::list<WindowAttach::Entry>::iterator WindowAttach::find(ANativeWindowBuffer*
 // A buffer out of the queue: back to its gbm surface, or dropped when that surface is gone.
 void WindowAttach::giveBack(std::list<Entry>::iterator e) {
     e->queued = false;
+    e->releaseFence.clear();
     if (e->gs) gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(e->gs, e->bo);
     else mEntries.erase(e);
 }
 
 // Every buffer SurfaceFlinger released, out of the queue (an attach takes a free slot first, so a free buffer would otherwise stay there).
-void WindowAttach::reclaim() {
+void WindowAttach::reclaim(void* gs) {
+    for (auto e = mEntries.begin(); e != mEntries.end();) {
+        auto current = e++;
+        if (current->releaseFence != nullptr && current->releaseFence->wait(0) == android::OK) giveBack(current);
+    }
     for (int i = 0; i < 64; i++) {
         sp<GraphicBuffer> gb;
         sp<Fence> fence;
-        if (gui()->detachNext(mSurface, &gb, &fence) != android::OK || gb == nullptr) return;
+        if (gui()->detachNext(mSurface, &gb, &fence) != android::OK || gb == nullptr) break;
         auto e = find(gb->getNativeBuffer());
         if (e == mEntries.end()) continue;  // one the queue allocated for a copied frame: dropped
-        if (fence != nullptr && fence->isValid()) fence->wait(1000);
-        giveBack(e);
+        if (fence != nullptr && fence->isValid() && fence->wait(0) != android::OK) {
+            e->queued = false;
+            e->releaseFence = fence;
+        } else {
+            giveBack(e);
+        }
+    }
+    // Wait only if the host swap has no free buffer. A pending release from a retired surface cannot unblock it.
+    if (!gbmFn<int (*)(void*)>("gbm_surface_has_free_buffers")(gs)) {
+        auto blocked = std::find_if(mEntries.begin(), mEntries.end(), [gs](const Entry& entry) {
+            return entry.gs == gs && entry.releaseFence != nullptr;
+        });
+        if (blocked != mEntries.end() && blocked->releaseFence->wait(1000) == android::OK) giveBack(blocked);
     }
 }
 
@@ -200,20 +216,19 @@ std::list<WindowAttach::Entry>::iterator WindowAttach::entryFor(void* gs, void* 
     }
     sp<GraphicBuffer> gb = wrap(bo, w, h, format, kProducerUsage | mConsumerUsage);
     if (gb == nullptr) return mEntries.end();
-    mEntries.push_back({gs, bo, format, gb, false});
+    mEntries.push_back({gs, bo, format, gb, false, nullptr});
     return std::prev(mEntries.end());
 }
 
 void WindowAttach::surfaceGone(void* gs) {
     for (auto e = mEntries.begin(); e != mEntries.end();) {
         if (e->gs != gs) { ++e; continue; }
-        if (e->queued) { e->gs = nullptr; ++e; }
+        if (e->queued || e->releaseFence != nullptr) { e->gs = nullptr; ++e; }
         else e = mEntries.erase(e);
     }
 }
 
 bool WindowAttach::present(EGLDisplay dpy, void* gs, void* bo, uint32_t w, uint32_t h, ANativeWindowBuffer** dst, int* dstFence) {
-    reclaim();
     int format = 0, qw = 0, qh = 0;
     mNative->query(mNative, NATIVE_WINDOW_FORMAT, &format);
     mNative->query(mNative, NATIVE_WINDOW_WIDTH, &qw);  // the queue's own size (a resize changes it before the swap sees it)

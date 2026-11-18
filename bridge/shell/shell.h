@@ -45,7 +45,7 @@
  *                108 STATE          {i32 id, i32 flags}  bit0 = window active (focused), bit1 = minimized
  *                                    (apps pause on !active, stop on minimized, resume on active)
  *                114 DMABUF_RELEASE {i32 id, buf}: the compositor is done with that dmabuf buffer (it may be drawn into again)
- *                112 DISPLAY        {i32 refresh in mHz}: the output's refresh rate (sent at HELLO and when it changes)
+ *                112 DISPLAY        {i32 refresh in mHz}: the window's output rate, or the active output for the timing anchor
  *                113 VSYNC          {i32 id, i32 ms}: answer to VSYNC_REQUEST, the compositor's frame callback time (ms)
  *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100, i32 density dpi, i32 navigation bar px, i32 mobile style,
  *                                    i32 output w px, i32 output h px, i32 keyboard px}
@@ -133,6 +133,7 @@ enum { EV_DOWN = 0, EV_UP = 1, EV_MOVE = 2, EV_HOVER = 3, EV_SECONDARY = 4, EV_K
 #define NBUF 2
 struct client {
     int fd, pid;
+    int refresh_mhz;           /* last output rate sent to this client */
     char pkg[128];
     size_t last_clipboard_len;
     char *last_clipboard; /* per receiving JVM; focus changes must not suppress delivery */
@@ -236,7 +237,8 @@ extern struct qt_surface_extension *qt_surface_ext;  /* wlshell.c */
 extern struct wl_seat *seat;
 extern struct wp_viewporter *viewporter;                     /* registry.c */
 extern struct wp_fractional_scale_manager_v1 *fscale_mgr;
-extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
+extern int output_refresh_mhz;       /* largest output's refresh rate, 60000 until known */
+int window_refresh_mhz(const struct window *w);
 extern int output_tf;  /* the largest output's wl_output transform (Lipstick: its screen orientation) */
 extern int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known (fallback without configure_bounds) */
 extern int output_scale;                  /* percent: the largest integer wl_output scale (fallback without wp_fractional_scale_v1) */
@@ -272,7 +274,7 @@ void maliit_enable(struct window *w, int enable);  /* maliit.c: the host keyboar
 void maliit_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* the field's text around the cursor */
 void text_input_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* textinput.c: set_surrounding_text */
 void text_input_send(struct window *w, int before, int after, const char *commit, const char *preedit);  /* textinput.c: one MSG_IME */
-void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
+int send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
 void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd);  /* with fd (SCM_RIGHTS) unless it is < 0 */
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b);  /* client.c */
 void client_read(struct client *c);  /* client.c */
@@ -302,6 +304,8 @@ void window_frame(struct window *w, int buf, const int32_t *damage);  /* window.
 void client_vsync_request(struct client *c, int id); /* vsync.c */
 void client_vsync_forget(struct client *c);
 void vsync_source_changed(void);
+void display_refresh_changed(void);
+void client_display_refresh(struct client *c, int mhz);
 #define DMABUF_LINEAR_MAX 64
 extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (feedback.c) */
 extern int dmabuf_linear_n;

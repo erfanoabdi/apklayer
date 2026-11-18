@@ -4,14 +4,17 @@
 
 /* ---- sending to apps ---- */
 
-void send_msg(struct client *c, uint32_t type, const int32_t *v, int n)
+int send_msg(struct client *c, uint32_t type, const int32_t *v, int n)
 {
-    if (!c || c->fd < 0) return;
+    if (!c || c->fd < 0) return -1;
     uint32_t buf[2 + 16] = { type, (uint32_t)(n * 4) };
     memcpy(buf + 2, v, (size_t)n * 4);
-    if (write(c->fd, buf, 8 + (size_t)n * 4) < 0 && errno != EAGAIN) {
+    size_t size = 8 + (size_t)n * 4;
+    ssize_t written = write(c->fd, buf, size);
+    if (written < 0 && errno != EAGAIN) {
         fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno));
     }
+    return written == (ssize_t)size ? 0 : -1;
 }
 
 void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd)
@@ -80,7 +83,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         c->pid = v[0];
         snprintf(c->pkg, sizeof c->pkg, "%.*s", (int)(len - 4), (const char *)p + 4);
         fprintf(stderr, "[shell] %s (pid %d) connected\n", c->pkg, c->pid);
-        send_msg(c, MSG_DISPLAY, &(int32_t){ output_refresh_mhz }, 1);
+        display_refresh_changed();
         gamepad_client_hello(c);
         break;
     case MSG_WINDOW_CREATE: {

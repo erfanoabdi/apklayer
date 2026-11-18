@@ -86,6 +86,7 @@ void send_state(struct window *w)
 {
     int32_t v[2] = { W_ID(w), (w->activated ? 1 : 0) | (w->minimized ? 2 : 0) };
     send_msg(W_TARGET(w), MSG_STATE, v, 2);
+    display_refresh_changed();
     vsync_source_changed();
 }
 
@@ -189,6 +190,7 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         if (!w->client || w->client == c || strcmp(w->title, title) != 0) continue;
         w->proxy = c;
         w->proxy_id = own_id;
+        client_display_refresh(c, window_refresh_mhz(w));
         clipboard_push(w);
         fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
         if (c->dark) window_set_dark(w, c->dark == 2);
@@ -243,6 +245,7 @@ void window_destroy(struct window *w)
     if (w->shell_surface) wl_shell_surface_destroy(w->shell_surface);
     wl_surface_destroy(w->surface);
     memset(w, 0, sizeof *w);
+    display_refresh_changed();
     vsync_source_changed();
 }
 
