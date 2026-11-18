@@ -357,7 +357,7 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
     if (ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
         std::string file = join(inst.runtimeDir, "gles-angle.prop");
-        writeFile(file, "ro.hardware.egl=angle\ndebug.angle.backend=2\ndebug.renderengine.vulkan=true\n");
+        writeFile(file, "ro.hardware.egl=angle\ndebug.angle.backend=2\ndebug.renderengine.vulkan=false\n");
         propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
     }
     if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 3), deviceGraphicsProperties(inst));  // after the overrides' first copy
@@ -450,6 +450,19 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         s.argv = {l.btload(), bionicPath, lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
+        if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
+            // ANGLE cannot import Android HardwareBuffers through this host Vulkan HAL. Keep ANGLE for apps, and have
+            // SurfaceFlinger use apklayer's GBM/EGL buffer importer via bionic_translation's per-process library map.
+            std::string hostEglShare = join(inst.root, "host-egl/share");
+            std::string hostEglCfg = join(hostEglShare, "bionic_translation/cfg.d/host-egl.cfg");
+            makeDirs(dirName(hostEglCfg));
+            writeFile(hostEglCfg,
+                      "libEGL.so libapklayer_egl.so\n"
+                      "libGLESv1_CM.so libGLESv1_CM.so\n"
+                      "libGLESv2.so libGLESv2.so.2\n"
+                      "libGLESv3.so libGLESv2.so.2\n");
+            s.env["XDG_DATA_DIRS"] = hostEglShare + ":" + s.env["XDG_DATA_DIRS"];
+        }
         if (!backend.empty()) s.env["APKLAYER_HOST_LIBS"] += (s.env["APKLAYER_HOST_LIBS"].empty() ? "" : ":") + backend;  // a HAL front's backend (bridge/hals/<domain>)
         s.logFile = join(inst.logs(), name + ".log");
         return s;
