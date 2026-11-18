@@ -20,7 +20,7 @@ import java.util.zip.ZipFile;
 /**
  * Stages what `apklayer install` was given (one APK, a base APK and its splits, or an .apks/.xapk/.apkm archive) as Android installs a package:
  * base.apk and split_<split name>.apk in one directory (cli/apps.cpp; dex2jvm and VerifyInstall then read the splits' code beside base.apk).
- * Every APK's manifest names its package, versionCode and split; they must agree and there must be exactly one base, as PackageParser
+ * Every APK's manifest names its package, version and split; package and full version must agree and there must be exactly one base, as PackageParser
  * requires of a cluster. Config splits for another ABI are left out (the device installs only its own ABI's split); density and language
  * splits all stay: the AssetManager picks the best configuration among them at run time.
  *
@@ -53,7 +53,7 @@ public final class ApkSet {
             String[] m = manifest(apk);
             if (pkg == null) { pkg = m[0]; version = Long.parseLong(m[1]); }
             else if (!pkg.equals(m[0])) fail(apk + " is " + m[0] + ", not " + pkg);
-            else if (version != Long.parseLong(m[1])) fail(apk + " has versionCode " + m[1] + ", the others " + version);
+            else if (version != Long.parseLong(m[1])) fail(apk + " has long versionCode " + m[1] + ", the others " + version);
             if (m[2].isEmpty()) {
                 if (base != null) fail("two base APKs: " + base + " and " + apk);
                 base = apk.toString();
@@ -105,8 +105,8 @@ public final class ApkSet {
     }
 
     /**
-     * {package, versionCode, split} from the APK's binary AndroidManifest.xml: the attributes of its root element (ResXMLTree: a string pool,
-     * then a resource map that names android: attributes by id, then the elements). versionCode is read by its id (obfuscated manifests drop the name).
+     * {package, long versionCode, split} from the APK's binary AndroidManifest.xml: the attributes of its root element (ResXMLTree: a string pool,
+     * then a resource map that names android: attributes by id, then the elements). Both version fields are read by ID because obfuscated manifests can drop their names.
      */
     static String[] manifest(Path apk) throws IOException {
         byte[] xml;
@@ -125,16 +125,20 @@ public final class ApkSet {
             else if (type == 0x0180) { ids = new int[(size - header) / 4]; for (int i = 0; i < ids.length; i++) ids[i] = b.getInt(at + header + 4 * i); }
             else if (type == 0x0102) {  // the first start element: <manifest>
                 int attrs = at + header + (b.getShort(at + 24) & 0xffff), count = b.getShort(at + 28) & 0xffff;
-                String pkg = "", split = "", version = "0";
+                String pkg = "", split = "";
+                int versionCode = 0, versionCodeMajor = 0;
                 for (int i = 0; i < count; i++) {
                     int a = attrs + 20 * i, name = b.getInt(a + 4), raw = b.getInt(a + 8), dataType = b.get(a + 15) & 0xff, data = b.getInt(a + 16);
                     String key = name >= 0 && name < strings.size() ? strings.get(name) : "";
                     String value = raw >= 0 && raw < strings.size() ? strings.get(raw) : dataType == 0x03 && data >= 0 && data < strings.size() ? strings.get(data) : Integer.toUnsignedString(data);
-                    if (name >= 0 && name < ids.length && ids[name] == 0x0101021b) version = Integer.toUnsignedString(data);  // android:versionCode
+                    int id = name >= 0 && name < ids.length ? ids[name] : 0;
+                    if (id == 0x0101021b) versionCode = data;
+                    else if (id == 0x01010576) versionCodeMajor = data;
                     else if (key.equals("package")) pkg = value;
                     else if (key.equals("split")) split = value;
                 }
-                return new String[] {pkg, version, split};
+                long version = ((long) versionCodeMajor << 32) | Integer.toUnsignedLong(versionCode);
+                return new String[] {pkg, Long.toString(version), split};
             }
             at += size;
         }
