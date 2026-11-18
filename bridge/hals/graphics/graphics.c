@@ -20,6 +20,7 @@ struct apklayer_gfx {
     int fd;
     struct gbm_device *gbm;
     bool other_gpu;  /* not the compositor's GPU: window buffers must be importable there */
+    bool angle;      /* ANGLE GLES instance: do not apply host NVIDIA tiling workarounds */
 };
 
 static int open_node(const char *path)
@@ -65,6 +66,8 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
     struct apklayer_gfx *gfx = calloc(1, sizeof *gfx);
     if (!gfx) { close(fd); errno = ENOMEM; return NULL; }
     gfx->fd = fd;
+    const char *angle = getenv("APKLAYER_ANGLE_ACTIVE");
+    gfx->angle = angle && *angle;
     gfx->gbm = gbm_create_device(fd);
     if (gfx->gbm && !allocates(gfx->gbm)) {
         fprintf(stderr, "apklayer-gfx: %s allocates no buffers (no GPU driver): choose another GPU (apklayer gpus)\n", render_node ? render_node : "the render node");
@@ -184,7 +187,7 @@ static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t 
     if (gfx->other_gpu && (usage & APKLAYER_GFX_SCANOUT) && gbm_device_is_format_supported(gfx->gbm, fourcc, f | GBM_BO_USE_SCANOUT)) f |= GBM_BO_USE_SCANOUT;
     /* window buffers only (the composer's usage: a Surface the CPU draws through lock/unlock); every buffer is sampled (toGfxUsage), and an
      * app's own CPU-written textures (PGR's Unity uploads) are written in ways that bypass the map's GPU copy: tiled, they were noise */
-    if ((f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SCANOUT) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
+    if (!gfx->angle && (f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SCANOUT) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
         && !gfx->other_gpu  /* another GPU's compositor needs LINEAR */
         && apklayer_gfx_transfer_supported(fourcc)  /* what readback.c copies (RGBA/BGRA/RGBX/BGRX, RGB888, RGB565) */
         && apklayer_gfx_linear_external_only(gfx->gbm, fourcc)) {
@@ -206,7 +209,7 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
         struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
         /* NVIDIA's GBM makes no LINEAR render target (EINVAL; its EGL renders to no pitch-linear image either): SurfaceFlinger's capture
          * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
-        if (!bo && (flags & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))
+        if (!bo && !gfx->angle && (flags & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))
             bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags & ~GBM_BO_USE_LINEAR);
         if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, flags, strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);
@@ -344,7 +347,7 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
         }
         /* a tiled buffer the driver maps not at all (NVIDIA): read through the GPU into a copy at the buffer's stride; a write goes back
          * through the GPU at the unmap (alloc_flags makes CPU-drawn buffers that SurfaceFlinger composes tiled there) */
-        if (!addr && !buf->packed && buf->num_planes == 1 && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
+        if (!addr && !gfx->angle && !buf->packed && buf->num_planes == 1 && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
             int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
                                           buf->modifier, m->stage, buf->stride[0]);
             if (r) { free(m->stage); m->stage = NULL; errno = -r; } else { addr = m->stage; offset = 0; }
