@@ -34,7 +34,7 @@ struct CachedImage {
     uint64_t key;
     ANativeWindowBuffer* ref;  // the Android buffer, referenced; null for a gbm buffer
     EGLImage image;
-    unsigned tex, fbo;
+    unsigned tex, fbo, fboStatus;
     uint64_t used;
 };
 constexpr size_t kCacheMax = 8;
@@ -137,8 +137,9 @@ CachedImage* cachedImage(Window& w, std::vector<CachedImage>& cache, uint64_t ke
         cache.erase(oldest);
     }
     if (ref) ref->common.incRef(&ref->common);
-    CachedImage c = {key, ref, image, 0, 0, ++w.useCount};
+    CachedImage c = {key, ref, image, 0, 0, 0, ++w.useCount};
     c.fbo = fboForImage(image, &c.tex);
+    c.fboStatus = gl<unsigned (*)(unsigned)>("glCheckFramebufferStatus")(0x8D40 /* GL_FRAMEBUFFER */);
     cache.push_back(c);
     return &cache.back();
 }
@@ -186,10 +187,9 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
     if (src && out) {
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, src->fbo);
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, out->fbo);
-        // an incomplete side would leave GL_INVALID_FRAMEBUFFER_OPERATION in the app's context (Meet's video renderer checks glGetError and
-        // gave up on every frame): checked first, the window named once
-        auto status = gl<unsigned (*)(unsigned)>("glCheckFramebufferStatus");
-        unsigned rs = status(0x8CA8), ds = status(0x8CA9);
+        // An incomplete side would leave GL_INVALID_FRAMEBUFFER_OPERATION in the app's context.
+        // These private FBOs keep the same attachment until their images leave the cache.
+        unsigned rs = src->fboStatus, ds = out->fboStatus;
         if (rs == 0x8CD5 /* GL_FRAMEBUFFER_COMPLETE */ && ds == 0x8CD5) {
             gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
                     0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
