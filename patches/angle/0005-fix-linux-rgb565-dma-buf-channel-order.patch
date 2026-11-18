@@ -1,0 +1,29 @@
+From: apklayer
+Subject: ANGLE: preserve the RGB565 channel order in Linux DMA-BUFs
+
+DRM_FORMAT_RGB565 stores red in the most significant five bits and blue
+in the least significant five bits. Match VK_FORMAT_R5G6B5_UNORM_PACK16
+in both directions so EGL queries and imports agree.
+
+diff --git a/src/common/linux/dma_buf_utils.cpp b/src/common/linux/dma_buf_utils.cpp
+index d9ea5fd..9f63d34 100644
+--- a/src/common/linux/dma_buf_utils.cpp
++++ b/src/common/linux/dma_buf_utils.cpp
+@@ -114,7 +114,7 @@ std::vector<int> VkFormatToDrmFourCCFormat(VkFormat format)
+             return {DRM_FORMAT_ARGB2101010};
+         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+             return {DRM_FORMAT_ABGR2101010};
+-        case VK_FORMAT_B5G6R5_UNORM_PACK16:
++        case VK_FORMAT_R5G6B5_UNORM_PACK16:
+             return {DRM_FORMAT_RGB565};
+         default:
+             return {};
+@@ -146,7 +146,7 @@ std::vector<VkFormat> DrmFourCCFormatToVkFormats(int fourccFormat)
+         case DRM_FORMAT_ARGB2101010:
+             return {VK_FORMAT_A2B10G10R10_UNORM_PACK32};
+         case DRM_FORMAT_RGB565:
+-            return {VK_FORMAT_B5G6R5_UNORM_PACK16};
++            return {VK_FORMAT_R5G6B5_UNORM_PACK16};
+         case DRM_FORMAT_NV12:
+             return {VK_FORMAT_G8_B8R8_2PLANE_420_UNORM};
+         default:
