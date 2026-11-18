@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,39 +69,6 @@ static int send_msg(struct apklayer_display *d, uint32_t type, const void *paylo
     return n == (ssize_t)(8 + len) ? 0 : -(errno ? errno : EIO);
 }
 
-static int read_full(int fd, void *p, size_t n)
-{
-    uint8_t *b = p;
-    while (n) {
-        ssize_t r = read(fd, b, n);
-        if (r <= 0) return -1;
-        b += r;
-        n -= (size_t)r;
-    }
-    return 0;
-}
-
-/* A message's header, with the fd that came along (SCM_RIGHTS arrives with a message's first byte; NAVBAR_PIXELS carries one), else -1. */
-static int read_head(int fd, uint32_t head[2], int *rfd)
-{
-    char control[CMSG_SPACE(sizeof(int) * 8)];
-    struct iovec iov = { head, 8 };
-    struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1, .msg_control = control, .msg_controllen = sizeof control };
-    ssize_t r = recvmsg(fd, &mh, MSG_CMSG_CLOEXEC);
-    if (r <= 0) return -1;
-    *rfd = -1;
-    for (struct cmsghdr *cm = CMSG_FIRSTHDR(&mh); cm; cm = CMSG_NXTHDR(&mh, cm)) {
-        if (cm->cmsg_level != SOL_SOCKET || cm->cmsg_type != SCM_RIGHTS) continue;
-        int n = (int)((cm->cmsg_len - CMSG_LEN(0)) / sizeof(int));
-        for (int i = 0; i < n; i++) {
-            int f;
-            memcpy(&f, CMSG_DATA(cm) + i * sizeof(int), sizeof f);
-            if (*rfd < 0) *rfd = f; else close(f);
-        }
-    }
-    return r < 8 ? read_full(fd, (uint8_t *)head + r, 8 - (size_t)r) : 0;
-}
-
 static int64_t now_ns(void)
 {
     struct timespec ts;
@@ -108,44 +76,103 @@ static int64_t now_ns(void)
     return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
 
+static void reply(struct apklayer_display *d, uint32_t type, uint32_t len, const int32_t body[64], int mfd)
+{
+    if (type == MSG_DISPLAY && len >= 4) {
+        atomic_store(&d->refresh_mhz, (uint32_t)body[0]);
+        if (d->cb.refresh) d->cb.refresh(d->cb.user, (uint32_t)body[0]);
+    } else if (type == MSG_VSYNC && len >= 8) {
+        /* the compositor's callback time is a 32 bit ms count of the monotonic clock: widen it to ns */
+        int64_t now = now_ns(), ms = now / 1000000;
+        int64_t ts = now - ((ms - (int64_t)(uint32_t)body[1]) & 0xffffffffLL) * 1000000;
+        if (d->cb.vsync) d->cb.vsync(d->cb.user, ts);
+    } else if (type == MSG_CONFIGURE && len >= 16) {
+        void (*fn)(void *, int32_t, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
+        int32_t turn = len >= 44 ? body[10] : 0;  /* the shell's turn (bridge/shell/geometry.c want_turn) */
+        if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3], turn);
+        else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], body[3]); atomic_store(&d->pending_cfg[3], turn); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
+    } else if (type == MSG_NAVBAR_PIXELS && len >= 12) {
+        void (*fn)(void *, int, int32_t, int32_t) = atomic_load(&d->navbar_fn);
+        if (fn) { fn(atomic_load(&d->navbar_user), mfd, body[1], body[2]); mfd = -1; }  /* the callback owns the fd */
+    } else if (type == MSG_DMABUF_RELEASE && len >= 8) {
+        if (d->cb.released) d->cb.released(d->cb.user, body[1]);
+    }
+    if (mfd >= 0) close(mfd);
+}
+
 static void *reader(void *arg)
 {
     struct apklayer_display *d = arg;
+    uint8_t rx[4096];
+    size_t used = 0;
+    uint32_t skip = 0;
+    int32_t body[64];
+    int fds[8];
+    size_t nfds = 0;
+
+    /* Release and vsync traffic usually fits in a single receive. Preserve partial messages
+     * on the stream and queue descriptors in order, just as the shell queues DMA-BUF planes. */
     for (;;) {
-        uint32_t head[2];
-        int mfd = -1;
-        if (read_head(d->fd, head, &mfd) < 0) break;
-        int32_t body[64] = { 0 };
-        uint32_t len = head[1];
-        if (mfd >= 0 && head[0] != MSG_NAVBAR_PIXELS) { close(mfd); mfd = -1; }
-        if (len > sizeof body) { /* skip what we do not understand */
-            char skip[256];
-            while (len) { size_t n = len < sizeof skip ? len : sizeof skip; if (read_full(d->fd, skip, n) < 0) goto out; len -= (uint32_t)n; }
-            continue;
+        char control[CMSG_SPACE(sizeof fds)];
+        struct iovec iov = { rx + used, sizeof rx - used };
+        struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1, .msg_control = control, .msg_controllen = sizeof control };
+        ssize_t n = recvmsg(d->fd, &mh, MSG_CMSG_CLOEXEC);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        used += (size_t)n;
+        size_t previous_nfds = nfds;
+        bool overflow = false;
+        for (struct cmsghdr *cm = CMSG_FIRSTHDR(&mh); cm; cm = CMSG_NXTHDR(&mh, cm)) {
+            if (cm->cmsg_level != SOL_SOCKET || cm->cmsg_type != SCM_RIGHTS) continue;
+            size_t count = (cm->cmsg_len - CMSG_LEN(0)) / sizeof(int);
+            for (size_t i = 0; i < count; ++i) {
+                int fd;
+                memcpy(&fd, CMSG_DATA(cm) + i * sizeof fd, sizeof fd);
+                if (nfds < sizeof fds / sizeof *fds) fds[nfds++] = fd;
+                else { close(fd); overflow = true; }
+            }
         }
-        if (len && read_full(d->fd, body, len) < 0) break;
-        if (head[0] == MSG_DISPLAY && len >= 4) {
-            atomic_store(&d->refresh_mhz, (uint32_t)body[0]);
-            if (d->cb.refresh) d->cb.refresh(d->cb.user, (uint32_t)body[0]);
-        } else if (head[0] == MSG_VSYNC && len >= 8) {
-            /* the compositor's callback time is a 32 bit ms count of the monotonic clock: widen it to ns */
-            int64_t now = now_ns(), ms = now / 1000000;
-            int64_t ts = now - ((ms - (int64_t)(uint32_t)body[1]) & 0xffffffffLL) * 1000000;
-            if (d->cb.vsync) d->cb.vsync(d->cb.user, ts);
-        } else if (head[0] == MSG_CONFIGURE && len >= 16) {
-            void (*fn)(void *, int32_t, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
-            int32_t turn = len >= 44 ? body[10] : 0;  /* the shell's turn (bridge/shell/geometry.c want_turn) */
-            if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3], turn);
-            else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], body[3]); atomic_store(&d->pending_cfg[3], turn); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
-        } else if (head[0] == MSG_NAVBAR_PIXELS && len >= 12) {
-            void (*fn)(void *, int, int32_t, int32_t) = atomic_load(&d->navbar_fn);
-            if (fn) { fn(atomic_load(&d->navbar_user), mfd, body[1], body[2]); mfd = -1; }  /* the callback owns the fd */
-        } else if (head[0] == MSG_DMABUF_RELEASE && len >= 8) {
-            if (d->cb.released) d->cb.released(d->cb.user, body[1]);
+        if (overflow) break;
+        if (mh.msg_flags & MSG_CTRUNC) {
+            /* Linux can discard the navbar's sole fd when this process hits its fd limit.
+             * Keep its place in the queue so a later fd still goes to its own reply. */
+            if (nfds != previous_nfds || nfds == sizeof fds / sizeof *fds) break;
+            fds[nfds++] = -1;
         }
-        if (mfd >= 0) close(mfd);
+
+        size_t off = skip < used ? skip : used;
+        skip -= (uint32_t)off;
+        while (used - off >= 8) {
+            uint32_t head[2];
+            memcpy(head, rx + off, sizeof head);
+            uint32_t len = head[1];
+            size_t available = used - off - 8;
+            if (len > sizeof body && len > available) {
+                /* The display ignores larger clipboard and other messages. Drain them
+                 * incrementally so a long payload never fills the receive buffer. */
+                skip = len - (uint32_t)available;
+                off = used;
+                break;
+            }
+            if (len > available) break;
+            if (len <= sizeof body) {
+                memcpy(body, rx + off + 8, len);
+                int mfd = -1;
+                /* Only a visible navbar carries an fd. A hide has zero dimensions. */
+                if (head[0] == MSG_NAVBAR_PIXELS && len >= 12 && body[1] > 0 && body[2] > 0 && nfds) {
+                    mfd = fds[0];
+                    --nfds;
+                    memmove(fds, fds + 1, nfds * sizeof *fds);
+                }
+                reply(d, head[0], len, body, mfd);
+            }
+            off += 8 + len;
+        }
+        used -= off;
+        if (used && off) memmove(rx, rx + off, used);
     }
-out:
+    for (size_t i = 0; i < nfds; ++i)
+        if (fds[i] >= 0) close(fds[i]);
     return NULL;
 }
 
