@@ -19,6 +19,19 @@ static void print(const char *line)
 
 static const EGLint ctx_attr[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
+static int check_import_failure(EGLDisplay display, EGLSurface surface)
+{
+    for (int i = 0; i < 8; ++i) {
+        glClear(GL_COLOR_BUFFER_BIT);
+        if (eglSwapBuffers(display, surface) || eglGetError() != EGL_BAD_MATCH) {
+            print("glbench: forced import failure did not reject the swap");
+            return 1;
+        }
+    }
+    print("glbench: rejected 8 swaps with EGL_BAD_MATCH");
+    return 0;
+}
+
 /* depth: 8, 10 (RGB10_A2) or 16 (half float, EGL_EXT_pixel_format_float) bits per channel; opaque: the first matching config without alpha
  * (XR30, XB4H), else the first one (AR30/AB30, AB4H); samples: multisampled (0: any) */
 static EGLConfig choose(EGLDisplay dpy, EGLint surface_type, int depth, int opaque, int samples)
@@ -70,7 +83,7 @@ JNIEXPORT jint JNICALL Java_hello_glbench_Main_run(JNIEnv *env, jclass cls, jobj
     int r = 1;
     if (t.surface != EGL_NO_SURFACE && eglMakeCurrent(t.dpy, t.surface, t.surface, ctx)) {
         eglSwapInterval(t.dpy, strstr(mode, "novsync") ? 0 : 1);
-        r = bench_run(&t, scenes, seconds);
+        r = !strcmp(mode, "window-import-fail") ? check_import_failure(t.dpy, t.surface) : bench_run(&t, scenes, seconds);
         eglMakeCurrent(t.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         eglDestroySurface(t.dpy, t.surface);
     } else {

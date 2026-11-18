@@ -408,9 +408,9 @@ setup = ["locale -a | grep -qx nl_NL.utf8 || sudo -n locale-gen nl_NL.UTF-8 >/de
 run = ["python3 -u tests/vm/gpu-smoke.py", "LANG=nl_NL.UTF-8 LC_ALL=nl_NL.UTF-8 python3 -u tests/vm/gpu-smoke.py", "python3 -u tests/vm/hwbitmap.py"]
 
 [gpu-import-fail]
-# a failing dmabuf import of a window frame (forced: APKLAYER_RUNTIME_DEBUG=egl-import-fail) falls back to a CPU copy; the frames still reach the compositor
-needs = ["com.android.test.uibench"]
-run = ["APKLAYER_RUNTIME_DEBUG=egl-import-fail python3 -u tests/vm/gpu-smoke.py"]
+# A failed DMA-BUF import cancels the frame without a CPU copy. Repeat to check the buffer queue can recycle the cancelled slots.
+apps = ["hello-glbench"]
+run = ["APKLAYER_RUNTIME_DEBUG=egl-import-fail python3 -u tests/bench/glbench/run-android.py window-import-fail clear 1 | grep -F 'glbench: rejected 8 swaps with EGL_BAD_MATCH'"]
 
 [gles1]
 # an OpenGL ES 1 app (GLSurfaceView's default context): the host driver's libGLESv1_CM (NVIDIA, Mesa with ES 1) or libapklayer-gles1's translator

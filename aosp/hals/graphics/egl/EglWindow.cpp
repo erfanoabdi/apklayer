@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <string.h>
+#include <system/graphics.h>
 #include <system/window.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -53,6 +54,7 @@ struct Window {
     uint64_t useCount = 0;
     int64_t presentationTime = 0;  // eglPresentationTimeANDROID for the next frame (0 = none)
     WindowAttach* attach = nullptr;  // the zero-copy present (null: every frame is copied)
+    bool reportedImportFailure = false;
 };
 constexpr int kAsyncBufferCount = 6;  // the window's buffers (dequeued + undequeued) at swap interval 0: the gbm_surface's four plus copy targets
 std::recursive_mutex windowsLock;
@@ -150,20 +152,31 @@ CachedImage* cachedImage(Window& w, GlState& state, std::vector<CachedImage>& ca
 }
 
 // The frame just swapped into the gbm_surface, attached to the Android window and queued, or copied into a buffer of it.
-void presentToWindow(EGLDisplay dpy, Window& w) {
+EGLBoolean presentToWindow(EGLDisplay dpy, Window& w) {
     ANativeWindow* nw = w.native;
+    auto release = gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer");
     void* bo = gbmFn<void* (*)(void*)>("gbm_surface_lock_front_buffer")(w.gbmSurface);
-    if (!bo) { ALOGE("gbm_surface_lock_front_buffer failed"); return; }
+    if (!bo) { ALOGE("gbm_surface_lock_front_buffer failed"); return fail(EGL_BAD_ALLOC); }
     if (w.presentationTime) { native_window_set_buffers_timestamp(nw, w.presentationTime); w.presentationTime = 0; }
     ANativeWindowBuffer* dst = nullptr;
     int fence = -1;
-    if (w.attach && !importForcedToFail() && w.attach->present(dpy, w.gbmSurface, bo, w.width, w.height, &dst, &fence)) return;
+    if (w.attach && !importForcedToFail() && w.attach->present(dpy, w.gbmSurface, bo, w.width, w.height, &dst, &fence)) return EGL_TRUE;
     if (!dst && (nw->dequeueBuffer(nw, &dst, &fence) != 0 || !dst)) {
         ALOGE("dequeueBuffer failed");
-        gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
-        return;
+        release(w.gbmSurface, bo);
+        return fail(EGL_BAD_NATIVE_WINDOW);
     }
-    if (fence >= 0) { pollfd p = {fence, POLLIN, 0}; poll(&p, 1, 1000); close(fence); }
+    if (fence >= 0) {
+        pollfd p = {fence, POLLIN, 0};
+        int result;
+        do { result = poll(&p, 1, 1000); } while (result < 0 && errno == EINTR);
+        if (result != 1 || !(p.revents & POLLIN)) {
+            nw->cancelBuffer(nw, dst, fence);
+            release(w.gbmSurface, bo);
+            return fail(EGL_BAD_ACCESS);
+        }
+        close(fence);
+    }
 
     EGLContext ctx = host<EGLContext (*)()>("eglGetCurrentContext")();
     if (ctx != w.cacheCtx) { dropCache(w); w.cacheCtx = ctx; }  // other context: other GL objects
@@ -173,47 +186,44 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
     if (ctx != EGL_NO_CONTEXT && !importForcedToFail()) {
         fd = gbmFn<int (*)(void*)>("gbm_bo_get_fd")(bo);
         struct stat st = {};
-        fstat(fd, &st);
-        saved.emplace();
-        src = cachedImage(w, *saved, w.srcCache, (uint64_t)st.st_ino, nullptr, [&]() -> EGLImage {
-            uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
-            uint32_t format = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
-            uint64_t modifier = gbmFn<uint64_t (*)(void*)>("gbm_bo_get_modifier")(bo);
-            std::vector<EGLint> a = {EGL_WIDTH, (EGLint)w.width, EGL_HEIGHT, (EGLint)w.height, EGL_LINUX_DRM_FOURCC_EXT, (EGLint)format,
-                                     EGL_DMA_BUF_PLANE0_FD_EXT, fd, EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0, EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride};
-            if (modifier != DRM_FORMAT_MOD_INVALID)
-                a.insert(a.end(), {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLint)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLint)(modifier >> 32)});
-            a.push_back(EGL_NONE);
-            return host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR")(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
-        });
-        out = cachedImage(w, *saved, w.dstCache, (uint64_t)(uintptr_t)dst, dst, [&]() { return imageFromNativeBuffer(dpy, dst); });
-    }
-    int outFence = -1;
-    if (src && out) {
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, src->fbo);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, out->fbo);
-        // An incomplete side would leave GL_INVALID_FRAMEBUFFER_OPERATION in the app's context.
-        // These private FBOs keep the same attachment until their images leave the cache.
-        unsigned rs = src->fboStatus, ds = out->fboStatus;
-        if (rs == 0x8CD5 /* GL_FRAMEBUFFER_COMPLETE */ && ds == 0x8CD5) {
-            gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
-                    0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
-        } else {
-            static std::set<ANativeWindow*> named;
-            if (named.insert(nw).second)
-                ALOGE("window present %ux%u: framebuffer incomplete (read 0x%x; draw 0x%x: buffer %dx%d format %d usage 0x%llx)",
-                      w.width, w.height, rs, ds, dst->width, dst->height, dst->format, (unsigned long long)dst->usage);
+        if (fd >= 0 && fstat(fd, &st) == 0) {
+            saved.emplace();
+            src = cachedImage(w, *saved, w.srcCache, (uint64_t)st.st_ino, nullptr, [&]() -> EGLImage {
+                uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
+                uint32_t offset = gbmFn<uint32_t (*)(void*, int)>("gbm_bo_get_offset")(bo, 0);
+                uint32_t format = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
+                uint64_t modifier = gbmFn<uint64_t (*)(void*)>("gbm_bo_get_modifier")(bo);
+                std::vector<EGLint> a = {EGL_WIDTH, (EGLint)w.width, EGL_HEIGHT, (EGLint)w.height, EGL_LINUX_DRM_FOURCC_EXT, (EGLint)format,
+                                         EGL_DMA_BUF_PLANE0_FD_EXT, fd, EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLint)offset, EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride};
+                if (modifier != DRM_FORMAT_MOD_INVALID)
+                    a.insert(a.end(), {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLint)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLint)(modifier >> 32)});
+                a.push_back(EGL_NONE);
+                return host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR")(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
+            });
+            if (src) out = cachedImage(w, *saved, w.dstCache, (uint64_t)(uintptr_t)dst, dst, [&]() { return imageFromNativeBuffer(dpy, dst); });
         }
-        outFence = gpuFence(dpy);
-    } else if (cpuCopy(bo, dst, w.width, w.height)) {  // an import failed (or no context): the frame goes through the CPU
-        static int told = 0;
-        if (told++ < 3) ALOGW("window present %ux%u: dmabuf import failed (images %p %p): copied on the CPU", w.width, w.height, src, out);
-    } else {
-        ALOGE("window present: images %p %p or no current context, and no CPU copy: the frame is blank", src, out);
     }
     if (fd >= 0) close(fd);
-    gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
-    nw->queueBuffer(nw, dst, outFence);
+    constexpr unsigned complete = 0x8CD5;  // GL_FRAMEBUFFER_COMPLETE
+    unsigned readStatus = src ? src->fboStatus : 0, drawStatus = out ? out->fboStatus : 0;
+    if (readStatus != complete || drawStatus != complete) {
+        if (!w.reportedImportFailure) {
+            ALOGE("window present %ux%u: DMA-BUF GPU import failed (read 0x%x, draw 0x%x), frame cancelled",
+                  w.width, w.height, readStatus, drawStatus);
+            w.reportedImportFailure = true;
+        }
+        nw->cancelBuffer(nw, dst, -1);
+        release(w.gbmSurface, bo);
+        return fail(EGL_BAD_MATCH);
+    }
+    w.reportedImportFailure = false;
+    gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, src->fbo);
+    gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, out->fbo);
+    gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
+            0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
+    int outFence = gpuFence(dpy);
+    release(w.gbmSurface, bo);
+    return nw->queueBuffer(nw, dst, outFence) == 0 ? EGL_TRUE : fail(EGL_BAD_NATIVE_WINDOW);
 }
 
 // The Android window's current size: the user's if set, else the consumer's default (what a resize changes).
@@ -293,10 +303,10 @@ EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
     if (win->attach && !importForcedToFail()) win->attach->reclaim(win->gbmSurface);
     EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, win->host);
     if (!ok) return ok;
-    presentToWindow(dpy, *win);
+    EGLBoolean presented = presentToWindow(dpy, *win);
     uint32_t w, h;
     if (windowSize(win->native, &w, &h) && (w != win->width || h != win->height)) resizeWindow(win);
-    return ok;
+    return presented;
 }
 
 }  // namespace
@@ -350,7 +360,9 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
     // SurfaceTexture wrapper drops its temporary sp<Surface> after this call.
     nw->common.incRef(&nw->common);
     native_window_set_usage(nw, kUsageRender | kUsageTexture);
-    native_window_set_buffers_format(nw, 1 /* HAL_PIXEL_FORMAT_RGBA_8888 */);
+    int format = windowBufferFormat((uint32_t)win->visual);
+    if (!format || native_window_set_buffers_format(nw, format) != 0)
+        native_window_set_buffers_format(nw, HAL_PIXEL_FORMAT_RGBA_8888);
     win->attach = WindowAttach::create(nw);
     std::lock_guard<std::recursive_mutex> lock(windowsLock);
     windows.insert(win);

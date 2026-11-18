@@ -46,8 +46,7 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf);
 EGLSurface hostSurface(EGLSurface s);
 // A native fence fd for the current context's GL work so far (flushed), or -1 after a glFinish when the host has none.
 int gpuFence(EGLDisplay dpy);
-// EglAttach.cpp: the CPU copy of a frame whose dmabuf import failed (false: it could not be copied), and the test hook that makes every import fail.
-bool cpuCopy(void* gbmBo, ANativeWindowBuffer* dst, uint32_t w, uint32_t h);
+// Test hook: deliberately prevent GPU presentation.
 bool importForcedToFail();
 
 }  // namespace apklayer::egl

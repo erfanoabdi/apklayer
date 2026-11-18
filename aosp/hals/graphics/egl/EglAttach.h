@@ -10,6 +10,8 @@
 
 namespace apklayer::egl {
 
+int windowBufferFormat(uint32_t fourcc);
+
 // The gbm_surface's finished buffer itself handed to the Android window: attached to the window's BufferQueue (libgui's Surface::attachBuffer,
 // through dlsym: libgui links libEGL, so our libEGL cannot link it), and detached again (detachNextBuffer) once SurfaceFlinger released it, to go
 // back to the gbm_surface. One per Android window.

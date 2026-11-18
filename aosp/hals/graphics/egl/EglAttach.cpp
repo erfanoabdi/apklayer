@@ -2,7 +2,7 @@
 // into somebody else's buffer), and instead of copying each finished frame into a dequeued buffer, the gbm buffer itself is wrapped as one of our
 // gralloc buffers and attached to the window's BufferQueue. Mesa's gbm surface has four buffers and fails the next frame when none is free, so each
 // one comes back (detachNextBuffer) once SurfaceFlinger released it, and when all four are out a release is waited for (dequeueBuffer) before the
-// swap returns. Anything this cannot do (no libgui Surface, a format or size the window does not ask for, a failed attach) falls back to the copy.
+// swap returns. Presentation can use a GPU blit when the window needs a size or format conversion.
 #define LOG_TAG "apklayer.egl"
 
 #include "EglAttach.h"
@@ -11,6 +11,7 @@
 #include <drm_fourcc.h>
 #include <log/log.h>
 #include <sys/mman.h>
+#include <system/graphics.h>
 #include <ui/ANativeObjectBase.h>
 #include <ui/Fence.h>
 #include <unistd.h>
@@ -29,6 +30,18 @@ using android::sp;
 using namespace apklayer::gralloc;
 
 namespace apklayer::egl {
+
+int windowBufferFormat(uint32_t fourcc) {
+    switch (fourcc) {
+        case DRM_FORMAT_ABGR8888: case DRM_FORMAT_ARGB8888:
+        case DRM_FORMAT_XBGR8888: case DRM_FORMAT_XRGB8888: return HAL_PIXEL_FORMAT_RGBA_8888;
+        case DRM_FORMAT_ABGR2101010: case DRM_FORMAT_ARGB2101010:
+        case DRM_FORMAT_XBGR2101010: case DRM_FORMAT_XRGB2101010: return HAL_PIXEL_FORMAT_RGBA_1010102;
+        case DRM_FORMAT_ABGR16161616F: case DRM_FORMAT_XBGR16161616F: return HAL_PIXEL_FORMAT_RGBA_FP16;
+        default: return 0;
+    }
+}
+
 namespace {
 
 // Surface's layout up to its ANativeWindow (RefBase first, as the ABI places the dynamic base): static_cast to it finds the Surface object
@@ -59,16 +72,27 @@ const Gui* gui() {
 constexpr uint64_t kProducerUsage = 0x200 | 0x100;  // GRALLOC_USAGE_HW_RENDER | HW_TEXTURE, as eglCreateWindowSurface asks
 std::atomic<uint32_t> gNextId{1};
 
-// The gbm buffer as one of our gralloc buffers (gralloc_handle.h, as the allocator makes them), labelled with the window's format (1 RGBA_8888 or
-// 2 RGBX_8888): what SurfaceFlinger samples is read through the handle's DRM format, so BGRA memory (Mesa's ARGB8888) is shown right.
+// Android describes the logical format. SurfaceFlinger imports the allocation's actual DRM layout.
 sp<GraphicBuffer> wrap(void* bo, uint32_t w, uint32_t h, int format, uint64_t usage) {
-    uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
-    native_handle_t* h2 = native_handle_create(2, kNumInts);
+    auto count = gbmFn<int (*)(void*)>("gbm_bo_get_plane_count");
+    auto planeFd = gbmFn<int (*)(void*, int)>("gbm_bo_get_fd_for_plane");
+    auto planeStride = gbmFn<uint32_t (*)(void*, int)>("gbm_bo_get_stride_for_plane");
+    auto planeOffset = gbmFn<uint32_t (*)(void*, int)>("gbm_bo_get_offset");
+    int planes = count ? count(bo) : 1;
+    if (planes < 1 || planes > kMaxPlanes || (planes > 1 && (!planeFd || !planeStride || !planeOffset))) return nullptr;
+    native_handle_t* h2 = native_handle_create(planes + 1, kNumInts);
     if (!h2) return nullptr;
-    h2->data[0] = gbmFn<int (*)(void*)>("gbm_bo_get_fd")(bo);
-    h2->data[1] = memfd_create("apklayer-gralloc-metadata", MFD_CLOEXEC);
+    HandleData d = {};
+    bool exported = true;
+    for (int i = 0; i < planes; ++i) {
+        h2->data[i] = planeFd ? planeFd(bo, i) : gbmFn<int (*)(void*)>("gbm_bo_get_fd")(bo);
+        d.stride[i] = planeStride ? planeStride(bo, i) : gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
+        d.offset[i] = planeOffset ? planeOffset(bo, i) : 0;
+        exported &= h2->data[i] >= 0;
+    }
+    h2->data[planes] = memfd_create("apklayer-gralloc-metadata", MFD_CLOEXEC);
     sp<GraphicBuffer> gb;
-    if (h2->data[0] >= 0 && h2->data[1] >= 0 && ftruncate(h2->data[1], kMetadataSize) == 0) {
+    if (exported && h2->data[planes] >= 0 && ftruncate(h2->data[planes], kMetadataSize) == 0) {
         if (SharedMetadata* meta = mapMetadata(h2)) {
             *meta = {};
             meta->blendMode = 2;  // PREMULTIPLIED, as the allocator's
@@ -76,7 +100,6 @@ sp<GraphicBuffer> wrap(void* bo, uint32_t w, uint32_t h, int format, uint64_t us
             unmapMetadata(meta);
         }
         uint32_t fourcc = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
-        HandleData d = {};
         d.magic = kMagic;
         d.version = kVersion;
         d.width = d.allocWidth = w;
@@ -84,17 +107,16 @@ sp<GraphicBuffer> wrap(void* bo, uint32_t w, uint32_t h, int format, uint64_t us
         d.layerCount = 1;
         d.androidFormat = format;
         d.fourcc = d.allocFourcc = fourcc;
-        d.numPlanes = 1;
-        d.stride[0] = stride;
-        d.offset[0] = gbmFn<uint32_t (*)(void*, int)>("gbm_bo_get_offset")(bo, 0);
+        d.numPlanes = planes;
         d.usage = usage;
         d.modifier = gbmFn<uint64_t (*)(void*)>("gbm_bo_get_modifier")(bo);
         d.id = (static_cast<uint64_t>(getpid()) << 32) | 0x80000000u | gNextId++;  // the allocator's ids are its own pid's
         encode(h2, d);
-        gb = sp<GraphicBuffer>::make(h2, GraphicBuffer::CLONE_HANDLE, w, h, format, 1, usage, stride / 4);
+        uint32_t stridePixels = d.stride[0] / (format == HAL_PIXEL_FORMAT_RGBA_FP16 ? 8 : 4);
+        gb = sp<GraphicBuffer>::make(h2, GraphicBuffer::CLONE_HANDLE, w, h, format, 1, usage, stridePixels);
         if (gb->initCheck() != android::OK) { ALOGE("window buffer %ux%u: gralloc import failed", w, h); gb = nullptr; }
         else ALOGI("attached buffer id %llx: %ux%u fourcc 0x%x android format %d stride %u modifier 0x%llx", (unsigned long long)d.id, w, h, fourcc,
-                   format, stride, (unsigned long long)d.modifier);
+                   format, d.stride[0], (unsigned long long)d.modifier);
     }
     native_handle_close(h2);
     native_handle_delete(h2);
@@ -103,50 +125,10 @@ sp<GraphicBuffer> wrap(void* bo, uint32_t w, uint32_t h, int format, uint64_t us
 
 }  // namespace
 
-// Test hook (APKLAYER_RUNTIME_DEBUG=egl-import-fail): every dmabuf import of a window frame fails, so each frame takes the CPU copy.
+// Test hook (APKLAYER_RUNTIME_DEBUG=egl-import-fail): neither GPU presentation path can import the frame.
 bool importForcedToFail() {
     static const bool fail = [] { const char* v = apklayer::hostGetenv("APKLAYER_RUNTIME_DEBUG"); return v && !strcmp(v, "egl-import-fail"); }();
     return fail;
-}
-
-// The frame the GPU path could not import (an EGLImage of the gbm bo or of the window buffer failed), copied through the CPU instead of being
-// lost: the bo mapped for reading (Mesa's gbm detiles a tiled bo itself), the window buffer locked for writing (the mapper gives a linear view
-// of a tiled buffer: graphics.c's upload). Only 8-bit RGB; false when it cannot, the frame is then lost.
-bool cpuCopy(void* bo, ANativeWindowBuffer* dst, uint32_t w, uint32_t h) {
-    HandleData d;
-    uint32_t fourcc = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
-    auto bgra = [](uint32_t f) { return f == DRM_FORMAT_ARGB8888 || f == DRM_FORMAT_XRGB8888; };  // B first in memory
-    auto rgb8 = [&](uint32_t f) { return bgra(f) || f == DRM_FORMAT_ABGR8888 || f == DRM_FORMAT_XBGR8888; };
-    if (!decode(dst->handle, &d) || !rgb8(fourcc) || !rgb8(d.fourcc)) {
-        ALOGW("CPU copy: formats 0x%x -> 0x%x are not 8-bit RGB (or not our buffer)", fourcc, d.fourcc);
-        return false;
-    }
-    uint32_t sstride = 0;
-    void* map = nullptr;
-    void* src = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, void**)>("gbm_bo_map")(bo, 0, 0, w, h, 1 /* GBM_BO_TRANSFER_READ */, &sstride, &map);
-    if (!src) { ALOGW("CPU copy: gbm_bo_map failed"); return false; }
-    bool ok = false;
-    sp<GraphicBuffer> gb = GraphicBuffer::from(dst);
-    void* out = nullptr;
-    if (gb->lock(GraphicBuffer::USAGE_SW_WRITE_OFTEN, &out) == android::OK && out) {
-        uint32_t cols = std::min<uint32_t>(w, dst->width), rows = std::min<uint32_t>(h, dst->height);
-        bool swap = bgra(fourcc) != bgra(d.fourcc), opaque = fourcc == DRM_FORMAT_XRGB8888 || fourcc == DRM_FORMAT_XBGR8888;
-        for (uint32_t y = 0; y < rows; y++) {
-            auto* s = reinterpret_cast<const uint32_t*>(static_cast<const char*>(src) + y * sstride);
-            auto* o = reinterpret_cast<uint32_t*>(static_cast<char*>(out) + y * dst->stride * 4);
-            for (uint32_t x = 0; x < cols; x++) {
-                uint32_t p = s[x];
-                if (swap) p = (p & 0xff00ff00) | ((p & 0xff) << 16) | ((p >> 16) & 0xff);
-                o[x] = opaque ? p | 0xff000000 : p;
-            }
-        }
-        gb->unlock();
-        ok = true;
-    } else {
-        ALOGW("CPU copy: lock of the window buffer failed");
-    }
-    gbmFn<void (*)(void*, void*)>("gbm_bo_unmap")(bo, map);
-    return ok;
 }
 
 WindowAttach* WindowAttach::create(ANativeWindow* nw) {
@@ -234,8 +216,10 @@ bool WindowAttach::present(EGLDisplay dpy, void* gs, void* bo, uint32_t w, uint3
     mNative->query(mNative, NATIVE_WINDOW_WIDTH, &qw);  // the queue's own size (a resize changes it before the swap sees it)
     mNative->query(mNative, NATIVE_WINDOW_HEIGHT, &qh);
     uint32_t fourcc = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
-    bool rgb8 = fourcc == DRM_FORMAT_ARGB8888 || fourcc == DRM_FORMAT_XRGB8888 || fourcc == DRM_FORMAT_ABGR8888 || fourcc == DRM_FORMAT_XBGR8888;
-    if (!rgb8 || (format != 1 && format != 2) || qw != (int)w || qh != (int)h) return false;
+    int bufferFormat = windowBufferFormat(fourcc);
+    bool match = format == bufferFormat ||
+                 (bufferFormat == HAL_PIXEL_FORMAT_RGBA_8888 && format == HAL_PIXEL_FORMAT_RGBX_8888);
+    if (!bufferFormat || !match || qw != (int)w || qh != (int)h) return false;
 
     if (!gbmFn<int (*)(void*)>("gbm_surface_has_free_buffers")(gs)) {
         // all four gbm buffers are out: wait for SurfaceFlinger to release one (the queue blocks as for a copy) and take it back
