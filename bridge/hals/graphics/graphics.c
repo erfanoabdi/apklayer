@@ -32,8 +32,14 @@ static int open_node(const char *path)
 }
 
 /* Whether fd and the node at path belong to different DRM devices (any node of a device: primary or render). */
-static bool other_device(int fd, const char *path)
+static bool other_device(int fd, const char *render_node, const char *path)
 {
+    /* The CLI supplies the same render node when the window stays on one GPU. */
+    struct stat render, compositor;
+    if (path && render_node && !strcmp(path, render_node) &&
+        fstat(fd, &render) == 0 && stat(path, &compositor) == 0 &&
+        S_ISCHR(render.st_mode) && S_ISCHR(compositor.st_mode) && render.st_rdev == compositor.st_rdev)
+        return false;
     int other = path ? open_node(path) : -1;
     drmDevicePtr a = NULL, b = NULL;
     bool differ = other >= 0 && drmGetDevice2(fd, 0, &a) == 0 && drmGetDevice2(other, 0, &b) == 0 && !drmDevicesEqual(a, b);
@@ -78,7 +84,7 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
         gfx->gbm = NULL;
     }
     if (!gfx->gbm) { close(fd); free(gfx); errno = ENODEV; return NULL; }
-    gfx->other_gpu = other_device(fd, getenv("APKLAYER_COMPOSITOR_NODE"));  /* set by the CLI from the compositor's dmabuf feedback */
+    gfx->other_gpu = other_device(fd, render_node, getenv("APKLAYER_COMPOSITOR_NODE"));  /* CLI compositor DMA-BUF feedback */
     if (gfx->other_gpu) fprintf(stderr, "apklayer-gfx: %s is not the compositor's GPU: window buffers are LINEAR\n", render_node ? render_node : "the render node");
     return gfx;
 }
@@ -127,17 +133,27 @@ static const struct pack_spec *find_pack(uint32_t fourcc)
     return NULL;
 }
 
+/* apklayer patch: keep GPU plane resources typed correctly. Reinterpreting a
+ * tall R8 resource as NV12 imports on virgl but samples the wrong texels. */
+static uint32_t plane_format(const struct pack_spec *sp, int p)
+{
+    if (!p || sp->plane[p].stride_div == 2) return sp->base;
+    return sp->base == DRM_FORMAT_R16 ? DRM_FORMAT_GR1616 : DRM_FORMAT_GR88;
+}
+
+static bool supports_packed(struct apklayer_gfx *gfx, const struct pack_spec *sp, uint32_t flags)
+{
+    if (!sp) return false;
+    for (int p = 0; p < sp->planes; p++)
+        if (!gbm_device_is_format_supported(gfx->gbm, plane_format(sp, p), flags | GBM_BO_USE_LINEAR)) return false;
+    return true;
+}
+
 bool apklayer_gfx_supports(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage)
 {
-    if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(gfx, usage)) != 0) return true;
-    const struct pack_spec *sp = find_pack(fourcc);
-    if (!sp) return false;
-    for (int p = 0; p < sp->planes; p++) {
-        uint32_t fmt = !p || sp->plane[p].stride_div == 2 ? sp->base :
-            sp->base == DRM_FORMAT_R16 ? DRM_FORMAT_GR1616 : DRM_FORMAT_GR88;
-        if (!gbm_device_is_format_supported(gfx->gbm, fmt, gbm_flags(gfx, usage) | GBM_BO_USE_LINEAR)) return false;
-    }
-    return true;
+    uint32_t flags = gbm_flags(gfx, usage);
+    return gbm_device_is_format_supported(gfx->gbm, fourcc, flags) != 0 ||
+        supports_packed(gfx, find_pack(fourcc), flags);
 }
 
 static void buffer_init(struct apklayer_gfx_buffer *out, uint32_t w, uint32_t h, uint32_t fourcc)
@@ -150,14 +166,6 @@ static void buffer_init(struct apklayer_gfx_buffer *out, uint32_t w, uint32_t h,
     out->alloc_fourcc = fourcc;
     out->alloc_width = w;
     out->alloc_height = h;
-}
-
-/* apklayer patch: keep GPU plane resources typed correctly. Reinterpreting a
- * tall R8 resource as NV12 imports on virgl but samples the wrong texels. */
-static uint32_t plane_format(const struct pack_spec *sp, int p)
-{
-    if (!p || sp->plane[p].stride_div == 2) return sp->base;
-    return sp->base == DRM_FORMAT_R16 ? DRM_FORMAT_GR1616 : DRM_FORMAT_GR88;
 }
 
 static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *out, const struct pack_spec *sp, uint32_t usage)
@@ -183,12 +191,15 @@ static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *ou
 /* The flags of a new buffer: gbm_flags, but a buffer the CPU draws and the GPU samples (a software-rendered window, composed by
  * SurfaceFlinger) is tiled where the GPU samples LINEAR only as an external texture (NVIDIA: SurfaceFlinger's GL_TEXTURE_2D import failed,
  * glEGLImageTargetTexture2DOES 0x502, and PGR's login dialog showed only its dim). Its CPU map goes through the GPU (readback.c). */
-static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage)
+static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage,
+                            uint32_t f, bool *supported)
 {
-    uint32_t f = gbm_flags(gfx, usage);
     /* Intel's plain LINEAR buffer has the exact pitch (865 px: 3460 B) and AMD's compositor refuses to
      * import it ("importing the supplied dmabufs failed"); with SCANOUT too the pitch is 256-aligned, which every GPU imports */
-    if (gfx->other_gpu && (usage & APKLAYER_GFX_SCANOUT) && gbm_device_is_format_supported(gfx->gbm, fourcc, f | GBM_BO_USE_SCANOUT)) f |= GBM_BO_USE_SCANOUT;
+    if (gfx->other_gpu && (usage & APKLAYER_GFX_SCANOUT) && gbm_device_is_format_supported(gfx->gbm, fourcc, f | GBM_BO_USE_SCANOUT)) {
+        *supported = true;
+        return f | GBM_BO_USE_SCANOUT;
+    }
     /* CPU-drawn windows need a tiled modifier when the compositor EGL can sample LINEAR only as an external texture. ANGLE handles their CPU
      * lock/read/write through its Vulkan transfer path; SurfaceFlinger still imports the buffer through EGL, so it needs this layout. */
     if ((f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SCANOUT) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
@@ -196,7 +207,10 @@ static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t 
         && apklayer_gfx_transfer_supported(fourcc)  /* what readback.c copies (RGBA/BGRA/RGBX/BGRX, RGB888, RGB565) */
         && apklayer_gfx_linear_external_only(gfx->gbm, fourcc)) {
         uint32_t tiled = (f & ~GBM_BO_USE_LINEAR) | GBM_BO_USE_RENDERING;  /* rendering: the upload is a blit into it */
-        if (gbm_device_is_format_supported(gfx->gbm, fourcc, tiled)) return tiled;
+        if (gbm_device_is_format_supported(gfx->gbm, fourcc, tiled)) {
+            *supported = true;
+            return tiled;
+        }
         fprintf(stderr, "apklayer-gfx: fourcc 0x%x cannot be tiled here: its CPU-drawn window stays LINEAR (the compositor may not show it)\n", fourcc);
     }
     return f;
@@ -205,11 +219,14 @@ static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t 
 int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height, uint32_t fourcc, uint32_t usage,
                        struct apklayer_gfx_buffer *out)
 {
-    if (!apklayer_gfx_supports(gfx, fourcc, usage)) return -ENOTSUP;
+    uint32_t flags = gbm_flags(gfx, usage);
+    bool supported = gbm_device_is_format_supported(gfx->gbm, fourcc, flags) != 0;
+    const struct pack_spec *pack = supported ? NULL : find_pack(fourcc);
+    if (!supported && !supports_packed(gfx, pack, flags)) return -ENOTSUP;
     buffer_init(out, width, height, fourcc);
     int r = 0;
-    uint32_t flags = alloc_flags(gfx, fourcc, usage);
-    if (gbm_device_is_format_supported(gfx->gbm, fourcc, flags)) {
+    flags = alloc_flags(gfx, fourcc, usage, flags, &supported);
+    if (supported) {
         struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
         /* NVIDIA's GBM makes no LINEAR render target (EINVAL; its EGL renders to no pitch-linear image either): SurfaceFlinger's capture
          * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
@@ -227,7 +244,7 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
         }
         gbm_bo_destroy(bo);
     } else {
-        r = alloc_packed(gfx, out, find_pack(fourcc), usage);
+        r = alloc_packed(gfx, out, pack, usage);
     }
     if (r) apklayer_gfx_buffer_close(out);
     return r;
