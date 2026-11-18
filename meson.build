@@ -136,6 +136,9 @@ install_subdir('tools/host-setup', install_dir: share_dir / 'tools')
 install_data('runtime/host/jvm.args', install_dir: share_dir / 'runtime/host')
 # ANGLE is part of the host package even when the Android runtime is downloaded separately (the Debian build).
 if not arm32_only and host_machine.cpu_family() == 'x86_64'
+  install_data(files('runtime/angle/host/libEGL_angle.so',
+                     'runtime/angle/host/libGLESv2_angle.so'),
+    install_dir: pkg_lib / 'angle/host')
   foreach abi : ['lib64', 'lib']
     install_data(files('runtime/angle/vendor/' + abi + '/egl/libEGL_angle.so',
                        'runtime/angle/vendor/' + abi + '/egl/libGLESv1_CM_angle.so',

@@ -419,6 +419,9 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     }
     if (useAngle) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
+        std::string hostAngleEgl = getenvOr("APKLAYER_ANGLE_HOST_EGL", join(layout.build, "angle/host/libEGL_angle.so"));
+        if (!exists(hostAngleEgl)) die("ANGLE GLES buffer transfers need the Linux ANGLE library at " + hostAngleEgl);
+        env["APKLAYER_ANGLE_HOST_EGL"] = hostAngleEgl;
         env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
         // Android's EGL loader asks for /system/lib{,64}/lib*_angle.so, but bionic_translation
         // opens libraries on the host filesystem. Add the runtime's mapped system dirs explicitly.

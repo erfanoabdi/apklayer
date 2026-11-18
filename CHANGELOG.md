@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-18: Use Linux ANGLE for NVIDIA CPU-mapped buffers
+
+- The Android-target ANGLE Vulkan display advertises Linux DMA-BUF import but has no Linux external-image sibling, so using it in the host graphics HAL crashed during `eglCreateImage`. Added source-built Linux ANGLE EGL/GLES for the host HAL's GBM buffer transfers; app GLES remains on Android-target ANGLE.
+- The Linux build uses `angle_enable_vulkan=true` and `angle_use_custom_libvulkan=false`, so it opens the host Vulkan loader. Its imported NVIDIA buffers are sampleable but not framebuffer-renderable, so readback now samples them into an RGBA8 framebuffer; upload writes into the imported texture with the matching RGB565/RGB/BGRA/RGBA client format.
+- Test: built the host libraries from ANGLE `f0d596b6f9e3dfe7a068786790516c035b1dfde4`, rebuilt the CLI and graphics HAL, then ran `hello.anglecanvas` in disposable `angle-map-test` on the RTX 5060 Ti with ANGLE/Vulkan forced. `SurfaceView.lockCanvas()` posted 3 frames; RGB565 and ABGR DMA-BUF readback and upload returned no GL errors. The test instance was stopped. This does not verify PGR or resolve AIDA64's separate ARM-bridge `GL_GetString` crash.
+- Build log: Linux ANGLE build succeeded (initial 3,018 steps; 85 incremental steps after changing the Vulkan-loader GN arg). `ninja -C b cli/apklayer bridge/hals/graphics/libapklayer-hal-graphics.so` succeeded. Noble 0.5.2 deb rebuilt and archive inspection confirms both Linux host ANGLE libraries and all six Android ANGLE libraries are included. `apklayer_0.5.2-1~noble1_amd64.deb` is 25,448,562 bytes (SHA-256 `58caa69ba1bdea26e75815289200f57895149f05e76843d5f86473d012d169e5`); `apklayer-dev` is 7,488 bytes (SHA-256 `d037f844feca9f4650f777b13b4856372411392ee0354ef39e9046c0c2a916b7`). Kept locally at `/home/wesley/apklayer-build-deb/out/angle-host-gpu-map`; not installed or published.
+
 ## 2026-11-18: Disable host NVIDIA workarounds for ANGLE instances
 
 - Preserve host NVIDIA GBM tiling and GPU-copy behavior for native GLES, but bypass those NVIDIA-specific paths when `APKLAYER_ANGLE_ACTIVE` is set for an instance. All ANGLE source patches remain unchanged.

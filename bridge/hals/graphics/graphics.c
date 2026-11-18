@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <gbm.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -298,6 +299,24 @@ struct apklayer_gfx_mapping {
     uint64_t upload_modifier;
 };
 
+/* One diagnostic per graphics-HAL process: Surface lock/unlock may request
+ * several CPU mappings per frame, so never log every ANGLE copy. */
+static pthread_mutex_t angle_map_log_lock = PTHREAD_MUTEX_INITIALIZER;
+static bool angle_map_logged;
+
+static void log_angle_map_once(uint32_t width, uint32_t height, uint32_t format, uint32_t stride, uint64_t modifier)
+{
+    const char *debug = getenv("APKLAYER_GFX_DEBUG");
+    if (!debug || !*debug || !strcmp(debug, "0")) return;
+    pthread_mutex_lock(&angle_map_log_lock);
+    if (!angle_map_logged) {
+        fprintf(stderr, "[gfx] ANGLE GPU CPU-map path: %ux%u format 0x%x stride %u modifier 0x%llx\n",
+                width, height, format, stride, (unsigned long long)modifier);
+        angle_map_logged = true;
+    }
+    pthread_mutex_unlock(&angle_map_log_lock);
+}
+
 void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, int plane, bool write,
                        uint32_t *stride, struct apklayer_gfx_mapping **mapping)
 {
@@ -326,34 +345,53 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             fd_data.stride = buf->stride[plane];
             fd_data.format = plane_format(sp, plane);
         }
-        /* a tiled buffer (a render target locked by the CPU, e.g. SurfaceFlinger's capture): the driver detiles in its map only when the
-         * import names the modifier; without it the map is the raw tiles */
-        if (!buf->packed && buf->num_planes == 1 && buf->modifier != DRM_FORMAT_MOD_INVALID && buf->modifier != DRM_FORMAT_MOD_LINEAR) {
-            struct gbm_import_fd_modifier_data md = { .width = fd_data.width, .height = fd_data.height, .format = fd_data.format, .num_fds = 1,
-                .fds = { fd_data.fd }, .strides = { (int)fd_data.stride }, .offsets = { (int)buf->offset[0] }, .modifier = buf->modifier };
-            if ((m->bo = gbm_bo_import(gfx->gbm, GBM_BO_IMPORT_FD_MODIFIER, &md, GBM_BO_USE_RENDERING))) offset = 0;
-        }
-        /* a buffer made for rendering (framebuffers) can refuse the linear usage on import; the same dmabuf imports with the usage it was made for */
-        static const uint32_t import_usage[] = { GBM_BO_USE_LINEAR, GBM_BO_USE_RENDERING, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT, 0 };
-        for (size_t u = 0; u < sizeof import_usage / sizeof *import_usage && !m->bo; u++)
-            m->bo = gbm_bo_import(gfx->gbm, GBM_BO_IMPORT_FD, &fd_data, import_usage[u]);
-        if (!m->bo && getenv("APKLAYER_RUNTIME_DEBUG")) { char link[64] = "?", path[40]; snprintf(path, sizeof path, "/proc/self/fd/%d", fd_data.fd); ssize_t n = readlink(path, link, sizeof link - 1); if (n > 0) link[n] = 0; fprintf(stderr, "[gfx] gbm_bo_import fd %d (%s) %ux%u stride %u format 0x%x: %s\n", fd_data.fd, link, fd_data.width, fd_data.height, fd_data.stride, fd_data.format, strerror(errno)); }
         uint32_t map_stride = 0;
-        if (m->bo) {
-            addr = gbm_bo_map(m->bo, 0, 0, fd_data.width, fd_data.height,
-                              write ? GBM_BO_TRANSFER_READ_WRITE : GBM_BO_TRANSFER_READ, &map_stride, &m->map_data);
-            if (!addr && getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[gfx] gbm_bo_map %ux%u: %s\n", fd_data.width, fd_data.height, strerror(errno));
-            if (!addr) { gbm_bo_destroy(m->bo); m->bo = NULL; }
-        }
-        /* a tiled buffer the driver maps not at all (NVIDIA): read through the GPU into a copy at the buffer's stride; a write goes back
-         * through the GPU at the unmap (alloc_flags makes CPU-drawn buffers that SurfaceFlinger composes tiled there) */
-        if (!addr && !gfx->angle && !buf->packed && buf->num_planes == 1 && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
-            int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
-                                          buf->modifier, m->stage, buf->stride[0]);
-            if (r) { free(m->stage); m->stage = NULL; errno = -r; } else { addr = m->stage; offset = 0; }
-            if (!r && write) {
-                m->upload_gbm = gfx->gbm; m->upload_fd = fd_data.fd; m->upload_w = fd_data.width; m->upload_h = fd_data.height;
-                m->upload_fourcc = fd_data.format; m->upload_stride = buf->stride[0]; m->upload_offset = buf->offset[0]; m->upload_modifier = buf->modifier;
+        bool angle_copy = gfx->angle && !buf->packed && buf->num_planes == 1 && apklayer_gfx_transfer_supported(fd_data.format);
+        if (angle_copy) {
+            /* ANGLE owns this transfer: import the dma-buf through ANGLE's Vulkan EGL driver even when GBM could CPU-map it. */
+            log_angle_map_once(fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->modifier);
+            m->stage = malloc((size_t)buf->stride[0] * fd_data.height);
+            if (!m->stage) errno = ENOMEM;
+            else {
+                int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
+                                              buf->modifier, m->stage, buf->stride[0]);
+                if (r) { free(m->stage); m->stage = NULL; errno = -r; }
+                else {
+                    addr = m->stage; offset = 0; map_stride = buf->stride[0];
+                    if (write) {
+                        m->upload_gbm = gfx->gbm; m->upload_fd = fd_data.fd; m->upload_w = fd_data.width; m->upload_h = fd_data.height;
+                        m->upload_fourcc = fd_data.format; m->upload_stride = buf->stride[0]; m->upload_offset = buf->offset[0]; m->upload_modifier = buf->modifier;
+                    }
+                }
+            }
+        } else {
+            /* A tiled buffer (e.g. SurfaceFlinger's capture) needs its modifier on import before GBM can map it. */
+            if (!buf->packed && buf->num_planes == 1 && buf->modifier != DRM_FORMAT_MOD_INVALID && buf->modifier != DRM_FORMAT_MOD_LINEAR) {
+                struct gbm_import_fd_modifier_data md = { .width = fd_data.width, .height = fd_data.height, .format = fd_data.format, .num_fds = 1,
+                    .fds = { fd_data.fd }, .strides = { (int)fd_data.stride }, .offsets = { (int)buf->offset[0] }, .modifier = buf->modifier };
+                if ((m->bo = gbm_bo_import(gfx->gbm, GBM_BO_IMPORT_FD_MODIFIER, &md, GBM_BO_USE_RENDERING))) offset = 0;
+            }
+            /* A rendering buffer may refuse linear usage on import; try the usage it was allocated with too. */
+            static const uint32_t import_usage[] = { GBM_BO_USE_LINEAR, GBM_BO_USE_RENDERING, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT, 0 };
+            for (size_t u = 0; u < sizeof import_usage / sizeof *import_usage && !m->bo; u++)
+                m->bo = gbm_bo_import(gfx->gbm, GBM_BO_IMPORT_FD, &fd_data, import_usage[u]);
+            if (!m->bo && getenv("APKLAYER_RUNTIME_DEBUG")) { char link[64] = "?", path[40]; snprintf(path, sizeof path, "/proc/self/fd/%d", fd_data.fd); ssize_t n = readlink(path, link, sizeof link - 1); if (n > 0) link[n] = 0; fprintf(stderr, "[gfx] gbm_bo_import fd %d (%s) %ux%u stride %u format 0x%x: %s\n", fd_data.fd, link, fd_data.width, fd_data.height, fd_data.stride, fd_data.format, strerror(errno)); }
+            if (m->bo) {
+                addr = gbm_bo_map(m->bo, 0, 0, fd_data.width, fd_data.height,
+                                  write ? GBM_BO_TRANSFER_READ_WRITE : GBM_BO_TRANSFER_READ, &map_stride, &m->map_data);
+                if (!addr && getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[gfx] gbm_bo_map %ux%u: %s\n", fd_data.width, fd_data.height, strerror(errno));
+                if (!addr) { gbm_bo_destroy(m->bo); m->bo = NULL; }
+            }
+            /* Native GLES path: use host GL if a tiled buffer cannot be CPU-mapped; ANGLE uses its own path above. */
+            if (!addr && !gfx->angle && !buf->packed && buf->num_planes == 1 && apklayer_gfx_transfer_supported(fd_data.format)
+                && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
+                int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
+                                              buf->modifier, m->stage, buf->stride[0]);
+                if (r) { free(m->stage); m->stage = NULL; errno = -r; } else { addr = m->stage; offset = 0; }
+                if (!r && write) {
+                    m->upload_gbm = gfx->gbm; m->upload_fd = fd_data.fd; m->upload_w = fd_data.width; m->upload_h = fd_data.height;
+                    m->upload_fourcc = fd_data.format; m->upload_stride = buf->stride[0]; m->upload_offset = buf->offset[0]; m->upload_modifier = buf->modifier;
+                }
             }
         }
         /* Android reads a locked buffer at its own stride: a map with another one (a driver's detiled staging copy) is read and written

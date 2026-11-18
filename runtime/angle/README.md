@@ -5,6 +5,12 @@ These x86_64 and x86 Android EGL/GLES libraries are built from Google ANGLE revi
 
 Meson packages the files under `runtime/angle/vendor` into `/usr/lib/apklayer/angle/vendor`. Runtime setup links them into `/system/lib` and `/system/lib64`, where Android 17's EGL loader looks for the `angle` suffix when `ro.hardware.egl=angle`.
 
+## Linux host libraries for GBM transfers
+
+The x86_64 host graphics HAL uses these Google ANGLE libraries to import Android DMA-BUFs for CPU lock/read/write operations. Android app GLES continues to use the Android-target libraries above. These host libraries are built from the same revision with `target_os="linux"`, `target_cpu="x64"`, `angle_enable_vulkan=true`, `angle_enable_gl=false`, and `angle_use_custom_libvulkan=false`; the last setting makes ANGLE use the system Vulkan loader rather than looking for a private loader beside ANGLE. The Vulkan backend can sample imported NVIDIA buffers into an RGBA framebuffer and upload CPU pixels through GLES.
+
+Meson packages the host files under `/usr/lib/apklayer/angle/host`; the CLI passes the EGL path to the graphics HAL only when ANGLE is selected. The Linux build uses the same ANGLE source revision and carries the apklayer source-tree patches listed above; their Android-only conditions do not change this Linux build.
+
 ANGLE is licensed under the BSD 3-Clause license. The binaries are built from the Google ANGLE source, not copied from the Waydroid NVIDIA Android 13 image.
 
 SHA-256:
@@ -17,3 +23,10 @@ SHA-256:
 | x86 | `libEGL_angle.so` | `fd23048764fe33787f56cfc9927d7134e6a317c5924596785a57a347c36ebfc6` |
 | x86 | `libGLESv1_CM_angle.so` | `e7af29754e1cd5038be6507e19968120ce2eaacf333fa63658ea18c513e9274a` |
 | x86 | `libGLESv2_angle.so` | `41a3257ec8249061af569eb0ceb9bb544cf515f3a229cbb71b4eb4c44ed860cb` |
+
+Linux host SHA-256:
+
+| Library | SHA-256 |
+|---|---|
+| `libEGL_angle.so` | `eee504738cc482eb4e3411af5dbc09b4a182dd453a89afbf4105258bd6e90936` |
+| `libGLESv2_angle.so` | `c74e44b3685a8f723594ae47af3f458dd25bcfa1ebbc74e7d50bcddcdbedb7b0` |
