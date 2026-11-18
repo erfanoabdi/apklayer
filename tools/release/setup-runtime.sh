@@ -13,12 +13,20 @@ if [ -n "$owner" ] && [ -e "$owner" ] && [ "$(dirname "$owner")" != "$half" ]; t
     echo "apklayer: the runtime $native is set up by $(dirname "$owner"), not by $half; not relinking it (APKLAYER_NATIVE=<own copy of the runtime> for this build)" >&2; exit 1
 fi
 exec 9>"$native/.setup.lock" && flock 9
-[ "$(stat -c %Y "$native/.setup" 2>/dev/null)" != "$(stat -c %Y "$half/native-runtime.jar")" ] || exit 0  # another CLI did it meanwhile
+host_classes_changed=0
+[ ! -f "$half/aosp/host-classes.jar" ] || [ ! "$half/aosp/host-classes.jar" -nt "$native/aosp/host-classes.jar" ] || host_classes_changed=1
+[ "$(stat -c %Y "$native/.setup" 2>/dev/null)" != "$(stat -c %Y "$half/native-runtime.jar")" ] || [ "$host_classes_changed" = 1 ] || exit 0  # another CLI did it meanwhile
 echo "apklayer: setting up the Android runtime in $native (after each update, a few minutes)" >&2
 chmod 755 "$native"  # unpacked as 0700 before 0.4.6: sandboxed apps (other uids) could not read the runtime
 for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an update reaches them; the bundle's own files stay
     t="$native/${f#"$half"/}"
-    [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"
+    if [ "$f" = "$half/aosp/host-classes.jar" ] && [ -f "$t" ] && [ ! -L "$t" ] && [ "$f" -nt "$t" ]; then
+        # Keep package host classes (NativeLoader, etc.) in sync with the CLI; replace atomically because live JVMs may have the old jar mapped.
+        tmpfile="$(mktemp "$native/aosp/.host-classes.XXXXXX")"
+        if cp -- "$f" "$tmpfile" && chmod --reference="$f" "$tmpfile" && mv -f -- "$tmpfile" "$t"; then :; else rm -f -- "$tmpfile"; exit 1; fi
+    else
+        [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"
+    fi
 done
 tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
 for d in "$half"/android-root/apex/*; do  # the package build's apex dirs the bundle lacks: com.android.art (libart.so: the JNI tables), com.android.runtime (bionic, linker); linked, so their own links resolve
