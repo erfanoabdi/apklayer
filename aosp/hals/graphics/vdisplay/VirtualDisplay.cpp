@@ -19,6 +19,7 @@
 #include <ui/GraphicBuffer.h>
 #include <ui/Rect.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <climits>
@@ -41,6 +42,7 @@ using namespace apklayer::gralloc;
 namespace {
 
 constexpr int kSlots = 8;
+constexpr int kMaxAcquired = kSlots - 2;
 
 class Sink : public ConsumerBase::FrameAvailableListener {
   public:
@@ -48,7 +50,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         mStack = stack;
         mWidth = w;
         mHeight = h;
-        auto [consumer, surface] = BufferItemConsumer::create(GraphicBuffer::USAGE_HW_COMPOSER | GraphicBuffer::USAGE_HW_TEXTURE, kSlots - 2);
+        auto [consumer, surface] = BufferItemConsumer::create(GraphicBuffer::USAGE_HW_COMPOSER | GraphicBuffer::USAGE_HW_TEXTURE, kMaxAcquired);
         mConsumer = consumer;
         mSurface = surface;
         mConsumer->setName(String8("apklayer-vdisplay"));
@@ -64,7 +66,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
 
         mToken = SurfaceComposerClient::createVirtualDisplay(std::string(title), /*isSecure=*/false);
         if (mToken == nullptr) { ALOGE("createVirtualDisplay failed"); return false; }
-        applyDisplay();
+        applyDisplay(/*synchronous=*/true);
         // the display's token under a name, for `apklayer screenshot` (aosp/tools/screenshot.cpp: SurfaceFlinger's own captureDisplay of this display).
         // The entry outlives this process (its death link is SurfaceFlinger's); names are per-launch pids, so a stale one is never looked up
         std::string name = "apklayer.vdisplay." + std::to_string(stack);
@@ -79,7 +81,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     }
 
   private:
-    void applyDisplay() {
+    void applyDisplay(bool synchronous = false) {
         SurfaceComposerClient::Transaction t;
         t.setDisplaySurface(mToken, mSurface);
         t.setDisplayLayerStack(mToken, ui::LayerStack::fromValue(mStack));
@@ -96,7 +98,8 @@ class Sink : public ConsumerBase::FrameAvailableListener {
             if (mBarGb != nullptr) t.setBuffer(mBar, buildBar());  // the strip's turn changed
             placeBar(t);
         }
-        t.apply(/*synchronous=*/true);
+        // The shell reader handles both configure and buffer release. A configure must return without waiting for a commit.
+        t.apply(synchronous);
     }
 
     // where the bar's layer sits in the layer stack: the bottom edge, or turned the side of the panel's bottom
@@ -174,32 +177,42 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         if (self->mTurn == 270 && turnedShape) self->applyDisplay();  // the stack's rectangle follows the bar's thickness
     }
 
-    // a finished frame of the virtual display: SurfaceFlinger's queueBuffer (a binder call into this process) only wakes the present thread,
-    // which waits for the composition's fence and hands the frame over; the fence wait no longer holds SurfaceFlinger's composition up
-    void onFrameAvailable(const BufferItem&) override {
+    // Producers and the shell's release callback wake the present thread. It drains the queue as buffer slots become available.
+    void wakePresent() {
         std::lock_guard<std::mutex> lock(mQueueLock);
-        mQueued++;
+        mQueueChanged = true;
         mQueueCv.notify_one();
     }
+
+    void onFrameAvailable(const BufferItem&) override { wakePresent(); }
+    void onFrameReplaced(const BufferItem&) override { wakePresent(); }
 
     void presentLoop() {
         for (;;) {
             {
                 std::unique_lock<std::mutex> lock(mQueueLock);
-                mQueueCv.wait(lock, [this] { return mQueued > 0; });
-                mQueued--;
+                mQueueCv.wait(lock, [this] { return mQueueChanged; });
+                mQueueChanged = false;
             }
-            BufferItem item;
-            {
+            for (;;) {
+                BufferItem item;
+                {
+                    std::lock_guard<std::mutex> lock(mLock);
+                    if (std::count(mBusy, mBusy + kSlots, true) >= kMaxAcquired) break;
+                    // acquireBuffer waits for the fence by default. Wait below so releases can take mLock in the meantime.
+                    if (mConsumer->acquireBuffer(&item, 0, /*waitForFence=*/false) != OK) break;
+                }
+                status_t fenceStatus = item.mFence != nullptr ? item.mFence->waitForever("apklayer-vdisplay") : OK;
                 std::lock_guard<std::mutex> lock(mLock);
-                if (mConsumer->acquireBuffer(&item, 0) != OK) continue;
-            }
-            if (item.mFence != nullptr) item.mFence->waitForever("apklayer-vdisplay");  // the GPU finished composing it
-            std::lock_guard<std::mutex> lock(mLock);
-            present(item);
-            if (!mFramed) {  // the app's first frame (no other layer is shown before it): the bar joins from the next one
-                mFramed = true;
-                if (mBar != nullptr) SurfaceComposerClient::Transaction().show(mBar).apply();
+                if (fenceStatus != OK) {
+                    mConsumer->releaseBuffer(item, item.mFence);
+                    continue;
+                }
+                present(item);
+                if (!mFramed) {  // the app's first frame (no other layer is shown before it): the bar joins from the next one
+                    mFramed = true;
+                    if (mBar != nullptr) SurfaceComposerClient::Transaction().show(mBar).apply();
+                }
             }
         }
     }
@@ -283,6 +296,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
             self->mHeld[slot] = BufferItem();
         }
         self->mBusy[slot] = false;
+        self->wakePresent();
     }
 
     // the window changed size or turn: the display follows
@@ -310,9 +324,9 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     bool mFramed = false;  // the display presented a frame: until then the bar stays hidden, or its layer alone makes the first frame (no splash)
     apklayer_display* mDisplay = nullptr;
     std::mutex mLock;
-    std::mutex mQueueLock;  // frames SurfaceFlinger queued that the present thread has not acquired yet
+    std::mutex mQueueLock;
     std::condition_variable mQueueCv;
-    int mQueued = 0;
+    bool mQueueChanged = false;
     uint32_t mStack = 0, mWidth = 0, mHeight = 0;
     int32_t mTurn = 0;  // degrees the app's layer stack is turned in the window (onConfigure)
     BufferItem mHeld[kSlots];

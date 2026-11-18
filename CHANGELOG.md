@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-18: Keep virtual display releases moving during resize
+
+- PGR hit the six-buffer acquire limit during a drag resize and then logged SurfaceFlinger commit timeouts. The virtual display's socket reader handled resize and release callbacks, but resize waited for a synchronous commit. The present thread also held the sink lock while `acquireBuffer` waited for a fence by default.
+- Submit resize transactions without waiting for commit. Wait for the fence outside the sink lock and drain frames on either queue activity or a released slot. Stop acquiring at the configured limit so Wayland releases can resume pending work.
+
 ## 2026-11-18: Keep NVIDIA compositor buffers tiled with ANGLE
 
 - PGR's current ANGLE launch logs show SurfaceFlinger receiving LINEAR AB24 buffers (`fourcc 0x34324241`, usage `0x933`) and Skia failing `glEGLImageTargetTexture2DOES` with `GL_INVALID_OPERATION` (`0x502`). ANGLE mode had skipped the NVIDIA tiled-buffer allocation workaround, so SurfaceFlinger could not sample these buffers through host EGL.
@@ -3213,6 +3218,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - All owned test instances were checked clean on ARM and x86. The owner paused/cleared the goal and requested a handoff after current tasks finished. No additional build/test was launched afterward. Real Termux confirmation, Fennec painted content, remaining native launch APIs and broader runtime identity gaps remain open.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-18 - gsi_x86_64 libapklayer_vdisplay (resize and buffer release stalls)
+- Sync `hals/graphics/vdisplay/VirtualDisplay.cpp` and replay the existing x86_64 graph under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp`. The buffer wait change is contained in this module.
+
 ### 2026-11-18 - gsi_x86_64 libapklayer_egl after reverting copied buffer reuse
 - Why: install the x86_64 shim from `00be45ae` to isolate the EGL fence waits in native NVIDIA mode. Sync `hals/graphics/egl/EglAttach.cpp` and `EglAttach.h` with `tools/sync-aosp.sh`. Replay the x86_64 `libapklayer_egl` compile and link under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl EglAttach.cpp EglWindow.cpp`, using a fresh command query and temporary stage. `EglWindow.cpp` also includes the changed header.
 - Result: rebuilt from vendor/apklayer `c10098c` and installed in the NVIDIA PC's 0.5.0 Android runtime. The 118240-byte shim has SHA-256 `a71b488ea78a47f15352c737b30a1c617b3e4efbe5ca404ee3c6594508d165d4`. It retains the Linux ANGLE compositor selector and no longer exports `WindowAttach::attachSpare`. The prior shim is backed up beside it. PGR frame timing with the reverted shim is still pending.
