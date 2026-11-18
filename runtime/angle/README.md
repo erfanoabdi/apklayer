@@ -11,7 +11,7 @@ Meson packages the files under `runtime/angle/vendor` into `/usr/lib/apklayer/an
 
 The x86_64 Linux ANGLE EGL/GLES libraries serve both the host graphics HAL's CPU buffer transfers and, in ANGLE mode, SurfaceFlinger's compositor EGL and GLES. Android app GLES continues to use the Android-target libraries above. These host libraries are built from the same revision with `target_os="linux"`, `target_cpu="x64"`, `angle_enable_vulkan=true`, `angle_enable_gl=false`, and `angle_use_custom_libvulkan=false`; the last setting makes ANGLE use the system Vulkan loader rather than looking for a private loader beside ANGLE. The Vulkan backend imports Android DMA-BUFs through GBM/EGL, samples them on the GPU, and uploads CPU pixels through GLES.
 
-Meson packages the host files under `/usr/lib/apklayer/angle/host`; the CLI passes the EGL path to the graphics HAL and the SurfaceFlinger process only when ANGLE is selected. The compositor's Android EGL shim still supplies Android native-buffer compatibility, while its EGL/GL implementation is Linux ANGLE. The Linux build uses the same ANGLE source revision and carries the apklayer source-tree patches listed above; their Android-only conditions do not change this Linux build.
+Meson packages the host files under `/usr/lib/apklayer/angle/host`. The CLI passes the EGL path to the graphics HAL and the SurfaceFlinger process when ANGLE is selected. The compositor's Android EGL shim supplies Android native-buffer compatibility and forwards EGL/GL to Linux ANGLE. Linux ANGLE uses the same source revision with `patches/angle/0004-cache-linux-dma-buf-modifiers.patch`, which shares each Vulkan format's DRM modifier list between EGL capability queries and DMA-BUF imports.
 
 ANGLE is licensed under the BSD 3-Clause license. The binaries are built from the Google ANGLE source, not copied from the Waydroid NVIDIA Android 13 image.
 
@@ -31,4 +31,4 @@ Linux host SHA-256:
 | Library | SHA-256 |
 |---|---|
 | `libEGL_angle.so` | `eee504738cc482eb4e3411af5dbc09b4a182dd453a89afbf4105258bd6e90936` |
-| `libGLESv2_angle.so` | `c74e44b3685a8f723594ae47af3f458dd25bcfa1ebbc74e7d50bcddcdbedb7b0` |
+| `libGLESv2_angle.so` | `dfae118972a908e0ed9a24e4fb24ce3c4804971cbd6e9bf01d72bae4941ae8df` |

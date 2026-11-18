@@ -1,0 +1,331 @@
+From: apklayer
+Subject: ANGLE: cache Vulkan DRM modifiers for DMA-BUF imports
+
+Use one DRM modifier list per Vulkan format on each Linux EGL display. Reuse it for EGL queries and image imports, and clear it when the display terminates.
+
+diff --git a/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.cpp b/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.cpp
+index 39c07ae..c52b811 100644
+--- a/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.cpp
++++ b/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.cpp
+@@ -20,6 +20,13 @@ namespace rx
+ 
+ DisplayVkLinux::DisplayVkLinux(const egl::DisplayState &state) : DisplayVk(state) {}
+ 
++void DisplayVkLinux::terminate()
++{
++    mDrmFormats.clear();
++    mDrmModifiers.clear();
++    DisplayVk::terminate();
++}
++
+ DeviceImpl *DisplayVkLinux::createDevice()
+ {
+     return new DeviceVkLinux(this);
+@@ -43,12 +50,18 @@ ExternalImageSiblingImpl *DisplayVkLinux::createExternalImageSibling(
+     }
+ }
+ 
+-// Returns the list of DRM modifiers that a VkFormat supports
+-std::vector<VkDrmFormatModifierPropertiesEXT> DisplayVkLinux::getDrmModifiers(
+-    const DisplayVk *displayVk,
++// apklayer patch: imports and modifier queries use the same device capabilities.
++const std::vector<VkDrmFormatModifierPropertiesEXT> &DisplayVkLinux::getDrmModifiers(
+     VkFormat vkFormat)
+ {
+-    vk::Renderer *renderer = displayVk->getRenderer();
++    auto [it, inserted] = mDrmModifiers.try_emplace(vkFormat);
++    auto &modifiers     = it->second;
++    if (!inserted)
++    {
++        return modifiers;
++    }
++
++    vk::Renderer *renderer = getRenderer();
+ 
+     // Query list of drm format modifiers compatible with VkFormat.
+     VkDrmFormatModifierPropertiesListEXT formatModifierPropertiesList = {};
+@@ -62,14 +75,16 @@ std::vector<VkDrmFormatModifierPropertiesEXT> DisplayVkLinux::getDrmModifiers(
+     VK_CALL(vkGetPhysicalDeviceFormatProperties2, renderer->getPhysicalDevice(), vkFormat,
+             &formatProperties);
+ 
+-    std::vector<VkDrmFormatModifierPropertiesEXT> formatModifierProperties(
+-        formatModifierPropertiesList.drmFormatModifierCount);
+-    formatModifierPropertiesList.pDrmFormatModifierProperties = formatModifierProperties.data();
+-
+-    VK_CALL(vkGetPhysicalDeviceFormatProperties2, renderer->getPhysicalDevice(), vkFormat,
+-            &formatProperties);
++    if (formatModifierPropertiesList.drmFormatModifierCount != 0)
++    {
++        modifiers.resize(formatModifierPropertiesList.drmFormatModifierCount);
++        formatModifierPropertiesList.pDrmFormatModifierProperties = modifiers.data();
++        VK_CALL(vkGetPhysicalDeviceFormatProperties2, renderer->getPhysicalDevice(), vkFormat,
++                &formatProperties);
++        modifiers.resize(formatModifierPropertiesList.drmFormatModifierCount);
++    }
+ 
+-    return formatModifierProperties;
++    return modifiers;
+ }
+ 
+ // Returns true if that VkFormat has at least on format modifier in its properties
+@@ -175,7 +190,7 @@ egl::Error DisplayVkLinux::queryDmaBufModifiers(EGLint drmFormat,
+     {
+         VkFormat vkFmt = vkFormats[i];
+ 
+-        std::vector<VkDrmFormatModifierPropertiesEXT> vkDrmMods = getDrmModifiers(this, vkFmt);
++        const auto &vkDrmMods = getDrmModifiers(vkFmt);
+ 
+         std::vector<EGLuint64KHR> drmMods(vkDrmMods.size());
+         std::transform(std::begin(vkDrmMods), std::end(vkDrmMods), std::begin(drmMods),
+diff --git a/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.h b/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.h
+index b83a57a..302836c 100644
+--- a/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.h
++++ b/src/libANGLE/renderer/vulkan/linux/DisplayVkLinux.h
+@@ -12,6 +12,8 @@
+ #ifndef LIBANGLE_RENDERER_VULKAN_DISPLAY_DISPLAYVKLINUX_H_
+ #define LIBANGLE_RENDERER_VULKAN_DISPLAY_DISPLAYVKLINUX_H_
+ 
++#include <unordered_map>
++
+ #include "libANGLE/renderer/vulkan/DisplayVk.h"
+ 
+ namespace rx
+@@ -21,6 +23,7 @@ class DisplayVkLinux : public DisplayVk
+   public:
+     DisplayVkLinux(const egl::DisplayState &state);
+ 
++    void terminate() override;
+     DeviceImpl *createDevice() override;
+ 
+     ExternalImageSiblingImpl *createExternalImageSibling(const gl::Context *context,
+@@ -35,15 +38,16 @@ class DisplayVkLinux : public DisplayVk
+                                     EGLBoolean *externalOnly,
+                                     EGLint *numModifiers) override;
+ 
++    const std::vector<VkDrmFormatModifierPropertiesEXT> &getDrmModifiers(VkFormat vkFormat);
++
+   private:
+-    std::vector<VkDrmFormatModifierPropertiesEXT> getDrmModifiers(const DisplayVk *displayVk,
+-                                                                  VkFormat vkFormat);
+     bool supportsDrmModifiers(VkPhysicalDevice device, VkFormat vkFormat);
+     std::vector<VkFormat> getVkFormatsWithDrmModifiers(const vk::Renderer *renderer);
+     std::unordered_set<EGLint> getDrmFormats(const vk::Renderer *renderer);
+ 
+     // Supported DRM formats
+     std::unordered_set<EGLint> mDrmFormats;
++    std::unordered_map<VkFormat, std::vector<VkDrmFormatModifierPropertiesEXT>> mDrmModifiers;
+ };
+ 
+ }  // namespace rx
+diff --git a/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.cpp b/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.cpp
+index 2de2c30..70c202f 100644
+--- a/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.cpp
++++ b/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.cpp
+@@ -12,7 +12,7 @@
+ #include "common/linux/dma_buf_utils.h"
+ #include "common/system_utils.h"
+ #include "libANGLE/Display.h"
+-#include "libANGLE/renderer/vulkan/DisplayVk.h"
++#include "libANGLE/renderer/vulkan/linux/DisplayVkLinux.h"
+ #include "libANGLE/renderer/vulkan/vk_renderer.h"
+ 
+ #include <fcntl.h>
+@@ -106,55 +106,6 @@ void GetModifiers(const egl::AttributeMap &attribs,
+     }
+ }
+ 
+-bool GetFormatModifierProperties(DisplayVk *displayVk,
+-                                 VkFormat vkFormat,
+-                                 uint64_t drmModifier,
+-                                 VkDrmFormatModifierPropertiesEXT *modifierPropertiesOut)
+-{
+-    vk::Renderer *renderer = displayVk->getRenderer();
+-
+-    // Query list of drm format modifiers compatible with VkFormat.
+-    VkDrmFormatModifierPropertiesListEXT formatModifierPropertiesList = {};
+-    formatModifierPropertiesList.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+-    formatModifierPropertiesList.drmFormatModifierCount = 0;
+-
+-    VkFormatProperties2 formatProperties = {};
+-    formatProperties.sType               = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+-    formatProperties.pNext               = &formatModifierPropertiesList;
+-
+-    VK_CALL(vkGetPhysicalDeviceFormatProperties2, renderer->getPhysicalDevice(), vkFormat,
+-            &formatProperties);
+-
+-    std::vector<VkDrmFormatModifierPropertiesEXT> formatModifierProperties(
+-        formatModifierPropertiesList.drmFormatModifierCount);
+-    formatModifierPropertiesList.pDrmFormatModifierProperties = formatModifierProperties.data();
+-
+-    VK_CALL(vkGetPhysicalDeviceFormatProperties2, renderer->getPhysicalDevice(), vkFormat,
+-            &formatProperties);
+-
+-    // Find the requested DRM modifiers.
+-    uint32_t propertiesIndex = formatModifierPropertiesList.drmFormatModifierCount;
+-    for (uint32_t index = 0; index < formatModifierPropertiesList.drmFormatModifierCount; ++index)
+-    {
+-        if (ANGLE_UNSAFE_TODO(formatModifierPropertiesList.pDrmFormatModifierProperties[index])
+-                .drmFormatModifier == drmModifier)
+-        {
+-            propertiesIndex = index;
+-            break;
+-        }
+-    }
+-
+-    // Return the properties if found.
+-    if (propertiesIndex >= formatModifierPropertiesList.drmFormatModifierCount)
+-    {
+-        return false;
+-    }
+-
+-    *modifierPropertiesOut = ANGLE_UNSAFE_TODO(
+-        formatModifierPropertiesList.pDrmFormatModifierProperties[propertiesIndex]);
+-    return true;
+-}
+-
+ VkImageUsageFlags GetUsageFlags(vk::Renderer *renderer,
+                                 const angle::Format &format,
+                                 const VkDrmFormatModifierPropertiesEXT &properties,
+@@ -352,7 +303,7 @@ DmaBufImageSiblingVkLinux::~DmaBufImageSiblingVkLinux() {}
+ 
+ egl::Error DmaBufImageSiblingVkLinux::initialize(const egl::Display *display)
+ {
+-    DisplayVk *displayVk = vk::GetImpl(display);
++    auto *displayVk = static_cast<DisplayVkLinux *>(vk::GetImpl(display));
+     return angle::ToEGL(initImpl(displayVk), EGL_BAD_PARAMETER);
+ }
+ 
+@@ -399,7 +350,7 @@ bool FindSupportedFlagsForFormat(vk::Renderer *renderer,
+     return *outUsageFlags != 0;
+ }
+ 
+-angle::Result DmaBufImageSiblingVkLinux::initWithFormat(DisplayVk *displayVk,
++angle::Result DmaBufImageSiblingVkLinux::initWithFormat(DisplayVkLinux *displayVk,
+                                                         const angle::Format &format,
+                                                         VkFormat vulkanFormat,
+                                                         MutableFormat mutableFormat,
+@@ -427,14 +378,19 @@ angle::Result DmaBufImageSiblingVkLinux::initWithFormat(DisplayVk *displayVk,
+     }
+ 
+     // First, check the possible features for the format and determine usage and create flags.
+-    VkDrmFormatModifierPropertiesEXT modifierProperties = {};
+-    if (!GetFormatModifierProperties(displayVk, vulkanFormat, plane0Modifier, &modifierProperties))
++    const auto &modifiers = displayVk->getDrmModifiers(vulkanFormat);
++    const auto modifier  = std::find_if(modifiers.begin(), modifiers.end(),
++                                       [plane0Modifier](const auto &properties) {
++                                           return properties.drmFormatModifier == plane0Modifier;
++                                       });
++    if (modifier == modifiers.end())
+     {
+         // Format is incompatible
+         *initResultOut = InitResult::Failed;
+         return angle::Result::Continue;
+     }
+ 
++    const VkDrmFormatModifierPropertiesEXT &modifierProperties = *modifier;
+     VkImageUsageFlags usageFlags =
+         GetUsageFlags(renderer, format, modifierProperties, &mTextureable, &mRenderable);
+ 
+@@ -578,7 +534,7 @@ angle::Result DmaBufImageSiblingVkLinux::initWithFormat(DisplayVk *displayVk,
+         allocateInfo.allocateInfoPtr.data(), vk::kForeignDeviceQueueIndex, flags);
+ }
+ 
+-angle::Result DmaBufImageSiblingVkLinux::initImpl(DisplayVk *displayVk)
++angle::Result DmaBufImageSiblingVkLinux::initImpl(DisplayVkLinux *displayVk)
+ {
+     vk::Renderer *renderer = displayVk->getRenderer();
+ 
+diff --git a/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.h b/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.h
+index 3b35004..fbfa4dd 100644
+--- a/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.h
++++ b/src/libANGLE/renderer/vulkan/linux/DmaBufImageSiblingVkLinux.h
+@@ -27,6 +27,8 @@ enum InitResult
+     Failed
+ };
+ 
++class DisplayVkLinux;
++
+ class DmaBufImageSiblingVkLinux : public ExternalImageSiblingVk
+ {
+   public:
+@@ -51,13 +53,13 @@ class DmaBufImageSiblingVkLinux : public ExternalImageSiblingVk
+     void release(vk::Renderer *renderer) override;
+ 
+   private:
+-    angle::Result initWithFormat(DisplayVk *displayVk,
++    angle::Result initWithFormat(DisplayVkLinux *displayVk,
+                                  const angle::Format &format,
+                                  VkFormat vulkanFormat,
+                                  MutableFormat mutableFormat,
+                                  InitResult *outResult);
+ 
+-    angle::Result initImpl(DisplayVk *displayVk);
++    angle::Result initImpl(DisplayVkLinux *displayVk);
+ 
+     egl::AttributeMap mAttribs;
+     gl::Extents mSize;
+diff --git a/src/libANGLE/renderer/vulkan/linux/display/DisplayVkSimple.cpp b/src/libANGLE/renderer/vulkan/linux/display/DisplayVkSimple.cpp
+index 61458c5..e3a932e 100644
+--- a/src/libANGLE/renderer/vulkan/linux/display/DisplayVkSimple.cpp
++++ b/src/libANGLE/renderer/vulkan/linux/display/DisplayVkSimple.cpp
+@@ -21,7 +21,7 @@ DisplayVkSimple::DisplayVkSimple(const egl::DisplayState &state) : DisplayVkLinu
+ 
+ void DisplayVkSimple::terminate()
+ {
+-    DisplayVk::terminate();
++    DisplayVkLinux::terminate();
+ }
+ 
+ bool DisplayVkSimple::isValidNativeWindow(EGLNativeWindowType window) const
+diff --git a/src/libANGLE/renderer/vulkan/linux/gbm/DisplayVkGbm.cpp b/src/libANGLE/renderer/vulkan/linux/gbm/DisplayVkGbm.cpp
+index b3a1a49..cf5e2f4 100644
+--- a/src/libANGLE/renderer/vulkan/linux/gbm/DisplayVkGbm.cpp
++++ b/src/libANGLE/renderer/vulkan/linux/gbm/DisplayVkGbm.cpp
+@@ -37,7 +37,7 @@ egl::Error DisplayVkGbm::initialize(egl::Display *display)
+ void DisplayVkGbm::terminate()
+ {
+     mGbmDevice = nullptr;
+-    DisplayVk::terminate();
++    DisplayVkLinux::terminate();
+ }
+ 
+ bool DisplayVkGbm::isValidNativeWindow(EGLNativeWindowType window) const
+diff --git a/src/libANGLE/renderer/vulkan/linux/headless/DisplayVkHeadless.cpp b/src/libANGLE/renderer/vulkan/linux/headless/DisplayVkHeadless.cpp
+index 7aa46c7..d825227 100644
+--- a/src/libANGLE/renderer/vulkan/linux/headless/DisplayVkHeadless.cpp
++++ b/src/libANGLE/renderer/vulkan/linux/headless/DisplayVkHeadless.cpp
+@@ -21,7 +21,7 @@ DisplayVkHeadless::DisplayVkHeadless(const egl::DisplayState &state) : DisplayVk
+ 
+ void DisplayVkHeadless::terminate()
+ {
+-    DisplayVk::terminate();
++    DisplayVkLinux::terminate();
+ }
+ 
+ bool DisplayVkHeadless::isValidNativeWindow(EGLNativeWindowType window) const
+diff --git a/src/libANGLE/renderer/vulkan/linux/wayland/DisplayVkWayland.cpp b/src/libANGLE/renderer/vulkan/linux/wayland/DisplayVkWayland.cpp
+index ac737b4..1a2019c 100644
+--- a/src/libANGLE/renderer/vulkan/linux/wayland/DisplayVkWayland.cpp
++++ b/src/libANGLE/renderer/vulkan/linux/wayland/DisplayVkWayland.cpp
+@@ -63,7 +63,7 @@ void DisplayVkWayland::terminate()
+         mOwnDisplay = false;
+     }
+     mWaylandDisplay = nullptr;
+-    DisplayVk::terminate();
++    DisplayVkLinux::terminate();
+ }
+ 
+ bool DisplayVkWayland::isValidNativeWindow(EGLNativeWindowType window) const
+diff --git a/src/libANGLE/renderer/vulkan/linux/xcb/DisplayVkXcb.cpp b/src/libANGLE/renderer/vulkan/linux/xcb/DisplayVkXcb.cpp
+index 051e2b8..11007c1 100644
+--- a/src/libANGLE/renderer/vulkan/linux/xcb/DisplayVkXcb.cpp
++++ b/src/libANGLE/renderer/vulkan/linux/xcb/DisplayVkXcb.cpp
+@@ -73,7 +73,7 @@ void DisplayVkXcb::terminate()
+         xcb_disconnect(mXcbConnection);
+         mXcbConnection = nullptr;
+     }
+-    DisplayVk::terminate();
++    DisplayVkLinux::terminate();
+ }
+ 
+ bool DisplayVkXcb::isValidNativeWindow(EGLNativeWindowType window) const

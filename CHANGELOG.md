@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-18: Cache DRM modifiers in the Linux ANGLE Vulkan backend
+
+- Reuse the modifier list for each Vulkan format across DMA-BUF imports and EGL modifier queries. Reset the cache when the EGL display terminates.
+- Rebuilt Linux x86_64 ANGLE at `f0d596b6` with `autoninja -C out/LinuxHost -j8 libEGL libGLESv2`. Median import and destroy time on the RTX 5060 Ti was 244.6 µs before and 243.5 µs after across ten batches of 8,000 linear and tiled imports per build.
+- Native NVIDIA GLES and baseline ANGLE both reached about 180 FPS in the vsynced Android glbench scenes. The benchmark did not reproduce the game slowdown. In ANGLE mode glbench reported that Android EGL frame timestamps are unavailable.
+- Both ANGLE builds submitted DMA-BUFs from a disposable `SurfaceView.lockCanvas()` test. Canvas locks failed intermittently with both builds, and SurfaceFlinger's screenshot allocation failed with `EINVAL` for an NVIDIA LINEAR render target on both builds.
+
 ## 2026-11-18: Make successful EGL imports opt-in logging
 
 - Print successful DMA-BUF imports only with `APKLAYER_GFX_DEBUG` enabled. The GPU smoke test opts in because it uses these messages to time its screenshot. Failed imports still report the EGL error.
