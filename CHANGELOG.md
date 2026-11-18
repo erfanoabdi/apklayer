@@ -9,6 +9,8 @@
 - For renderable RGBA DMA-BUFs, read the imported framebuffer directly. Skip intermediate RGBA copies for tight rows and for ANGLE's supported padded rows. Keep sampling when the imported attachment is incomplete. The 667×279 tiled RGBA test verified pixels and padding at three pitches with native EGL and ANGLE. At 2680 bytes per row, median upload and readback improved from 1026 to 889 µs on native NVIDIA and from 1138 to 1014 µs on ANGLE.
 - The EGL GPU blit path checks each private framebuffer when it caches the image. Later frames reuse that status until the image or context changes.
 - Both old and new display sinks presented 600 Vulkan frames in isolated app windows. SurfaceFlinger's captures were 86.9% magenta, and both steady runs used two Wayland imports. A separate slot replay with three buffers released immediately needed 600 imports before and 3 after. It also verified that the new cache never evicts busy buffers. AMD, Intel, and Halium need hardware checks.
+- The optimized ANGLE Canvas app posted three software-rendered frames and the shell received all three as DMA-BUFs. ANGLE's screenshot still fails because NVIDIA rejects the linear render target. Native NVIDIA glbench reached 180 FPS with the rebuilt EGL shim in both 8-bit and FP16 windows.
+- Built the local Noble amd64 package from `caf13ede` and verified its graphics HAL, Linux ANGLE, and six Android ANGLE libraries. Package SHA-256 `2761c7896e8e2c54afdd2e1ad4f6313596fac21410de408af8f0a190d7c60f39`. Retained the package and both companion runtime libraries in `/home/wesley/apklayer-build-deb/out/graphics-caf13ede`. Installed the two x86_64 runtime libraries with rollback copies. The package itself stays local and uninstalled.
 
 ## 2026-11-18: Cache DRM modifiers in the Linux ANGLE Vulkan backend
 
@@ -3248,6 +3250,7 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 ### 2026-11-18 - gsi_x86_64 libapklayer_egl (cache GPU blit framebuffer status)
 - Sync `hals/graphics/egl/EglWindow.cpp` with `tools/sync-aosp.sh`. Replay `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl EglWindow.cpp` under `flock -n ~/los24-build.lock`.
+- Result: vendor/apklayer `4f47530` built the 118,272-byte x86_64 library with SHA-256 `c0dc8e9b4207e97f9c153cf1e4cb4a108b6347e041f693c690d36ed52024ba5a`. The 8-bit and FP16 smoke runs passed.
 
 ### 2026-11-18 - gsi_x86_64 libapklayer_vdisplay (retain reusable Wayland imports)
 - Sync `hals/graphics/vdisplay/VirtualDisplay.cpp` with `tools/sync-aosp.sh`. Replay `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp` under `flock -n ~/los24-build.lock`. The existing build graph is sufficient.
