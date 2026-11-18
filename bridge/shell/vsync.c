@@ -4,14 +4,11 @@
 
 struct request { struct client *client; int id; };
 static struct request requests[MAX_WINDOWS];
+_Static_assert(MAX_WINDOWS > 0 && MAX_WINDOWS <= 64, "vsync request slots must fit in a uint64_t");
+/* Keep the old highest-free slot choice and ascending reply order. */
+static uint64_t request_slots;
 static struct wl_callback *callback;
 static struct wl_surface *source;
-
-static int pending(void)
-{
-    for (int i = 0; i < MAX_WINDOWS; i++) if (requests[i].client) return 1;
-    return 0;
-}
 
 static void done(void *data, struct wl_callback *cb, uint32_t ms)
 {
@@ -19,10 +16,12 @@ static void done(void *data, struct wl_callback *cb, uint32_t ms)
     wl_callback_destroy(cb);
     callback = NULL;
     source = NULL;
-    for (int i = 0; i < MAX_WINDOWS; i++) {
+    uint64_t slots = request_slots;
+    request_slots = 0;
+    for (; slots; slots &= slots - 1) {
+        int i = __builtin_ctzll(slots);
         struct request r = requests[i];
-        requests[i].client = NULL;
-        if (r.client && r.client->fd >= 0)
+        if (r.client->fd >= 0)
             send_msg(r.client, MSG_VSYNC, (int32_t[]){ r.id, (int32_t)ms }, 2);
     }
 }
@@ -62,7 +61,7 @@ void display_refresh_changed(void)
 
 void vsync_source_changed(void)
 {
-    struct window *chosen = pending() ? timing_window() : NULL;
+    struct window *chosen = request_slots ? timing_window() : NULL;
     struct wl_surface *next = chosen ? chosen->surface : NULL;
     if (callback && source == next) return;
     if (callback) wl_callback_destroy(callback);
@@ -76,19 +75,23 @@ void vsync_source_changed(void)
 
 void client_vsync_request(struct client *c, int id)
 {
-    int free_slot = -1;
-    for (int i = 0; i < MAX_WINDOWS; i++) {
+    uint64_t free_slots = ~request_slots & (UINT64_MAX >> (64 - MAX_WINDOWS));
+    if (!free_slots) return;
+    for (uint64_t slots = request_slots; slots; slots &= slots - 1) {
+        int i = __builtin_ctzll(slots);
         if (requests[i].client == c && requests[i].id == id) return;
-        if (!requests[i].client) free_slot = i;
     }
-    if (free_slot < 0) return;
+    int free_slot = 63 - __builtin_clzll(free_slots);
     requests[free_slot] = (struct request){ c, id };
+    request_slots |= UINT64_C(1) << free_slot;
     vsync_source_changed();
 }
 
 void client_vsync_forget(struct client *c)
 {
-    for (int i = 0; i < MAX_WINDOWS; i++)
-        if (requests[i].client == c) requests[i].client = NULL;
+    for (uint64_t slots = request_slots; slots; slots &= slots - 1) {
+        int i = __builtin_ctzll(slots);
+        if (requests[i].client == c) request_slots &= ~(UINT64_C(1) << i);
+    }
     vsync_source_changed();
 }
