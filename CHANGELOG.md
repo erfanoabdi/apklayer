@@ -3,7 +3,7 @@
 ## 2026-11-18: Disable host NVIDIA workarounds for ANGLE instances
 
 - Preserve host NVIDIA GBM tiling and GPU-copy behavior for native GLES, but bypass those NVIDIA-specific paths when `APKLAYER_ANGLE_ACTIVE` is set for an instance. All ANGLE source patches remain unchanged.
-- Build log (before build): compile the graphics HAL and Noble package from this source; do not rebuild ANGLE because its NVIDIA patch set is unchanged.
+- Build log: Noble 0.5.2 package build succeeded. The packaged graphics HAL contains the `APKLAYER_ANGLE_ACTIVE` gate and the Google ANGLE libraries are unchanged. `apklayer_0.5.2-1~noble1_amd64.deb` is 20,793,878 bytes (SHA-256 `98bd7488a95e2c79f981f5da35224ee409908e4c1e4d4c4f8b520a198ba215fc`); `apklayer-dev` is 7,502 bytes (SHA-256 `359f17f52954b397538b8cc82087581598316bcbc44856ba4546838400d309f8`). Kept local at `/home/wesley/apklayer-build-deb/out/angle-runtime-bypass`; not published.
 
 ## 2026-11-18: Rebuild ANGLE package after runtime path fix
 
