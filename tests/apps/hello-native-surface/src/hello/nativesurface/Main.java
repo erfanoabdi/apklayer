@@ -53,10 +53,11 @@ public class Main extends Activity implements SurfaceHolder.Callback {
     }
     private void decode(SurfaceHolder holder) {
         try {
-            TextureCheck.run(this, surface -> decodeStream(surface, "red-vp8.ivf", false, -1));
-            decodeStream(holder.getSurface(), "red-vp8.ivf", false, -1);
-            decodeStream(holder.getSurface(), "red-vp9.ivf", false, -1);
-            decodeStream(holder.getSurface(), "red-vp9-multi.ivf", false, 2);
+            TextureCheck.run(this, (surface, frameCheck) -> decodeStream(surface, "red-vp9.ivf",
+                    -1, "c2.apklayer.vp9.decoder", frameCheck));
+            decodeStream(holder.getSurface(), "red-vp8.ivf", -1, null, null);
+            decodeStream(holder.getSurface(), "red-vp9.ivf", -1, null, null);
+            decodeStream(holder.getSurface(), "red-vp9-multi.ivf", 2, null, null);
             liveCodec = AvcCheck.run(this, holder.getSurface());
             System.out.println("[hello-native-surface] DECODE PASS");
         } catch (Throwable error) {
@@ -64,15 +65,16 @@ public class Main extends Activity implements SurfaceHolder.Callback {
             error.printStackTrace();
         }
     }
-    /** Decodes an IVF stream into the surface, every picture rendered; returns the last picture's presentation time (us). */
-    private long decodeStream(Surface surface, String asset, boolean keep, int duplicatedIndex) throws Exception {
+    /** Decodes an IVF stream into the surface and renders each picture before checking EOS. */
+    private void decodeStream(Surface surface, String asset, int duplicatedIndex, String decoder,
+            TextureCheck.FrameCheck frameCheck) throws Exception {
         MediaCodec codec = null;
         try (InputStream input = getAssets().open(asset)) {
             byte[] header = input.readNBytes(32);
             int count = (int)le(header, 24, 4);
             String kind = header[10] == '9' ? "vp9" : "vp8";
             String mime = "video/x-vnd.on2." + kind;
-            codec = MediaCodec.createDecoderByType(mime);
+            codec = decoder == null ? MediaCodec.createDecoderByType(mime) : MediaCodec.createByCodecName(decoder);
             System.out.println("[hello-native-surface] codec=" + codec.getName());
             codec.setOnFrameRenderedListener((c, pts, time) -> {
                 System.out.println("[hello-native-surface] rendered pts=" + pts + " codec=" + kind);
@@ -83,7 +85,6 @@ public class Main extends Activity implements SurfaceHolder.Callback {
             codec.start();
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             boolean eos = false;
-            long last = -1;
             for (int frame = 0; frame < count; frame++) {
                 byte[] packet = input.readNBytes(12);
                 int size = (int)le(packet, 0, 4);
@@ -109,7 +110,7 @@ public class Main extends Activity implements SurfaceHolder.Callback {
                     require(output >= 0 && info.presentationTimeUs == pts, "output PTS");
                     eos |= (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
                     codec.releaseOutputBuffer(output, true);
-                    last = pts;
+                    if (frameCheck != null) frameCheck.await(pts);
                     System.out.println("[hello-native-surface] queued frame=" + frame + " pts=" + pts);
                 }
             }
@@ -120,9 +121,7 @@ public class Main extends Activity implements SurfaceHolder.Callback {
                 codec.releaseOutputBuffer(output, false);
             }
             require(eos, "EOS");
-            if (keep) { liveCodec = codec; codec = null; }
-            else codec.stop();
-            return last;
+            codec.stop();
         } finally {
             if (codec != null) codec.release();
         }

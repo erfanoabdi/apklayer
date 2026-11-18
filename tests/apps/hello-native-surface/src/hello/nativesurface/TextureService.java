@@ -43,7 +43,11 @@ public class TextureService extends Service {
         ready.join();
         return new Binder() {
             @Override protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) {
-                if (code == SURFACE) { surface.writeToParcel(reply, 0); return true; }
+                if (code == SURFACE) {
+                    reply.writeInt(android.os.Process.myPid());
+                    surface.writeToParcel(reply, 0);
+                    return true;
+                }
                 if (code != FRAMES) return false;
                 synchronized (TextureService.this) { reply.writeInt(frames); reply.writeLong(timestamp); reply.writeString(error); }
                 return true;
@@ -71,7 +75,15 @@ public class TextureService extends Service {
         texture.setOnFrameAvailableListener(st -> {
             try {
                 st.updateTexImage();
-                synchronized (this) { frames++; timestamp = st.getTimestamp(); }
+                long latched = st.getTimestamp();
+                synchronized (this) {
+                    if (frames > 0 && latched < timestamp) {
+                        error = "SurfaceTexture timestamp regressed from " + timestamp + " to " + latched;
+                    } else if (frames == 0 || latched > timestamp) {
+                        frames++;
+                        timestamp = latched;
+                    }
+                }
             } catch (RuntimeException failure) { synchronized (this) { error = failure.toString(); } }
         }, gl);
         surface = new Surface(texture);

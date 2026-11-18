@@ -12,7 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 /** MediaCodec output into a SurfaceTexture of another process (TextureService): its frame-available callbacks fire and updateTexImage latches the frames. */
 final class TextureCheck {
-    interface Decoder { long decode(Surface surface) throws Exception; }
+    interface Decoder { void decode(Surface surface, FrameCheck frameCheck) throws Exception; }
+    interface FrameCheck { void await(long presentationTimeUs) throws Exception; }
 
     static void run(Context context, Decoder decoder) throws Exception {
         LinkedBlockingQueue<IBinder> connected = new LinkedBlockingQueue<>();
@@ -28,24 +29,51 @@ final class TextureCheck {
             Surface surface;
             try {
                 require(service.transact(TextureService.SURFACE, data, reply, 0), "SURFACE");
+                require(reply.readInt() != android.os.Process.myPid(), "TextureService must be in another process");
                 surface = Surface.CREATOR.createFromParcel(reply);
             } finally { data.recycle(); reply.recycle(); }
-            require(surface.isValid(), "the parcelled Surface is not valid");
-            long last = decoder.decode(surface);
-            int frames = 0; long timestamp = -1; String error = "";
-            for (int wait = 0; wait < 40 && timestamp != last * 1000; wait++) {  // the last callback may still be on its way (up to 2 s)
-                data = Parcel.obtain(); reply = Parcel.obtain();
+            try {
+                require(surface.isValid(), "the parcelled Surface is not valid");
+                FrameProgress progress = new FrameProgress(service);
+                decoder.decode(surface, progress::await);
+                require(progress.frames >= 3, "expected at least three latched VP9 frames, got " + progress.frames);
+                System.out.println("[hello-native-surface] TEXTURE PASS VP9 latched " + progress.frames
+                        + " frames with advancing timestamps in another process and reached EOS");
+            } finally { surface.release(); }
+        } finally { context.unbindService(connection); }
+    }
+
+    private static final class FrameProgress {
+        private final IBinder service;
+        private int frames;
+        private long timestampNs = Long.MIN_VALUE;
+
+        FrameProgress(IBinder service) { this.service = service; }
+
+        void await(long presentationTimeUs) throws Exception {
+            long expectedNs = TimeUnit.MICROSECONDS.toNanos(presentationTimeUs);
+            require(expectedNs > timestampNs, "fixture PTS did not advance");
+            long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
+            // Wait before releasing the next output so SurfaceTexture cannot coalesce our test frames.
+            do {
+                Parcel data = Parcel.obtain(), reply = Parcel.obtain();
                 try {
                     require(service.transact(TextureService.FRAMES, data, reply, 0), "FRAMES");
-                    frames = reply.readInt(); timestamp = reply.readLong(); error = reply.readString();
+                    int latched = reply.readInt();
+                    long actualNs = reply.readLong();
+                    String error = reply.readString();
+                    require(error.isEmpty(), "updateTexImage failed in the texture process: " + error);
+                    if (actualNs == expectedNs && latched > frames) {
+                        timestampNs = actualNs;
+                        frames = latched;
+                        return;
+                    }
+                    require(actualNs <= expectedNs, "unexpected SurfaceTexture timestamp " + actualNs);
                 } finally { data.recycle(); reply.recycle(); }
-                if (timestamp != last * 1000) Thread.sleep(50);
-            }
-            require(error.isEmpty(), "updateTexImage failed in the texture's process: " + error);
-            require(frames > 0 && timestamp == last * 1000, "the other process latched " + frames + " frames, last timestamp " + timestamp + " ns, expected " + last * 1000);
-            surface.release();
-            System.out.println("[hello-native-surface] TEXTURE PASS " + frames + " frames reached a SurfaceTexture in another process (last at " + last + " us)");
-        } finally { context.unbindService(connection); }
+                Thread.sleep(20);
+            } while (android.os.SystemClock.elapsedRealtime() < deadline);
+            throw new AssertionError("SurfaceTexture did not latch VP9 PTS " + expectedNs + " ns");
+        }
     }
 
     private static void require(boolean yes, String message) { if (!yes) throw new AssertionError(message); }
