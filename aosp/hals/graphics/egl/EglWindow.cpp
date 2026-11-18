@@ -78,19 +78,23 @@ constexpr uint64_t kUsageRender = 0x200, kUsageTexture = 0x100;  // GRALLOC_USAG
 
 // The current context's framebuffer bindings, texture binding and scissor test around our copy.
 struct GlState {
-    int read = 0, draw = 0, tex = 0, scissor = 0;
+    int read = 0, draw = 0, scissor = 0;
+    std::optional<int> tex;
     GlState() {
         auto get = gl<void (*)(unsigned, int*)>("glGetIntegerv");
         get(0x8CAA, &read);  // GL_READ_FRAMEBUFFER_BINDING
         get(0x8CA6, &draw);  // GL_DRAW_FRAMEBUFFER_BINDING
-        get(0x8069, &tex);   // GL_TEXTURE_BINDING_2D
         scissor = gl<unsigned char (*)(unsigned)>("glIsEnabled")(0xC11);
         if (scissor) gl<void (*)(unsigned)>("glDisable")(0xC11);
+    }
+    void saveTextureBinding() {
+        // Only importing a new image changes the texture binding.
+        if (!tex) gl<void (*)(unsigned, int*)>("glGetIntegerv")(0x8069 /* GL_TEXTURE_BINDING_2D */, &tex.emplace(0));
     }
     ~GlState() {
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, read);
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, draw);
-        gl<void (*)(unsigned, unsigned)>("glBindTexture")(0xDE1, tex);
+        if (tex) gl<void (*)(unsigned, unsigned)>("glBindTexture")(0xDE1 /* GL_TEXTURE_2D */, *tex);
         if (scissor) gl<void (*)(unsigned)>("glEnable")(0xC11);
     }
 };
@@ -126,10 +130,11 @@ void dropCache(Window& w) {
 
 // The cached image and framebuffer for `key`, made by `make` (an EGLImage) when there is none yet. The framebuffer is left bound to GL_FRAMEBUFFER.
 template <typename Make>
-CachedImage* cachedImage(Window& w, std::vector<CachedImage>& cache, uint64_t key, ANativeWindowBuffer* ref, Make&& make) {
+CachedImage* cachedImage(Window& w, GlState& state, std::vector<CachedImage>& cache, uint64_t key, ANativeWindowBuffer* ref, Make&& make) {
     for (CachedImage& c : cache) if (c.key == key) { c.used = ++w.useCount; return &c; }
     EGLImage image = make();
     if (image == EGL_NO_IMAGE) return nullptr;
+    state.saveTextureBinding();
     if (cache.size() >= kCacheMax) {
         auto oldest = cache.begin();
         for (auto it = cache.begin(); it != cache.end(); ++it) if (it->used < oldest->used) oldest = it;
@@ -162,15 +167,15 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
 
     EGLContext ctx = host<EGLContext (*)()>("eglGetCurrentContext")();
     if (ctx != w.cacheCtx) { dropCache(w); w.cacheCtx = ctx; }  // other context: other GL objects
-    int fd = gbmFn<int (*)(void*)>("gbm_bo_get_fd")(bo);
-    struct stat st = {};
-    fstat(fd, &st);
-    auto createImage = host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR");
+    int fd = -1;
     CachedImage *src = nullptr, *out = nullptr;
     std::optional<GlState> saved;  // restored when the function ends (creating a cache entry binds a texture and a framebuffer)
     if (ctx != EGL_NO_CONTEXT && !importForcedToFail()) {
+        fd = gbmFn<int (*)(void*)>("gbm_bo_get_fd")(bo);
+        struct stat st = {};
+        fstat(fd, &st);
         saved.emplace();
-        src = cachedImage(w, w.srcCache, (uint64_t)st.st_ino, nullptr, [&]() -> EGLImage {
+        src = cachedImage(w, *saved, w.srcCache, (uint64_t)st.st_ino, nullptr, [&]() -> EGLImage {
             uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
             uint32_t format = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
             uint64_t modifier = gbmFn<uint64_t (*)(void*)>("gbm_bo_get_modifier")(bo);
@@ -179,9 +184,9 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
             if (modifier != DRM_FORMAT_MOD_INVALID)
                 a.insert(a.end(), {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLint)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLint)(modifier >> 32)});
             a.push_back(EGL_NONE);
-            return createImage(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
+            return host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR")(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
         });
-        out = cachedImage(w, w.dstCache, (uint64_t)(uintptr_t)dst, dst, [&]() { return imageFromNativeBuffer(dpy, dst); });
+        out = cachedImage(w, *saved, w.dstCache, (uint64_t)(uintptr_t)dst, dst, [&]() { return imageFromNativeBuffer(dpy, dst); });
     }
     int outFence = -1;
     if (src && out) {
@@ -206,7 +211,7 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
     } else {
         ALOGE("window present: images %p %p or no current context, and no CPU copy: the frame is blank", src, out);
     }
-    close(fd);
+    if (fd >= 0) close(fd);
     gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
     nw->queueBuffer(nw, dst, outFence);
 }
