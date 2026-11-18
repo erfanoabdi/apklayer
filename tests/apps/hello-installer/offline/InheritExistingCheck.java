@@ -27,6 +27,9 @@ public final class InheritExistingCheck {
 
         rejects("No base APK", List.of(), List.of(density), List.of());
         rejects("Mismatched version", List.of(base), List.of(new HubInstaller.InstallApk(density.path(), PKG, density.split(), 7)), List.of());
+        var upgradedBase = new HubInstaller.InstallApk(Path.of("upgraded-base.apk"), PKG, null, VERSION + 1);
+        rejects("Mismatched version for split " + density.split(),
+                List.of(base, density), List.of(upgradedBase), List.of());
         rejects("Unexpected package", List.of(base), List.of(new HubInstaller.InstallApk(density.path(), "other.payload", density.split(), VERSION)), List.of());
         rejects("duplicate split", List.of(base), List.of(density, replacement), List.of());
         rejects("Cannot remove split", List.of(base), List.of(), List.of(density.split()));
