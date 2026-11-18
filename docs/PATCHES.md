@@ -97,6 +97,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 |---|---|
 | frameworks/av/0001-codec2-linear-virtual-map | C2Buffer: non-DMA-heap linear allocations use their own map |
 | frameworks/av/0002-mediametrics-vendor-visibility | libmediametrics visible to vendor/apklayer |
+| frameworks/av/0005-codec2-igba-allocate-status | Codec2 reports Binder and allocator status when a surface buffer allocation fails |
 | frameworks/av/0004-audiopolicy-call-audio-activity | the audio policy service answers a private transaction (system uid only): per uid, a started voice communication player / unsilenced recorder (what AudioService's activity monitors give; HubCallAudio) |
 | frameworks/base/0001-media-player-native-parcels | MediaPlayer JNI: callback Parcels from apklayer NativeParcel |
 | frameworks/base/0002-settingsprovider-ssaid-by-package-uid | SettingsProvider: the SSAID lookup keyed by the package uid, not the (isolated) caller uid |
