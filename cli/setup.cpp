@@ -280,12 +280,13 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
                       : installFromIndex(fresh, instance, id, index, sources.strings({id, "packages"}));
         step(id, e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
     };
-    // microG and Google's own share package names under other signers: Google's go first (with their data), as --gapps removes microG's
-    if (o.microg && gappsInstalled(fresh)) {
-        std::string e = removeGapps(fresh, instance, [](const std::string& detail) { step("microg", "running", detail); });
-        if (!e.empty()) { step("microg", "failed", e); o.microg = false; }
+    if (o.microg) {
+        const std::string index = getenvOr("APKLAYER_MICROG_INDEX", sources.str({"microg", "index"}));
+        const std::string e = !sourcesError.empty() ? sourcesError : index.empty() ? "No microg index in downloads.json"
+            : installMicrog(fresh, instance, index, sources.strings({"microg", "packages"}),
+                            [](const std::string& detail) { step("microg", "running", detail); }, progress);
+        step("microg", e.empty() ? "done" : "failed", e.empty() ? "Installed" : e);
     }
-    if (o.microg) extra("microg", "APKLAYER_MICROG_INDEX");
     if (o.gapps) {
         std::string e = installGapps(fresh, instance, [](const std::string& detail) { step("gapps", "running", detail); }, progress);
         // the hub reads the allowlists once per JVM (apklayer.host.HubPackages): a running instance keeps its old view until it is restarted

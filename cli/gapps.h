@@ -16,8 +16,10 @@ std::string loadDownloads(const Layout& layout, manager::Downloads& d);
 std::string installGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report, const manager::Progress& progress);
 // Google's apps installed (the Services Framework is theirs alone; microG has none)
 bool gappsInstalled(const Layout& layout);
-// Uninstalls Google's apps (with their data) and drops their allowlists, before microG goes in (`setup --microg`). "" or what failed.
-std::string removeGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report);
+// Stages microG's repository APKs, replaces the confirmed Google counterparts, then removes Google-only packages.
+std::string installMicrog(const Layout& layout, const Instance& instance, const std::string& indexUrl,
+                          const std::vector<std::string>& packages, const std::function<void(const std::string&)>& report,
+                          const manager::Progress& progress);
 // <data>/apklayer/google-apps/etc: Google's permission allowlists, sysconfig and default grants, where `setup --gapps` leaves them. The readers are
 // pointed at them there (APKLAYER_EXTRA_ETC in cli/env.cpp, apklayer.host.HostSystemConfig, cli/manage.cpp) rather than a copy being made into the
 // runtime's android-root, which a package build serves read-only. "" unless Google's apps are installed, so a removal takes effect at once.
