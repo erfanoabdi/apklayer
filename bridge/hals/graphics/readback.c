@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 typedef void *EGLp;
 typedef intptr_t EGLAttrib;
@@ -261,6 +262,35 @@ static struct {
     uint32_t width, height;
 } copy_target;
 
+struct imported_texture {
+    dev_t dev;
+    ino_t ino;
+    uint64_t modifier, used;
+    uint32_t width, height, fourcc, stride, offset;
+    unsigned tex;
+};
+
+static struct imported_texture imports[4];
+static uint64_t import_clock;
+
+static void destroy_context(void)
+{
+    if (ctx) gl.destroyContext(ctx_dpy, ctx);
+    ctx = NULL;
+    ctx_gbm = NULL;
+    copy_program = 0;
+    memset(&copy_target, 0, sizeof copy_target);
+    memset(imports, 0, sizeof imports);
+    import_clock = 0;
+}
+
+void apklayer_gfx_transfer_close(struct gbm_device *gbm)
+{
+    pthread_mutex_lock(&ctx_lock);
+    if (ctx_gbm == gbm) destroy_context();
+    pthread_mutex_unlock(&ctx_lock);
+}
+
 /* The process's copy context on gbm's display (made once; ctx_lock held). */
 static bool context(struct gbm_device *gbm)
 {
@@ -282,10 +312,8 @@ static bool context(struct gbm_device *gbm)
     static const int attrs[] = { EGL_CONTEXT_MAJOR_VERSION, 3, EGL_NONE };  /* ES 3: glBlitFramebuffer */
     EGLp c = gl.createContext(dpy, NULL /* EGL_NO_CONFIG_KHR */, NULL, attrs);
     if (!c) { GFX_DEBUG("eglCreateContext failed\n"); return false; }
-    if (ctx) gl.destroyContext(ctx_dpy, ctx);
+    destroy_context();
     ctx_gbm = gbm, ctx_dpy = dpy, ctx = c;
-    copy_program = 0;
-    memset(&copy_target, 0, sizeof copy_target);
     GFX_DEBUG("EGL ES3 context created\n");
     return true;
 }
@@ -362,6 +390,57 @@ static bool bind_copy_target(uint32_t width, uint32_t height)
     return true;
 }
 
+/* Four small tiled imports cover a typical swapchain and keep at most 8 MiB of DMA-BUFs alive.
+ * A texture keeps the underlying allocation alive after eglDestroyImage, so its inode cannot be
+ * recycled while cached. Use the allocation identity and its full layout, since fd numbers can be reused. */
+static unsigned import_texture(int fd, uint32_t width, uint32_t height, uint32_t fourcc,
+                               uint32_t stride, uint32_t offset, uint64_t modifier,
+                               struct imported_texture **retained)
+{
+    struct imported_texture *slot = NULL;
+    struct stat st;
+    if (modifier != DRM_FORMAT_MOD_LINEAR && modifier != DRM_FORMAT_MOD_INVALID &&
+        fstat(fd, &st) == 0 && st.st_size > 0 && st.st_size <= 2 * 1024 * 1024) {
+        for (size_t i = 0; i < sizeof imports / sizeof *imports; ++i) {
+            struct imported_texture *entry = &imports[i];
+            if (entry->tex && entry->dev == st.st_dev && entry->ino == st.st_ino &&
+                entry->width == width && entry->height == height && entry->fourcc == fourcc &&
+                entry->stride == stride && entry->offset == offset && entry->modifier == modifier) {
+                entry->used = ++import_clock;
+                *retained = entry;
+                gl.bindTexture(GL_TEXTURE_2D, entry->tex);
+                return entry->tex;
+            }
+            if (!slot || entry->used < slot->used) slot = entry;
+        }
+    }
+
+    EGLAttrib attrs[] = { EGL_WIDTH, width, EGL_HEIGHT, height, EGL_LINUX_DRM_FOURCC_EXT, fourcc, EGL_DMA_BUF_PLANE0_FD_EXT, fd,
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT, offset, EGL_DMA_BUF_PLANE0_PITCH_EXT, stride,
+        EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLAttrib)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLAttrib)(modifier >> 32), EGL_NONE };
+    if (modifier == DRM_FORMAT_MOD_INVALID) attrs[12] = EGL_NONE;
+    EGLp image = gl.createImage(ctx_dpy, NULL, EGL_LINUX_DMA_BUF_EXT, NULL, attrs);
+    if (!image) return 0;
+    unsigned tex = 0;
+    gl.genTextures(1, &tex);
+    gl.bindTexture(GL_TEXTURE_2D, tex);
+    gl.imageTargetTexture2D(GL_TEXTURE_2D, image);
+    gl.destroyImage(ctx_dpy, image);
+    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (gl.getError() != GL_NO_ERROR) { gl.deleteTextures(1, &tex); return 0; }
+    if (slot) {
+        gl.deleteTextures(1, &slot->tex);
+        *slot = (struct imported_texture){
+            st.st_dev, st.st_ino, modifier, ++import_clock, width, height, fourcc, stride, offset, tex,
+        };
+        *retained = slot;
+    }
+    return tex;
+}
+
 /* The GPU copy between the dmabuf and a CPU view in RGBA8. */
 static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t height, uint32_t fourcc, uint32_t stride,
                     uint32_t offset, uint64_t modifier, const struct pixel_upload *upload, uint8_t *dst, uint32_t rgba_stride)
@@ -376,25 +455,11 @@ static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t hei
     if (gl.makeCurrent(ctx_dpy, NULL, NULL, ctx)) {  /* surfaceless */
         GFX_DEBUG("eglMakeCurrent succeeded\n");
         while (gl.getError() != GL_NO_ERROR) {}
-        EGLAttrib attrs[] = { EGL_WIDTH, width, EGL_HEIGHT, height, EGL_LINUX_DRM_FOURCC_EXT, fourcc, EGL_DMA_BUF_PLANE0_FD_EXT, fd,
-            EGL_DMA_BUF_PLANE0_OFFSET_EXT, offset, EGL_DMA_BUF_PLANE0_PITCH_EXT, stride,
-            EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLAttrib)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLAttrib)(modifier >> 32), EGL_NONE };
-        if (modifier == DRM_FORMAT_MOD_INVALID) attrs[12] = EGL_NONE;  /* no modifier: the driver's implicit layout */
-        GFX_DEBUG("eglCreateImage dma-buf %ux%u format 0x%x modifier 0x%llx\n", width, height, fourcc, (unsigned long long)modifier);
-        EGLp image = gl.createImage(ctx_dpy, NULL, EGL_LINUX_DMA_BUF_EXT, NULL, attrs);
-        GFX_DEBUG("eglCreateImage returned %p\n", image);
-        unsigned tex = 0, fb = 0;
-        why = "no EGLImage";
-        if (image) {
-            gl.genTextures(1, &tex);
-            gl.bindTexture(GL_TEXTURE_2D, tex);
-            gl.imageTargetTexture2D(GL_TEXTURE_2D, image);
-            unsigned image_target_error = gl.getError();
-            GFX_DEBUG("dma-buf texture target error 0x%x\n", image_target_error);
-            if (image_target_error != GL_NO_ERROR) {
-                why = "could not bind the dma-buf EGLImage as a texture";
-                goto copy_cleanup;
-            }
+        struct imported_texture *retained = NULL;
+        unsigned tex = import_texture(fd, width, height, fourcc, stride, offset, modifier, &retained);
+        unsigned fb = 0;
+        why = "could not import the dma-buf as a texture";
+        if (tex) {
             if (upload) {
                 why = "a GL error while uploading into dma-buf";
                 gl.pixelStorei(GL_UNPACK_ALIGNMENT, upload->alignment);
@@ -426,10 +491,6 @@ static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t hei
                     gl.viewport(0, 0, (int)width, (int)height);
                     gl.activeTexture(GL_TEXTURE0);
                     gl.bindTexture(GL_TEXTURE_2D, tex);
-                    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                     gl.useProgram(copy_program);
                     gl.uniform1i(copy_sampler, 0);
                     gl.drawArrays(GL_TRIANGLES, 0, 3);
@@ -447,8 +508,10 @@ copy_cleanup:
             /* Large captures are infrequent. Cap retained target storage at 8 MiB. */
             if ((uint64_t)copy_target.width * copy_target.height > 2 * 1024 * 1024) delete_copy_target();
             if (fb) gl.deleteFramebuffers(1, &fb);
-            gl.deleteTextures(1, &tex);
-            gl.destroyImage(ctx_dpy, image);
+            if (!retained || r != 0) {
+                gl.deleteTextures(1, &tex);
+                if (retained) memset(retained, 0, sizeof *retained);
+            }
         }
     }
     if (r) fprintf(stderr, "apklayer-gfx: %s of a %ux%u buffer (fourcc 0x%x, modifier 0x%llx) through the GPU failed: %s\n",

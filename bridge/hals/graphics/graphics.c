@@ -86,6 +86,7 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
 void apklayer_gfx_close(struct apklayer_gfx *gfx)
 {
     if (!gfx) return;
+    apklayer_gfx_transfer_close(gfx->gbm);
     gbm_device_destroy(gfx->gbm);
     close(gfx->fd);
     free(gfx);
