@@ -57,11 +57,9 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     @Implementation @Override protected ClassLoader getClassLoader() {
         android.app.LoadedApk apk = ReflectionHelpers.getField(real, "mPackageInfo");
         if (ShadowHostLoadedApk.isForeign(apk)) {
-            ClassLoader explicit = ReflectionHelpers.getField(real, "mClassLoader");
-            if (explicit != null) return explicit;
+            // An explicit split loader cannot override the foreign context authorization checks.
             ShadowHostLoadedApk shadow = Shadow.extract(apk);
-            ClassLoader foreign = shadow.classLoaderForContext(ReflectionHelpers.<Integer>getField(real, "mFlags"));
-            return foreign != null ? foreign : Shadow.directlyOn(real, "android.app.ContextImpl", "getClassLoader");
+            return shadow.classLoaderForContext(ReflectionHelpers.<Integer>getField(real, "mFlags"));
         }
         return AppClassLoader.app != null ? AppClassLoader.app : super.getClassLoader();
     }
