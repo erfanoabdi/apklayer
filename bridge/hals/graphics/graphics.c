@@ -332,20 +332,19 @@ static int dma_buf_sync(int fd, uint64_t flags)
     return rc;
 }
 
-static void *map_linear_dma_buf(const struct apklayer_gfx_buffer *buf, bool write,
+static void *map_linear_dma_buf(int fd, size_t length, bool write,
                                struct apklayer_gfx_mapping *mapping)
 {
-    uint64_t bytes = (uint64_t)buf->stride[0] * buf->alloc_height;
-    if (!bytes || bytes > SIZE_MAX || buf->offset[0] > SIZE_MAX - bytes) return NULL;
-    size_t length = (size_t)bytes + buf->offset[0];
-    int fd = buf->fd[0];
     struct stat st;
-    if (fstat(fd, &st) < 0 || st.st_size < 0 || (uint64_t)st.st_size < length) return NULL;
+    if (fstat(fd, &st) < 0) return NULL;
+    if (st.st_size < 0 || (uint64_t)st.st_size < length) { errno = EINVAL; return NULL; }
     void *base = mmap(NULL, length, PROT_READ | (write ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
     if (base == MAP_FAILED) return NULL;
     uint64_t access = write ? DMA_BUF_SYNC_RW : DMA_BUF_SYNC_READ;
     if (dma_buf_sync(fd, DMA_BUF_SYNC_START | access) < 0) {
+        int error = errno;
         munmap(base, length);
+        errno = error;
         return NULL;
     }
     mapping->blob = base;
@@ -359,16 +358,25 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
                        uint32_t *stride, struct apklayer_gfx_mapping **mapping)
 {
     if (plane < 0 || plane >= buf->num_planes) { errno = EINVAL; return NULL; }
-    if (buf->fourcc != 0 && !buf->packed && buf->num_planes > 1) { errno = ENOTSUP; return NULL; }
+    if (!buf->packed && buf->num_planes > 1) {
+        if (buf->modifier != DRM_FORMAT_MOD_LINEAR) { errno = ENOTSUP; return NULL; }
+        uint8_t *base = apklayer_gfx_map_linear(gfx, buf, write, stride, mapping);
+        if (!base) return NULL;
+        *stride = buf->stride[plane];
+        return base + buf->offset[plane];
+    }
     struct apklayer_gfx_mapping *m = calloc(1, sizeof *m);
     if (!m) { errno = ENOMEM; return NULL; }
     uint8_t *addr = NULL;
     size_t offset = buf->fourcc == 0 ? 0 : buf->offset[plane];
-    if (buf->fourcc != 0 && !buf->packed && buf->num_planes == 1 && buf->modifier == DRM_FORMAT_MOD_LINEAR
-        && (addr = map_linear_dma_buf(buf, write, m))) {
-        *stride = buf->stride[plane];
-        *mapping = m;
-        return addr + offset;
+    if (buf->fourcc != 0 && !buf->packed && buf->num_planes == 1 && buf->modifier == DRM_FORMAT_MOD_LINEAR) {
+        uint64_t bytes = (uint64_t)buf->stride[0] * buf->alloc_height;
+        if (bytes && bytes <= SIZE_MAX - offset &&
+            (addr = map_linear_dma_buf(buf->fd[0], offset + (size_t)bytes, write, m))) {
+            *stride = buf->stride[plane];
+            *mapping = m;
+            return addr + offset;
+        }
     }
     if (buf->fourcc == 0 || buf->packed == 3) { /* plain memory: a BLOB, or CPU-only YUV planes (apklayer_gfx_alloc_memory) */
         struct stat st;
@@ -456,6 +464,38 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
 void *apklayer_gfx_map_linear(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, bool write,
                              uint32_t *stride, struct apklayer_gfx_mapping **mapping)
 {
+    // Android's mapper returns one pointer. A native linear YUV allocation can
+    // use several fds for planes in the same DMA-BUF, with offsets from that pointer.
+    if (!buf->packed && buf->num_planes > 1 && buf->modifier == DRM_FORMAT_MOD_LINEAR) {
+        const struct pack_spec *sp = find_pack(buf->fourcc);
+        struct stat first;
+        if (!sp || buf->num_planes != sp->planes) {
+            errno = ENOTSUP;
+            return NULL;
+        }
+        if (fstat(buf->fd[0], &first) < 0) return NULL;
+        size_t length = 0;
+        for (int p = 0; p < sp->planes; p++) {
+            struct stat plane;
+            uint64_t rows = ((uint64_t)buf->alloc_height * sp->plane[p].num + sp->plane[p].den - 1) / sp->plane[p].den;
+            uint64_t bytes = rows * buf->stride[p];
+            if (fstat(buf->fd[p], &plane) < 0) return NULL;
+            if (plane.st_dev != first.st_dev || plane.st_ino != first.st_ino) {
+                errno = ENOTSUP;
+                return NULL;
+            }
+            if (!bytes || bytes > SIZE_MAX - buf->offset[p]) { errno = EINVAL; return NULL; }
+            size_t end = buf->offset[p] + (size_t)bytes;
+            if (end > length) length = end;
+        }
+        struct apklayer_gfx_mapping *m = calloc(1, sizeof *m);
+        if (!m) return NULL;
+        void *base = map_linear_dma_buf(buf->fd[0], length, write, m);
+        if (!base) { free(m); return NULL; }
+        *stride = buf->stride[0];
+        *mapping = m;
+        return base;
+    }
     if (buf->packed != 2) return apklayer_gfx_map(gfx, buf, 0, write, stride, mapping);
     const struct pack_spec *sp = find_pack(buf->fourcc);
     if (!sp) { errno = ENOTSUP; return NULL; }

@@ -68,7 +68,7 @@ int main(void)
         snprintf(what, sizeof what, "%s allocates (planes=%d, packed=%d)", yuv[i].name, r2 == 0 ? b.num_planes : 0, r2 == 0 ? b.packed : 0);
         CHECK(r2 == 0, what);
         if (r2 != 0) continue;
-        uint32_t st[4]; struct apklayer_gfx_mapping *mm[4] = { 0 }; uint8_t *px[4];
+        uint32_t st[4] = { 0 }; struct apklayer_gfx_mapping *mm[4] = { 0 }; uint8_t *px[4];
         int mapped = 1;
         for (int p = 0; p < b.num_planes; p++) {
             px[p] = apklayer_gfx_map(gfx, &b, p, true, &st[p], &mm[p]);
@@ -94,6 +94,7 @@ int main(void)
             size_t offset = 0;
             int preserved = 1;
             for (int p = 0; p < b.num_planes; p++) {
+                if (b.packed != 2) offset = b.offset[p];
                 preserved &= base[offset] == 0x10 + p && base[offset + 8] == 0x20 + p;
                 base[offset + 1] = 0x80 + p;
                 offset += b.stride[p] * (p && b.fourcc != DRM_FORMAT_NV16 ? b.height / 2 : b.height);
