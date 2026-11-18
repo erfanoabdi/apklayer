@@ -17,6 +17,7 @@
 #include <mutex>
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "../../HostEnvironment.h"
@@ -139,36 +140,45 @@ EGLImage apklayer::egl::imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffe
         tError = EGL_BAD_PARAMETER;
         return EGL_NO_IMAGE;
     }
-    SharedMetadata* meta = mapMetadata(buf->handle);
-    int32_t dataspace = meta ? meta->dataspace : 0;
-    if (meta) unmapMetadata(meta);
-
-    std::vector<EGLint> a = {EGL_WIDTH, (EGLint)d.width, EGL_HEIGHT, (EGLint)d.height, EGL_LINUX_DRM_FOURCC_EXT, (EGLint)d.fourcc};
+    // Three image attributes, up to five per plane, two YUV hints and EGL_NONE.
+    EGLint a[6 + 10 * kMaxPlanes + 4 + 1];
+    EGLint* next = a;
+    auto add = [&next](EGLint key, EGLint value) { *next++ = key; *next++ = value; };
+    add(EGL_WIDTH, (EGLint)d.width);
+    add(EGL_HEIGHT, (EGLint)d.height);
+    add(EGL_LINUX_DRM_FOURCC_EXT, (EGLint)d.fourcc);
     static const EGLint fd[] = {EGL_DMA_BUF_PLANE0_FD_EXT, EGL_DMA_BUF_PLANE1_FD_EXT, EGL_DMA_BUF_PLANE2_FD_EXT, EGL_DMA_BUF_PLANE3_FD_EXT};
     static const EGLint off[] = {EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGL_DMA_BUF_PLANE1_OFFSET_EXT, EGL_DMA_BUF_PLANE2_OFFSET_EXT, EGL_DMA_BUF_PLANE3_OFFSET_EXT};
     static const EGLint pitch[] = {EGL_DMA_BUF_PLANE0_PITCH_EXT, EGL_DMA_BUF_PLANE1_PITCH_EXT, EGL_DMA_BUF_PLANE2_PITCH_EXT, EGL_DMA_BUF_PLANE3_PITCH_EXT};
     static const EGLint modLo[] = {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT, EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT, EGL_DMA_BUF_PLANE3_MODIFIER_LO_EXT};
     static const EGLint modHi[] = {EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT, EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT, EGL_DMA_BUF_PLANE3_MODIFIER_HI_EXT};
-    for (uint32_t i = 0; i < d.numPlanes && i < 4; i++) {
-        a.insert(a.end(), {fd[i], buf->handle->data[i], off[i], (EGLint)d.offset[i], pitch[i], (EGLint)d.stride[i]});
-        if (d.modifier != DRM_FORMAT_MOD_INVALID)
-            a.insert(a.end(), {modLo[i], (EGLint)(d.modifier & 0xffffffff), modHi[i], (EGLint)(d.modifier >> 32)});
+    for (uint32_t i = 0; i < d.numPlanes && i < kMaxPlanes; i++) {
+        add(fd[i], buf->handle->data[i]);
+        add(off[i], (EGLint)d.offset[i]);
+        add(pitch[i], (EGLint)d.stride[i]);
+        if (d.modifier != DRM_FORMAT_MOD_INVALID) {
+            add(modLo[i], (EGLint)(d.modifier & 0xffffffff));
+            add(modHi[i], (EGLint)(d.modifier >> 32));
+        }
     }
     if (d.fourcc == DRM_FORMAT_NV12 || d.fourcc == DRM_FORMAT_NV21 || d.fourcc == DRM_FORMAT_YUV420 || d.fourcc == DRM_FORMAT_YVU420 ||
         d.fourcc == DRM_FORMAT_NV16 || d.fourcc == DRM_FORMAT_P010) {
         // colour hints from the buffer's dataspace (standard and range bits); unknown means BT.601 limited, Android's default
+        SharedMetadata* meta = mapMetadata(buf->handle);
+        int32_t dataspace = meta ? meta->dataspace : 0;
+        if (meta) unmapMetadata(meta);
         int32_t standard = dataspace & 0x003F0000, range = dataspace & 0x38000000;
         // unspecified standard: what Android's ColorUtils assumes, BT.709 for HD (taller than 576 or wider than 1024), else BT.601;
         // always reading 601 desaturated HD video
         bool hd = d.height > 576 || d.width > 1024;
         EGLint space = standard == (1 << 16) ? EGL_ITU_REC709_EXT : standard == (6 << 16) ? EGL_ITU_REC2020_EXT
                      : standard == 0 && hd ? EGL_ITU_REC709_EXT : EGL_ITU_REC601_EXT;
-        a.insert(a.end(), {EGL_YUV_COLOR_SPACE_HINT_EXT, space,
-                           EGL_SAMPLE_RANGE_HINT_EXT, range == (1 << 27) ? EGL_YUV_FULL_RANGE_EXT : EGL_YUV_NARROW_RANGE_EXT});
+        add(EGL_YUV_COLOR_SPACE_HINT_EXT, space);
+        add(EGL_SAMPLE_RANGE_HINT_EXT, range == (1 << 27) ? EGL_YUV_FULL_RANGE_EXT : EGL_YUV_NARROW_RANGE_EXT);
     }
-    a.push_back(EGL_NONE);
+    *next = EGL_NONE;
     auto create = host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR");
-    EGLImage image = create(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
+    EGLImage image = create(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a);
     if (image == EGL_NO_IMAGE)
         ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x (display refs %u)", d.width, d.height,
               d.fourcc, d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")(), displayRefs);
@@ -179,19 +189,24 @@ EGLImage apklayer::egl::imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffe
 }
 
 // Every name host<>, gl<> and gbmFn<> use (EglHost.h), resolved in resolveForwarded below; a name missing here is looked up on each call.
-static const char* const kHostNames[] = {
+static constexpr const char* kHostNames[] = {
     "eglChooseConfig", "eglCreateContext", "eglCreateImage", "eglCreateImageKHR", "eglCreatePlatformWindowSurface", "eglCreateSyncKHR",
     "eglDestroyContext", "eglDestroyImageKHR", "eglDestroySurface", "eglDestroySyncKHR", "eglDupNativeFenceFDANDROID", "eglGetConfigAttrib",
     "eglGetCurrentContext", "eglGetCurrentDisplay", "eglGetCurrentSurface", "eglGetError", "eglGetPlatformDisplay", "eglGetProcAddress",
     "eglInitialize", "eglMakeCurrent", "eglQueryContext", "eglQueryString", "eglQuerySurface", "eglReleaseThread", "eglSurfaceAttrib",
     "eglSwapBuffers", "eglSwapInterval",
+    "gbm_bo_get_fd", "gbm_bo_get_format", "gbm_bo_get_modifier", "gbm_bo_get_offset", "gbm_bo_get_stride", "gbm_surface_create",
+    "gbm_surface_destroy", "gbm_surface_has_free_buffers", "gbm_surface_lock_front_buffer", "gbm_surface_release_buffer",
     "glBindFramebuffer", "glBindTexture", "glBlitFramebuffer", "glCheckFramebufferStatus", "glDeleteFramebuffers", "glDeleteTextures",
     "glDisable", "glEGLImageTargetTexture2DOES", "glEnable", "glFinish", "glFlush", "glFramebufferTexture2D", "glGenFramebuffers",
     "glGenTextures", "glGetIntegerv", "glGetString", "glIsEnabled",
-    "gbm_bo_get_fd", "gbm_bo_get_format", "gbm_bo_get_modifier", "gbm_bo_get_offset", "gbm_bo_get_stride", "gbm_surface_create",
-    "gbm_surface_destroy", "gbm_surface_has_free_buffers", "gbm_surface_lock_front_buffer", "gbm_surface_release_buffer",
 };
 static constexpr size_t kHostCount = sizeof(kHostNames) / sizeof(kHostNames[0]);
+static_assert([] {
+    for (size_t i = 1; i < kHostCount; ++i)
+        if (std::string_view(kHostNames[i - 1]) >= kHostNames[i]) return false;
+    return true;
+}(), "host function names must be sorted for lookup");
 static void* hostSyms[kHostCount];
 static bool hostResolved[kHostCount];  // written by the constructor only, before any other thread can call in
 
@@ -209,8 +224,14 @@ static void* lookupHost(const char* name) {
 }
 
 void* apklayer::egl::hostSym(const char* name) {
-    for (size_t i = 0; i < kHostCount; i++)
-        if (!strcmp(kHostNames[i], name)) return hostResolved[i] ? hostSyms[i] : lookupHost(name);
+    const auto* end = kHostNames + kHostCount;
+    const auto* it = std::lower_bound(kHostNames, end, name, [](const char* entry, const char* target) {
+        return strcmp(entry, target) < 0;
+    });
+    if (it != end && !strcmp(*it, name)) {
+        size_t index = it - kHostNames;
+        return hostResolved[index] ? hostSyms[index] : lookupHost(name);
+    }
     ALOGW("host symbol %s is not in kHostNames: looked up on every call", name);
     return lookupHost(name);
 }
