@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-18: Rebuild ANGLE package after runtime path fix
+
+- Rebuilt the Noble 0.5.2 package with the updated runtime setup script and Google ANGLE binaries. The package contains the refreshed `host-classes.jar` and all six x86/x86_64 ANGLE libraries. `apklayer_0.5.2-1~noble1_amd64.deb` is 20,793,800 bytes (SHA-256 `4ca09051d2e6f1ed84c7f018d0880db8e6995baf86f3a7447454ffcc6e1d871d`); `apklayer-dev` also built. Archive inspection passed. System installation was not possible in this shell because sudo requires a password.
+
 ## 2026-11-18: Trace the ANGLE Vulkan swapchain crash
 
 - The patched Google ANGLE build passes its earlier `GL_GetString` TLS fault. The next crash is in Android Vulkan loader `CreateSwapchainKHR`, not an ANGLE GLES call: `llvm-symbolizer` maps the faulting loader frame to `swapchain.cpp:2362`, where ANGLE's deferred-allocation swapchain asks the host HAL to create an unbound image with `VkImageSwapchainCreateInfoKHR`. That chain contains an Android loader-owned swapchain handle; forwarding it into NVIDIA's host Vulkan driver causes the pre-GLES crash. ANGLE already disables this optimization for NVIDIA/Wayland, but apklayer presents Android WSI. The `GraphicsEnv: No GPU service` messages are nonfatal; ANGLE and the RTX 5060 Ti initialize afterward.

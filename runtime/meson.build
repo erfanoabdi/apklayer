@@ -73,7 +73,7 @@ if get_option('android_runtime')
   subdir('android-all-instrumented')
   install_symlink('Robolectric_all.jar', pointing_to: robolectric, install_dir: native_dir / 'aosp')
   install_symlink('sim-classes', pointing_to: sim_classes, install_dir: native_dir / 'aosp')
-  # Waydroid NVIDIA's Android ANGLE EGL/GLES binaries (runtime/angle/README.md); available for x86_64 and x86 guest processes.
+  # Google ANGLE Android EGL/GLES binaries (runtime/angle/README.md); available for x86_64 and x86 guest processes.
   if not arm32_only and host_machine.cpu_family() == 'x86_64'
     foreach abi : ['lib64', 'lib']
       install_data(files('angle/vendor/' + abi + '/egl/libEGL_angle.so',

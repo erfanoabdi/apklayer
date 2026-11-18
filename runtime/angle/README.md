@@ -1,22 +1,19 @@
-# ANGLE Android vendor libraries
+# ANGLE Android libraries
 
-These unchanged Android ANGLE binaries were copied from the installed Waydroid NVIDIA v0.2.0 guest vendor tree:
-`/usr/lib/waydroid-nvidia/guest/vendor/{lib64,lib}/egl/`. The package's vendor image is Android 20.0. They provide x86_64 and x86
-EGL/GLES libraries. Meson installs them into the runtime's `android-root/vendor` on x86_64 builds; the Android EGL loader selects them
-when an instance uses `ro.hardware.egl=angle`. Android 17's EGL loader looks for the `angle` suffix under
-`/system/lib` or `/system/lib64`, so Meson and Debian staging place the runtime links there.
+These x86_64 and x86 Android EGL/GLES libraries are built from Google ANGLE revision
+`f0d596b6f9e3dfe7a068786790516c035b1dfde4` for Android API 37. The GN build enables Vulkan and uses the `_angle` library suffix. The source includes apklayer patches `patches/angle/0001-use-host-safe-tls-for-vulkan.patch` and `0002-disable-nvidia-android-deferred-swapchain.patch`; see `docs/PATCHES.md`. ANGLE's Android GLES 3.2 exposure is enabled at runtime with `ANGLE_FEATURE_OVERRIDES_ENABLED=exposeES32ForTesting`.
 
-Waydroid NVIDIA source: <https://github.com/Shiro836/waydroid-nvidia> (package v0.2.0, vendor image digest
-`692a0eeb45c288492f66ddba5b77ea15f00f88eca5354b048ec4b1e752aee29b`). ANGLE's source is BSD-style licensed. The Waydroid NVIDIA
-package declares GPL-3.0-or-later; preserve the source and package license notices when redistributing these binaries.
+Meson packages the files under `runtime/angle/vendor` into `/usr/lib/apklayer/angle/vendor`. Runtime setup links them into `/system/lib` and `/system/lib64`, where Android 17's EGL loader looks for the `angle` suffix when `ro.hardware.egl=angle`.
+
+ANGLE is licensed under the BSD 3-Clause license. The binaries are built from the Google ANGLE source, not copied from the Waydroid NVIDIA Android 13 image.
 
 SHA-256:
 
 | ABI | Library | SHA-256 |
 |---|---|---|
-| x86_64 | `libEGL_angle.so` | `19325dde73b29f6c3594ab47ea9a343d978ed76642b0a02c00bcdf6c0990fb52` |
-| x86_64 | `libGLESv1_CM_angle.so` | `365e08b7486ad6899ecfb439418ba066c07dcd3ce0b8a9d762f925c197ec6614` |
-| x86_64 | `libGLESv2_angle.so` | `9f4ce826c924e22ec3863f4ee6d44e49cc3ad62c9fd2cb76ada473a4cbba3b3e` |
-| x86 | `libEGL_angle.so` | `d6d6a08113f7a599aff6d0c67417d37b734b68ea5ff413d00280bddc996ddee0` |
-| x86 | `libGLESv1_CM_angle.so` | `d5941f56b6f7ba00b05a70f525489e83008e3351d630f2164f1aa6cd10ecf58a` |
-| x86 | `libGLESv2_angle.so` | `3f69fe02be70d16c9efb3944d6be957c7dcc75804e5024103c79de7b130bec06` |
+| x86_64 | `libEGL_angle.so` | `ae78e0ac613c94f3426dd55b46429c5d68fe662c70ea89f7f4c56b9908ad1a06` |
+| x86_64 | `libGLESv1_CM_angle.so` | `63c2e858fb1d99aba9e896bfa1f7c31b789ec6d20da71fec74a64751bd213999` |
+| x86_64 | `libGLESv2_angle.so` | `6860953c03abad8976ff209d90edd61d71c95ecc65d1181515c5715ee0a122f0` |
+| x86 | `libEGL_angle.so` | `fd23048764fe33787f56cfc9927d7134e6a317c5924596785a57a347c36ebfc6` |
+| x86 | `libGLESv1_CM_angle.so` | `e7af29754e1cd5038be6507e19968120ce2eaacf333fa63658ea18c513e9274a` |
+| x86 | `libGLESv2_angle.so` | `41a3257ec8249061af569eb0ceb9bb544cf515f3a229cbb71b4eb4c44ed860cb` |
