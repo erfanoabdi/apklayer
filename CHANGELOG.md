@@ -5,6 +5,9 @@
 - Keep released DMA-BUF and Halium gralloc imports until their slot is needed. Reuse unused slots first, then replace the oldest released slot. Return old-size frames with their original fence before waiting on the GPU.
 - Return superseded Halium frames before the shell's first configure. Each window's virtual display still passes its original buffer to Wayland.
 - Try direct GBM mapping for linear buffers in ANGLE mode. Keep ANGLE's GPU transfer for tiled buffers and buffers that cannot be mapped. Initialize the external-only modifier flags because Linux ANGLE may leave them untouched.
+- Use synchronized DMA-BUF mappings for linear single-plane buffers when the exporter supports them. On the RTX 5060 Ti, median lock, write and unlock time on a 667×279 buffer was 8.72 µs to 7.91 µs with native EGL and 1,065 µs to 7.20 µs with ANGLE. The test read the expected pixels from the same exported buffer.
+- For renderable RGBA DMA-BUFs, read the imported framebuffer directly. Skip intermediate RGBA copies for tight rows and for ANGLE's supported padded rows. Keep sampling when the imported attachment is incomplete. The 667×279 tiled RGBA test verified pixels and padding at three pitches with native EGL and ANGLE. At 2680 bytes per row, median upload and readback improved from 1026 to 889 µs on native NVIDIA and from 1138 to 1014 µs on ANGLE.
+- Both old and new display sinks presented 600 Vulkan frames in isolated app windows. SurfaceFlinger's captures were 86.9% magenta, and both steady runs used two Wayland imports. A separate slot replay with three buffers released immediately needed 600 imports before and 3 after. It also verified that the new cache never evicts busy buffers. AMD, Intel, and Halium need hardware checks.
 
 ## 2026-11-18: Cache DRM modifiers in the Linux ANGLE Vulkan backend
 
@@ -3244,6 +3247,7 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 ### 2026-11-18 - gsi_x86_64 libapklayer_vdisplay (retain reusable Wayland imports)
 - Sync `hals/graphics/vdisplay/VirtualDisplay.cpp` with `tools/sync-aosp.sh`. Replay `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp` under `flock -n ~/los24-build.lock`. The existing build graph is sufficient.
+- Result: vendor/apklayer `0ce1812` built the 37,080-byte x86_64 library with SHA-256 `c01a48eef52b09d6d41c3a0477b69fef70a8359339a12415275e593151f98501`. The isolated Vulkan presentation test passed.
 
 ### 2026-11-18 - gsi_x86_64 libapklayer_egl (quiet successfully imported buffers)
 - Sync `hals/graphics/egl/Egl.cpp` and replay the existing module under `flock -n ~/los24-build.lock` with `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp`.

@@ -355,15 +355,23 @@ fail:
     return false;
 }
 
-/* The GPU copy between the dmabuf and rgba (RGBA8, width * 4 per row). */
-static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t height, uint32_t fourcc, uint32_t stride,
-                    uint32_t offset, uint64_t modifier, uint8_t *rgba, bool upload)
+static unsigned read_pixels(uint32_t width, uint32_t height, int row_length, uint8_t *dst)
 {
-    if (!load()) return -ENOSYS;
+    gl.pixelStorei(GL_PACK_ALIGNMENT, 4);
+    gl.pixelStorei(GL_PACK_ROW_LENGTH, row_length);
+    gl.readPixels(0, 0, (int)width, (int)height, GL_RGBA, GL_UNSIGNED_BYTE, dst);
+    return gl.getError();
+}
+
+/* The GPU copy between the dmabuf and a CPU view in RGBA8. */
+static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t height, uint32_t fourcc, uint32_t stride,
+                    uint32_t offset, uint64_t modifier, const uint8_t *src, uint8_t *dst, uint32_t rgba_stride)
+{
     pthread_mutex_lock(&ctx_lock);
     if (!context(gbm)) { pthread_mutex_unlock(&ctx_lock); return -ENODEV; }
     /* the caller's thread may have its own context current (libapklayer_egl uses the same host EGL): put it back afterwards */
     EGLp old_dpy = gl.getCurrentDisplay(), old_ctx = gl.getCurrentContext(), old_draw = gl.getCurrentSurface(EGL_DRAW), old_read = gl.getCurrentSurface(EGL_READ);
+    int row_length = rgba_stride == width * 4 ? 0 : (int)(rgba_stride / 4);
     int r = -EIO;
     const char *why = "no context";
     if (gl.makeCurrent(ctx_dpy, NULL, NULL, ctx)) {  /* surfaceless */
@@ -387,12 +395,17 @@ static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t hei
             gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            GFX_DEBUG("dma-buf texture target error 0x%x, parameter error 0x%x\n", image_target_error, gl.getError());
-            why = "a GL error while uploading into dma-buf";
-            if (upload) {
+            unsigned parameter_error = gl.getError();
+            GFX_DEBUG("dma-buf texture target error 0x%x, parameter error 0x%x\n", image_target_error, parameter_error);
+            if (image_target_error != GL_NO_ERROR || parameter_error != GL_NO_ERROR) {
+                why = "could not bind the dma-buf EGLImage as a texture";
+                goto copy_cleanup;
+            }
+            if (src) {
+                why = "a GL error while uploading into dma-buf";
                 unsigned upload_format, upload_type;
-                uint8_t *converted = upload_pixels(fourcc, rgba, width, height, &upload_format, &upload_type);
-                const void *upload_data = converted ? converted : rgba;
+                uint8_t *converted = upload_pixels(fourcc, src, width, height, &upload_format, &upload_type);
+                const void *upload_data = converted ? converted : src;
                 if ((fourcc == DRM_FORMAT_XBGR8888 || fourcc == DRM_FORMAT_BGR888 || fourcc == DRM_FORMAT_RGB565
                      || fourcc == DRM_FORMAT_ARGB8888 || fourcc == DRM_FORMAT_XRGB8888) && !converted) {
                     why = "could not allocate converted upload pixels";
@@ -400,23 +413,33 @@ static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t hei
                 }
                 gl.pixelStorei(GL_UNPACK_ALIGNMENT, upload_type == GL_UNSIGNED_SHORT_5_6_5 ? 2 :
                                upload_format == GL_RGB ? 1 : 4);
-                gl.pixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                gl.pixelStorei(GL_UNPACK_ROW_LENGTH, converted ? 0 : row_length);
                 gl.texSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (int)width, (int)height, upload_format, upload_type, upload_data);
                 unsigned error = gl.getError();
                 gl.finish();  /* the pixels are in the buffer before the consumer gets it */
                 unsigned finish_error = gl.getError();
                 GFX_DEBUG("dma-buf TexSubImage format 0x%x type 0x%x error 0x%x, finish error 0x%x\n",
                           upload_format, upload_type, error, finish_error);
-                if (error == GL_NO_ERROR) r = 0;
+                if (error == GL_NO_ERROR && finish_error == GL_NO_ERROR) r = 0;
                 free(converted);
             } else {
+                gl.genFramebuffers(1, &fb);
+                gl.bindFramebuffer(GL_FRAMEBUFFER, fb);
+                if (fourcc == DRM_FORMAT_ABGR8888) {
+                    /* Read renderable RGBA images without a temporary target or a draw. */
+                    gl.framebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+                    unsigned status = gl.checkFramebufferStatus(GL_FRAMEBUFFER);
+                    if (gl.getError() == GL_NO_ERROR && status == GL_FRAMEBUFFER_COMPLETE &&
+                        read_pixels(width, height, row_length, dst) == GL_NO_ERROR) {
+                        r = 0;
+                        goto copy_cleanup;
+                    }
+                }
                 gl.genTextures(1, &output_tex);
                 gl.bindTexture(GL_TEXTURE_2D, output_tex);
                 gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 gl.texImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (int)width, (int)height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-                gl.genFramebuffers(1, &fb);
-                gl.bindFramebuffer(GL_FRAMEBUFFER, fb);
                 gl.framebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, output_tex, 0);
                 unsigned framebuffer_status = gl.checkFramebufferStatus(GL_FRAMEBUFFER);
                 why = "the RGBA readback framebuffer is incomplete";
@@ -427,11 +450,9 @@ static int gpu_copy(struct gbm_device *gbm, int fd, uint32_t width, uint32_t hei
                     gl.useProgram(copy_program);
                     gl.uniform1i(copy_sampler, 0);
                     gl.drawArrays(GL_TRIANGLES, 0, 3);
-                    gl.finish();
-                    gl.pixelStorei(GL_PACK_ALIGNMENT, 4);
-                    gl.pixelStorei(GL_PACK_ROW_LENGTH, 0);
-                    gl.readPixels(0, 0, (int)width, (int)height, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-                    unsigned error = gl.getError();
+                    /* Native NVIDIA readback is faster with the draw submitted separately. */
+                    if (!angle_backend) gl.finish();
+                    unsigned error = read_pixels(width, height, row_length, dst);
                     GFX_DEBUG("dma-buf sample framebuffer 0x%x, GL error 0x%x\n", framebuffer_status, error);
                     why = "a GL error while sampling dma-buf";
                     if (error == GL_NO_ERROR) r = 0;
@@ -451,7 +472,7 @@ copy_cleanup:
         }
     }
     if (r) fprintf(stderr, "apklayer-gfx: %s of a %ux%u buffer (fourcc 0x%x, modifier 0x%llx) through the GPU failed: %s\n",
-                   upload ? "writing" : "reading", width, height, fourcc, (unsigned long long)modifier, why);
+                   src ? "writing" : "reading", width, height, fourcc, (unsigned long long)modifier, why);
     if (old_ctx) gl.makeCurrent(old_dpy, old_draw, old_read, old_ctx);
     else gl.makeCurrent(ctx_dpy, NULL, NULL, NULL);  /* release ours: another thread may take it next */
     pthread_mutex_unlock(&ctx_lock);
@@ -462,10 +483,15 @@ int apklayer_gfx_readback(struct gbm_device *gbm, int fd, uint32_t width, uint32
                           uint32_t offset, uint64_t modifier, void *dst, uint32_t dst_stride)
 {
     unsigned bpp = pixel_bytes(fourcc);
-    if (!bpp || dst_stride < width * bpp) return -ENOTSUP;
+    if (!bpp || width > dst_stride / bpp || width > UINT32_MAX / 4) return -ENOTSUP;
+    if (!load()) return -ENOSYS;
+    // ANGLE handles padded RGBA pitch efficiently. Keep the tight GL pack on native drivers.
+    bool direct = dst_stride == width * 4 || (angle_backend && dst_stride % 4 == 0);
+    if ((fourcc == DRM_FORMAT_ABGR8888 || fourcc == DRM_FORMAT_XBGR8888) && direct)
+        return gpu_copy(gbm, fd, width, height, fourcc, stride, offset, modifier, NULL, dst, dst_stride);
     uint8_t *rgba = malloc((size_t)width * 4 * height);
     if (!rgba) return -ENOMEM;
-    int r = gpu_copy(gbm, fd, width, height, fourcc, stride, offset, modifier, rgba, false);
+    int r = gpu_copy(gbm, fd, width, height, fourcc, stride, offset, modifier, NULL, rgba, width * 4);
     for (uint32_t y = 0; !r && y < height; y++) from_rgba(fourcc, rgba + (size_t)y * width * 4, (uint8_t *)dst + (size_t)y * dst_stride, width);
     free(rgba);
     return r;
@@ -475,11 +501,15 @@ int apklayer_gfx_upload(struct gbm_device *gbm, int fd, uint32_t width, uint32_t
                         uint32_t offset, uint64_t modifier, const void *src, uint32_t src_stride)
 {
     unsigned bpp = pixel_bytes(fourcc);
-    if (!bpp || src_stride < width * bpp) return -ENOTSUP;
+    if (!bpp || width > src_stride / bpp || width > UINT32_MAX / 4) return -ENOTSUP;
+    if (!load()) return -ENOSYS;
+    bool direct = src_stride == width * 4 || (angle_backend && src_stride % 4 == 0);
+    if (fourcc == DRM_FORMAT_ABGR8888 && direct)
+        return gpu_copy(gbm, fd, width, height, fourcc, stride, offset, modifier, src, NULL, src_stride);
     uint8_t *rgba = malloc((size_t)width * 4 * height);
     if (!rgba) return -ENOMEM;
     for (uint32_t y = 0; y < height; y++) to_rgba(fourcc, (const uint8_t *)src + (size_t)y * src_stride, rgba + (size_t)y * width * 4, width);
-    int r = gpu_copy(gbm, fd, width, height, fourcc, stride, offset, modifier, rgba, true);
+    int r = gpu_copy(gbm, fd, width, height, fourcc, stride, offset, modifier, rgba, NULL, width * 4);
     free(rgba);
     return r;
 }

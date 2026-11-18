@@ -63,9 +63,8 @@ int apklayer_gfx_alloc_memory(struct apklayer_gfx *gfx, uint32_t width, uint32_t
 
 void apklayer_gfx_buffer_close(struct apklayer_gfx_buffer *buf); /* closes its fds */
 
-/* CPU access to a plane (this process's mapping of any dmabuf, ours or imported): the buffer is imported into the driver and
- * mapped through it, which is coherent and works on every driver (mmap of the dmabuf itself is not guaranteed: virtio-gpu
- * refuses it). Legacy packed resources map one region; separate-plane fallback resources map
+/* CPU access to a plane of a DMA-BUF. Try a synchronized mmap for a linear single-plane buffer,
+ * then import and map through GBM when the exporter cannot provide that view. Legacy packed resources map one region; separate-plane fallback resources map
  * each R/RG plane independently. Native multi-plane GBM mapping remains unsupported (-ENOTSUP). */
 struct apklayer_gfx_mapping;
 void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, int plane, bool write,

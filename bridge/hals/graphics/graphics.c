@@ -8,9 +8,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <gbm.h>
+#include <linux/dma-buf.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -283,8 +285,10 @@ void apklayer_gfx_buffer_close(struct apklayer_gfx_buffer *buf)
 struct apklayer_gfx_mapping {
     struct gbm_bo *bo;
     void *map_data;
-    void *blob;      /* plain memory (fourcc 0): the mmap, or NULL */
+    void *blob;      /* a direct mmap, or NULL */
     size_t blob_len;
+    int dma_fd;
+    uint64_t dma_access;
     void *stage;
     size_t stage_offset[4], plane_size[4];
     void *plane_addr[4];
@@ -317,6 +321,39 @@ static void log_angle_map_once(uint32_t width, uint32_t height, uint32_t format,
     pthread_mutex_unlock(&angle_map_log_lock);
 }
 
+static int dma_buf_sync(int fd, uint64_t flags)
+{
+    struct dma_buf_sync sync = { .flags = flags };
+    int rc;
+    do {
+        rc = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+    } while (rc < 0 && (errno == EINTR || errno == EAGAIN));
+    return rc;
+}
+
+static void *map_linear_dma_buf(const struct apklayer_gfx_buffer *buf, bool write,
+                               struct apklayer_gfx_mapping *mapping)
+{
+    uint64_t bytes = (uint64_t)buf->stride[0] * buf->alloc_height;
+    if (!bytes || bytes > SIZE_MAX || buf->offset[0] > SIZE_MAX - bytes) return NULL;
+    size_t length = (size_t)bytes + buf->offset[0];
+    int fd = buf->fd[0];
+    struct stat st;
+    if (fstat(fd, &st) < 0 || st.st_size < 0 || (uint64_t)st.st_size < length) return NULL;
+    void *base = mmap(NULL, length, PROT_READ | (write ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
+    if (base == MAP_FAILED) return NULL;
+    uint64_t access = write ? DMA_BUF_SYNC_RW : DMA_BUF_SYNC_READ;
+    if (dma_buf_sync(fd, DMA_BUF_SYNC_START | access) < 0) {
+        munmap(base, length);
+        return NULL;
+    }
+    mapping->blob = base;
+    mapping->blob_len = length;
+    mapping->dma_fd = fd;
+    mapping->dma_access = access;
+    return base;
+}
+
 void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, int plane, bool write,
                        uint32_t *stride, struct apklayer_gfx_mapping **mapping)
 {
@@ -326,6 +363,12 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
     if (!m) { errno = ENOMEM; return NULL; }
     uint8_t *addr = NULL;
     size_t offset = buf->fourcc == 0 ? 0 : buf->offset[plane];
+    if (buf->fourcc != 0 && !buf->packed && buf->num_planes == 1 && buf->modifier == DRM_FORMAT_MOD_LINEAR
+        && (addr = map_linear_dma_buf(buf, write, m))) {
+        *stride = buf->stride[plane];
+        *mapping = m;
+        return addr + offset;
+    }
     if (buf->fourcc == 0 || buf->packed == 3) { /* plain memory: a BLOB, or CPU-only YUV planes (apklayer_gfx_alloc_memory) */
         struct stat st;
         m->blob_len = buf->fourcc == 0 ? buf->width : fstat(buf->fd[0], &st) == 0 ? (size_t)st.st_size : 0;
@@ -347,8 +390,8 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
         }
         uint32_t map_stride = 0;
         bool can_transfer = !buf->packed && buf->num_planes == 1 && apklayer_gfx_transfer_supported(fd_data.format);
-        // A LINEAR buffer can be mapped directly even when ANGLE is rendering the app.
-        // Tiled buffers in an ANGLE instance still use its GPU transfer path.
+        /* Try GBM when a LINEAR buffer cannot be mapped directly. Tiled buffers in an
+         * ANGLE instance still use its GPU transfer path. */
         if (!gfx->angle || buf->modifier == DRM_FORMAT_MOD_LINEAR || !can_transfer) {
             /* A tiled buffer (e.g. SurfaceFlinger's capture) needs its modifier on import before GBM can map it. */
             if (!buf->packed && buf->num_planes == 1 && buf->modifier != DRM_FORMAT_MOD_INVALID && buf->modifier != DRM_FORMAT_MOD_LINEAR) {
@@ -456,6 +499,8 @@ void apklayer_gfx_unmap(struct apklayer_gfx_mapping *m)
         }
         free(m->stage);
     }
+    if (m->dma_access && dma_buf_sync(m->dma_fd, DMA_BUF_SYNC_END | m->dma_access) < 0)
+        fprintf(stderr, "apklayer-gfx: finishing a linear DMA-BUF CPU access failed: %s\n", strerror(errno));
     if (m->blob) munmap(m->blob, m->blob_len);
     if (m->bo) { gbm_bo_unmap(m->bo, m->map_data); gbm_bo_destroy(m->bo); }
     free(m);
