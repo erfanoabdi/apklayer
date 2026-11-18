@@ -170,7 +170,7 @@ static void buffer_init(struct apklayer_gfx_buffer *out, uint32_t w, uint32_t h,
 
 static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *out, const struct pack_spec *sp, uint32_t usage)
 {
-    out->packed = 2; /* separate GPU plane resources; CPU linear mapping stages YUV */
+    out->packed = 2; /* separate GPU plane resources, presented using the original DMA-BUFs */
     out->num_planes = sp->planes;
     out->modifier = DRM_FORMAT_MOD_LINEAR;
     for (int p = 0; p < sp->planes; p++) {
@@ -305,7 +305,8 @@ struct apklayer_gfx_mapping {
     void *map_data;
     void *blob;      /* a direct mmap, or NULL */
     size_t blob_len;
-    int dma_fd;
+    int dma_fds[APKLAYER_GFX_MAX_PLANES];
+    int num_dma_fds;
     uint64_t dma_access;
     void *stage;
     size_t stage_offset[4], plane_size[4];
@@ -349,12 +350,18 @@ static int dma_buf_sync(int fd, uint64_t flags)
     return rc;
 }
 
+static bool dma_buf_covers(int fd, size_t length)
+{
+    struct stat st;
+    if (fstat(fd, &st) < 0) return false;
+    if (st.st_size < 0 || (uint64_t)st.st_size < length) { errno = EINVAL; return false; }
+    return true;
+}
+
 static void *map_linear_dma_buf(int fd, size_t length, bool write,
                                struct apklayer_gfx_mapping *mapping)
 {
-    struct stat st;
-    if (fstat(fd, &st) < 0) return NULL;
-    if (st.st_size < 0 || (uint64_t)st.st_size < length) { errno = EINVAL; return NULL; }
+    if (!dma_buf_covers(fd, length)) return NULL;
     void *base = mmap(NULL, length, PROT_READ | (write ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
     if (base == MAP_FAILED) return NULL;
     uint64_t access = write ? DMA_BUF_SYNC_RW : DMA_BUF_SYNC_READ;
@@ -366,7 +373,8 @@ static void *map_linear_dma_buf(int fd, size_t length, bool write,
     }
     mapping->blob = base;
     mapping->blob_len = length;
-    mapping->dma_fd = fd;
+    mapping->dma_fds[0] = fd;
+    mapping->num_dma_fds = 1;
     mapping->dma_access = access;
     return base;
 }
@@ -413,6 +421,13 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             fd_data.height = buf->height * sp->plane[plane].num / sp->plane[plane].den;
             fd_data.stride = buf->stride[plane];
             fd_data.format = plane_format(sp, plane);
+            uint64_t bytes = (uint64_t)fd_data.stride * fd_data.height;
+            if (buf->modifier == DRM_FORMAT_MOD_LINEAR && bytes && bytes <= SIZE_MAX - offset &&
+                (addr = map_linear_dma_buf(fd_data.fd, offset + (size_t)bytes, write, m))) {
+                *stride = fd_data.stride;
+                *mapping = m;
+                return addr + offset;
+            }
         }
         uint32_t map_stride = 0;
         bool can_transfer = !buf->packed && buf->num_planes == 1 && apklayer_gfx_transfer_supported(fd_data.format);
@@ -475,9 +490,45 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
     return addr + offset;
 }
 
-/* Android's mapper lock API exposes one base pointer. Separate GPU resources
- * need a temporary contiguous YUV view; presentation still imports the planes
- * directly, with no RGB conversion or CPU readback. */
+/* The mapper describes these planes as consecutive regions of one CPU view. When their
+ * boundaries are page-aligned, map the original buffers at those offsets in a reserved
+ * address range. MAP_FIXED only replaces pages in this mapping, which we own. */
+static void *map_separate_linear_planes(const struct apklayer_gfx_buffer *buf, size_t size, bool write,
+                                         struct apklayer_gfx_mapping *m)
+{
+    if (buf->modifier != DRM_FORMAT_MOD_LINEAR) return NULL;
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) return NULL;
+    for (int p = 0; p < buf->num_planes; p++) {
+        if (buf->offset[p] || m->stage_offset[p] % (size_t)page_size ||
+            !dma_buf_covers(buf->fd[p], m->plane_size[p])) return NULL;
+    }
+    uint8_t *base = mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (base == MAP_FAILED) return NULL;
+    int prot = PROT_READ | (write ? PROT_WRITE : 0);
+    uint64_t access = write ? DMA_BUF_SYNC_RW : DMA_BUF_SYNC_READ;
+    int started = 0;
+    for (int p = 0; p < buf->num_planes; p++) {
+        if (mmap(base + m->stage_offset[p], m->plane_size[p], prot, MAP_SHARED | MAP_FIXED,
+                 buf->fd[p], 0) == MAP_FAILED ||
+            dma_buf_sync(buf->fd[p], DMA_BUF_SYNC_START | access) < 0) {
+            int error = errno;
+            while (started) dma_buf_sync(buf->fd[--started], DMA_BUF_SYNC_END | access);
+            munmap(base, size);
+            errno = error;
+            return NULL;
+        }
+        m->dma_fds[started++] = buf->fd[p];
+    }
+    m->num_dma_fds = started;
+    m->dma_access = access;
+    m->blob = base;
+    m->blob_len = size;
+    return base;
+}
+
+/* Android's mapper lock API exposes one base pointer. Use the original DMA-BUFs
+ * when their layout can provide it directly, and stage incompatible layouts. */
 void *apklayer_gfx_map_linear(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, bool write,
                              uint32_t *stride, struct apklayer_gfx_mapping **mapping)
 {
@@ -515,14 +566,23 @@ void *apklayer_gfx_map_linear(struct apklayer_gfx *gfx, const struct apklayer_gf
     }
     if (buf->packed != 2) return apklayer_gfx_map(gfx, buf, 0, write, stride, mapping);
     const struct pack_spec *sp = find_pack(buf->fourcc);
-    if (!sp) { errno = ENOTSUP; return NULL; }
+    if (!sp || buf->num_planes != sp->planes) { errno = ENOTSUP; return NULL; }
     struct apklayer_gfx_mapping *m = calloc(1, sizeof *m);
     if (!m) return NULL;
     size_t size = 0;
     for (int p = 0; p < buf->num_planes; p++) {
+        uint64_t rows = (uint64_t)buf->height * sp->plane[p].num / sp->plane[p].den;
+        uint64_t bytes = (uint64_t)buf->stride[p] * rows;
+        if (!bytes || bytes > SIZE_MAX - size) { free(m); errno = EINVAL; return NULL; }
         m->stage_offset[p] = size;
-        m->plane_size[p] = (size_t)buf->stride[p] * (buf->height * sp->plane[p].num / sp->plane[p].den);
+        m->plane_size[p] = (size_t)bytes;
         size += m->plane_size[p];
+    }
+    void *base = map_separate_linear_planes(buf, size, write, m);
+    if (base) {
+        *stride = buf->stride[0];
+        *mapping = m;
+        return base;
     }
     m->stage = malloc(size);
     if (!m->stage) { free(m); return NULL; }
@@ -557,8 +617,9 @@ void apklayer_gfx_unmap(struct apklayer_gfx_mapping *m)
         }
         free(m->stage);
     }
-    if (m->dma_access && dma_buf_sync(m->dma_fd, DMA_BUF_SYNC_END | m->dma_access) < 0)
-        fprintf(stderr, "apklayer-gfx: finishing a linear DMA-BUF CPU access failed: %s\n", strerror(errno));
+    for (int p = 0; p < m->num_dma_fds; p++)
+        if (dma_buf_sync(m->dma_fds[p], DMA_BUF_SYNC_END | m->dma_access) < 0)
+            fprintf(stderr, "apklayer-gfx: finishing a linear DMA-BUF CPU access failed: %s\n", strerror(errno));
     if (m->blob) munmap(m->blob, m->blob_len);
     if (m->bo) { gbm_bo_unmap(m->bo, m->map_data); gbm_bo_destroy(m->bo); }
     free(m);
