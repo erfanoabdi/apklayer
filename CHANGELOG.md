@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-19: Berberis CPU patches 0072-0075 (PGR)
+
+- Build log: `libberberis_arm64` (gsi_x86_64 userdebug, incremental, Mac `~/los24`) with 0072 (FRSQRTE table), 0073 (interpreter stops at untranslated code), 0074 (unshared interpreter counter) and 0075 (AMD `lock notl` for DMB ISH/STLR) applied on top of the tree as it was (it also carries other sessions' uncommitted large_mmap and virtual_guest_call_frame work).
+
 ## 2026-11-18: Reuse virtual-display imports and map linear buffers directly
 
 - Keep released DMA-BUF and Halium gralloc imports until their slot is needed. Reuse unused slots first, then replace the oldest released slot. Return old-size frames with their original fence before waiting on the GPU.
