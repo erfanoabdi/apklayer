@@ -1,0 +1,63 @@
+# The ANGLE libraries of runtime/angle (README.md there), built from Google's source at patches/angle/REVISION with patches/angle/*.patch
+# by tools/angle/build.sh: Android x86_64 and x86 (the guests' EGL/GLES) and Linux x86_64 (the host graphics HAL and the compositor).
+# A change to the revision, the patches or the script on main builds them and opens a pull request that puts the new binaries and their
+# SHA256SUMS into runtime/angle; run by hand (workflow_dispatch) it only builds and keeps the files as an artifact.
+name: angle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - patches/angle/**
+      - tools/angle/**
+      - .github/workflows/angle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write        # the branch of the pull request
+  pull-requests: write   # the pull request (repository setting: "Allow GitHub Actions to create and approve pull requests")
+
+concurrency:
+  group: angle
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Room for the checkout (about 20 GB with the Android toolchain)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo mkdir -p /mnt/angle && sudo chown "$USER" /mnt/angle
+          df -h / /mnt
+
+      - name: Build
+        run: tools/angle/build.sh /mnt/angle/work /mnt/angle/out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: angle-${{ github.sha }}
+          path: /mnt/angle/out
+          retention-days: 30
+
+      - name: Pull request with the new binaries
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp -r /mnt/angle/out/vendor /mnt/angle/out/host /mnt/angle/out/SHA256SUMS runtime/angle/
+          if git diff --quiet -- runtime/angle && [ -z "$(git status --porcelain runtime/angle)" ]; then
+            echo "the binaries are unchanged"; exit 0
+          fi
+          branch="angle-build/$(cut -c1-12 patches/angle/REVISION)-${GITHUB_SHA::8}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add runtime/angle
+          git commit -q -m "ANGLE libraries from $(cat patches/angle/REVISION) with $(ls patches/angle/[0-9]*.patch | wc -l) patches (workflow angle, ${GITHUB_SHA::8})"
+          git push -q origin "$branch"
+          gh pr create --base main --head "$branch" --title "ANGLE libraries for ${GITHUB_SHA::8}" \
+            --body "Built by the angle workflow (run ${GITHUB_RUN_ID}) with tools/angle/build.sh. SHA-256 in runtime/angle/SHA256SUMS."

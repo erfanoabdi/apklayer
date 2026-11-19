@@ -1,5 +1,9 @@
 # ANGLE Android libraries
 
+Built by `.github/workflows/angle.yml` with `tools/angle/build.sh` (also runnable locally: `tools/angle/build.sh <work dir> <out dir>`): a change
+to `patches/angle/REVISION`, the patches or the script on main builds all of them and opens a pull request with the new files and
+`SHA256SUMS`. The tables below are the hand-built set of 2026-11-18.
+
 These x86_64 and x86 Android EGL/GLES libraries are built from Google ANGLE revision
 `f0d596b6f9e3dfe7a068786790516c035b1dfde4` for Android API 37. The GN build enables Vulkan and uses the `_angle` library suffix. The source includes apklayer patches `patches/angle/0001-use-host-safe-tls-for-vulkan.patch`, `0002-disable-nvidia-android-deferred-swapchain.patch`, `0003-disable-nvidia-android-present-fences.patch`, and `0006-use-saved-egl-thread-during-cleanup.patch`; see `docs/PATCHES.md`. ANGLE's Android GLES 3.2 exposure is enabled at runtime with `ANGLE_FEATURE_OVERRIDES_ENABLED=exposeES32ForTesting`.
 
