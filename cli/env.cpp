@@ -74,28 +74,32 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
     std::string system = join(layout.native, "android-root/system");
     std::string packaged = join(layout.build, "angle/vendor");
     static const char* libs[] = {"libEGL_angle.so", "libGLESv1_CM_angle.so", "libGLESv2_angle.so"};
-    // Prefer the runtime's own copy (e.g. Meson installs with android_runtime=true).
-    bool complete = true;
-    for (const char* abi : {"lib64", "lib"}) {
-        std::string dir = join(system, abi);
-        for (const char* name : libs) {
-            std::string path = join(dir, name);
-            complete = complete && exists(path);
-        }
-    }
-    if (complete) return true;
-    // A downloaded Android runtime is user-owned; expose packaged binaries by symlink without replacing existing files.
+    bool packageHasAll = true, runtimeHasAll = true;
     for (const char* abi : {"lib64", "lib"})
         for (const char* name : libs) {
-            std::string source = join(join(packaged, std::string(abi) + "/egl"), name);
-            if (!exists(source)) { reason = "missing packaged ANGLE library " + source; return false; }
+            packageHasAll = packageHasAll && exists(join(join(packaged, std::string(abi) + "/egl"), name));
+            runtimeHasAll = runtimeHasAll && exists(join(join(system, abi), name));
         }
+    // Without the package's ANGLE (an arm64 package, a build without it) the runtime's own copies serve.
+    if (!packageHasAll) {
+        if (runtimeHasAll) return true;
+        reason = "missing packaged ANGLE library under " + packaged;
+        return false;
+    }
+    // The package's ANGLE always wins: each runtime entry becomes a link to it, replacing a copy a runtime brought (a Meson install with
+    // android_runtime=true, an older bundle) or a link to elsewhere, so a package update's ANGLE reaches apps at their next start.
     for (const char* abi : {"lib64", "lib"}) {
         std::string dir = join(system, abi);
         makeDirs(dir);
         for (const char* name : libs) {
-            std::string path = join(dir, name);
-            if (!exists(path) && symlink(join(join(packaged, std::string(abi) + "/egl"), name).c_str(), path.c_str()) != 0) {
+            std::string path = join(dir, name), target = join(join(packaged, std::string(abi) + "/egl"), name);
+            char current[4096];
+            ssize_t n = readlink(path.c_str(), current, sizeof(current) - 1);
+            if (n > 0 && std::string(current, n) == target) continue;
+            std::string temp = path + ".apklayer-link";
+            unlink(temp.c_str());
+            if (symlink(target.c_str(), temp.c_str()) != 0 || rename(temp.c_str(), path.c_str()) != 0) {
+                unlink(temp.c_str());
                 reason = "cannot link packaged ANGLE library " + path;
                 return false;
             }
