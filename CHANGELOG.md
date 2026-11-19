@@ -3,6 +3,7 @@
 ## 2026-11-19: Berberis CPU patches 0072-0075 (PGR)
 
 - Build log: `libberberis_arm64` (gsi_x86_64 userdebug, incremental, Mac `~/los24`) with 0072 (FRSQRTE table), 0073 (interpreter stops at untranslated code), 0074 (unshared interpreter counter) and 0075 (AMD `lock notl` for DMB ISH/STLR) applied on top of the tree as it was (it also carries other sessions' uncommitted large_mmap and virtual_guest_call_frame work).
+- That first build aborted PGR at startup ("couldn't find __kernel_rt_sigreturn symbol in vdso"): the Mac tree carried another session's uncommitted 0090 (guest vdso `__kernel_rt_sigreturn` stub + loader, from the 2026-11-17 anti-cheat work, never in the repo). Cleaned the Mac trees to the repo state (binary_translation: repo patches + 0072-0075, files touched so ninja recompiles; native_bridge_support: upstream 3d6ed1b + 0001-0004); their diffs are saved in `~/apklayer-0090-backup/` on the NVIDIA PC. Rebuild succeeded: libberberis_arm64.so sha256 b1551152...a3c6, 3.3 MB, no 0090 symbol. Installed only in a private runtime copy `~/apklayer-pgr-cpu/runtime` (links to runtime 0.5.0 with this library); PGR starts on it in instance default.
 
 ## 2026-11-18: Reuse virtual-display imports and map linear buffers directly
 
