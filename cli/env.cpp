@@ -179,8 +179,16 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
     bool aot = ver != std::string::npos && atoi(rel.c_str() + ver + 14) >= 25 && getenvOr("APKLAYER_AOT", "") != "off";
     snprintf(name, sizeof name, aot ? "%016zx.aot" : "%016zx.jsa", std::hash<std::string>{}(key));
     std::string jsa = join(inst.stateDir, std::string("cds/") + name);
+    const bool hasArchive = exists(jsa);
+    bool preferArchiveAddress = !aot && hasArchive;
+#if defined(__x86_64__)
+    // HotSpot can relocate the archive and its 1 GiB class space into Berberis's MAP_32BIT range.
+    // Try the address recorded in the archive first, including for the default archive on cold starts.
+    preferArchiveAddress |= l.java.empty();
+#endif
+    if (preferArchiveAddress) a.insert(a.end(), {"-XX:+UnlockDiagnosticVMOptions", "-XX:ArchiveRelocationMode=0"});
     if (aot) {
-        if (exists(jsa)) {
+        if (hasArchive) {
             a.push_back("-XX:AOTCache=" + jsa);
             glob_t old{};  // the configurations of the JVMs that recorded and ended after the cache was made
             if (glob((jsa + "conf.*").c_str(), 0, nullptr, &old) == 0) for (size_t i = 0; i < old.gl_pathc; i++) unlink(old.gl_pathv[i]);
@@ -193,7 +201,7 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
     }
     // at the address it was written for, as JDKs before 20 did: relocated (21's default) its pages are each JVM's own, ~25 MB more per JVM than no
     // archive (instance PSS on UTM: 2237 MB without, 2329 relocated, 2197 here); the JVM relocates it still when that address is taken
-    if (exists(jsa)) a.insert(a.end(), {"-XX:SharedArchiveFile=" + jsa, "-XX:+UnlockDiagnosticVMOptions", "-XX:ArchiveRelocationMode=0"});
+    if (hasArchive) a.push_back("-XX:SharedArchiveFile=" + jsa);
     else a.insert(a.end(), {"-XX:+RecordDynamicDumpInfo", "-Dapklayer.cdsdump=" + jsa});
 }
 
