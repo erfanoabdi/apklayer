@@ -69,6 +69,7 @@ struct NativeBufferDispatch {
     PFN_vkCreateSemaphore createSemaphore = nullptr;
     PFN_vkGetSemaphoreFdKHR exportSemaphore = nullptr;
     VkQueue acquireQueue = VK_NULL_HANDLE;  // first queue in gQueueDevice's order, for the acquire fallback
+    bool importSignaledSyncFd = false;
 };
 std::map<VkDevice, NativeBufferDispatch> gNativeBuffer;  // devices created with VK_ANDROID_native_buffer
 
@@ -87,6 +88,22 @@ bool hasExtension(VkPhysicalDevice physical, const char* name) {
     if (fn(physical, nullptr, &count, properties.data()) != VK_SUCCESS) return false;
     for (const auto& p : properties) if (!strcmp(p.extensionName, name)) return true;
     return false;
+}
+
+bool supportsSyncFdImport(VkPhysicalDevice physical) {
+    auto semaphoreProperties = host<PFN_vkGetPhysicalDeviceExternalSemaphoreProperties>("vkGetPhysicalDeviceExternalSemaphoreProperties");
+    auto fenceProperties = host<PFN_vkGetPhysicalDeviceExternalFenceProperties>("vkGetPhysicalDeviceExternalFenceProperties");
+    if (!semaphoreProperties || !fenceProperties) return false;
+    VkPhysicalDeviceExternalSemaphoreInfo semaphoreInfo = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO, nullptr,
+                                                           VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT};
+    VkExternalSemaphoreProperties semaphore = {VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES};
+    semaphoreProperties(physical, &semaphoreInfo, &semaphore);
+    VkPhysicalDeviceExternalFenceInfo fenceInfo = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FENCE_INFO, nullptr,
+                                                  VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT};
+    VkExternalFenceProperties fence = {VK_STRUCTURE_TYPE_EXTERNAL_FENCE_PROPERTIES};
+    fenceProperties(physical, &fenceInfo, &fence);
+    return (semaphore.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT) &&
+           (fence.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT);
 }
 
 // OPT-IN (APKLAYER_VULKAN_PRESENT=1): on the UTM VM's Venus GPU (virglrenderer on macOS) a virgl dma-buf imports and binds but Venus aborts on the first
@@ -132,16 +149,16 @@ VkResult importPending(VkDevice device, VkImage image, NativeBufferDispatch* dis
 VKAPI_ATTR VkResult VKAPI_CALL acquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) {
     NativeBufferDispatch dispatch;
     VkResult imported = importPending(device, image, &dispatch);
-    if (nativeFenceFd < 0 && (semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE)) {
-        // nothing to wait for: signal the app's semaphore and fence with a real (empty) submission rather than a sync-fd import of -1,
-        // which leaves Venus's semaphore unsignaled
+    if (imported != VK_SUCCESS) { if (nativeFenceFd >= 0) close(nativeFenceFd); return imported; }
+    if (nativeFenceFd < 0 && !dispatch.importSignaledSyncFd && (semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE)) {
+        // A sync-fd import of -1 signals acquisition without submitting to an app-owned queue.
+        // Keep an empty submission for drivers such as Venus, where that import leaves the semaphore unsignaled.
         if (!dispatch.submit || !dispatch.acquireQueue) return VK_ERROR_INITIALIZATION_FAILED;
         VkSubmitInfo signal = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
         signal.signalSemaphoreCount = semaphore != VK_NULL_HANDLE ? 1 : 0;
         signal.pSignalSemaphores = &semaphore;
         return dispatch.submit(dispatch.acquireQueue, 1, &signal, fence);
     }
-    if (imported != VK_SUCCESS) { if (nativeFenceFd >= 0) close(nativeFenceFd); return imported; }
     if (!dispatch.importSemaphore) { if (nativeFenceFd >= 0) close(nativeFenceFd); return VK_ERROR_INITIALIZATION_FAILED; }
     if (fence != VK_NULL_HANDLE && !dispatch.importFence) {
         // no fence fds on this host driver: wait for the window's fence here, then signal the app's fence with an empty submit
@@ -489,6 +506,7 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
             hostDevice<PFN_vkCreateSemaphore>(*device, "vkCreateSemaphore"),
             hostDevice<PFN_vkGetSemaphoreFdKHR>(*device, "vkGetSemaphoreFdKHR"),
         };
+        dispatch.importSignaledSyncFd = dispatch.importSemaphore && dispatch.importFence && supportsSyncFdImport(physical);
         std::lock_guard<std::mutex> lock(gLock);
         gNativeBuffer[*device] = dispatch;
     }
