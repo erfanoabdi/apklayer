@@ -1,0 +1,53 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: FRSQRTE's estimate from a table, not the ARM ARM loop per element
+
+0035's ArmFpRSqrtEstimate ran RecipSqrtEstimate's `while a*(b+1)^2 < 2^28: b++` (up to ~500 iterations) for every lane. In PGR (two-gear,
+NVIDIA PC, perf 2026-11-19) that loop alone was 17.7% of the process's CPU, all on Unity's job workers. The integer part now comes from a
+512-entry table built once with the same loop: bit-identical (f16 all, f32 every 4093rd, 1M random f64), 58 -> 3.8 ns per element.
+Module libberberis_arm64.
+
+diff --git a/cpu_emulation/interpreter/arm64/fp_estimate.h b/cpu_emulation/interpreter/arm64/fp_estimate.h
+--- a/cpu_emulation/interpreter/arm64/fp_estimate.h
++++ b/cpu_emulation/interpreter/arm64/fp_estimate.h
+@@ -43,6 +43,24 @@
+   return signed_zero | (static_cast<uint64_t>(result_exp) << f) | fraction;
+ }
+ 
++// apklayer patch (0072): RecipSqrtEstimate's integer part for every 9-bit index (128..511), built once with the ARM ARM loop. Run per element,
++// the loop took up to ~500 iterations and was the hottest code of Unity's job workers (PGR: 18% of the process's CPU).
++inline const uint16_t* ArmRSqrtEstimateTable() {
++  struct Table {
++    uint16_t v[512] = {};
++    Table() {
++      for (int scaled = 128; scaled < 512; scaled++) {
++        int a = scaled < 256 ? scaled * 2 + 1 : (((scaled >> 1) << 1) + 1) * 2;
++        int b = 512;
++        while (static_cast<int64_t>(a) * (b + 1) * (b + 1) < (int64_t{1} << 28)) b++;
++        v[scaled] = static_cast<uint16_t>((b + 1) / 2);
++      }
++    }
++  };
++  static const Table table;
++  return table.v;
++}
++
+ inline uint64_t ArmFpRSqrtEstimate(uint64_t bits, int e, int f) {
+   const uint64_t frac_mask = (uint64_t{1} << f) - 1;
+   const uint64_t exp_mask = (uint64_t{1} << e) - 1;
+@@ -62,15 +80,7 @@
+   }
+   int scaled = (exp & 1) ? 128 + static_cast<int>(frac >> (f - 7))  // '01' : fraction<F-1:F-7>
+                          : 256 + static_cast<int>(frac >> (f - 8));  // '1' : fraction<F-1:F-8>
+-  int a;
+-  if (scaled < 256) {
+-    a = scaled * 2 + 1;
+-  } else {
+-    a = (((scaled >> 1) << 1) + 1) * 2;
+-  }
+-  int b = 512;
+-  while (static_cast<int64_t>(a) * (b + 1) * (b + 1) < (int64_t{1} << 28)) b++;
+-  int estimate = (b + 1) / 2;  // [256, 511]
++  int estimate = ArmRSqrtEstimateTable()[scaled];  // [256, 511]; apklayer patch (0072): a table, not the pseudo-code loop per element
+   int64_t result_exp = (3 * (int64_t{1} << (e - 1)) - 4 - exp) / 2;
+   return (static_cast<uint64_t>(result_exp) << f) | (static_cast<uint64_t>(estimate & 0xff) << (f - 8));
+ }
