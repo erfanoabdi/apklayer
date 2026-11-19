@@ -489,8 +489,9 @@ public final class AppHost implements Runnable {
      */
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
         if (dpi <= 0) dpi = 160 * scalePct / 100;
-        int wdp = dp(w * scalePct / 100, dpi), hdp = dp(h * scalePct / 100, dpi);
-        HostInputDevices.install(w * scalePct / 100, h * scalePct / 100);  // its motion ranges are the window's pixels
+        int pw = w * scalePct / 100, ph = h * scalePct / 100;
+        int wdp = dp(pw, dpi), hdp = dp(ph, dpi);
+        HostInputDevices.install(pw, ph);  // its motion ranges are the window's pixels
         // a rotation: the window turned as the app asked (setRequestedOrientation) or the phone turned (mobile style); other shape changes
         // (a drag, fullscreen) are resizes in place
         boolean turned = (turnRequested || mobile) && !stack.isEmpty() && logicalW > 0 && (w > h) != (logicalW > logicalH);
@@ -500,14 +501,13 @@ public final class AppHost implements Runnable {
         logicalScale = scalePct;
         logicalDpi = dpi;
         System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
-                + "x" + hdp + "dp @" + dpi + "dpi, navigation bar " + navPx + " px");
+                + "x" + hdp + "dp @" + dpi + "dpi (" + pw + "x" + ph + " px), navigation bar " + navPx + " px");
         org.robolectric.shadows.NavigationBarInset.set(navPx);
         NativeWindowResize.resizing(new ArrayList<>(stack));
         // before the app sees the new shape: a Camera1 app opens or sets its display orientation from onConfigurationChanged or the view's size
         HostCameraShadows.windowShape(h > w);
         // the screen (WindowConfiguration max bounds: Display.getRealSize, WindowManager.getMaximumWindowMetrics, ViewConfiguration's drawing
         // cache limit) is the output, turned like the window as a phone's display turns with it; the window stays the app's bounds
-        int pw = w * scalePct / 100, ph = h * scalePct / 100;
         int longer = Math.max(Math.max(outputPxW, outputPxH), Math.max(pw, ph)), shorter = Math.max(Math.min(outputPxW, outputPxH), Math.min(pw, ph));
         HostConfiguration.setScreen(outputPxW > 0 && outputPxH > 0 ? (pw >= ph ? new android.graphics.Rect(0, 0, longer, shorter) : new android.graphics.Rect(0, 0, shorter, longer)) : null);
         String qualifiers = "w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi";
