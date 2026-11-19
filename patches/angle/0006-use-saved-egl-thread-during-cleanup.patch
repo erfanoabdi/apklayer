@@ -1,0 +1,27 @@
+From: apklayer
+Subject: ANGLE: use the saved EGL thread during pthread cleanup
+
+The Android pthread destructor receives the EGL Thread it must release.
+On apklayer the C++ TLS lookup can already return null at that point.
+Use the supplied Thread to update its context, including when ReleaseThread
+restores the current-context state from the destructor.
+
+--- a/src/libGLESv2/global_state.cpp
++++ b/src/libGLESv2/global_state.cpp
+@@ -150,13 +150,9 @@
+ 
+ void SetContextCurrent(Thread *thread, gl::Context *context)
+ {
+-#if defined(ANGLE_PLATFORM_APPLE) || defined(ANGLE_USE_STATIC_THREAD_LOCAL_VARIABLES)
+-    Thread *currentThread = GetCurrentThreadTLS();
+-#else
+-    Thread *currentThread = gCurrentThread;
+-#endif
+-    ASSERT(currentThread);
+-    currentThread->setCurrent(context);
++    // apklayer patch: the pthread cleanup callback can run after C++ TLS was cleared.
++    ASSERT(thread);
++    thread->setCurrent(context);
+ 
+     gl::SetCurrentValidContext(context);
+ 

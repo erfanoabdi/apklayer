@@ -1,7 +1,7 @@
 # ANGLE Android libraries
 
 These x86_64 and x86 Android EGL/GLES libraries are built from Google ANGLE revision
-`f0d596b6f9e3dfe7a068786790516c035b1dfde4` for Android API 37. The GN build enables Vulkan and uses the `_angle` library suffix. The source includes apklayer patches `patches/angle/0001-use-host-safe-tls-for-vulkan.patch`, `0002-disable-nvidia-android-deferred-swapchain.patch` and `0003-disable-nvidia-android-present-fences.patch`; see `docs/PATCHES.md`. ANGLE's Android GLES 3.2 exposure is enabled at runtime with `ANGLE_FEATURE_OVERRIDES_ENABLED=exposeES32ForTesting`.
+`f0d596b6f9e3dfe7a068786790516c035b1dfde4` for Android API 37. The GN build enables Vulkan and uses the `_angle` library suffix. The source includes apklayer patches `patches/angle/0001-use-host-safe-tls-for-vulkan.patch`, `0002-disable-nvidia-android-deferred-swapchain.patch`, `0003-disable-nvidia-android-present-fences.patch`, and `0006-use-saved-egl-thread-during-cleanup.patch`; see `docs/PATCHES.md`. ANGLE's Android GLES 3.2 exposure is enabled at runtime with `ANGLE_FEATURE_OVERRIDES_ENABLED=exposeES32ForTesting`.
 
 ANGLE is packaged for x86 and x86_64 Android guests on x86_64 Linux hosts. There is no ARM64 ANGLE build or runtime payload.
 
@@ -21,10 +21,10 @@ SHA-256:
 |---|---|---|
 | x86_64 | `libEGL_angle.so` | `ae78e0ac613c94f3426dd55b46429c5d68fe662c70ea89f7f4c56b9908ad1a06` |
 | x86_64 | `libGLESv1_CM_angle.so` | `63c2e858fb1d99aba9e896bfa1f7c31b789ec6d20da71fec74a64751bd213999` |
-| x86_64 | `libGLESv2_angle.so` | `699d08e3eefe00aee74753efee4813172d0cb9c0147e6e432c2f751b303b79c2` |
+| x86_64 | `libGLESv2_angle.so` | `f6ed78e52153a62d53a5270d12b0eb92d0d608cfd99853ca287511ee008269df` |
 | x86 | `libEGL_angle.so` | `fd23048764fe33787f56cfc9927d7134e6a317c5924596785a57a347c36ebfc6` |
 | x86 | `libGLESv1_CM_angle.so` | `e7af29754e1cd5038be6507e19968120ce2eaacf333fa63658ea18c513e9274a` |
-| x86 | `libGLESv2_angle.so` | `0e85fc0b65759315280135995b29bf1e808849fd97dc1bad968f2659575ab13c` |
+| x86 | `libGLESv2_angle.so` | `d2bc2589b8b3290744e3edf492d107bbb09ce2044d479d491068be629b742dee` |
 
 Linux host SHA-256:
 
