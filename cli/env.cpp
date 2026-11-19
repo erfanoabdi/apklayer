@@ -113,7 +113,12 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
 // target. shortcut: any such device counts, not only the instance's GPU (APKLAYER_GPU); the driver still checks the extensions on its own device.
 std::string hostVulkan(const Layout& layout, const Env& env) {
     std::string cache = join(layout.runtimeHome, "apklayer-host-vulkan");
-    if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
+    // Loader overrides can change which drivers are visible for this launch.
+    const char* driverOverrides[] = {"VK_ICD_FILENAMES", "VK_DRIVER_FILES", "VK_ADD_DRIVER_FILES",
+                                     "VK_LOADER_DRIVERS_SELECT", "VK_LOADER_DRIVERS_DISABLE"};
+    bool cacheable = std::none_of(std::begin(driverOverrides), std::end(driverOverrides), [&](const char* name) { return env.count(name); });
+    if (cacheable)
+        if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
     if (!exists("/usr/bin/vulkaninfo")) return "";  // vulkan-tools is only recommended
     Spawn probe;
     probe.argv = {"vulkaninfo", "--summary"};
@@ -151,7 +156,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         }
         if (level1) version += " 1";
     }
-    writeFile(cache, (version.empty() ? "-" : version) + "\n");
+    if (cacheable) writeFile(cache, (version.empty() ? "-" : version) + "\n");
     return version;
 }
 
@@ -335,22 +340,32 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
     env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it
-    env["XDG_DATA_DIRS"] = prepend(join(n, "share"), getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"));
+    const std::string angleShare = join(instance.root, "angle/share");
+    const std::string runtimeShare = join(n, "share");
+    auto& dataDirs = env["XDG_DATA_DIRS"];
+    dataDirs = runtimeShare;
+    // Launches from the hub can inherit an ANGLE environment. Select its EGL mapping again below.
+    env.erase("APKLAYER_ANGLE_ACTIVE");
+    for (const std::string& dir : split(getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"), ':'))
+        if (dir != runtimeShare && dir != angleShare) dataDirs += ":" + dir;
     if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env, layout.java.empty() ? "lib64" : "lib");  // a layout with its own JVM: the 32-bit one
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
     env["BIONIC_LD_LIBRARY_PATH"] = l;
     if (!env.count("APKLAYER_CRASH_TRACE")) env["APKLAYER_CRASH_TRACE"] = "1";
     // system_server's services stay in the JVM; native clients use their existing unavailable-service fallbacks
     if (!env.count("APKLAYER_NO_SYSTEM_SERVER")) env["APKLAYER_NO_SYSTEM_SERVER"] = "1";
-    // Android and host Vulkan loaders retain separate dispatch tables once the frontend is installed
-    if (exists(join(l, "libapklayer_vulkan.so")) && exists(join(l, "vulkan.apklayer.so"))) env["APKLAYER_VULKAN_HOST"] = "1";
-    // Vulkan presentation on where the host can do it (the driver's switch; HostSystemConfig declares android.hardware.vulkan.* from the
-    // version); APKLAYER_VULKAN_PRESENT=0 turns it off, =1 keeps it on where the probe finds no device
-    if (env.count("APKLAYER_VULKAN_PRESENT") && env["APKLAYER_VULKAN_PRESENT"] == "0") env.erase("APKLAYER_VULKAN_PRESENT");
-    else if (env.count("APKLAYER_VULKAN_HOST")) {
-        std::string vulkan = hostVulkan(layout, env);
-        if (size_t sp = vulkan.find(' '); sp != std::string::npos) env["APKLAYER_VULKAN_LEVEL"] = vulkan.substr(sp + 1), vulkan.resize(sp);
-        if (!vulkan.empty()) env["APKLAYER_VULKAN_PRESENT"] = "1", env["APKLAYER_VULKAN_VERSION"] = vulkan;
+    // Android and host Vulkan loaders retain separate dispatch tables once the frontend is installed.
+    const bool hostVulkanStaged = exists(join(l, "libapklayer_vulkan.so")) && exists(join(l, "vulkan.apklayer.so"));
+    if (hostVulkanStaged) env["APKLAYER_VULKAN_HOST"] = "1";
+    else env.erase("APKLAYER_VULKAN_HOST");
+    const std::string vulkanSetting = getenvOr("APKLAYER_VULKAN_PRESENT", "");
+    const bool vulkanDisabled = vulkanSetting == "0" || (vulkanSetting.empty() && env.count("APKLAYER_VULKAN_DISABLED"));
+    // Android checks for the presence of the presentation flag. Keep the off policy for child CLI launches.
+    if (vulkanDisabled) {
+        env.erase("APKLAYER_VULKAN_PRESENT");
+        env["APKLAYER_VULKAN_DISABLED"] = "1";
+    } else {
+        env.erase("APKLAYER_VULKAN_DISABLED");
     }
     // the host side of the graphics, media and audio HALs: every staged library is loaded (services and apps use all of them)
     std::string libs;
@@ -382,6 +397,13 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         fprintf(stderr, "apklayer: ANGLE GLES needs the host graphics provider; using the device GLES driver\n");
         useAngle = false;
     }
+    // ANGLE needs usable Vulkan presentation even when apps have forced Vulkan on.
+    std::string vulkan = hostVulkanStaged && !vulkanDisabled ? hostVulkan(layout, env) : "";
+    if (useAngle && vulkan.empty()) {
+        fprintf(stderr, "apklayer: %s; using native GLES\n", vulkanDisabled ? "Vulkan is disabled" :
+                "ANGLE GLES needs a detected Vulkan device and presentation driver");
+        useAngle = false;
+    }
     if (useAngle) {
         std::string reason;
         if (!angleLibrariesAvailable(layout, reason)) {
@@ -389,29 +411,18 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
             fprintf(stderr, "apklayer: ANGLE GLES libraries are unavailable (%s); using native GLES\n", reason.c_str());
             useAngle = false;
         }
-        // ANGLE's Vulkan renderer needs the guest Vulkan presentation path too. Treat ANGLE as
-        // vulkan=on, including when the general Vulkan setting is off or its optional probe did
-        // not find a device. The Vulkan HAL will report a real initialization failure if the
-        // host driver cannot provide it; other instances keep the normal auto/off behavior.
-        if (useAngle && env.count("APKLAYER_VULKAN_HOST") && !env.count("APKLAYER_VULKAN_PRESENT")) {
-            std::string vulkan = hostVulkan(layout, env);
-            if (size_t sp = vulkan.find(' '); sp != std::string::npos)
-                env["APKLAYER_VULKAN_LEVEL"] = vulkan.substr(sp + 1), vulkan.resize(sp);
-            env["APKLAYER_VULKAN_PRESENT"] = "1";
-            env["APKLAYER_VULKAN_VERSION"] = vulkan.empty() ? "1.1" : vulkan;
-            fprintf(stderr, "apklayer: enabling Vulkan presentation for ANGLE GLES\n");
-        }
-        if (useAngle && (!env.count("APKLAYER_VULKAN_HOST") || !env.count("APKLAYER_VULKAN_PRESENT"))) {
-            if (angleMode == "on") die("ANGLE GLES needs the host Vulkan presentation driver; enable a supported Vulkan presentation path");
-            fprintf(stderr, "apklayer: ANGLE GLES needs Vulkan presentation; using native GLES\n");
-            useAngle = false;
-        }
+    }
+    if (!vulkan.empty()) {
+        if (size_t sp = vulkan.find(' '); sp != std::string::npos) env["APKLAYER_VULKAN_LEVEL"] = vulkan.substr(sp + 1), vulkan.resize(sp);
+        env["APKLAYER_VULKAN_PRESENT"] = "1";
+        env["APKLAYER_VULKAN_VERSION"] = vulkan;
     }
     if (useAngle) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
         std::string hostAngleEgl = getenvOr("APKLAYER_ANGLE_HOST_EGL", join(layout.build, "angle/host/libEGL_angle.so"));
         if (!exists(hostAngleEgl)) die("ANGLE GLES buffer transfers need the Linux ANGLE library at " + hostAngleEgl);
         env["APKLAYER_ANGLE_HOST_EGL"] = hostAngleEgl;
+        env["ANGLE_DEFAULT_PLATFORM"] = "vulkan";  // Linux ANGLE defaults to GL with both backends built.
         env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
         // Android's EGL loader asks for /system/lib{,64}/lib*_angle.so, but bionic_translation
         // opens libraries on the host filesystem. Add the runtime's mapped system dirs explicitly.
@@ -425,15 +436,14 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         std::string sharedLibs;
         for (const std::string& name : shared) if (!name.empty()) sharedLibs += (sharedLibs.empty() ? "" : ":") + name;
         env["BIONIC_VENDOR_SHARED_LIBS"] = sharedLibs;
-        std::string share = join(instance.root, "angle/share");
-        makeDirs(join(share, "bionic_translation/cfg.d"));
-        writeFile(join(share, "bionic_translation/cfg.d/angle.cfg"),
+        makeDirs(join(angleShare, "bionic_translation/cfg.d"));
+        writeFile(join(angleShare, "bionic_translation/cfg.d/angle.cfg"),
                   "# Android's EGL loader selects the ANGLE vendor libraries from ro.hardware.egl=angle\n"
                   "libEGL.so libEGL.so\n"
                   "libGLESv1_CM.so libGLESv1_CM.so\n"
                   "libGLESv2.so libGLESv2.so\n"
                   "libGLESv3.so libGLESv3.so\n");
-        env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
+        dataDirs = prepend(angleShare, dataDirs);
         fprintf(stderr, "apklayer: ANGLE GLES enabled (Vulkan backend, %s)\n", gpu ? gpu->node.c_str() : "automatic GPU");
     }
     std::string gles = useAngle ? "3.2" : hostGles(layout, env);

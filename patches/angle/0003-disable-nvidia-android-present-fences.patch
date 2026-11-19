@@ -7,6 +7,12 @@ instead of querying present fences created for the Android-loader swapchain.
 
 --- a/src/libANGLE/renderer/vulkan/vk_renderer.cpp
 +++ b/src/libANGLE/renderer/vulkan/vk_renderer.cpp
-@@ -6491 +6491 @@
+@@ -6489,7 +6489,7 @@
+     ANGLE_FEATURE_CONDITION(&mFeatures, supportsSwapchainMaintenance1,
+                             mSwapchainMaintenance1Features.swapchainMaintenance1 == VK_TRUE &&
 -                                useVulkanSwapchain == UseVulkanSwapchain::Yes);
 +                                useVulkanSwapchain == UseVulkanSwapchain::Yes && !(IsAndroid() && isNvidia));
+
+     // ANI crashes on NVIDIA/Wayland on a swapchain with deferred memory allocation.
+     // http://anglebug.com/499347835
+     // Keyed on the window system this display resolved to, so it covers the

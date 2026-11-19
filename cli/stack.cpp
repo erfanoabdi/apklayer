@@ -357,7 +357,10 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
     if (ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
         std::string file = join(inst.runtimeDir, "gles-angle.prop");
-        writeFile(file, "ro.hardware.egl=angle\ndebug.angle.backend=2\ndebug.renderengine.vulkan=false\n");
+        writeFile(file, "ro.hardware.egl=angle\n"
+                        "debug.angle.backend=2\n"
+                        "debug.angle.feature_overrides_enabled=exposeES32ForTesting\n"
+                        "debug.renderengine.vulkan=false\n");
         propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
     }
     if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 3), deviceGraphicsProperties(inst));  // after the overrides' first copy

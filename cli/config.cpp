@@ -18,7 +18,7 @@ const Setting kSettings[] = {
     {"gles-claim", "APKLAYER_GLES_OVERRIDE", "choice", "auto", "auto,off", "", "OpenGL ES 3.2 claim",
      "auto: apps are told OpenGL ES 3.2 where the host driver is older but copes; off: the driver's own version", false},
     {"gles-angle", "APKLAYER_GLES_ANGLE", "choice", "auto", "auto,off,on", "", "GLES ANGLE",
-     "auto: ANGLE on NVIDIA, native GLES elsewhere; on: ANGLE on the selected GPU; off: native GLES. ANGLE enables Vulkan presentation for its Vulkan renderer; applies at next instance start", false},
+     "auto: prefer ANGLE on NVIDIA; on: prefer ANGLE on the selected GPU; off: native GLES. APKLayer uses native GLES when Vulkan is off or unavailable. Applies at next instance start", false},
     {"vulkan", "APKLAYER_VULKAN_PRESENT", "choice", "auto", "auto,off,on", "off=0,on=1", "Vulkan",
      "auto: Vulkan for apps where the host can present; off: none; on: also where the probe finds no device", true},
     {"aot", "APKLAYER_AOT", "choice", "on", "on,off", "", "Ahead-of-time cache",

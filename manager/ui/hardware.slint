@@ -30,7 +30,7 @@ component GlesSettingsRow {
             spacing: MaterialStyleMetrics.spacing_16;
             MaterialText {
                 horizontal-stretch: 1;
-                text: "GLES: ANGLE translates through Vulkan. Automatic uses ANGLE on NVIDIA; switch on for ANGLE on any GPU, or off for native GLES. Applies at the next instance start.";
+                text: "GLES: Automatic prefers ANGLE on NVIDIA. Switch on to prefer ANGLE on any GPU, or off for native GLES. If Vulkan is off or unavailable, APKLayer uses native GLES. Applies at the next instance start.";
                 style: MaterialTypography.body_medium;
                 color: MaterialPalette.on_surface_variant;
                 wrap: word-wrap;
@@ -51,7 +51,7 @@ component GlesSettingsRow {
             spacing: MaterialStyleMetrics.spacing_8;
             MaterialText {
                 horizontal-stretch: 1;
-                text: Backend.gles-angle-enabled ? "ANGLE forced on" : "Native GLES forced on";
+                text: Backend.gles-angle-enabled ? "ANGLE preferred" : "Native GLES forced on";
                 style: MaterialTypography.body_medium;
                 color: MaterialPalette.on_surface_variant;
             }
