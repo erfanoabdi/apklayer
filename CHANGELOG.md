@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-19: ASTC/ETC2 emulation back in the Vulkan HAL (Arknights: Endfield on NVIDIA)
+
+- Reapplied (owner, d4f58218; the reason for the 2026-11-18 revert is not known). `vulkan-textures-test` passes on the RTX 5060 Ti.
+- Checked with real ASTC data (scratch harness, not in the tree): ARM's astc-encoder (from the local ANGLE source) encoded a test
+  image with gradients, edges, noise and alpha at 10 formats (4x4, 5x5, 6x6, 8x5, 8x8, 10x10, 12x12; UNORM and sRGB), 96x72 and 37x29
+  (partial blocks); gfxstream's GPU decoder through the HAL against astcenc's own decoder: sRGB bit-exact, UNORM within 1 of 255 on
+  every channel (91-97% exact; float rounding vs the shader's 16-bit truncation). ETC2 was not checked (no encoder here).
+- `-Wno-implicit-fallthrough` for the AOSP build: gfxstream's getShaderGroup ends an exhaustive inner switch without a break.
+- Not done: the AOSP build of `vulkan.apklayer` and Endfield itself (the Mac build host is unreachable).
+
 ## 2026-11-19: Berberis CPU patches 0072-0075 (PGR)
 
 - Build log: `libberberis_arm64` (gsi_x86_64 userdebug, incremental, Mac `~/los24`) with 0072 (FRSQRTE table), 0073 (interpreter stops at untranslated code), 0074 (unshared interpreter counter) and 0075 (AMD `lock notl` for DMB ISH/STLR) applied on top of the tree as it was (it also carries other sessions' uncommitted large_mmap and virtual_guest_call_frame work).
