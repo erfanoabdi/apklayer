@@ -13,13 +13,6 @@ deb="$version-1~${codename}1"
 slint="${APKLAYER_SLINT:-$HOME/.cache/apklayer/slint}"
 manager/fetch-slint.sh "$slint"
 
-# ANGLE (runtime/angle, README.md there): a local x86_64 build compiles it (tools/angle/build.sh) into this tree's runtime/angle, reusing its
-# checkout in APKLAYER_ANGLE_WORK (the first time: about 20 GB and some hours; then only what changed). GitHub's release builds and arm64
-# machines package the committed files (the angle workflow builds those; the Android x86 libraries need an x86_64 host). APKLAYER_ANGLE_BUILD=0 skips it.
-if [ "${APKLAYER_ANGLE_BUILD:-1}" != 0 ] && [ "${GITHUB_ACTIONS:-}" != true ] && [ "$(uname -m)" = x86_64 ]; then
-    tools/angle/build.sh "${APKLAYER_ANGLE_WORK:-$HOME/.cache/apklayer/angle-build}" runtime/angle
-fi
-
 # per-release differences: Ubuntu keeps binder_linux in linux-modules-extra, which only its kernel metapackages pull in; Debian builds it into its kernel.
 # Only the kernel binder (apklayer binder kernel) needs it, the userspace one is the default: a suggestion
 case "$codename" in
