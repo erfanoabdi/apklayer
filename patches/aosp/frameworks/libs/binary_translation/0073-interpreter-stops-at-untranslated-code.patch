@@ -1,0 +1,27 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: the interpreter stops at code that was never translated
+
+InterpretBatch went on interpreting (up to 500 instructions) while the next pc had no translation yet (kEntryNotTranslated). A region
+the translators end at an instruction they leave to the interpreter (0035 FRECPE/FRSQRTE, 0041 FMLS/FRECPS/FRSQRTS, 0036 UCVTF) is
+followed by an address that starts no region, so the rest of that loop body ran interpreted on every iteration: in PGR (perf,
+2026-11-19) the interpreter's decode and vector paths were ~24% of the process's CPU besides 0072's estimate loop. Now the batch
+ends there and the dispatcher translates a region starting after the interpreted instruction. kEntryInterpret and kEntryTranslating
+still continue. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/interpreter/arm64/interpreter-main.cc b/cpu_emulation/interpreter/arm64/interpreter-main.cc
+index bb1dcbd..60f245f 100644
+--- a/cpu_emulation/interpreter/arm64/interpreter-main.cc
++++ b/cpu_emulation/interpreter/arm64/interpreter-main.cc
+@@ -374,8 +374,10 @@ void InterpretBatch(ThreadState* state, int max_insns, TranslationCache* cache)
+     GuestAddr new_pc = state->cpu.insn_addr;
+     if (new_pc == 0) break;
+     auto code = cache->GetHostCodePtr(new_pc)->load();
+-    if (code != kEntryInterpret && code != kEntryNotTranslated &&
+-        code != kEntryTranslating) {
++    // apklayer patch (0073): stop at code never translated, too. A region the translators end at an instruction they leave to the
++    // interpreter (0035/0036/0041's FP forms) is followed by an address that starts no region yet; continuing interpreted ran the
++    // rest of the loop body here on every iteration (PGR: a quarter of its CPU in this loop). The dispatcher translates it instead.
++    if (code != kEntryInterpret && code != kEntryTranslating) {
+       break;
+     }
+   }

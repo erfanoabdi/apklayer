@@ -1,0 +1,28 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: no shared counter write on every interpreter entry
+
+berberis_HandleInterpret incremented g_translation_stats.interpret_invocations (a plain global) on each entry from every thread, so
+the cache line bounced between Unity's job workers; with 0073 there is one entry per interpreted instruction. It is now counted only
+for the first 25 entries of the process (the logged ones) and only read after that; the every-5000000th log line is gone.
+Module libberberis_arm64.
+
+diff --git a/runtime/arm64/translator_x86_64.cc b/runtime/arm64/translator_x86_64.cc
+index ad5fdba..80fc335 100644
+--- a/runtime/arm64/translator_x86_64.cc
++++ b/runtime/arm64/translator_x86_64.cc
+@@ -451,9 +451,12 @@ extern "C" __attribute__((used, __visibility__("hidden"))) void berberis_HandleN
+ extern "C" __attribute__((used, __visibility__("hidden"))) void berberis_HandleInterpret(
+     ThreadState* state) {
+   // interpreter invocation counter with syscall diagnostics
+-  g_translation_stats.interpret_invocations++;
+-  bool should_log = g_translation_stats.interpret_invocations <= 25 ||
+-                    g_translation_stats.interpret_invocations % 5000000 == 0;
++  // apklayer patch (0074): count only the first 25 (the logged ones). Every interpreter entry of every thread wrote this shared
++  // counter, a cache line bouncing between Unity's job workers; afterwards it is only read. The every-5000000th line is gone.
++  bool should_log = false;
++  if (__atomic_load_n(&g_translation_stats.interpret_invocations, __ATOMIC_RELAXED) < 25) {
++    should_log = __atomic_add_fetch(&g_translation_stats.interpret_invocations, 1, __ATOMIC_RELAXED) <= 25;
++  }
+   uint64_t pre_x0 = state->cpu.x[0];
+   if (should_log) {
+     TRACE_AND_ALOGD("berberis: interp #%lu pc=0x%lx x8=%lu x0=0x%lx x1=0x%lx x2=0x%lx",
