@@ -1,0 +1,647 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: the lite tier translates FRECPS, FRSQRTS and vector FMLS with the Arm NaN rules
+
+0041 sent FRECPS/FRSQRTS (vector and scalar) and vector FMLS to the interpreter for exact Arm results; in PGR's job threads
+that interpreter work (decode, dispatch, AdvSimdThreeSame) was about a third of the process's CPU after 0072-0075 (perf,
+2026-11-19). The lite tier now computes them itself: the fused step (FMA, one rounding), 2.0/1.5 for 0 x infinity, the Arm
+NaN choice (FPProcessNaNs of (-a, b); FPProcessNaNs3 of (d, -n, m) for FMLS, with the default NaN for a quiet-NaN addend and
+0 x infinity) quieted, the positive default NaN for invalid results, and FRSQRTS's (3 - ab)/2 without the intermediate
+overflow (1.5 - (a/2)b where 3 - ab overflowed from finite operands). FPCR.DN is not honoured (as in EmitArmFpMinMax); FP16
+forms stay with the interpreter. Test: Arm64DifferentialFuzz.FpStepFusedAndFmlsExact (lite vs interpreter, zeros, infinities,
+quiet and signalling NaNs with payloads, denormals, overflowing products). Module libberberis_arm64.
+
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/differential_fuzz_tests.cc b/cpu_emulation/lite_translator/arm64_to_x86_64/differential_fuzz_tests.cc
+index 15449cd..078a0af 100644
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/differential_fuzz_tests.cc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/differential_fuzz_tests.cc
+@@ -699,6 +699,65 @@ TEST_F(Arm64DifferentialFuzz, AdvSimdScalarThreeSame) {
+   EXPECT_GT(compared, 200) << "JIT accepted too few scalar three-same encodings";
+ }
+ 
++// apklayer patch (0076): FRECPS / FRSQRTS (vector .2S/.4S/.2D and scalar S/D) and vector FMLS are translated with the Arm NaN
++// rules; lanes are drawn from zeros, infinities, quiet and signalling NaNs of both signs with payloads, denormals, values whose
++// product overflows, and random bits. FPCR is 0 (round to nearest, DN off), as the interpreter's reference then is exact.
++TEST_F(Arm64DifferentialFuzz, FpStepFusedAndFmlsExact) {
++  Seed(0xF2EC95F5A1ED0076ULL);
++  static const uint32_t kS[] = {0x00000000u, 0x80000000u, 0x7f800000u, 0xff800000u, 0x7fc00000u, 0xffc12345u,
++                                0x7f800001u, 0xff812345u, 0x7fa00000u, 0x00000001u, 0x807fffffu, 0x3f800000u,
++                                0xbf800000u, 0x7f000000u, 0xff7fffffu, 0x5f800000u, 0x1f800000u, 0x40400000u};
++  static const uint64_t kD[] = {0x0ULL, 0x8000000000000000ULL, 0x7ff0000000000000ULL, 0xfff0000000000000ULL,
++                                0x7ff8000000000000ULL, 0xfff8000000012345ULL, 0x7ff0000000000001ULL,
++                                0xfff4000000012345ULL, 0x0000000000000001ULL, 0x800fffffffffffffULL,
++                                0x3ff0000000000000ULL, 0xbff0000000000000ULL, 0x7fe0000000000000ULL,
++                                0xffefffffffffffffULL, 0x5ff0000000000000ULL, 0x4008000000000000ULL};
++  const int kIters = 20000 * FuzzScale();
++  int compared = 0;
++  for (int iter = 0; iter < kIters; iter++) {
++    uint32_t kind = Rnd() % 5;  // 0 FRECPS.V 1 FRSQRTS.V 2 FMLS.V 3 FRECPS scalar 4 FRSQRTS scalar
++    uint32_t sz = Rnd() & 1;
++    uint32_t q = sz ? 1u : (Rnd() & 1);
++    uint32_t rn = Rnd() % 8, rm = Rnd() % 8;
++    uint32_t r = Rnd() % 4;
++    uint32_t rd = r == 0 ? rn : (r == 1 ? rm : (Rnd() % 8));
++    uint32_t insn;
++    if (kind <= 2) {
++      uint32_t hi = (kind == 0) ? 0u : 1u;                // bit 23
++      uint32_t opc = (kind == 2) ? 0b11001u : 0b11111u;   // FMLS / FRECPS, FRSQRTS
++      insn = (q << 30) | (0b01110u << 24) | (hi << 23) | (sz << 22) | (1u << 21) | (rm << 16) | (opc << 11) |
++             (1u << 10) | (rn << 5) | rd;
++    } else {
++      uint32_t hi = (kind == 3) ? 0u : 1u;
++      insn = (0b01u << 30) | (0b11110u << 24) | (hi << 23) | (sz << 22) | (1u << 21) | (rm << 16) |
++             (0b11111u << 11) | (1u << 10) | (rn << 5) | rd;
++    }
++    uint32_t code[1] = {insn};
++    InitState in = RandomInit();
++    for (uint32_t reg : {rn, rm, rd}) {
++      uint64_t lanes[2];
++      memcpy(lanes, &in.v[reg], 16);
++      if (sz) {
++        for (auto& l : lanes) if (Rnd() % 4 != 0) l = kD[Rnd() % (sizeof(kD) / sizeof(kD[0]))];
++      } else {
++        uint32_t w[4];
++        memcpy(w, lanes, 16);
++        for (auto& l : w) if (Rnd() % 4 != 0) l = kS[Rnd() % (sizeof(kS) / sizeof(kS[0]))];
++        memcpy(lanes, w, 16);
++      }
++      memcpy(&in.v[reg], lanes, 16);
++    }
++    std::string desc;
++    Result res = RunDifferential(code, 1, in, /*compare_fpsr=*/false, &desc);
++    if (res == kDeclined) continue;
++    compared++;
++    if (res == kDiverge) {
++      ADD_FAILURE() << "iter " << iter << " " << desc;
++    }
++  }
++  EXPECT_GT(compared, kIters / 2) << "JIT declined FRECPS/FRSQRTS/FMLS";
++}
++
+ // Single-instruction AdvSIMD three-different (integer widening/narrowing). rd
+ // aliasing rn/rm sampled; the lite tier JITs the widening-MUL family at all
+ // sizes (the rest bail).
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
+index 39cbc66..a9b2bde 100644
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_fp_dataproc.inc
+@@ -591,6 +591,214 @@
+     return true;
+   }
+ 
++  // apklayer patch (0076): exact Arm FRECPS / FRSQRTS / FMLS in translated code (0041 sent them to the interpreter, the hottest
++  // interpreter work in PGR's job threads). Packed over all lanes; scalar callers load with the upper lanes zero and mask the result.
++  // FPCR.DN is not honoured here (as in EmitArmFpMinMax).
++  void EmitArmFpUnord(SimdRegister d, SimdRegister s, bool is_double) {
++    if (is_double) as_.Cmpunordpd(d, s); else as_.Cmpunordps(d, s);
++  }
++  void EmitArmFpBroadcast(SimdRegister x, Register gp, uint64_t bits, bool is_double) {
++    if (is_double) {
++      as_.Movq(gp, static_cast<int64_t>(bits));
++      as_.Movq(x, gp);
++      as_.Punpcklqdq(x, x);
++    } else {
++      as_.Movl(gp, static_cast<int32_t>(bits));
++      as_.Movd(x, gp);
++      as_.Pshufd(x, x, int8_t{0});
++    }
++  }
++  // q = the quiet bit per lane, sign = the sign bit per lane.
++  void EmitArmFpQuietAndSign(SimdRegister q, SimdRegister sign, bool is_double) {
++    as_.Pcmpeqd(q, q);
++    as_.Pcmpeqd(sign, sign);
++    if (is_double) {
++      as_.Psllq(q, int8_t{63});
++      as_.Psrlq(q, int8_t{12});
++      as_.Psllq(sign, int8_t{63});
++    } else {
++      as_.Pslld(q, int8_t{31});
++      as_.Psrld(q, int8_t{9});
++      as_.Pslld(sign, int8_t{31});
++    }
++  }
++  // s = lanes of v that are signalling NaNs (nan_mask = the lanes where v is a NaN).
++  void EmitArmFpSnan(SimdRegister s, SimdRegister v, SimdRegister nan_mask, SimdRegister q, bool is_double) {
++    as_.Movdqa(s, v);
++    as_.Pand(s, q);
++    as_.Pcmpeqd(s, q);
++    if (is_double) as_.Pshufd(s, s, static_cast<int8_t>(0xF5));
++    as_.Pandn(s, nan_mask);
++  }
++  // ARM ARM FPProcessNaNs of (a, b): val = a where a is a signalling NaN, or a NaN and b not signalling, else b (raw, not quieted);
++  // any = a or b is a NaN; snan = a or b is signalling. t0..t3 are scratch.
++  void EmitArmNaNPick(SimdRegister a, SimdRegister b, SimdRegister q, bool is_double, SimdRegister val, SimdRegister any,
++                      SimdRegister snan, SimdRegister t0, SimdRegister t1, SimdRegister t2, SimdRegister t3) {
++    as_.Movdqa(t0, a);
++    EmitArmFpUnord(t0, t0, is_double);  // a is NaN
++    as_.Movdqa(t1, b);
++    EmitArmFpUnord(t1, t1, is_double);  // b is NaN
++    EmitArmFpSnan(t2, a, t0, q, is_double);
++    EmitArmFpSnan(t3, b, t1, q, is_double);
++    as_.Movdqa(any, t0);
++    as_.Por(any, t1);
++    as_.Movdqa(snan, t2);
++    as_.Por(snan, t3);
++    as_.Pandn(t3, t0);  // a NaN, b not signalling
++    as_.Por(t2, t3);    // the lanes that take a
++    as_.Movdqa(val, a);
++    as_.Pand(val, t2);
++    as_.Pandn(t2, b);
++    as_.Por(val, t2);
++  }
++
++  // FRECPS: 2 - a*b, FRSQRTS: (3 - a*b) / 2, one rounding (FPRecipStepFused / FPRSqrtStepFused). xn, xm are kept.
++  // Returns the result register, or no_simd_register (success_ = false) when out of registers.
++  SimdRegister EmitArmFpStepFused(SimdRegister xn, SimdRegister xm, bool is_rsqrt, bool is_double) {
++    SimdRegister q = AllocTempSimdReg();
++    SimdRegister sign = AllocTempSimdReg();
++    SimdRegister r = AllocTempSimdReg();
++    SimdRegister t = AllocTempSimdReg();
++    SimdRegister u = AllocTempSimdReg();
++    SimdRegister val = AllocTempSimdReg();
++    SimdRegister any = AllocTempSimdReg();
++    SimdRegister snan = AllocTempSimdReg();
++    SimdRegister t0 = AllocTempSimdReg();
++    SimdRegister t1 = AllocTempSimdReg();
++    SimdRegister t2 = AllocTempSimdReg();
++    SimdRegister t3 = AllocTempSimdReg();
++    Register gp = AllocTempReg();
++    if (!success()) { return no_simd_register; }
++    auto k = [&](double v32, double v64) {
++      uint64_t bits;
++      if (is_double) { memcpy(&bits, &v64, 8); } else { float f = static_cast<float>(v32); uint32_t b32; memcpy(&b32, &f, 4); bits = b32; }
++      return bits;
++    };
++    EmitArmFpQuietAndSign(q, sign, is_double);
++    EmitArmFpBroadcast(r, gp, k(is_rsqrt ? 3.0 : 2.0, is_rsqrt ? 3.0 : 2.0), is_double);
++    if (is_double) as_.Vfnmadd231pd(r, xn, xm); else as_.Vfnmadd231ps(r, xn, xm);  // K - a*b
++    if (is_rsqrt) {
++      EmitArmFpBroadcast(t, gp, k(0.5, 0.5), is_double);
++      if (is_double) as_.Mulpd(r, t); else as_.Mulps(r, t);  // exact, unless 3 - a*b overflowed before the halving
++      // Where r is infinite from finite a, b: 1.5 - (a/2)*b (there |a*b| overflows, so |a| >= 1 and a/2 is exact; an infinite
++      // operand already gave the right infinity; other lanes get 0, 0: no flags).
++      auto cmpeq = [&](SimdRegister d, SimdRegister s) { if (is_double) as_.Cmpeqpd(d, s); else as_.Cmpeqps(d, s); };
++      EmitArmFpBroadcast(val, gp, is_double ? 0x7ff0000000000000ULL : 0x7f800000ULL, is_double);
++      as_.Movdqa(u, sign);
++      as_.Pandn(u, r);  // |r|
++      cmpeq(u, val);    // u = r is infinite
++      as_.Movdqa(t0, sign);
++      as_.Pandn(t0, xn);
++      cmpeq(t0, val);
++      as_.Movdqa(t1, sign);
++      as_.Pandn(t1, xm);
++      cmpeq(t1, val);
++      as_.Por(t0, t1);
++      as_.Pandn(t0, u);
++      as_.Movdqa(u, t0);  // ... and a, b are not
++      as_.Movdqa(t0, xn);
++      as_.Pand(t0, u);
++      as_.Movdqa(t1, xm);
++      as_.Pand(t1, u);
++      if (is_double) as_.Mulpd(t0, t); else as_.Mulps(t0, t);
++      EmitArmFpBroadcast(t2, gp, k(1.5, 1.5), is_double);
++      if (is_double) as_.Vfnmadd231pd(t2, t0, t1); else as_.Vfnmadd231ps(t2, t0, t1);
++      as_.Pand(t2, u);
++      as_.Pandn(u, r);
++      as_.Por(t2, u);
++      as_.Movdqa(r, t2);
++    }
++    // (0, inf) or (inf, 0): r is NaN, neither input is: +2.0 / +1.5.
++    as_.Movdqa(t, xn);
++    EmitArmFpUnord(t, xm, is_double);
++    as_.Movdqa(u, r);
++    EmitArmFpUnord(u, u, is_double);
++    as_.Pandn(t, u);
++    EmitArmFpBroadcast(val, gp, k(is_rsqrt ? 1.5 : 2.0, is_rsqrt ? 1.5 : 2.0), is_double);
++    as_.Pand(val, t);
++    as_.Pandn(t, r);
++    as_.Por(val, t);
++    as_.Movdqa(r, val);
++    // A NaN operand: the Arm choice of (-a, b), quieted.
++    as_.Movdqa(u, xn);
++    as_.Pxor(u, sign);
++    EmitArmNaNPick(u, xm, q, is_double, val, any, snan, t0, t1, t2, t3);
++    as_.Por(val, q);
++    as_.Pand(val, any);
++    as_.Pandn(any, r);
++    as_.Por(val, any);
++    return val;
++  }
++
++  // FMLS: d + (-n)*m, one rounding (FPMulAdd with FPProcessNaNs3 of (d, -n, m)). xn is clobbered; xd, xm are kept.
++  SimdRegister EmitArmFpFmls(SimdRegister xd, SimdRegister xn, SimdRegister xm, bool is_double) {
++    SimdRegister q = AllocTempSimdReg();
++    SimdRegister sign = AllocTempSimdReg();
++    SimdRegister r = AllocTempSimdReg();
++    SimdRegister t = AllocTempSimdReg();
++    SimdRegister u = AllocTempSimdReg();
++    SimdRegister val = AllocTempSimdReg();
++    SimdRegister any = AllocTempSimdReg();
++    SimdRegister snan = AllocTempSimdReg();
++    SimdRegister s0 = AllocTempSimdReg();
++    SimdRegister s1 = AllocTempSimdReg();
++    SimdRegister s2 = AllocTempSimdReg();
++    SimdRegister s3 = AllocTempSimdReg();
++    Register gp = AllocTempReg();
++    if (!success()) { return no_simd_register; }
++    auto cmpeq = [&](SimdRegister d, SimdRegister s) { if (is_double) as_.Cmpeqpd(d, s); else as_.Cmpeqps(d, s); };
++    EmitArmFpQuietAndSign(q, sign, is_double);
++    as_.Movdqa(r, xd);
++    if (is_double) as_.Vfnmadd231pd(r, xn, xm); else as_.Vfnmadd231ps(r, xn, xm);  // d - n*m
++    as_.Pxor(xn, sign);  // op1 = -n (Arm negates before the NaN choice)
++    EmitArmNaNPick(xn, xm, q, is_double, val, any, snan, s0, s1, s2, s3);
++    as_.Movdqa(t, xd);
++    EmitArmFpUnord(t, t, is_double);         // d is NaN
++    EmitArmFpSnan(u, xd, t, q, is_double);   // d is signalling
++    // inf*0 of the operands (no NaN among them): (|n| == inf && m == 0) || (n == 0 && |m| == inf)
++    EmitArmFpBroadcast(s0, gp, is_double ? 0x7ff0000000000000ULL : 0x7f800000ULL, is_double);
++    as_.Pxor(s1, s1);
++    as_.Movdqa(s2, sign);
++    as_.Pandn(s2, xn);
++    cmpeq(s2, s0);
++    as_.Movdqa(s3, xm);
++    cmpeq(s3, s1);
++    as_.Pand(s2, s3);
++    as_.Movdqa(s3, sign);
++    as_.Pandn(s3, xm);
++    cmpeq(s3, s0);
++    as_.Movdqa(s0, xn);
++    cmpeq(s0, s1);
++    as_.Pand(s0, s3);
++    as_.Por(s0, s2);  // s0 = inf*0
++    // Default NaN: a quiet NaN d with inf*0, or a NaN result from no NaN operand.
++    as_.Movdqa(s1, u);
++    as_.Pandn(s1, t);  // d is a quiet NaN
++    as_.Pand(s0, s1);
++    as_.Por(any, t);   // any operand is a NaN
++    as_.Movdqa(s2, r);
++    EmitArmFpUnord(s2, s2, is_double);
++    as_.Movdqa(s3, any);
++    as_.Pandn(s3, s2);
++    as_.Por(s0, s3);   // s0 = the default-NaN lanes
++    // The NaN to return: d where d is signalling, or a NaN and neither product operand is signalling.
++    as_.Pandn(snan, t);
++    as_.Por(snan, u);
++    as_.Movdqa(s1, xd);
++    as_.Pand(s1, snan);
++    as_.Pandn(snan, val);
++    as_.Por(s1, snan);
++    as_.Por(s1, q);    // quieted
++    as_.Pand(s1, any);
++    as_.Pandn(any, r);
++    as_.Por(s1, any);
++    EmitArmFpBroadcast(s2, gp, is_double ? 0x7ff8000000000000ULL : 0x7fc00000ULL, is_double);
++    as_.Pand(s2, s0);
++    as_.Pandn(s0, s1);
++    as_.Por(s2, s0);
++    return s2;
++  }
++
+   // FP arithmetic JIT
+   //
+   // FP16 (ftype=0b11) lowering: F16C round-trip.
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
+index 34d254e..fc8a00a 100644
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_scalar_three_same.inc
+@@ -96,8 +96,8 @@
+     const bool is_fmulx = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFmulx);
+     const bool is_frecps = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrecps);
+     const bool is_frsqrts = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFrsqrts);
+-    // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
+-    if (is_frecps || is_frsqrts) { success_ = false; return; }
++    // apklayer patch (0041, 0076): FP16 FRECPS/FRSQRTS go to the interpreter; FP32/FP64 below have the Arm NaN rules.
++    if ((is_frecps || is_frsqrts) && args.is_fp16) { success_ = false; return; }
+     const bool is_fabd = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFabd);
+     const bool is_fcmeq = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmeq);
+     const bool is_fcmge = (opc == Decoder::AdvSimdScalarThreeSameOpcode::kFcmge);
+@@ -1939,153 +1939,23 @@
+     }
+ 
+     if (is_frecps || is_frsqrts) {
+-      // Constants: K_fma (the additive in FMA(-a,b,K)) and K_sat (the
+-      // saturation value when (0,inf) cross).
+-      const int64_t k_fma_bits_d  = is_frecps ? int64_t{0x4000000000000000LL}
+-                                              : int64_t{0x4008000000000000LL};
+-      const int32_t k_fma_bits_s  = is_frecps ? int32_t{0x40000000}
+-                                              : int32_t{0x40400000};
+-      const int64_t k_sat_bits_d  = is_frecps ? int64_t{0x4000000000000000LL}
+-                                              : int64_t{0x3FF8000000000000LL};
+-      const int32_t k_sat_bits_s  = is_frecps ? int32_t{0x40000000}
+-                                              : int32_t{0x3FC00000};
+-      const int64_t qnan_bits_d   = int64_t{0x7FF8000000000000LL};
+-      const int32_t qnan_bits_s   = int32_t{0x7FC00000};
+-      const int64_t two_bits_d    = int64_t{0x4000000000000000LL};
+-      const int32_t two_bits_s    = int32_t{0x40000000};
+-
++      // apklayer patch (0076): the exact Arm step on lane 0 (lite_translator_fp_dataproc.inc EmitArmFpStepFused); the other lanes
++      // are 0, 0 (no flags) and are cleared from the result, as the scalar write clears Vd above the lane.
+       SimdRegister xmm_n = AllocTempSimdReg();
+       SimdRegister xmm_m = AllocTempSimdReg();
+-      SimdRegister xmm_mul = AllocTempSimdReg();
+-      SimdRegister xmm_iu = AllocTempSimdReg();
+-      SimdRegister xmm_special = AllocTempSimdReg();
+       if (!success()) { return; }
+-
+-      // FP16 lift via F16C round-trip — Pxor + Pinsrw +
+-      // Vcvtph2ps widens each FP16 source lane to FP32 in xmm lane 0.  The
+-      // existing FP32 FRECPS/FRSQRTS Newton-step core (Vfnmadd231ss of
+-      // K_fma - a*b, plus a Divss-by-2 step for FRSQRTS, with K_sat blend on
+-      // special_mask and qnan blend on input_unord) then runs unchanged on
+-      // the lifted operands.  Lanes 1..3 of xmm_n / xmm_m stay FP32 +0 by
+-      // Vcvtph2ps zero-fill, and all subsequent FP32-width primitives in the
+-      // core preserve that upper-zero invariant (Mulss / Cmpunordps / Pand /
+-      // Por / Vfnmadd231ss / Divss / Movd-zero-extended-into-xmm all leave
+-      // lanes 1..3 == 0).  Divss of (lane0=fma_result, lanes1..3=+0) by
+-      // (lane0=+2, lanes1..3=+0) is undefined per SSE — but Divss only writes
+-      // lane 0 and leaves lanes 1..3 of the dst unchanged, so the upper
+-      // zeroes survive.  The narrow at the store path uses Vcvtps2ph
+-      // (real-FP output), not Packssdw (mask output).
+-      const bool use_single = args.is_fp16 || !is_double;
+-      if (args.is_fp16) {
+-        as_.Pxor(xmm_n, xmm_n);
+-        as_.Pinsrw(xmm_n, {.base = Assembler::rbp, .disp = src_n_off}, int8_t{0});
+-        as_.Vcvtph2ps(xmm_n, xmm_n);
+-        as_.Pxor(xmm_m, xmm_m);
+-        as_.Pinsrw(xmm_m, {.base = Assembler::rbp, .disp = src_m_off}, int8_t{0});
+-        as_.Vcvtph2ps(xmm_m, xmm_m);
+-      } else if (is_double) {
+-        as_.Movsd(xmm_n, {.base = Assembler::rbp, .disp = src_n_off});
+-        as_.Movsd(xmm_m, {.base = Assembler::rbp, .disp = src_m_off});
+-      } else {
+-        as_.Movss(xmm_n, {.base = Assembler::rbp, .disp = src_n_off});
+-        as_.Movss(xmm_m, {.base = Assembler::rbp, .disp = src_m_off});
+-      }
+-
+-      // mul = a * b (only its NaN bit is observed via cmpunord below).
+-      as_.Movdqa(xmm_mul, xmm_n);
+-      if (use_single) as_.Mulss(xmm_mul, xmm_m);
+-      else            as_.Mulsd(xmm_mul, xmm_m);
+-
+-      // input_unord = cmpunord(a, b): all-ones iff a or b is NaN.
+-      as_.Movdqa(xmm_iu, xmm_n);
+-      if (use_single) as_.Cmpunordps(xmm_iu, xmm_m);
+-      else            as_.Cmpunordpd(xmm_iu, xmm_m);
+-
+-      // mul_unord = cmpunord(mul, mul): all-ones iff mul is NaN.  Store
+-      // in-place over xmm_mul (the actual product is no longer needed).
+-      if (use_single) as_.Cmpunordps(xmm_mul, xmm_mul);
+-      else            as_.Cmpunordpd(xmm_mul, xmm_mul);
+-
+-      // special_mask = (NOT input_unord) AND mul_unord.  Preserve input_unord.
+-      as_.Movdqa(xmm_special, xmm_iu);
+-      as_.Pandn(xmm_special, xmm_mul);
+-      // xmm_mul is now free as scratch.
+-
+-      // Normal-path result = K_fma - a*b via VFNMADD231.  Load K_fma into
+-      // xmm_mul (the destination), then VFNMADD231(dest, n, m) -> dest -= n*m.
+-      Register tmp_gpr = AllocTempReg();
+-      if (use_single) {
+-        as_.Movl(tmp_gpr, k_fma_bits_s);
+-        as_.Movd(xmm_mul, tmp_gpr);
+-        as_.Vfnmadd231ss(xmm_mul, xmm_n, xmm_m);
+-      } else {
+-        as_.Movq(tmp_gpr, k_fma_bits_d);
+-        as_.Movq(xmm_mul, tmp_gpr);
+-        as_.Vfnmadd231sd(xmm_mul, xmm_n, xmm_m);
+-      }
+-
+-      // FRSQRTS: divide by 2 (exact one-exponent decrement).  Reuse xmm_n
+-      // as scratch — a is no longer needed past this point.
+-      if (is_frsqrts) {
+-        if (use_single) {
+-          as_.Movl(tmp_gpr, two_bits_s);
+-          as_.Movd(xmm_n, tmp_gpr);
+-          as_.Divss(xmm_mul, xmm_n);
+-        } else {
+-          as_.Movq(tmp_gpr, two_bits_d);
+-          as_.Movq(xmm_n, tmp_gpr);
+-          as_.Divsd(xmm_mul, xmm_n);
+-        }
+-      }
+-      // xmm_mul now holds fma_result.  xmm_n, xmm_m are free as scratch
+-      // (we reuse them as constant-load targets below).
+-
+-      // First select: result_first = special_mask ? K_sat : fma_result.
+-      // Build K_sat in xmm_n.
+-      if (use_single) {
+-        as_.Movl(tmp_gpr, k_sat_bits_s);
+-        as_.Movd(xmm_n, tmp_gpr);
+-      } else {
+-        as_.Movq(tmp_gpr, k_sat_bits_d);
+-        as_.Movq(xmm_n, tmp_gpr);
+-      }
+-      as_.Pand(xmm_n, xmm_special);       // xmm_n = K_sat AND special
+-      as_.Pandn(xmm_special, xmm_mul);    // xmm_special = (NOT special) AND fma
+-      as_.Por(xmm_n, xmm_special);        // xmm_n = result_first
+-
+-      // Second select: result_final = input_unord ? qnan : result_first.
+-      // Build qnan in xmm_m (b is no longer needed).
+-      if (use_single) {
+-        as_.Movl(tmp_gpr, qnan_bits_s);
+-        as_.Movd(xmm_m, tmp_gpr);
+-      } else {
+-        as_.Movq(tmp_gpr, qnan_bits_d);
+-        as_.Movq(xmm_m, tmp_gpr);
+-      }
+-      as_.Pand(xmm_m, xmm_iu);            // xmm_m = qnan AND iu
+-      as_.Pandn(xmm_iu, xmm_n);           // xmm_iu = (NOT iu) AND result_first
+-      as_.Por(xmm_m, xmm_iu);             // xmm_m = result_final
+-
+-      // FP16 narrow via Vcvtps2ph (real-FP output, NOT a
+-      // mask).  Rounds 4 FP32 lanes to 4 FP16 word lanes in dst xmm's low
+-      // 64 bits and zero-fills the upper 64 bits.  Lanes 1..3 of xmm_m are
+-      // FP32 +0 throughout the Pand/Por blend pipeline (the upper-zero
+-      // invariant is preserved by all primitives above), so the narrowed
+-      // word lanes 1..3 are 0x0000.  Full 128-bit Movdqu writes Vd[15:0] =
+-      // FP16 result with Vd[127:16] = 0.
+-      if (args.is_fp16) {
+-        as_.Vcvtps2ph(xmm_m, xmm_m, int8_t{0});
+-        as_.Movdqu({.base = Assembler::rbp, .disp = dst_off}, xmm_m);
++      if (is_double) {
++        as_.Movq(xmm_n, {.base = Assembler::rbp, .disp = src_n_off});
++        as_.Movq(xmm_m, {.base = Assembler::rbp, .disp = src_m_off});
+       } else {
+-        // Zero Vd above the result lane, then write the scalar lane 0.
+-        as_.Pxor(xmm_n, xmm_n);
+-        as_.Movdqu({.base = Assembler::rbp, .disp = dst_off}, xmm_n);
+-        if (is_double) {
+-          as_.Movsd({.base = Assembler::rbp, .disp = dst_off}, xmm_m);
+-        } else {
+-          as_.Movss({.base = Assembler::rbp, .disp = dst_off}, xmm_m);
+-        }
++        as_.Movd(xmm_n, {.base = Assembler::rbp, .disp = src_n_off});
++        as_.Movd(xmm_m, {.base = Assembler::rbp, .disp = src_m_off});
+       }
++      SimdRegister res = EmitArmFpStepFused(xmm_n, xmm_m, /*is_rsqrt=*/is_frsqrts, is_double);
++      if (!success()) { return; }
++      as_.Pslldq(res, int8_t{static_cast<int8_t>(is_double ? 8 : 12)});
++      as_.Psrldq(res, int8_t{static_cast<int8_t>(is_double ? 8 : 12)});
++      as_.Movdqu({.base = Assembler::rbp, .disp = dst_off}, res);
+       return;
+     }
+ 
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
+index 8fccb16..d8927fa 100644
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_simd_three_same.inc
+@@ -2213,8 +2213,8 @@
+       // F16C bail on the FP16 path.
+       case Decoder::AdvSimdThreeSameOpcode::kFmlaV:
+       case Decoder::AdvSimdThreeSameOpcode::kFmlsV: {
+-        // apklayer patch (0041): FMLS: Arm negates a NaN operand before the fused multiply-add; the interpreter has that (interpreter/arm64/arm_nan.h).
+-        if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV) { success_ = false; return; }
++        // apklayer patch (0041, 0076): FP16 FMLS goes to the interpreter (Arm negates a NaN operand first; interpreter/arm64/arm_nan.h).
++        if (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV && args.is_fp16) { success_ = false; return; }
+         if (args.is_fp16) {
+           if (!host_platform::kHasFMA) { success_ = false; return; }
+           if (!host_platform::kHasF16C) { success_ = false; return; }
+@@ -2345,9 +2345,12 @@
+         const bool is_fmls =
+             (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFmlsV);
+         if (is_fmls) {
+-          // Vd = Vd + (-Vn)*Vm  -- single fused rounding.
+-          if (is_double) as_.Vfnmadd231pd(xmm_d, xmm_n, xmm_m);
+-          else            as_.Vfnmadd231ps(xmm_d, xmm_n, xmm_m);
++          // Vd = Vd + (-Vn)*Vm  -- single fused rounding, the Arm NaN result (apklayer patch 0076, EmitArmFpFmls).
++          SimdRegister res = EmitArmFpFmls(xmm_d, xmm_n, xmm_m, is_double);
++          if (!success()) { return; }
++          if (!args.q) MaskLow64(res);
++          StoreVReg(args.rd, res);
++          return;
+         } else {
+           if (is_double) as_.Vfmadd231pd(xmm_d, xmm_n, xmm_m);
+           else            as_.Vfmadd231ps(xmm_d, xmm_n, xmm_m);
+@@ -2379,8 +2382,8 @@
+       // fused semantics).  Reserved .1D shape (size=01 && q=0) bails.
+       case Decoder::AdvSimdThreeSameOpcode::kFrecpsV:
+       case Decoder::AdvSimdThreeSameOpcode::kFrsqrtsV: {
+-        // apklayer patch (0041): bail to the interpreter, which has the Arm NaN rules and the fused step (interpreter/arm64/arm_nan.h).
+-        if (true) { success_ = false; return; }
++        // apklayer patch (0041, 0076): FP16 goes to the interpreter (its FP32 step narrowed); FP32/FP64 below has the Arm NaN rules.
++        if (args.is_fp16) { success_ = false; return; }
+         // FP16 vector FRECPS / FRSQRTS .4H / .8H via
+         // F16C round-trip.  The interpreter computes FP16 lanes as
+         // FpSingleToHalf(FrecpsScalar<float>(a, b)) — i.e. the whole
+@@ -2515,117 +2518,16 @@
+         if (is_double && !args.q) { success_ = false; return; }
+         const bool is_frecps =
+             (args.opcode == Decoder::AdvSimdThreeSameOpcode::kFrecpsV);
+-
+-        // Constants (lane-broadcasted below).
+-        const int64_t k_fma_bits_d = is_frecps ? int64_t{0x4000000000000000LL}   // +2.0
+-                                                : int64_t{0x4008000000000000LL};  // +3.0
+-        const int32_t k_fma_bits_s = is_frecps ? int32_t{0x40000000}              // +2.0
+-                                                : int32_t{0x40400000};             // +3.0
+-        const int64_t k_sat_bits_d = is_frecps ? int64_t{0x4000000000000000LL}   // +2.0
+-                                                : int64_t{0x3FF8000000000000LL};  // +1.5
+-        const int32_t k_sat_bits_s = is_frecps ? int32_t{0x40000000}              // +2.0
+-                                                : int32_t{0x3FC00000};             // +1.5
+-        const int64_t qnan_bits_d  = int64_t{0x7FF8000000000000LL};
+-        const int32_t qnan_bits_s  = int32_t{0x7FC00000};
+-        const int64_t two_bits_d   = int64_t{0x4000000000000000LL};
+-        const int32_t two_bits_s   = int32_t{0x40000000};
+-
++        // apklayer patch (0076): the exact Arm step (lite_translator_fp_dataproc.inc EmitArmFpStepFused).
+         SimdRegister xmm_n = AllocTempSimdReg();
+         SimdRegister xmm_m = AllocTempSimdReg();
+-        SimdRegister xmm_mul = AllocTempSimdReg();
+-        SimdRegister xmm_iu = AllocTempSimdReg();
+-        SimdRegister xmm_special = AllocTempSimdReg();
+         if (!success()) { return; }
+-
+         LoadVReg(xmm_n, args.rn);
+         LoadVReg(xmm_m, args.rm);
+-
+-        // mul = a * b (only its NaN bit is observed via cmpunord below).
+-        as_.Movdqa(xmm_mul, xmm_n);
+-        if (is_double) as_.Mulpd(xmm_mul, xmm_m);
+-        else            as_.Mulps(xmm_mul, xmm_m);
+-
+-        // input_unord = cmpunord(a, b): per-lane all-ones iff a or b NaN.
+-        as_.Movdqa(xmm_iu, xmm_n);
+-        if (is_double) as_.Cmpunordpd(xmm_iu, xmm_m);
+-        else            as_.Cmpunordps(xmm_iu, xmm_m);
+-
+-        // mul_unord = cmpunord(mul, mul) reused in xmm_mul (product value
+-        // no longer needed past this point — only its NaN bit matters).
+-        if (is_double) as_.Cmpunordpd(xmm_mul, xmm_mul);
+-        else            as_.Cmpunordps(xmm_mul, xmm_mul);
+-
+-        // special_mask = (NOT input_unord) AND mul_unord.  Pandn writes
+-        // (NOT dst) AND src.  Keep input_unord alive in xmm_iu.
+-        as_.Movdqa(xmm_special, xmm_iu);
+-        as_.Pandn(xmm_special, xmm_mul);
+-        // xmm_mul now free as scratch.
+-
+-        // Normal-path result = K_fma - a*b via VFNMADD231(dst, n, m):
+-        // load broadcast K_fma into xmm_mul, then dst -= n*m in-place.
+-        Register tmp_gpr = AllocTempReg();
+-        if (is_double) {
+-          as_.Movq(tmp_gpr, k_fma_bits_d);
+-          as_.Movq(xmm_mul, tmp_gpr);
+-          as_.Punpcklqdq(xmm_mul, xmm_mul);
+-          as_.Vfnmadd231pd(xmm_mul, xmm_n, xmm_m);
+-        } else {
+-          as_.Movl(tmp_gpr, k_fma_bits_s);
+-          as_.Movd(xmm_mul, tmp_gpr);
+-          as_.Pshufd(xmm_mul, xmm_mul, int8_t{0});
+-          as_.Vfnmadd231ps(xmm_mul, xmm_n, xmm_m);
+-        }
+-
+-        // FRSQRTS: divide by 2 (one-exponent decrement; exact under IEEE
+-        // binary FP — the rounding-once invariant carries through).
+-        // Reuse xmm_n as a broadcast-2.0 scratch; a is no longer needed.
+-        if (!is_frecps) {
+-          if (is_double) {
+-            as_.Movq(tmp_gpr, two_bits_d);
+-            as_.Movq(xmm_n, tmp_gpr);
+-            as_.Punpcklqdq(xmm_n, xmm_n);
+-            as_.Divpd(xmm_mul, xmm_n);
+-          } else {
+-            as_.Movl(tmp_gpr, two_bits_s);
+-            as_.Movd(xmm_n, tmp_gpr);
+-            as_.Pshufd(xmm_n, xmm_n, int8_t{0});
+-            as_.Divps(xmm_mul, xmm_n);
+-          }
+-        }
+-        // xmm_mul now holds fma_result.  xmm_n, xmm_m are free as scratch.
+-
+-        // First select: result_first = special_mask ? K_sat : fma_result.
+-        // Broadcast K_sat into xmm_n.
+-        if (is_double) {
+-          as_.Movq(tmp_gpr, k_sat_bits_d);
+-          as_.Movq(xmm_n, tmp_gpr);
+-          as_.Punpcklqdq(xmm_n, xmm_n);
+-        } else {
+-          as_.Movl(tmp_gpr, k_sat_bits_s);
+-          as_.Movd(xmm_n, tmp_gpr);
+-          as_.Pshufd(xmm_n, xmm_n, int8_t{0});
+-        }
+-        as_.Pand(xmm_n, xmm_special);       // xmm_n = K_sat AND special
+-        as_.Pandn(xmm_special, xmm_mul);    // xmm_special = (NOT special) AND fma
+-        as_.Por(xmm_n, xmm_special);        // xmm_n = result_first
+-
+-        // Second select: result_final = input_unord ? qnan : result_first.
+-        // Broadcast qNaN into xmm_m (b is no longer needed).
+-        if (is_double) {
+-          as_.Movq(tmp_gpr, qnan_bits_d);
+-          as_.Movq(xmm_m, tmp_gpr);
+-          as_.Punpcklqdq(xmm_m, xmm_m);
+-        } else {
+-          as_.Movl(tmp_gpr, qnan_bits_s);
+-          as_.Movd(xmm_m, tmp_gpr);
+-          as_.Pshufd(xmm_m, xmm_m, int8_t{0});
+-        }
+-        as_.Pand(xmm_m, xmm_iu);            // xmm_m = qnan AND iu
+-        as_.Pandn(xmm_iu, xmm_n);           // xmm_iu = (NOT iu) AND result_first
+-        as_.Por(xmm_m, xmm_iu);             // xmm_m = result_final
+-
+-        if (!args.q) MaskLow64(xmm_m);
+-        StoreVReg(args.rd, xmm_m);
++        SimdRegister res = EmitArmFpStepFused(xmm_n, xmm_m, /*is_rsqrt=*/!is_frecps, is_double);
++        if (!success()) { return; }
++        if (!args.q) MaskLow64(res);
++        StoreVReg(args.rd, res);
+         return;
+       }
+       // SQDMULH / SQRDMULH three-same vector: saturating

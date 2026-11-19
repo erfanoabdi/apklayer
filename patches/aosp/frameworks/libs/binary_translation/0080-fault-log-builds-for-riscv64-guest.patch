@@ -1,0 +1,34 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: 0050's fault log builds for the riscv64 guest (host tests)
+
+berberis_host_tests builds guest_os_primitives for riscv64 too: 0050 read cpu.sp (riscv64 has x2) and its LogGuestFault is
+unused there (-Werror). That test binary still does not link (OwnIdsForGuest, from another arm64-only patch). Module
+libberberis_guest_os_primitives_riscv64 (host tests only).
+
+diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/guest_signal_handling.cc
+index 98b34b3..8fd5b1d 100644
+--- a/guest_os_primitives/guest_signal_handling.cc
++++ b/guest_os_primitives/guest_signal_handling.cc
+@@ -592,7 +592,7 @@ static void LogGuestFaultAddr(char* out, size_t cap, const char* what, uint64_t
+   if (n > 0 && static_cast<size_t>(n) < cap - 1) { out[n++] = '\n'; out[n] = 0; }
+ }
+ 
+-static void LogGuestFault(const siginfo_t* si, const Guest_sigaction* sa, ThreadState* state) {
++[[maybe_unused]] static void LogGuestFault(const siginfo_t* si, const Guest_sigaction* sa, ThreadState* state) {  // apklayer patch: called on the arm64 guest only
+   static const ConfigStr enabled("BERBERIS_LOG_FAULTS", "berberis.log_faults");
+   if (enabled.get() == nullptr || enabled.get()[0] == '\0') return;
+   const int sig = si->si_signo;
+@@ -608,7 +608,12 @@ static void LogGuestFault(const siginfo_t* si, const Guest_sigaction* sa, Thread
+   int n = snprintf(buf, sizeof buf, "berberis: FAULT tid %d sig %d code %d si_addr %p handler 0x%llx pc 0x%llx insn %s0x%08x sp 0x%llx\n",
+                    static_cast<int>(syscall(__NR_gettid)), sig, si->si_code, si->si_addr,
+                    static_cast<unsigned long long>(sa ? static_cast<uint64_t>(sa->guest_sa_sigaction) : 0), static_cast<unsigned long long>(pc),
+-                   insn_ok ? "" : "(unreadable) ", insn, static_cast<unsigned long long>(cpu.sp));
++                   insn_ok ? "" : "(unreadable) ", insn,
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++                   static_cast<unsigned long long>(cpu.sp));
++#else
++                   static_cast<unsigned long long>(cpu.x[2]));  // apklayer patch: riscv64 has no sp field (x2 is sp); the host tests build it
++#endif
+   for (int i = 0; i < 31; i += 4) {
+     n += snprintf(buf + n, sizeof buf - n, "  x%-2d=%016llx x%-2d=%016llx x%-2d=%016llx x%-2d=%016llx\n", i, (unsigned long long)cpu.x[i],
+                   i + 1, (unsigned long long)cpu.x[i + 1], i + 2, (unsigned long long)(i + 2 < 31 ? cpu.x[i + 2] : 0),

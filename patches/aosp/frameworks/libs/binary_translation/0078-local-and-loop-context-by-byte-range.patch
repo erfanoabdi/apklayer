@@ -1,0 +1,116 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: the local and loop guest-context passes respect every access to the CPU state
+
+After 0077 PGR's home scene was still noise in two-gear mode and clean with both the local and the loop pass off (2026-11-19).
+Both passes key slots by their first byte and see only the GET/PUT forms. RemoveLocalGuestContextAccesses
+(InvalidateOverlappingSlots): a read pins the pending store of every slot it overlaps, a write or any other access to the CPU
+state drops every mapping it overlaps, so later GETs reload. RemoveLoopGuestContextAccesses (FindUnmappableOffsets): a slot
+that another access in the loop overlaps stays in memory. Applies after 0077 (ClassifyContextAccess). Not yet confirmed on
+PGR with every pass on. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/backend/include/berberis/backend/x86_64/local_guest_context_optimizer.h b/cpu_emulation/backend/include/berberis/backend/x86_64/local_guest_context_optimizer.h
+index 27bbd9a..c8322e0 100644
+--- a/cpu_emulation/backend/include/berberis/backend/x86_64/local_guest_context_optimizer.h
++++ b/cpu_emulation/backend/include/berberis/backend/x86_64/local_guest_context_optimizer.h
+@@ -118,6 +118,8 @@ class LocalGuestContextOptimizer {
+   void InvalidateMappingsForDefs(const berberis::MachineInsn* insn);
+ #endif
+   // endregion
++  // apklayer patch (0078): the mappings and pending stores an access to the CPU state overlaps, by byte range.
++  void InvalidateOverlappingSlots(const berberis::MachineInsn* insn);
+ 
+   MachineIR* machine_ir_;
+   ContextMapping context_map_;
+diff --git a/cpu_emulation/backend/x86_64/local_guest_context_optimizer.cc b/cpu_emulation/backend/x86_64/local_guest_context_optimizer.cc
+index f3f0384..e5fa290 100644
+--- a/cpu_emulation/backend/x86_64/local_guest_context_optimizer.cc
++++ b/cpu_emulation/backend/x86_64/local_guest_context_optimizer.cc
+@@ -21,6 +21,7 @@
+ #include <optional>
+ #include <variant>
+ 
++#include "berberis/backend/x86_64/context_liveness_analyzer.h"
+ #include "berberis/backend/x86_64/machine_ir_analysis.h"
+ #include "berberis/backend/x86_64/machine_ir_opt.h"
+ #include "berberis/base/algorithm.h"
+@@ -109,6 +110,29 @@ void LocalGuestContextOptimizer::InvalidateMappingsForDefs(const berberis::Machi
+ #endif
+ // endregion
+ 
++// apklayer patch (0078): mem_reg_map is keyed by a slot's first byte and sees only the GET/PUT forms. An access that reaches
++// into another slot's bytes, or any other instruction addressed off the CPU-state pointer (a 32-bit or byte store, a
++// compare with memory), left that slot's value forwarded or its earlier store removable although the bytes changed or were
++// read: stale guest registers in heavy-optimized code (PGR's home scene, two-gear mode). Now: a read pins the pending store
++// of every slot it overlaps (it stays), a write or an unrecognized access drops every mapping it overlaps (later GETs
++// reload). A GET or PUT of the slot at its own offset is left to ReplaceGet/ReplacePut, which handle its width.
++void LocalGuestContextOptimizer::InvalidateOverlappingSlots(const berberis::MachineInsn* insn) {
++  ContextByteAccess access = ClassifyContextAccess(machine_ir_, insn);
++  if (access.kind == ContextByteAccess::kNone) return;
++  MemRegUsageMap& mem_reg_map = context_map_.mem_reg_map;
++  uint32_t first = access.begin >= 15 ? access.begin - 15 : 0;  // a slot is at most 16 bytes
++  for (uint32_t disp = first; disp < access.end && disp < mem_reg_map.size(); disp++) {
++    auto& mapping = mem_reg_map[disp];
++    if (!mapping.has_value() || disp + mapping.value().access.size <= access.begin) continue;
++    if (access.kind != ContextByteAccess::kOther && disp == access.begin) continue;
++    if (access.kind == ContextByteAccess::kGet) {
++      mapping.value().last_store = std::nullopt;
++    } else {
++      mapping = std::nullopt;
++    }
++  }
++}
++
+ void LocalGuestContextOptimizer::RemoveLocalGuestContextAccesses() {
+   MachineBasicBlockList nonloop_nodes(machine_ir_->arena());
+   // We need reverse post order for global guest context optimization.
+@@ -141,6 +165,7 @@ void LocalGuestContextOptimizer::RemoveLocalGuestContextAccesses() {
+       InvalidateMappingsForDefs(*insn_it);
+ #endif
+       // endregion
++      InvalidateOverlappingSlots(*insn_it);  // apklayer patch (0078)
+ 
+       if (machine_ir_->IsCPUStateGet(*insn_it) || machine_ir_->IsCPUStatePut(*insn_it)) {
+         auto* insn = AsMachineInsnX86_64(*insn_it);
+diff --git a/cpu_emulation/backend/x86_64/loop_guest_context_optimizer.cc b/cpu_emulation/backend/x86_64/loop_guest_context_optimizer.cc
+index cecdcc2..4e4c9a3 100644
+--- a/cpu_emulation/backend/x86_64/loop_guest_context_optimizer.cc
++++ b/cpu_emulation/backend/x86_64/loop_guest_context_optimizer.cc
+@@ -20,6 +20,7 @@
+ #include <functional>
+ #include <tuple>
+ 
++#include "berberis/backend/x86_64/context_liveness_analyzer.h"
+ #include "berberis/backend/x86_64/machine_ir.h"
+ #include "berberis/base/algorithm.h"
+ #include "berberis/base/logging.h"
+@@ -262,8 +263,15 @@ ArenaVector<bool> FindUnmappableOffsets(const MachineIR* ir, const Loop* loop) {
+   ArenaVector<bool> unmappable(sizeof(CPUState), false, ir->arena());
+   ArenaVector<int> seen_width(sizeof(CPUState), 0, ir->arena());
+   ArenaVector<int> byte_owner(sizeof(CPUState), -1, ir->arena());
++  // apklayer patch (0078): the bytes any other access to the CPU state in the loop touches (a 32-bit or byte store, a
++  // compare with memory): a slot mapped to a register would not see it. Such slots stay in memory.
++  ArenaVector<bool> other_bytes(sizeof(CPUState), false, ir->arena());
+   for (auto* bb : *loop) {
+     for (auto* base_insn : bb->insn_list()) {
++      ContextByteAccess other = ClassifyContextAccess(ir, base_insn);
++      if (other.kind == ContextByteAccess::kOther) {
++        for (uint32_t byte = other.begin; byte < other.end; byte++) other_bytes.at(byte) = true;
++      }
+       if (!ir->IsCPUStateGet(base_insn) && !ir->IsCPUStatePut(base_insn)) {
+         continue;
+       }
+@@ -302,6 +310,14 @@ ArenaVector<bool> FindUnmappableOffsets(const MachineIR* ir, const Loop* loop) {
+       }
+     }
+   }
++  for (size_t disp = 0; disp < sizeof(CPUState); disp++) {  // apklayer patch (0078)
++    for (int byte = 0; byte < seen_width.at(disp) && disp + byte < sizeof(CPUState); byte++) {
++      if (other_bytes.at(disp + byte)) {
++        unmappable.at(disp) = true;
++        break;
++      }
++    }
++  }
+   return unmappable;
+ }
+ // endregion digitalis

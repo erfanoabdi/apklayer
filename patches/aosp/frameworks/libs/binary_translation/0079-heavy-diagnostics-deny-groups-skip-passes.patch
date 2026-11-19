@@ -1,0 +1,344 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: heavy-tier bisection switches and an FP/SIMD sweep (DIAGNOSTIC)
+
+BERBERIS_HEAVY_DENY splits ldst into excl (exclusive, ordered, CAS), atomic (LSE), pair (LDP/STP) and single, and single into
+lit, sp (SP base), ld and st. BERBERIS_HEAVY_SKIP=loop,fwd,local,put,fold,dce,flags,vex,lea,nop,merge,cold,fwdblk,place skips
+those heavy optimization passes one by one (disable-heavy-opts in BERBERIS_FLAGS skips all; keep glibc-host-thread-id-handoff
+in that list). Unset: nothing changes. Test Arm64HeavyDifferentialFuzz.FpSimdFiniteSweep: random FP/SIMD encodings and
+4-instruction chains over finite lane values, heavy vs interpreter (run in a child process), grouped by encoding; it finds
+the interpreter's fixed-point FCVTZS/FCVTZU wrapping instead of saturating, SCVTF reading register 31 as non-zero, heavy
+accepting a few unallocated encodings, and FP16 signalling-NaN differences (not fixed). Module libberberis_arm64.
+
+diff --git a/cpu_emulation/backend/x86_64/code_gen.cc b/cpu_emulation/backend/x86_64/code_gen.cc
+index 892c773..8cc5d43 100644
+--- a/cpu_emulation/backend/x86_64/code_gen.cc
++++ b/cpu_emulation/backend/x86_64/code_gen.cc
+@@ -16,6 +16,8 @@
+ 
+ #include "berberis/backend/x86_64/code_gen.h"
+ 
++#include <cstring>
++
+ #include "berberis/assembler/machine_code.h"
+ #include "berberis/backend/code_emitter.h"
+ #include "berberis/backend/common/machine_ir_opt.h"
+@@ -39,6 +41,7 @@
+ #include "berberis/backend/x86_64/rename_vregs.h"
+ #include "berberis/base/checks.h"
+ #include "berberis/base/config_globals.h"
++#include "berberis/base/host_environment.h"
+ #include "berberis/base/tracing.h"
+ // region digitalis
+ #include "berberis/runtime_primitives/platform.h"
+@@ -46,6 +49,26 @@
+ 
+ namespace berberis::x86_64 {
+ 
++namespace {
++
++// apklayer patch (diagnostic, 0077): BERBERIS_HEAVY_SKIP="loop,fwd,local,put,fold,dce,flags,vex,lea,nop,merge,cold,fwdblk,place"
++// (any subset, comma separated) skips those heavy optimization passes one by one (disable-heavy-opts skips them all): to find the
++// pass that breaks PGR's home scene in two-gear mode (clean with disable-heavy-opts, 2026-11-19).
++bool HeavySkip(const char* name) {
++  static const char* env = berberis::HostGetenv("BERBERIS_HEAVY_SKIP");
++  if (env == nullptr) return false;
++  size_t len = strlen(name);
++  for (const char* p = env; *p;) {
++    size_t n = strcspn(p, ",");
++    if (n == len && strncmp(p, name, len) == 0) return true;
++    p += n;
++    if (*p == ',') p++;
++  }
++  return false;
++}
++
++}  // namespace
++
+ void GenCode(MachineIR* machine_ir, MachineCode* machine_code, const GenCodeParams& params) {
+   LowerSSAInstructions(machine_ir);
+   // region digitalis
+@@ -66,18 +89,18 @@ void GenCode(MachineIR* machine_ir, MachineCode* machine_code, const GenCodePara
+ 
+   if (!IsConfigFlagSet(kDisableHeavyOptimizations)) {
+     // Must be called before any IR passes which introduce bb live_in's and live_out's
+-    MergeBasicBlocks(machine_ir);
++    if (!HeavySkip("merge")) MergeBasicBlocks(machine_ir);
+   }
+ 
+   // Required unconditionally by RenameVRegs.
+   RemoveCriticalEdges(machine_ir);
+ 
+   if (!IsConfigFlagSet(kDisableHeavyOptimizations)) {
+-    MoveColdBlocksToEnd(machine_ir);
+-    RemoveLoopGuestContextAccesses(machine_ir);
++    if (!HeavySkip("cold")) MoveColdBlocksToEnd(machine_ir);
++    if (!HeavySkip("loop")) RemoveLoopGuestContextAccesses(machine_ir);
+     // region digitalis
+     // Values the local pass cannot carry past the end of a recovery split.
+-    ForwardGuestContextGetsAcrossRecoverySplits(machine_ir);
++    if (!HeavySkip("fwd")) ForwardGuestContextGetsAcrossRecoverySplits(machine_ir);
+     // endregion digitalis
+   }
+ 
+@@ -85,9 +108,9 @@ void GenCode(MachineIR* machine_ir, MachineCode* machine_code, const GenCodePara
+   RenameVRegs(machine_ir);
+ 
+   if (!IsConfigFlagSet(kDisableHeavyOptimizations)) {
+-    RemoveLocalGuestContextAccesses(machine_ir);
+-    RemoveRedundantPut(machine_ir);
+-    FoldInsns(machine_ir);
++    if (!HeavySkip("local")) RemoveLocalGuestContextAccesses(machine_ir);
++    if (!HeavySkip("put")) RemoveRedundantPut(machine_ir);
++    if (!HeavySkip("fold")) FoldInsns(machine_ir);
+     // Call this after all phases that create copy instructions.
+     // region digitalis
+     // Skipped for the ARM64 guest. This frontend's IR mixes forms: some
+@@ -111,26 +134,26 @@ void GenCode(MachineIR* machine_ir, MachineCode* machine_code, const GenCodePara
+     // region digitalis
+ #endif
+     // endregion
+-    RemoveDeadCode(machine_ir);
+-    OptimizeReadFlags(machine_ir);
++    if (!HeavySkip("dce")) RemoveDeadCode(machine_ir);
++    if (!HeavySkip("flags")) OptimizeReadFlags(machine_ir);
+     // region digitalis
+     if (host_platform::kHasAVX) {
+-      UseVexThreeOperandForms(machine_ir);
++      if (!HeavySkip("vex")) UseVexThreeOperandForms(machine_ir);
+     }
+-    UseLeaForCopiedAdds(machine_ir);
++    if (!HeavySkip("lea")) UseLeaForCopiedAdds(machine_ir);
+     // endregion
+   }
+ 
+   AllocRegs(machine_ir);
+ 
+   if (!IsConfigFlagSet(kDisableHeavyOptimizations)) {
+-    RemoveNopCopyAndMovq(machine_ir);
++    if (!HeavySkip("nop")) RemoveNopCopyAndMovq(machine_ir);
+         // region digitalis
+-    RemoveNopRegMoves(machine_ir);
++    if (!HeavySkip("nop")) RemoveNopRegMoves(machine_ir);
+     // endregion
+-    x86_64::RemoveForwarderBlocks(machine_ir);
++    if (!HeavySkip("fwdblk")) x86_64::RemoveForwarderBlocks(machine_ir);
+     // region digitalis
+-    PlaceBlocksBeforeBranchTargets(machine_ir);
++    if (!HeavySkip("place")) PlaceBlocksBeforeBranchTargets(machine_ir);
+     // endregion
+   }
+ 
+diff --git a/cpu_emulation/heavy_optimizer/arm64/heavy_differential_fuzz_tests.cc b/cpu_emulation/heavy_optimizer/arm64/heavy_differential_fuzz_tests.cc
+index 8a95fb8..b95b5a4 100644
+--- a/cpu_emulation/heavy_optimizer/arm64/heavy_differential_fuzz_tests.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/heavy_differential_fuzz_tests.cc
+@@ -61,6 +61,12 @@
+ #include <cstdlib>
+ #include <cstring>
+ 
++#include <fcntl.h>
++#include <sys/wait.h>
++#include <unistd.h>
++
++#include <map>
++#include <set>
+ #include <string>
+ #include <vector>
+ 
+@@ -954,6 +960,142 @@ class Arm64HeavyDifferentialFuzz : public ::testing::Test {
+ // vacuous.
+ // -------------------------------------------------------------------------
+ 
++// apklayer patch (diagnostic, 0077): random FP/SIMD encodings (op0 0111 and 1111: no memory access) over FINITE lane values of
++// moderate magnitude, singly and as 4-instruction regions on v0-v7, heavy vs interpreter. Lanes that are NaN on both sides
++// count as equal (the payload rule is separate), so what remains is a value the heavy tier computes differently: PGR's
++// home scene draws noise and black only in two-gear mode. Divergences are grouped by encoding (registers masked out).
++TEST_F(Arm64HeavyDifferentialFuzz, FpSimdFiniteSweep) {
++  Seed(0xF1417E5EEDF00077ULL);
++  auto finite_word = [&]() -> uint32_t {
++    if (Rnd() % 10 == 0) return (Rnd() & 1) ? 0x80000000u : 0u;
++    uint32_t sign = (Rnd() & 1) << 31;
++    uint32_t exp = 127 - 12 + (Rnd() % 25);
++    return sign | (exp << 23) | (Rnd() & 0x7fffff);
++  };
++  auto nan32 = [](uint32_t w) { return (w & 0x7f800000u) == 0x7f800000u && (w & 0x7fffffu) != 0; };
++  auto nan64 = [](uint64_t w) {
++    return (w & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL && (w & 0xfffffffffffffULL) != 0;
++  };
++  auto lanes_equal = [&](unsigned __int128 a, unsigned __int128 b) {
++    for (int h = 0; h < 2; h++) {
++      uint64_t x = static_cast<uint64_t>(a >> (64 * h)), y = static_cast<uint64_t>(b >> (64 * h));
++      if (x == y || (nan64(x) && nan64(y))) continue;
++      for (int w = 0; w < 2; w++) {
++        uint32_t p = static_cast<uint32_t>(x >> (32 * w)), q = static_cast<uint32_t>(y >> (32 * w));
++        if (p == q || (nan32(p) && nan32(q))) continue;
++        for (int hw = 0; hw < 2; hw++) {  // FP16 lanes: both NaN
++          uint16_t e = static_cast<uint16_t>(p >> (16 * hw)), f = static_cast<uint16_t>(q >> (16 * hw));
++          if (e != f && !((e & 0x7c00) == 0x7c00 && (e & 0x3ff) && (f & 0x7c00) == 0x7c00 && (f & 0x3ff))) return false;
++        }
++      }
++    }
++    return true;
++  };
++  std::map<uint32_t, std::pair<int, std::string>> bad;
++  std::set<uint32_t> undefined;
++  const int kIters = 400000 * FuzzScale();
++  int compared = 0, diverged = 0;
++  for (int iter = 0; iter < kIters; iter++) {
++    const int n = (iter % 4 == 0) ? 4 : 1;
++    uint32_t code[4];
++    for (int k = 0; k < n; k++) {
++      uint32_t w = static_cast<uint32_t>(Rnd64());
++      w = (w & ~(0xfu << 25)) | (((Rnd() & 1) ? 0x7u : 0xfu) << 25);
++      if (n > 1) w &= ~((0x18u << 16) | (0x18u << 5) | 0x18u);  // rd, rn, rm in 0-7: a dependency chain
++      code[k] = w;
++    }
++    InitState in = RandomInit();
++    for (int i = 0; i < 32; i++) {
++      uint32_t w[4] = {finite_word(), finite_word(), finite_word(), finite_word()};
++      memcpy(&in.v[i], w, 16);
++    }
++    GuestAddr start = ToGuestAddr(code);
++    GuestAddr code_end = start + static_cast<GuestAddr>(n) * 4;
++    ApplyInit(in);
++    state_.cpu.insn_addr = start;
++    MachineCode mc;
++    auto [stop, ok, num] = HeavyOptimizeRegion(start, &mc, HeavyOptimizeParams{.end_pc = code_end});
++    if (!ok || stop != code_end || num != static_cast<size_t>(n)) continue;
++    // The interpreter must accept every instruction too (a heavy accept of an encoding it declines is a separate report).
++    TranslationCache::GetInstance()->InvalidateGuestRange(start, code_end + 4);
++    {
++      ScopedExecRegion exec(&mc);
++      TestingRunGeneratedCode(&state_, exec.get(), stop);
++    }
++    FullState heavy = Capture();
++    // The interpreter runs in a child: an encoding it rejects raises a guest SIGILL with no handler, which ends the process.
++    int fds[2];
++    ASSERT_EQ(pipe(fds), 0);
++    pid_t pid = fork();
++    if (pid == 0) {
++      close(fds[0]);
++      int null_fd = open("/dev/null", O_WRONLY);
++      if (null_fd >= 0) dup2(null_fd, 2);
++      ApplyInit(in);
++      state_.cpu.insn_addr = start;
++      int guard = 0;
++      while (state_.cpu.insn_addr >= start && state_.cpu.insn_addr < stop && guard++ < 64) InterpretInsn(&state_);
++      FullState c = Capture();
++      bool reached = state_.cpu.insn_addr == stop;
++      if (write(fds[1], &reached, 1) != 1 || write(fds[1], &c, sizeof(c)) != static_cast<ssize_t>(sizeof(c))) _exit(2);
++      _exit(0);
++    }
++    close(fds[1]);
++    bool reached = false;
++    FullState itp;
++    bool got = read(fds[0], &reached, 1) == 1 && read(fds[0], &itp, sizeof(itp)) == static_cast<ssize_t>(sizeof(itp));
++    close(fds[0]);
++    int status = 0;
++    waitpid(pid, &status, 0);
++    if (!got || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
++      uint32_t key = code[0] & ~((0x1fu << 16) | (0x1fu << 5) | 0x1fu);
++      if (undefined.insert(key).second && undefined.size() <= 40)
++        fprintf(stderr, "  heavy accepts what the interpreter rejects: %s\n", RegionStr(code, n).c_str());
++      continue;
++    }
++    if (!reached) continue;
++    compared++;
++    std::string what;
++    for (int i = 0; i < 31 && what.empty(); i++)
++      if (heavy.x[i] != itp.x[i]) what = "x" + std::to_string(i);
++    if (what.empty() && (heavy.flags & kNZCVMask) != (itp.flags & kNZCVMask)) what = "nzcv";
++    int bad_v = -1;
++    for (int i = 0; i < 32 && what.empty(); i++)
++      if (!lanes_equal(heavy.v[i], itp.v[i])) { what = "v" + std::to_string(i); bad_v = i; }
++    if (what.empty()) continue;
++    diverged++;
++    // Blame the first instruction for a single one; for a region, report it whole under its first word's encoding.
++    uint32_t key = code[0] & ~((0x1fu << 16) | (0x1fu << 5) | 0x1fu);
++    auto& e = bad[key];
++    if (e.first++ == 0) {
++      char b[256];
++      if (bad_v >= 0) {
++        snprintf(b, sizeof(b), "%s HEAVY=%016llx:%016llx INTERP=%016llx:%016llx", what.c_str(),
++                 (unsigned long long)(heavy.v[bad_v] >> 64), (unsigned long long)heavy.v[bad_v],
++                 (unsigned long long)(itp.v[bad_v] >> 64), (unsigned long long)itp.v[bad_v]);
++      } else {
++        snprintf(b, sizeof(b), "%s", what.c_str());
++      }
++      uint32_t rn = (code[0] >> 5) & 31, rm = (code[0] >> 16) & 31, rd = code[0] & 31;
++      char inb[320];
++      snprintf(inb, sizeof(inb), " | in: x%u=%016llx v%u=%016llx:%016llx v%u=%016llx:%016llx v%u=%016llx:%016llx sp=%016llx",
++               rn, (unsigned long long)(rn < 31 ? in.x[rn] : 0xdeadULL), rn, (unsigned long long)(in.v[rn] >> 64),
++               (unsigned long long)in.v[rn], rm, (unsigned long long)(in.v[rm] >> 64), (unsigned long long)in.v[rm], rd,
++               (unsigned long long)(in.v[rd] >> 64), (unsigned long long)in.v[rd], (unsigned long long)in.sp);
++      char xb[96] = "";
++      if (bad_v < 0 && what[0] == 'x') {
++        int xi = atoi(what.c_str() + 1);
++        snprintf(xb, sizeof(xb), " HEAVY=%016llx INTERP=%016llx", (unsigned long long)heavy.x[xi], (unsigned long long)itp.x[xi]);
++      }
++      e.second = std::string(b) + xb + " region:" + RegionStr(code, n) + inb;
++    }
++  }
++  fprintf(stderr, "FpSimdFiniteSweep: compared=%d diverged=%d encodings=%zu heavy-only encodings=%zu\n", compared, diverged,
++          bad.size(), undefined.size());
++  for (auto& [key, e] : bad) fprintf(stderr, "  enc %08x x%d  %s\n", key, e.first, e.second.c_str());
++  EXPECT_EQ(diverged, 0);
++}
++
+ // Multi-instruction integer regions: exposes a heavy destructive-lowering
+ // register-mapping clobber (a value still live in the mapping, overwritten).
+ TEST_F(Arm64HeavyDifferentialFuzz, IntDataProcRegion) {
+diff --git a/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc b/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
+index 87abd8d..7b52eeb 100644
+--- a/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
+@@ -39,12 +39,19 @@ namespace berberis {
+ 
+ namespace {
+ 
+-// apklayer patch (diagnostic): BERBERIS_HEAVY_DENY="simd,fp,ldst,simdldst,dpreg,dpimm,branch" (any subset, comma separated) keeps
++// apklayer patch (diagnostic): BERBERIS_HEAVY_DENY="simd,fp,ldst,simdldst,dpreg,dpimm,branch" (any subset, comma separated; ldst is
++// excl,atomic,pair,single; single is lit,sp,ld,st) keeps
+ // regions with an instruction of those ARM64 encoding groups (op0, bits 28:25) out of the heavy optimizer: they bail as an
+ // unimplemented instruction does and stay lite-translated. To find which group the heavy tier miscompiles (PGR's home scene: block
+ // noise in two-gear mode, clean with BERBERIS_MODE=lite-translate-or-interpret).
+ enum : unsigned {
+-  kDenySimd = 1, kDenyFp = 2, kDenyLdst = 4, kDenySimdLdst = 8, kDenyDpReg = 16, kDenyDpImm = 32, kDenyBranch = 64,
++  kDenySimd = 1, kDenyFp = 2, kDenySimdLdst = 8, kDenyDpReg = 16, kDenyDpImm = 32, kDenyBranch = 64,
++  // ldst (integer loads/stores) split: exclusives/ordered (LDXR/STXR/LDAR/STLR/CAS), LSE atomics, pairs, single registers.
++  // single: literal loads, SP-based accesses, other loads, other stores.
++  kDenyLdstExcl = 128, kDenyLdstAtomic = 256, kDenyLdstPair = 512,
++  kDenyLdstLit = 1024, kDenyLdstSp = 2048, kDenyLdstLd = 4096, kDenyLdstSt = 8192,
++  kDenyLdstSingle = kDenyLdstLit | kDenyLdstSp | kDenyLdstLd | kDenyLdstSt,
++  kDenyLdst = kDenyLdstExcl | kDenyLdstAtomic | kDenyLdstPair | kDenyLdstSingle,
+ };
+ 
+ unsigned HeavyDenyMask() {
+@@ -53,7 +60,9 @@ unsigned HeavyDenyMask() {
+     unsigned m = 0;
+     if (env == nullptr) return m;
+     struct { const char* name; unsigned bit; } names[] = {{"simd", kDenySimd}, {"fp", kDenyFp}, {"ldst", kDenyLdst},
+-        {"simdldst", kDenySimdLdst}, {"dpreg", kDenyDpReg}, {"dpimm", kDenyDpImm}, {"branch", kDenyBranch}};
++        {"simdldst", kDenySimdLdst}, {"dpreg", kDenyDpReg}, {"dpimm", kDenyDpImm}, {"branch", kDenyBranch},
++        {"excl", kDenyLdstExcl}, {"atomic", kDenyLdstAtomic}, {"pair", kDenyLdstPair}, {"single", kDenyLdstSingle},
++        {"lit", kDenyLdstLit}, {"sp", kDenyLdstSp}, {"ld", kDenyLdstLd}, {"st", kDenyLdstSt}};
+     const char* p = env;
+     while (*p) {
+       size_t len = strcspn(p, ",");
+@@ -71,7 +80,15 @@ unsigned InsnGroup(uint32_t insn) {
+   uint32_t op0 = (insn >> 25) & 0xf;
+   if (op0 == 0x7) return kDenySimd;            // 0111: Advanced SIMD (vector)
+   if (op0 == 0xf) return kDenyFp;              // 1111: scalar FP and scalar SIMD
+-  if ((op0 & 0x5) == 0x4) return (insn & (1u << 26)) ? kDenySimdLdst : kDenyLdst;  // x1x0: loads/stores (bit 26: SIMD&FP registers)
++  if ((op0 & 0x5) == 0x4) {  // x1x0: loads/stores (bit 26: SIMD&FP registers)
++    if (insn & (1u << 26)) return kDenySimdLdst;
++    if (((insn >> 24) & 0x3f) == 0x08) return kDenyLdstExcl;  // xx001000: exclusive, ordered, CAS
++    if (((insn >> 27) & 0x7) == 0x5) return kDenyLdstPair;    // xx101xxx: LDP/STP
++    if (((insn >> 24) & 0x3f) == 0x38 && (insn & (1u << 21)) && ((insn >> 10) & 3) == 0) return kDenyLdstAtomic;  // LSE
++    if (((insn >> 27) & 0x7) == 0x3) return kDenyLdstLit;     // xx011xxx: LDR (literal)
++    if (((insn >> 5) & 0x1f) == 31) return kDenyLdstSp;        // base SP
++    return ((insn >> 22) & 3) == 0 ? kDenyLdstSt : kDenyLdstLd;  // opc 00: store
++  }
+   if ((op0 & 0x7) == 0x5) return kDenyDpReg;   // x101: data processing, register
+   if ((op0 & 0xe) == 0x8) return kDenyDpImm;   // 100x: data processing, immediate
+   if ((op0 & 0xe) == 0xa) return kDenyBranch;  // 101x: branches, exceptions, system

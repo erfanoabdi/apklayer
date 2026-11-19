@@ -1,0 +1,228 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: RemoveRedundantPut keeps a store that any later access reads
+
+The heavy tier's RemoveRedundantPut and ContextLivenessAnalyzer saw only the four GET/PUT forms (MOVQ, MOVDQA, MOVW, MOVSD
+off the CPU-state pointer) and tested only a slot's first byte. A read in another form or width (a 32-bit or byte access, a
+compare with memory, a read starting inside the slot) did not keep the store before it, which was removed: stale guest
+registers. ClassifyContextAccess gives every access its byte range; anything else addressed off the CPU-state pointer counts
+as a read of up to 16 bytes. Found on PGR's home scene, black or noisy in two-gear mode only (bisected with 0079's switches:
+clean with disable-heavy-opts and with the loop, local and put passes off). Tests: MachineIR.PutReadByMovlInSuccessorIsKept,
+PutReadAtAnInnerByteIsKept. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/backend/include/berberis/backend/x86_64/context_liveness_analyzer.h b/cpu_emulation/backend/include/berberis/backend/x86_64/context_liveness_analyzer.h
+index c5b0084..e5bda43 100644
+--- a/cpu_emulation/backend/include/berberis/backend/x86_64/context_liveness_analyzer.h
++++ b/cpu_emulation/backend/include/berberis/backend/x86_64/context_liveness_analyzer.h
+@@ -25,6 +25,16 @@
+ 
+ namespace berberis::x86_64 {
+ 
++// apklayer patch (0077): how an instruction touches CPUState, by byte range. kGet/kPut are the forms the context optimizers move and
++// remove; kOther is any other instruction addressed off the CPUState pointer (a 32-bit or byte access, a compare with memory, a
++// reservation slot): it counts as a read of up to 16 bytes from its displacement, so a PUT it reads is never removed as dead.
++struct ContextByteAccess {
++  enum Kind : uint8_t { kNone, kGet, kPut, kOther } kind;
++  uint32_t begin;
++  uint32_t end;
++};
++ContextByteAccess ClassifyContextAccess(const MachineIR* ir, const berberis::MachineInsn* insn);
++
+ class ContextLivenessAnalyzer {
+  public:
+   explicit ContextLivenessAnalyzer(const MachineIR* ir)
+@@ -32,6 +42,7 @@ class ContextLivenessAnalyzer {
+ 
+   void Init();
+   bool IsLiveIn(const MachineBasicBlock* bb, uint32_t offset) const;
++  const MachineIR* machine_ir() const { return machine_ir_; }
+ 
+  private:
+   using ContextLiveness = std::bitset<sizeof(CPUState)>;
+diff --git a/cpu_emulation/backend/x86_64/context_liveness_analyzer.cc b/cpu_emulation/backend/x86_64/context_liveness_analyzer.cc
+index ff334b7..66f5251 100644
+--- a/cpu_emulation/backend/x86_64/context_liveness_analyzer.cc
++++ b/cpu_emulation/backend/x86_64/context_liveness_analyzer.cc
+@@ -47,6 +47,38 @@ bool ContextLivenessAnalyzer::IsLiveIn(const MachineBasicBlock* bb, uint32_t off
+   return context_live_in_[bb->id()].test(offset);
+ }
+ 
++ContextByteAccess ClassifyContextAccess(const MachineIR* ir, const berberis::MachineInsn* insn) {
++  constexpr uint32_t kSize = sizeof(CPUState);
++  auto range = [&](ContextByteAccess::Kind kind, uint32_t disp, uint32_t width) {
++    return ContextByteAccess{kind, disp, disp + width < kSize ? disp + width : kSize};
++  };
++  if (ir->IsCPUStatePut(insn)) {
++    uint32_t disp = AsMachineInsnX86_64(insn)->disp();
++    switch (insn->opcode()) {
++      case kMachineOpMovdqaMemBaseDispXReg: return range(ContextByteAccess::kPut, disp, 16);
++      case kMachineOpMovwMemBaseDispReg: return range(ContextByteAccess::kPut, disp, 2);
++      default: return range(ContextByteAccess::kPut, disp, 8);  // MOVQ (reg, imm), MOVSD
++    }
++  }
++  if (ir->IsCPUStateGet(insn)) {
++    uint32_t disp = AsMachineInsnX86_64(insn)->disp();
++    switch (insn->opcode()) {
++      case kMachineOpMovdqaXRegMemBaseDisp: return range(ContextByteAccess::kGet, disp, 16);
++      case kMachineOpMovwRegMemBaseDisp: return range(ContextByteAccess::kGet, disp, 2);
++      default: return range(ContextByteAccess::kGet, disp, 8);  // MOVQ, MOVSD
++    }
++  }
++  if (insn->opcode() <= kMachineOpJump) return ContextByteAccess{ContextByteAccess::kNone, 0, 0};  // pseudo instructions
++  for (int i = 0; i < insn->NumRegOperands(); i++) {
++    if (insn->RegAt(i) == kCPUStatePointer) {
++      uint32_t disp = AsMachineInsnX86_64(insn)->disp();
++      if (disp >= kSize) break;  // ThreadState outside CPUState
++      return range(ContextByteAccess::kOther, disp, 16);
++    }
++  }
++  return ContextByteAccess{ContextByteAccess::kNone, 0, 0};
++}
++
+ bool ContextLivenessAnalyzer::VisitBasicBlock(const MachineBasicBlock* bb) {
+   ContextLiveness running_liveness;
+   if (bb->out_edges().size() == 0) {
+@@ -57,13 +89,13 @@ bool ContextLivenessAnalyzer::VisitBasicBlock(const MachineBasicBlock* bb) {
+     }
+   }
+ 
++  // apklayer patch (0077): by byte range; any other CPUState access is a read (ClassifyContextAccess).
+   for (auto insn_it = bb->insn_list().rbegin(); insn_it != bb->insn_list().rend(); insn_it++) {
+-    if (machine_ir_->IsCPUStatePut(*insn_it)) {
+-      auto* insn = AsMachineInsnX86_64(*insn_it);
+-      running_liveness.reset(insn->disp());
+-    } else if (machine_ir_->IsCPUStateGet(*insn_it)) {
+-      auto* insn = AsMachineInsnX86_64(*insn_it);
+-      running_liveness.set(insn->disp());
++    ContextByteAccess access = ClassifyContextAccess(machine_ir_, *insn_it);
++    if (access.kind == ContextByteAccess::kPut) {
++      for (uint32_t b = access.begin; b < access.end; b++) running_liveness.reset(b);
++    } else if (access.kind == ContextByteAccess::kGet || access.kind == ContextByteAccess::kOther) {
++      for (uint32_t b = access.begin; b < access.end; b++) running_liveness.set(b);
+     }
+   }
+ 
+diff --git a/cpu_emulation/backend/x86_64/machine_ir_opt.cc b/cpu_emulation/backend/x86_64/machine_ir_opt.cc
+index aff0fd2..318a530 100644
+--- a/cpu_emulation/backend/x86_64/machine_ir_opt.cc
++++ b/cpu_emulation/backend/x86_64/machine_ir_opt.cc
+@@ -195,18 +195,18 @@ MachineInsnList::reverse_iterator RemovePutIfDead(const ContextLivenessAnalyzer*
+                                                   MachineInsnList::reverse_iterator insn_it,
+                                                   const std::bitset<sizeof(CPUState)> seen_get) {
+   CHECK_NE(bb->out_edges().size(), 0);
+-  auto* insn = AsMachineInsnX86_64(*insn_it);
+-  auto disp = insn->disp();
+-
+-  if (seen_get.test(disp)) {
+-    return ++insn_it;
+-  }
+-
+-  for (auto out_edge : bb->out_edges()) {
+-    auto dst = out_edge->dst();
+-    if (analyzer->IsLiveIn(dst, disp)) {
++  // apklayer patch (0077): dead only if no byte it writes is read later in the block or live into a successor (it used to test
++  // the first byte, and only the reads in GET form: PGR's home scene went black in two-gear mode).
++  ContextByteAccess put = ClassifyContextAccess(analyzer->machine_ir(), *insn_it);
++  for (uint32_t b = put.begin; b < put.end; b++) {
++    if (seen_get.test(b)) {
+       return ++insn_it;
+     }
++    for (auto out_edge : bb->out_edges()) {
++      if (analyzer->IsLiveIn(out_edge->dst(), b)) {
++        return ++insn_it;
++      }
++    }
+   }
+ 
+   // The instruction writes to dead context.
+@@ -233,9 +233,9 @@ void RemoveRedundantPut(MachineIR* ir) {
+       if (ir->IsCPUStatePut(*insn_it)) {
+         insn_it = RemovePutIfDead(&analyzer, bb, insn_it, seen_get);
+       } else {
+-        if (ir->IsCPUStateGet(*insn_it)) {
+-          auto* insn = AsMachineInsnX86_64(*insn_it);
+-          seen_get.set(insn->disp(), true);
++        ContextByteAccess access = ClassifyContextAccess(ir, *insn_it);  // apklayer patch (0077)
++        if (access.kind == ContextByteAccess::kGet || access.kind == ContextByteAccess::kOther) {
++          for (uint32_t b = access.begin; b < access.end; b++) seen_get.set(b, true);
+         }
+         insn_it++;
+       }
+diff --git a/cpu_emulation/backend/x86_64/machine_ir_opt_test.cc b/cpu_emulation/backend/x86_64/machine_ir_opt_test.cc
+index a6ac2b7..7016f15 100644
+--- a/cpu_emulation/backend/x86_64/machine_ir_opt_test.cc
++++ b/cpu_emulation/backend/x86_64/machine_ir_opt_test.cc
+@@ -470,6 +470,74 @@ TEST(MachineIR, PutsInSuccessorsKillPut) {
+   ASSERT_EQ(2u, bb3->insn_list().size());
+ }
+ 
++// apklayer patch (0077): a PUT is live while any later access reads one of its bytes, whatever the form of that access.
++TEST(MachineIR, PutReadByMovlInSuccessorIsKept) {
++  Arena arena;
++  x86_64::MachineIR machine_ir(&arena);
++
++  auto* bb1 = machine_ir.NewBasicBlock();
++  auto* bb2 = machine_ir.NewBasicBlock();
++  auto* bb3 = machine_ir.NewBasicBlock();
++  machine_ir.AddEdge(bb1, bb2);
++  machine_ir.AddEdge(bb1, bb3);
++  x86_64::MachineIRBuilder builder(&machine_ir);
++
++  auto vreg = machine_ir.AllocVReg();
++  auto vreg2 = machine_ir.AllocVReg();
++  builder.StartBasicBlock(bb1);
++  builder.GenPut(GetThreadStateRegOffset(0), vreg);
++  builder.Gen<CondBranch>(CodeEmitter::Condition::kZero, bb2, bb3, x86_64::kMachineRegFLAGS);
++
++  builder.StartBasicBlock(bb2);
++  builder.Gen<x86_64::MovlRegOp>(vreg2, {.base = x86_64::kMachineRegRBP, .disp = static_cast<int32_t>(GetThreadStateRegOffset(0))});
++  builder.GenPut(GetThreadStateRegOffset(0), vreg);
++  builder.Gen<Jump>(kNullGuestAddr);
++
++  builder.StartBasicBlock(bb3);
++  builder.GenPut(GetThreadStateRegOffset(0), vreg);
++  builder.Gen<Jump>(kNullGuestAddr);
++
++  EXPECT_EQ(x86_64::CheckMachineIR(machine_ir), x86_64::kMachineIRCheckSuccess);
++  x86_64::RemoveRedundantPut(&machine_ir);
++  EXPECT_EQ(x86_64::CheckMachineIR(machine_ir), x86_64::kMachineIRCheckSuccess);
++
++  ASSERT_EQ(2u, bb1->insn_list().size());
++}
++
++TEST(MachineIR, PutReadAtAnInnerByteIsKept) {
++  Arena arena;
++  x86_64::MachineIR machine_ir(&arena);
++
++  auto* bb1 = machine_ir.NewBasicBlock();
++  auto* bb2 = machine_ir.NewBasicBlock();
++  auto* bb3 = machine_ir.NewBasicBlock();
++  machine_ir.AddEdge(bb1, bb2);
++  machine_ir.AddEdge(bb1, bb3);
++  x86_64::MachineIRBuilder builder(&machine_ir);
++
++  auto vreg = machine_ir.AllocVReg();
++  auto vreg2 = machine_ir.AllocVReg();
++  builder.StartBasicBlock(bb1);
++  builder.GenPut(GetThreadStateRegOffset(0), vreg);
++  builder.Gen<CondBranch>(CodeEmitter::Condition::kZero, bb2, bb3, x86_64::kMachineRegFLAGS);
++
++  // A word read of the upper half, then the whole register written again.
++  builder.StartBasicBlock(bb2);
++  builder.Gen<x86_64::MovwRegOp>(vreg2, {.base = x86_64::kMachineRegRBP, .disp = static_cast<int32_t>(GetThreadStateRegOffset(0) + 4)});
++  builder.GenPut(GetThreadStateRegOffset(0), vreg);
++  builder.Gen<Jump>(kNullGuestAddr);
++
++  builder.StartBasicBlock(bb3);
++  builder.GenPut(GetThreadStateRegOffset(0), vreg);
++  builder.Gen<Jump>(kNullGuestAddr);
++
++  EXPECT_EQ(x86_64::CheckMachineIR(machine_ir), x86_64::kMachineIRCheckSuccess);
++  x86_64::RemoveRedundantPut(&machine_ir);
++  EXPECT_EQ(x86_64::CheckMachineIR(machine_ir), x86_64::kMachineIRCheckSuccess);
++
++  ASSERT_EQ(2u, bb1->insn_list().size());
++}
++
+ TEST(MachineIR, PutsInSuccessorsKillPutImm) {
+   Arena arena;
+   x86_64::MachineIR machine_ir(&arena);
