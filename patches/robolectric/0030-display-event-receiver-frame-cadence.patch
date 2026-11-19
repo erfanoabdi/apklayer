@@ -1,0 +1,140 @@
+From: apklayer
+Subject: [PATCH] Keep Choreographer on its display frame cadence
+
+Base the next wakeup on the receiver's frame phase so scheduler delays do
+not accumulate. Put frame deadlines and expected presentation times on the
+same monotonic clock as the delivered vsync.
+
+Against external/robolectric 87aa52b08 (REVISION), after 0024.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
+@@ -134,10 +134,10 @@
+           frameTimeNanos, 0 /* SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN */, frame);
+     } else if (RuntimeEnvironment.getApiLevel() < S) {
+       displayEventReceiverReflector.onVsync(
+-          ShadowSystem.nanoTime(), 0L /* SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN */, frame);
++          frameTimeNanos, 0L /* SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN */, frame);
+     } else {
+       displayEventReceiverReflector.onVsync(
+-          ShadowSystem.nanoTime(),
++          frameTimeNanos,
+           0L /* physicalDisplayId currently ignored */,
+           frame,
+           vsyncEventData);
+@@ -182,6 +182,7 @@
+     // apklayer patch: this receiver's own pending vsync. The shared next-vsync time alone went to whichever receiver's listener ran first,
+     // so a Choreographer on another looper (Unity's UnityChoreographer thread) never got one while the main thread's kept scheduling.
+     private long vsyncAt = 0;
++    private long lastVsyncAt = 0;
+ 
+     public NativeDisplayEventReceiver(WeakReference<DisplayEventReceiver> receiverRef) {
+       this.receiverRef = receiverRef;
+@@ -190,18 +191,24 @@
+     }
+ 
+     private void onClockAdvanced(Duration advancedBy) {
++      long frameTimeNanos;
+       synchronized (this) {
+         long now = ShadowPausedSystemClock.uptimeNanos();
+         if (vsyncAt == 0 || now < vsyncAt) {
+           return;
+         }
++        long interval = ShadowChoreographer.getFrameDelay().toNanos();
++        // Keep the scheduled phase across a late wakeup. Skip expired frames instead of
++        // making the next deadline one full interval after the thread happened to wake.
++        frameTimeNanos = interval > 0 ? now - (now - vsyncAt) % interval : now;
++        lastVsyncAt = frameTimeNanos;
+         vsyncAt = 0;
+         if (ShadowChoreographer.getNextVsyncTimeNanos() <= now) {
+           ShadowChoreographer.setNextVsyncTimeNanos(0);
+         }
+       }
+ 
+-      doVsync();
++      doVsync(frameTimeNanos);
+     }
+ 
+     void dispose() {
+@@ -212,38 +219,46 @@
+       Duration frameDelay = ShadowChoreographer.getFrameDelay();
+       if (ShadowChoreographer.isPaused()) {
+         synchronized (this) {
++          long now = ShadowPausedSystemClock.uptimeNanos();
+           if (vsyncAt == 0) {
+-            vsyncAt = ShadowPausedSystemClock.uptimeNanos() + frameDelay.toNanos();
++            long interval = frameDelay.toNanos();
++            vsyncAt = now + interval;
++            if (lastVsyncAt != 0 && interval > 0) {
++              vsyncAt -= (now - lastVsyncAt) % interval;
++            }
+           }
+-        }
+-        if (ShadowChoreographer.getNextVsyncTimeNanos() < ShadowPausedSystemClock.uptimeNanos()) {
+-          ShadowChoreographer.setNextVsyncTimeNanos(
+-              ShadowPausedSystemClock.uptimeNanos() + frameDelay.toNanos());
++          long next = ShadowChoreographer.getNextVsyncTimeNanos();
++          if (next <= now || next > vsyncAt) {
++            ShadowChoreographer.setNextVsyncTimeNanos(vsyncAt);
++          }
+         }
+       } else {
+         // simulate an immediate callback
+         ShadowSystemClock.advanceBy(frameDelay);
+-        doVsync();
+-      }
+-    }
+-
+-    private void doVsync() {
++        doVsync(ShadowSystem.nanoTime());
++      }
++    }
++
++    private void doVsync(long frameTimeNanos) {
+       DisplayEventReceiver receiver = receiverRef.get();
+       if (receiver != null) {
+         ShadowDisplayEventReceiver shadowReceiver = Shadow.extract(receiver);
+         if (RuntimeEnvironment.getApiLevel() >= S) {
+-          latestVsyncEventData = newVsyncEventData(ShadowChoreographer.getFrameDelay().toNanos());
+-        }
+-        shadowReceiver.onVsync(ShadowSystem.nanoTime(), frame, latestVsyncEventData);
++          latestVsyncEventData =
++              newVsyncEventData(frameTimeNanos, ShadowChoreographer.getFrameDelay().toNanos());
++        }
++        shadowReceiver.onVsync(frameTimeNanos, frame, latestVsyncEventData);
+         frame++;
+       }
+     }
+ 
+-    private static Object /* VsyncEventData */ newVsyncEventData(long frameIntervalNanos) {
++    private static Object /* VsyncEventData */ newVsyncEventData(
++        long frameTimeNanos, long frameIntervalNanos) {
++      long nextVsync = frameTimeNanos + frameIntervalNanos;
+       VsyncEventDataReflector vsyncEventDataReflector = reflector(VsyncEventDataReflector.class);
+       if (RuntimeEnvironment.getApiLevel() < TIRAMISU) {
+         return vsyncEventDataReflector.newVsyncEventData(
+-            /* id= */ 1, /* frameDeadline= */ 10, frameIntervalNanos);
++            /* id= */ 1, nextVsync, frameIntervalNanos);
+       }
+       try {
+         // onVsync on T takes a package-private VsyncEventData class, which is itself composed of a
+@@ -255,7 +270,8 @@
+         FrameTimelineReflector frameTimelineReflector = reflector(FrameTimelineReflector.class);
+         Object timelineArray = Array.newInstance(frameTimelineClass, timelineArrayLength);
+         for (int i = 0; i < timelineArrayLength; i++) {
+-          Array.set(timelineArray, i, frameTimelineReflector.newFrameTimeline(1, 1, 10));
++          long deadline = nextVsync + i * frameIntervalNanos;
++          Array.set(timelineArray, i, frameTimelineReflector.newFrameTimeline(1, deadline, deadline));
+         }
+         if (RuntimeEnvironment.getApiLevel() <= TIRAMISU) {
+           return vsyncEventDataReflector.newVsyncEventData(
+@@ -297,6 +313,8 @@
+     public void resetState() {
+       frame = 0;
+       latestVsyncEventData = null;
++      vsyncAt = 0;
++      lastVsyncAt = 0;
+     }
+   }
+ 

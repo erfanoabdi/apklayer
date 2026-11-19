@@ -4,9 +4,11 @@ import android.app.Activity;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.Display;
+import java.time.Duration;
 import java.util.List;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.android.controller.ActivityController;
+import org.robolectric.shadows.ShadowChoreographer;
 
 /**
  * The instance's host settings (HubHostSettings: the desktop's, or the instance's overrides) as an app process's configuration: night mode
@@ -22,6 +24,7 @@ final class HostConfiguration {
     private static String size = "w480dp-h800dp";
     private static Bundle settings = new Bundle();
     private static android.graphics.Rect screen;
+    private static int refreshMhz;
 
     /** The instance's colour scheme; null when the host has none (no portal). */
     static Boolean night() { return settings.containsKey("night") ? settings.getBoolean("night") : null; }
@@ -114,6 +117,30 @@ final class HostConfiguration {
         screen = bounds;
     }
 
+    /** The window's Wayland output rate can change without a resize or density change. */
+    static void setRefreshRate(int mhz) {
+        if (mhz <= 0 || mhz == refreshMhz) return;
+        refreshMhz = mhz;
+        ShadowChoreographer.setFrameDelay(Duration.ofNanos(Math.round(1_000_000_000_000.0 / mhz)));
+        updateDisplayMode();
+    }
+
+    private static void updateDisplayMode() {
+        android.hardware.display.DisplayManagerGlobal manager = android.hardware.display.DisplayManagerGlobal.getInstance();
+        android.view.DisplayInfo info = manager.getDisplayInfo(Display.DEFAULT_DISPLAY);
+        Display.Mode mode = info.getMode();
+        int width = screen == null ? mode.getPhysicalWidth() : screen.width();
+        int height = screen == null ? mode.getPhysicalHeight() : screen.height();
+        float rate = refreshMhz == 0 ? mode.getRefreshRate() : refreshMhz / 1000f;
+        if (mode.getPhysicalWidth() == width && mode.getPhysicalHeight() == height && mode.getRefreshRate() == rate) return;
+        info.supportedModes = new Display.Mode[] {new Display.Mode(mode.getModeId(), width, height, rate)};
+        if (org.robolectric.util.ReflectionHelpers.hasField(android.view.DisplayInfo.class, "appsSupportedModes"))
+            org.robolectric.util.ReflectionHelpers.setField(info, "appsSupportedModes", info.supportedModes);
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(org.robolectric.shadow.api.Shadow.extract(manager), "changeDisplay",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class, Display.DEFAULT_DISPLAY),
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(android.view.DisplayInfo.class, info));
+    }
+
     private static android.graphics.Rect notifiedScreen;  // the screen the listeners last knew
 
     private static void apply() {
@@ -123,17 +150,9 @@ final class HostConfiguration {
         Boolean night = night();
         if (night != null) extra.append(extra.length() > 0 ? "-" : "").append(night ? "night" : "notnight");
         RuntimeEnvironment.setQualifiers(extra.length() > 0 ? size + " +" + extra : size);
-        if (screen != null) {  // Robolectric's qualifiers make the max bounds the window (DeviceConfig.setBounds); on Android they are the display
-            // and so is the display mode (Display.getMode: the panel, at rotation 0 the real size); Robolectric's is the window. Before the max
-            // bounds: changeDisplay resets the default display's to its logical size
-            android.view.DisplayInfo info = android.hardware.display.DisplayManagerGlobal.getInstance().getDisplayInfo(android.view.Display.DEFAULT_DISPLAY);
-            android.view.Display.Mode mode = info.getMode();
-            info.supportedModes = new android.view.Display.Mode[] {new android.view.Display.Mode(mode.getModeId(), screen.width(), screen.height(), mode.getRefreshRate())};
-            if (org.robolectric.util.ReflectionHelpers.hasField(android.view.DisplayInfo.class, "appsSupportedModes"))
-                org.robolectric.util.ReflectionHelpers.setField(info, "appsSupportedModes", info.supportedModes);
-            org.robolectric.util.ReflectionHelpers.callInstanceMethod(org.robolectric.shadow.api.Shadow.extract(android.hardware.display.DisplayManagerGlobal.getInstance()), "changeDisplay",
-                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class, android.view.Display.DEFAULT_DISPLAY),
-                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(android.view.DisplayInfo.class, info));
+        // Qualifiers rebuild the display mode from the window size. Restore the host output's mode first.
+        if (screen != null || refreshMhz != 0) updateDisplayMode();
+        if (screen != null) {
             Configuration c = new Configuration(RuntimeEnvironment.getApplication().getResources().getConfiguration());
             c.windowConfiguration.setMaxBounds(screen);
             c.seq = 0;  // unsequenced: always applied

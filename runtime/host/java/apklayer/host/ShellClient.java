@@ -29,6 +29,7 @@ final class ShellClient {
     private final ConcurrentLinkedQueue<String> clipboardIn = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<String> layoutIn = new ConcurrentLinkedQueue<>();
     private volatile boolean closed;
+    private volatile int refreshMhz;
     private HostVsync vsync;
     private int width, height;
 
@@ -185,6 +186,10 @@ final class ShellClient {
         return closed;
     }
 
+    int refreshMhz() {
+        return refreshMhz;
+    }
+
     private void readLoop() {
         ByteBuffer head = buf(8);
         try {
@@ -251,7 +256,8 @@ final class ShellClient {
                     // {15, flags}: bit0 active, bit1 minimized
                     input.add(new int[] {15, body.getInt(4)});
                 } else if (type == DISPLAY) {
-                    if (vsync != null) vsync.display(body.getInt(0));
+                    refreshMhz = body.getInt(0);
+                    if (vsync != null) vsync.display(refreshMhz);
                 } else if (type == VSYNC) {
                     if (vsync != null) vsync.vsync(body.getInt(4));
                 } else if (type == CLOSE) {

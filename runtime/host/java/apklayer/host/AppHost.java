@@ -13,7 +13,6 @@ import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.view.Choreographer;
 import android.view.Display;
 import android.view.MotionEvent;
 import android.view.View;
@@ -197,6 +196,7 @@ public final class AppHost implements Runnable {
                     configured = true;
                 }
             }
+            HostConfiguration.setRefreshRate(shell.refreshMhz());
         }
         StartTrace.mark("window configured by the shell");
         this.shell = shell;
@@ -240,12 +240,6 @@ public final class AppHost implements Runnable {
     private void loop(ShellClient shell) {
         looper = Shadow.extract(Looper.myLooper());
         loopShell = shell;
-        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
-            @Override
-            public void doFrame(long frameTimeNanos) {
-                Choreographer.getInstance().postFrameCallback(this);
-            }
-        });
 
         // a window process of another android:process (it gets the launch's options through the hub) runs only its own steps: -Dapklayer.script.<suffix>
         String process = HostProcessName.windowProcess();
@@ -314,6 +308,7 @@ public final class AppHost implements Runnable {
             return false;
         }
 
+        if (shell != null) HostConfiguration.setRefreshRate(shell.refreshMhz());
         for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
         for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) text.ime((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
         for (String tag; shell != null && (tag = shell.pollLayout()) != null; ) HostInputMethods.layout(tag);
