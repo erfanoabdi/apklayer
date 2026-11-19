@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-19: owner's runtime gets the Berberis CPU patches 0072-0076
+
+- Owner's request: `~/.local/share/apklayer/runtime/0.5.0/android-libs/libberberis_arm64.so` replaced (atomic rename) with the Mac build
+  sha256 d5770811... (repo patches + 0072-0076 + the diagnostic BERBERIS_HEAVY_DENY groups and BERBERIS_HEAVY_SKIP pass switches); the
+  previous one (8b943c0e..., Nov 17) is kept beside it as `libberberis_arm64.so.orig-20261119`. Not in it: 0077 (heavy-tier
+  RemoveRedundantPut fix for PGR's black home scene in two-gear mode), still unbuilt (Mac unreachable).
+- Refresh rate: the installed deb (gitb6c8950e) predates 77e5295b, so apps saw 60 Hz; deb 0.5.2+local20261119.git6839b335 built
+  (`~/apklayer-build-deb/out/refresh-6839b335`), host-classes.jar has setRefreshRate; the owner installs it.
+
 ## 2026-11-19: ASTC/ETC2 emulation back in the Vulkan HAL (Arknights: Endfield on NVIDIA)
 
 - Reapplied (owner, d4f58218; the reason for the 2026-11-18 revert is not known). `vulkan-textures-test` passes on the RTX 5060 Ti.
