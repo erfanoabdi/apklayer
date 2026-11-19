@@ -7,6 +7,8 @@
   image with gradients, edges, noise and alpha at 10 formats (4x4, 5x5, 6x6, 8x5, 8x8, 10x10, 12x12; UNORM and sRGB), 96x72 and 37x29
   (partial blocks); gfxstream's GPU decoder through the HAL against astcenc's own decoder: sRGB bit-exact, UNORM within 1 of 255 on
   every channel (91-97% exact; float rounding vs the shader's 16-bit truncation). ETC2 was not checked (no encoder here).
+  Also Unity-style uploads (4x4, 6x6, 8x8): a cube-compatible 6-layer image with 3 mip levels, each (layer, level) its own copy
+  region with padded rows (bufferRowLength), then a 2x2-block patch copied at a block offset: all within 1 of the reference.
 - `-Wno-implicit-fallthrough` for the AOSP build: gfxstream's getShaderGroup ends an exhaustive inner switch without a break.
 - Not done: the AOSP build of `vulkan.apklayer` and Endfield itself (the Mac build host is unreachable).
 
