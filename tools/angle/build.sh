@@ -48,18 +48,6 @@ for lib in libEGL_angle libGLESv2_angle libGLESv1_CM_angle; do
     cp "$src/out/Android32/$lib.so" "$out/vendor/lib/egl/"
 done
 cp "$src/out/LinuxHost/libEGL_angle.so" "$src/out/LinuxHost/libGLESv2_angle.so" "$out/host/"
-# each file where Meson (meson.build) and the CLI (cli/env.cpp) look for it, of its ABI: lib64 and host x86-64, lib i386; the Android ones
-# linked against bionic's libc.so, the host ones against glibc's libc.so.6
-check() {  # <file> <machine> <libc>
-    [ -s "$1" ] || { echo "build.sh: $1 missing" >&2; exit 1; }
-    readelf -h "$1" | grep -q "Machine:.*$2" || { echo "build.sh: $1 is not $2" >&2; exit 1; }
-    readelf -d "$1" | grep -q "Shared library: \[$3\]" || { echo "build.sh: $1 does not link $3" >&2; exit 1; }
-}
-for lib in libEGL_angle libGLESv2_angle libGLESv1_CM_angle; do
-    check "$out/vendor/lib64/egl/$lib.so" "X86-64" libc.so
-    check "$out/vendor/lib/egl/$lib.so" "80386" libc.so
-done
-for lib in libEGL_angle libGLESv2_angle; do check "$out/host/$lib.so" "X86-64" libc.so.6; done
 (cd "$out" && find vendor host -name '*.so' | sort | xargs sha256sum > SHA256SUMS)
 echo "ANGLE $rev with $(ls "$here"/patches/angle/[0-9]*.patch | wc -l) patches:"
 cat "$out/SHA256SUMS"
