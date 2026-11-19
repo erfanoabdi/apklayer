@@ -24,6 +24,10 @@ runtime version was already released from another prebuilts commit (`runtime.pre
 
 Everything glibc-linked, built from the tag with the prebuilts as build inputs (`debian/rules`: the Meson build and install of `docs/INSTALL.md` with `-Dandroid_runtime=false`):
 
+ANGLE (`runtime/angle`): `tools/release/build-deb.sh` on an x86_64 machine first compiles it with `tools/angle/build.sh` into the tree it packages (checkout reused
+in `APKLAYER_ANGLE_WORK`, default `~/.cache/apklayer/angle-build`; `APKLAYER_ANGLE_BUILD=0` skips it). GitHub's release legs and arm64 package the committed
+files, which the `angle` workflow (`.github/workflows/angle.yml`) builds and proposes as a pull request whenever the revision, patches or script change.
+
 | Path | What |
 |---|---|
 | `/usr/bin/apklayer` -> `/usr/lib/apklayer/cli/apklayer`, `/usr/bin/apklayer-manager` | the CLI, the manager |
