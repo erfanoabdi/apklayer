@@ -262,8 +262,19 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env
             snprintf(err, sizeof err, "%s: app namespace: %s", bridge, nb->getError() ? nb->getError() : "?");
         else if (!install_guest_environment(h))
             snprintf(err, sizeof err, "%s: guest environment authority unavailable", bridge);
-        else if (!nb->loadLibraryExt("/apex/com.android.art/lib64/libart.so", RTLD_NOW_BIONIC, system))  /* libart.so's maps line and file in the guest (libart_symbols.c; best effort) */
-            fprintf(stderr, "[runtime] guest libart.so did not load: %s\n", nb->getError() ? nb->getError() : "?");
+        else {
+            /* libart.so's maps line and file in the guest (libart_symbols.c; best effort). */
+            if (!nb->loadLibraryExt("/apex/com.android.art/lib64/libart.so", RTLD_NOW_BIONIC, system))
+                fprintf(stderr, "[runtime] guest libart.so did not load: %s\n", nb->getError() ? nb->getError() : "?");
+            /* Keep the public Vulkan proxy in the system namespace so absolute-path app probes
+             * reuse it with its private dependencies already resolved. */
+            const char *vulkan = getenv("APKLAYER_VULKAN_PRESENT");
+            if (vulkan && !strcmp(vulkan, "1") && getenv("APKLAYER_VULKAN_HOST") &&
+                !nb->loadLibraryExt("libvulkan.so", RTLD_NOW_BIONIC, system)) {
+                const char *error = nb->getError();
+                fprintf(stderr, "[runtime] guest libvulkan.so did not load: %s\n", error ? error : "?");
+            }
+        }
         free(pub);
     }
     if (*err) nb = NULL;
