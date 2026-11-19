@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-19: spare JVMs no longer leave their AOT configurations behind (164 GB in one instance)
+
+- `~/.local/state/apklayer/default/cds` held 1,961 `<hash>.aotconf.<pid>` files of ended processes, 80-300 MB each (163 GB, the PC's
+  disk at 93%): a spare records one (`-XX:AOTMode=record`, cli/spare.cpp), HotSpot writes it when the JVM ends, and only a first
+  launch's training (CdsDump.aotCreateAndExit) deletes it; spares that were stopped or replaced kept theirs.
+- cli/spare.cpp `removeEndedAotConfigurations`: whenever a spare starts, the cds directory's configurations of processes that no longer
+  run and are older than ten minutes (a training's create run may still read a young one) are deleted. Checked on fake files: the old
+  one of an ended pid goes; a young one, a running process's and the .aot/.jsa caches stay. The existing 163 GB is for the owner to
+  delete (command given), not done here.
+
 ## 2026-11-19: owner's runtime gets the Berberis CPU patches 0072-0076
 
 - Owner's request: `~/.local/share/apklayer/runtime/0.5.0/android-libs/libberberis_arm64.so` replaced (atomic rename) with the Mac build

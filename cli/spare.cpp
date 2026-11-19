@@ -6,7 +6,9 @@
 
 #include <cerrno>
 #include <csignal>
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fcntl.h>
 #include <poll.h>
 #include <set>
@@ -24,6 +26,25 @@ namespace {
 // answer). Holder -> launch: "pid <n>" (taken) or "stale <why>"
 // (another key: the holder ends, the launcher starts a spare of its own key), later "exit <status>". Holder -> spare JVM: target lines, with the fds.
 std::string socketPath(const Instance& inst) { return join(inst.stateDir, "app-spare.sock"); }
+
+// A spare records an AOT configuration (<cache>conf.<pid>, startAppSpare) that HotSpot writes when its JVM ends; only a first launch's training
+// turns it into the cache and deletes it (CdsDump.aotCreateAndExit). A spare that was stopped or replaced left its file behind, 80-300 MB each:
+// 164 GB in one instance's cds directory after two days (2026-11-19). Before a spare records, those of ended processes go; one younger than ten
+// minutes stays (the training's create run may still be reading it).
+void removeEndedAotConfigurations(const std::string& dir) {
+    time_t now = time(nullptr);
+    for (const std::string& name : listDir(dir)) {
+        size_t at = name.find(".aotconf.");
+        if (at == std::string::npos) continue;
+        char* end = nullptr;
+        long pid = strtol(name.c_str() + at + 9, &end, 10);
+        if (pid <= 0 || *end != '\0') continue;
+        if (kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM) continue;  // still running
+        std::string path = join(dir, name);
+        struct stat st;
+        if (stat(path.c_str(), &st) == 0 && now - st.st_mtime >= 600) unlink(path.c_str());
+    }
+}
 
 bool sendWithFds(int fd, const std::string& text, const int* fds, int count) {
     iovec iov{const_cast<char*>(text.data()), text.size()};
@@ -224,8 +245,12 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::s
     jvm.argv = argv;
     // JDK 25 without an AOT cache: this idle spare records, and trains headless (CdsDump.trainSpare); the key above has no part of it, so a launch can still take it
     for (const std::string& a : argv)
-        if (a.rfind("-Dapklayer.cdsdump=", 0) == 0 && a.size() > 4 && a.compare(a.size() - 4, 4, ".aot") == 0 && !exists(a.substr(19)))
-            jvm.argv.insert(jvm.argv.begin() + 1, {"-XX:AOTMode=record", "-XX:AOTConfiguration=" + a.substr(19) + "conf." + std::to_string(getpid())});
+        if (a.rfind("-Dapklayer.cdsdump=", 0) == 0 && a.size() > 4 && a.compare(a.size() - 4, 4, ".aot") == 0) {
+            std::string cache = a.substr(19);
+            removeEndedAotConfigurations(cache.substr(0, cache.rfind('/')));  // every app's leftovers, whether this one's cache exists or not
+            if (!exists(cache))
+                jvm.argv.insert(jvm.argv.begin() + 1, {"-XX:AOTMode=record", "-XX:AOTConfiguration=" + cache + "conf." + std::to_string(getpid())});
+        }
     jvm.argv.push_back("--spare");
     jvm.env = ne.env;
     jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);
