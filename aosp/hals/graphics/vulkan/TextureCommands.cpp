@@ -218,7 +218,7 @@ VKAPI_ATTR void VKAPI_CALL cmdPipelineBarrier(VkCommandBuffer buffer, VkPipeline
 // synchronization2 flags the version-1 barrier of the decoder can take: the low 32 bits are the same bits, the rest widened
 VkPipelineStageFlags stages1(VkPipelineStageFlags2 stages, VkPipelineStageFlags none) {
     if (!stages) return none;
-    return stages >> 32 ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : static_cast<VkPipelineStageFlags>(stages);
+    return stages >> 32 ? static_cast<VkPipelineStageFlags>(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) : static_cast<VkPipelineStageFlags>(stages);
 }
 VkAccessFlags access1(VkAccessFlags2 access) {
     return access >> 32 ? static_cast<VkAccessFlags>(access) | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT : static_cast<VkAccessFlags>(access);

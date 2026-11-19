@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "DeviceSelect.h"
+#include "TextureEmulation.h"
 #include "gralloc_handle.h"
 
 namespace {
@@ -393,11 +394,14 @@ VKAPI_ATTR VkResult VKAPI_CALL createImage(VkDevice device, const VkImageCreateI
     for (auto* link = reinterpret_cast<const VkBaseInStructure*>(info->pNext); link; link = link->pNext)
         if (link->sType == VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID)
             return createNativeBufferImage(device, info, allocator, reinterpret_cast<const VkNativeBufferANDROID*>(link), image);
+    VkResult emulated;
+    if (apklayer::vulkan::textures::createImage(device, info, image, &emulated)) return emulated;  // ASTC/ETC2 the host lacks
     auto fn = hostDevice<PFN_vkCreateImage>(device, "vkCreateImage");
     return fn ? fn(device, info, allocator, image) : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 VKAPI_ATTR void VKAPI_CALL destroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks* allocator) {
+    if (apklayer::vulkan::textures::destroyImage(device, image)) return;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     {
         std::lock_guard<std::mutex> lock(gLock);
@@ -449,6 +453,7 @@ VKAPI_ATTR void VKAPI_CALL destroyDevice(VkDevice device, const VkAllocationCall
         gNativeBuffer.erase(device);
     }
     if (destroySemaphore) for (VkSemaphore semaphore : semaphores) destroySemaphore(device, semaphore, allocator);
+    apklayer::vulkan::textures::destroyed(device);
     if (destroy) destroy(device, allocator);
 }
 
@@ -472,6 +477,7 @@ PFN_vkVoidFunction getDeviceProcAddr(VkDevice device, const char* name) {
     };
     for (auto& o : ours)
         if (!strcmp(name, o.name)) return o.needsNative && !native ? nullptr : o.function;
+    if (PFN_vkVoidFunction emulated = apklayer::vulkan::textures::deviceProc(device, name)) return emulated;
     auto fn = host<PFN_vkGetDeviceProcAddr>("vkGetDeviceProcAddr");
     return fn ? fn(device, name) : nullptr;
 }
@@ -496,7 +502,10 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
     VkDeviceCreateInfo host = *info;
     host.enabledExtensionCount = names.size();
     host.ppEnabledExtensionNames = names.data();
+    apklayer::vulkan::textures::DeviceRequest textures;
+    apklayer::vulkan::textures::prepare(physical, &host, &textures);  // emulated ASTC/ETC2 are not asked of the host
     VkResult result = fn(physical, &host, allocator, device);
+    apklayer::vulkan::textures::created(physical, result == VK_SUCCESS ? *device : VK_NULL_HANDLE, &textures, result);
     if (result == VK_SUCCESS && native) {
         // Resolve once while the device is being created. Extension functions may be driver-specific.
         NativeBufferDispatch dispatch = {
@@ -541,6 +550,7 @@ PFN_vkVoidFunction getInstanceProcAddr(VkInstance instance, const char* name) {
         return reinterpret_cast<PFN_vkVoidFunction>(enumerateDeviceExtensions);
     if (!strcmp(name, "vkCreateDevice")) return reinterpret_cast<PFN_vkVoidFunction>(createDevice);
     if (!strcmp(name, "vkGetDeviceProcAddr")) return reinterpret_cast<PFN_vkVoidFunction>(getDeviceProcAddr);
+    if (PFN_vkVoidFunction emulated = apklayer::vulkan::textures::instanceProc(name)) return emulated;  // ASTC/ETC2 reported
     auto fn = host<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     return fn ? fn(instance, name) : nullptr;
 }

@@ -76,8 +76,9 @@ Emulation emulation(VkPhysicalDevice physical) {
     if (features && !(off && !strcmp(off, "0"))) {
         VkPhysicalDeviceFeatures f = {};
         features(physical, &f);
-        e.astc = !f.textureCompressionASTC_LDR;
-        e.etc2 = !f.textureCompressionETC2;
+        bool force = off && !strcmp(off, "force");  // tests: emulated even where the device has the formats
+        e.astc = force || !f.textureCompressionASTC_LDR;
+        e.etc2 = force || !f.textureCompressionETC2;
         if (e.astc || e.etc2) GFXSTREAM_INFO("the device lacks%s%s: emulated", e.astc ? " ASTC" : "", e.etc2 ? " ETC2" : "");
     }
     return known[physical] = e;
@@ -277,9 +278,12 @@ PFN_vkVoidFunction instanceProc(const char* name) {
         {"vkGetPhysicalDeviceImageFormatProperties2", reinterpret_cast<PFN_vkVoidFunction>(getImageFormatProperties2)},
         {"vkGetPhysicalDeviceImageFormatProperties2KHR", reinterpret_cast<PFN_vkVoidFunction>(getImageFormatProperties2)},
     };
-    for (const auto& o : ours)
-        if (!strcmp(name, o.name)) return hostSymbol(o.name[strlen(o.name) - 1] == 'R' ? std::string(o.name, strlen(o.name) - 3).c_str() : o.name)
-                                       ? o.function : nullptr;
+    for (const auto& o : ours) {
+        if (strcmp(name, o.name)) continue;
+        std::string core(name);  // the wrappers call the core entry point (the instance is made at Vulkan 1.1 or later)
+        if (core.size() > 3 && !core.compare(core.size() - 3, 3, "KHR")) core.resize(core.size() - 3);
+        return hostSymbol(core.c_str()) ? o.function : nullptr;
+    }
     return nullptr;
 }
 
