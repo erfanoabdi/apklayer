@@ -1,0 +1,92 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: full fences as a locked xchg on the stack, not MFENCE
+
+Both translators lowered every full DMB/DSB and the store-load fence after STLR to MFENCE. MFENCE is dispatch-serializing on AMD Zen:
+14.5 ns per fence on a Ryzen 5 5600 against 1.8 ns for `mov tmp, (%rsp); xchg tmp, (%rsp)` (a microbenchmark, 2026-11-19). PGR's
+render thread was CPU-bound in menus (94% running, UnityMain waiting on it 86%), and half of its samples sat on 3-byte pairs in two
+heavy regions of libunity.so built from DMB/LDAR/LDAXR/STLXR loops (Unity's lock-free queues). The xchg is a locked RMW of this
+thread's own stack slot that writes back the value it read: it orders earlier stores before later loads like MFENCE for ordinary
+memory and leaves EFLAGS alone (lock or/add would clobber the flags the heavy register allocator may keep live). Lite: EmitFullFence
+(lite_translator_integer_ctrl.inc), used by DataMemoryBarrier and STLR; heavy: HeavyOptimizerFrontend::EmitFullFence, same uses.
+Module libberberis_arm64.
+
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+index 350c585..7d69eaa 100644
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -1846,7 +1846,7 @@ void HeavyOptimizerFrontend::LoadStoreExclusive(const Decoder::LoadStoreExclusiv
+         return;
+       }
+       StoreUntagged(lss, base, 0, data);
+-      GenRaw<x86_64::Mfence>();
++      EmitFullFence();  // apklayer patch (0075)
+       return;
+     }
+ 
+@@ -2613,8 +2613,15 @@ void HeavyOptimizerFrontend::ClearExclusive() {
+ }
+ 
+ void HeavyOptimizerFrontend::DataMemoryBarrier() {
+-  // Full DMB/DSB -> MFENCE: recover the StoreLoad ordering x86 TSO omits.
+-  GenRaw<x86_64::Mfence>();
++  // Full DMB/DSB: recover the StoreLoad ordering x86 TSO omits.
++  EmitFullFence();  // apklayer patch (0075)
++}
++
++// apklayer patch (0075): as lite's EmitFullFence: `mov tmp, (%rsp); xchg tmp, (%rsp)` instead of MFENCE (dispatch-serializing on AMD
++// Zen, 8x the cost); a locked RMW that writes back the value it read, no EFLAGS.
++void HeavyOptimizerFrontend::EmitFullFence() {
++  Register tmp = std::get<0>(Gen<x86_64::MovqRegOp>({.base = x86_64::kMachineRegRSP}));
++  GenRaw<x86_64::XchgqRegOp>(tmp, {.base = x86_64::kMachineRegRSP});
+ }
+ 
+ void HeavyOptimizerFrontend::RecordBail(BailReason reason) {
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.h b/cpu_emulation/heavy_optimizer/arm64/frontend.h
+index 66bbcf2..3979d5e 100644
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.h
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.h
+@@ -197,6 +197,7 @@ class HeavyOptimizerFrontend {
+   // DMB/DSB full barrier: lowers to MFENCE (x86 TSO lacks StoreLoad ordering).
+   // The store-only/load-only barrier variants are NOPed in the decoder.
+   void DataMemoryBarrier();
++  void EmitFullFence();  // apklayer patch (0075)
+ 
+   //
+   // Immediate-form data processing.
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
+index d8c667a..d5ada30 100644
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
+@@ -292,7 +292,7 @@
+         if (!success()) return;
+         if (args.rt >= 31) as_.Xorl(data, data);
+         StoreUntagged(lss, base, 0, data);
+-        as_.Mfence();
++        EmitFullFence();  // apklayer patch (0075)
+         break;
+       }
+ 
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+index 064f862..22292b5 100644
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+@@ -1307,7 +1307,18 @@
+   // DMB/DSB full barrier: x86 TSO lacks StoreLoad ordering, so a full guest
+   // barrier must lower to MFENCE (the store-only/load-only variants are NOPed
+   // upstream in the decoder).
+-  void DataMemoryBarrier() { as_.Mfence(); }
++  void DataMemoryBarrier() { EmitFullFence(); }
++
++  // apklayer patch (0075): the full fence as `mov tmp, (%rsp); xchg tmp, (%rsp)`: a locked RMW of this thread's own stack slot that
++  // writes back what it read, orders earlier stores before later loads like MFENCE for ordinary memory, and leaves EFLAGS alone.
++  // MFENCE is dispatch-serializing on AMD Zen: 14.5 ns against 1.8 ns on a Ryzen 5 5600, and the hottest code of PGR's render thread
++  // (Unity's lock-free queues: DMB and STLR in a loop).
++  void EmitFullFence() {
++    Register tmp = AllocTempReg();
++    if (!success()) return;
++    as_.Movq(tmp, {.base = Assembler::rsp});
++    as_.Xchgq(tmp, {.base = Assembler::rsp});
++  }
+ 
+   // IC IVAU, Xt — invalidate the translation cache for self-modified code. The
+   // address is only known at run time, so end the region here and let the
