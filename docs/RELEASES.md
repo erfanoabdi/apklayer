@@ -27,6 +27,8 @@ Everything glibc-linked, built from the tag with the prebuilts as build inputs (
 ANGLE (`runtime/angle`): `tools/release/build-deb.sh` on an x86_64 machine first compiles it with `tools/angle/build.sh` into the tree it packages (checkout reused
 in `APKLAYER_ANGLE_WORK`, default `~/.cache/apklayer/angle-build`; `APKLAYER_ANGLE_BUILD=0` skips it). GitHub's release legs and arm64 package the committed
 files, which the `angle` workflow (`.github/workflows/angle.yml`) builds and proposes as a pull request whenever the revision, patches or script change.
+`tools/release/build-local-deb.sh <out dir>` builds this checkout's HEAD that way in a clean copy and copies ANGLE libraries that changed back into the checkout's
+`runtime/angle` (also `APKLAYER_REPO=<checkout>` for `build-deb.sh` run in a copy).
 
 | Path | What |
 |---|---|
