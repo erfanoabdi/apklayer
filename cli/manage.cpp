@@ -343,7 +343,12 @@ int status(const Layout& l, const Instance& inst) {
     }
     printf("battery\t%s\n", clean(battery).c_str());
     // apps get location from GeoClue (bridge/portal/geoclue.py) when the system has it
-    printf("location\t%s\n", exists("/usr/share/dbus-1/system-services/org.freedesktop.GeoClue2.service") ? "GeoClue" : "off (no GeoClue)");
+    std::string location = exists("/usr/share/dbus-1/system-services/org.freedesktop.GeoClue2.service") ? "GeoClue" : "off (no GeoClue)";
+    if (exists("/usr/share/dbus-1/services/org.freedesktop.Geoclue.Master.service")) {  // Sailfish: GeoClue 1, switched by Settings > Location (location.conf)
+        std::string conf = readFile("/var/lib/location/location.conf").value_or("");
+        location = conf.find("\nenabled=true") != std::string::npos ? "GeoClue 1" : "GeoClue 1, but Location is off in Settings";
+    }
+    printf("location\t%s\n", location.c_str());
     // the hub's inotify watches for MediaStore (apklayer.host.HubMediaWatch): what is over its budget is scanned at the next hub start
     if (auto watch = readFile(join(inst.stateDir, "media-watch")); watch && stackRunning(inst)) printf("media watch\t%s\n", trim(*watch).c_str());
     return 0;
