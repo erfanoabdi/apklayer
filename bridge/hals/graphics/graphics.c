@@ -8,7 +8,20 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <gbm.h>
+#if __has_include(<linux/dma-buf.h>)
 #include <linux/dma-buf.h>
+#else
+/* Sailfish OS's kernel headers have no linux/dma-buf.h: the sync ioctl as the kernel's uapi defines it (Linux 4.6+) */
+#include <linux/types.h>
+struct dma_buf_sync { __u64 flags; };
+#define DMA_BUF_SYNC_READ (1 << 0)
+#define DMA_BUF_SYNC_WRITE (2 << 0)
+#define DMA_BUF_SYNC_RW (DMA_BUF_SYNC_READ | DMA_BUF_SYNC_WRITE)
+#define DMA_BUF_SYNC_START (0 << 2)
+#define DMA_BUF_SYNC_END (1 << 2)
+#define DMA_BUF_BASE 'b'
+#define DMA_BUF_IOCTL_SYNC _IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
+#endif
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>

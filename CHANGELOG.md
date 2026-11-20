@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-20: Sailfish build: graphics HAL without linux/dma-buf.h
+
+- The v0.5.3 release's `sailfish` job failed: `bridge/hals/graphics/graphics.c` includes `linux/dma-buf.h` (since caf13ede, 2026-11-18), which
+  the SailfishOS 5.0.0.62 target's kernel headers lack. Without the header it now defines the DMA_BUF_IOCTL_SYNC ABI itself (the kernel's
+  uapi values, Linux 4.6+). Both paths compile here; the Sailfish job itself is checked by the next workflow run.
+
 ## 0.5.3 (release notes; apklayer 0.5.3, Android runtime 0.5.1 from prebuilts ddcfd1a2)
 
 - Runtime (x86_64): libberberis_arm64 b59d5c1f (binary_translation 0072-0082: CPU patches, exact FRECPS/FRSQRTS/FMLS, the heavy tier's loop and
