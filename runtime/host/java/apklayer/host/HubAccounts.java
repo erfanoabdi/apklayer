@@ -178,7 +178,16 @@ final class HubAccounts extends IAccountManager.Stub {
                     return;
                 }
                 if (interactive) {
-                    reply(response, result);
+                    try {
+                        if (response != null) {
+                            response.onResult(result);
+                            return;
+                        }
+                    } catch (RemoteException | RuntimeException failure) {
+                        // The caller could not receive the sign-in intent.
+                    }
+                    finished = true;
+                    done();
                     return;
                 }
 
