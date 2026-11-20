@@ -3441,6 +3441,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - All owned test instances were checked clean on ARM and x86. The owner paused/cleared the goal and requested a handoff after current tasks finished. No additional build/test was launched afterward. Real Termux confirmation, Fennec painted content, remaining native launch APIs and broader runtime identity gaps remain open.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-20 - gsi_x86_64 libvulkan (anglefix2: no deferred swapchain memory over a host driver) + mapper.apklayer
+- Why: with APKLAYER_GLES_ANGLE=on ANGLE creates swapchains with VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT; the loader then calls vkCreateImage with a VkImageSwapchainCreateInfoKHR holding its own Swapchain handle, which the Mesa driver dereferences (NULL device, SIGSEGV on Intel and AMD). Patch `patches/aosp/frameworks/native/0010-...` applied to `~/los24/frameworks/native`. mapper.apklayer: the X-variant FP16 fix (c1cb2dc, already in vendor/apklayer) for x86_64.
+- Command: `flock -n ~/los24-build.lock bash -lc 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libvulkan mapper.apklayer'` (incremental).
 ### 2026-11-18 - gsi_x86_64 libapklayer_egl (cache GPU blit framebuffer status)
 - Sync `hals/graphics/egl/EglWindow.cpp` with `tools/sync-aosp.sh`. Replay `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl EglWindow.cpp` under `flock -n ~/los24-build.lock`.
 - Result: vendor/apklayer `4f47530` built the 118,272-byte x86_64 library with SHA-256 `c0dc8e9b4207e97f9c153cf1e4cb4a108b6347e041f693c690d36ed52024ba5a`. The 8-bit and FP16 smoke runs passed.
