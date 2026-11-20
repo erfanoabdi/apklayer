@@ -12,6 +12,7 @@ struct Layout {
     std::string build;        // Meson build directory: shell, converter, host HAL libraries
     std::string native;       // the staged native runtime (native-runtime.jar, aosp/, android-root/, bin/btload...)
     std::string androidLibs;  // the device build's libraries
+    std::string angle;        // ANGLE (angle/host, angle/vendor): <build> installed, else the install prefix's lib dir (meson install)
     std::string bionic;       // bionic_translation's build directory
     std::string deps;         // pinned Java dependencies
     std::string dataHome;     // ~/.local/share

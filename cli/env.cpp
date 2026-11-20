@@ -72,7 +72,7 @@ std::string hostGles(const Layout& layout, const Env& env) {
 // while Debian's Android runtime is unpacked per user; link the package-owned drivers into that runtime on demand.
 bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
     std::string system = join(layout.native, "android-root/system");
-    std::string packaged = join(layout.build, "angle/vendor");
+    std::string packaged = join(layout.angle, "angle/vendor");
     static const char* libs[] = {"libEGL_angle.so", "libGLESv1_CM_angle.so", "libGLESv2_angle.so"};
     bool packageHasAll = true, runtimeHasAll = true;
     for (const char* abi : {"lib64", "lib"})
@@ -421,7 +421,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     const bool angleVulkan = useAngle && !vulkan.empty();
     if (angleVulkan) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
-        std::string hostAngleEgl = getenvOr("APKLAYER_ANGLE_HOST_EGL", join(layout.build, "angle/host/libEGL_angle.so"));
+        std::string hostAngleEgl = getenvOr("APKLAYER_ANGLE_HOST_EGL", join(layout.angle, "angle/host/libEGL_angle.so"));
         if (!exists(hostAngleEgl)) die("ANGLE GLES buffer transfers need the Linux ANGLE library at " + hostAngleEgl);
         env["APKLAYER_ANGLE_HOST_EGL"] = hostAngleEgl;
         env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
