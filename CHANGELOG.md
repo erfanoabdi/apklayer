@@ -2,7 +2,11 @@
 
 ## 2026-11-21: Vulkan enumerated 0 devices on the Halium X23 (branch malivk)
 
-- Build log: sync aosp/tools to the Mac tree's vendor/apklayer, `m libapklayer_vktest` (gsi_arm64 userdebug), incremental, flock (necessary: the probe asserted the host route's swapchain rule, which a device driver breaks; one test file). Result below.
+- Build log: sync aosp/tools to the Mac tree's vendor/apklayer, `m libapklayer_vktest` (gsi_arm64 userdebug), incremental, flock (necessary: the probe asserted the host route's swapchain rule, which a device driver breaks; one test file). Succeeded (12:00): libapklayer_vktest.so arm64 d9f4124c (52,304 bytes), vendor/apklayer 24fcfab; not in prebuilts or the lock rows yet.
+- Cause: Android's libvulkan loads `vulkan.<ro.hardware.vulkan>.so` by bare name through libvndksupport (no sphal namespace); bionic_translation's search missed it, the
+  glibc fallback failed (LD_DEBUG=files: "file=vulkan.mali.so dynamically loaded by libdl_bio.so.0"), so no driver and 0 physical devices. Fix: cli/env.cpp maps the name
+  to /vendor/lib64/hw/ in device-graphics.cfg and sets no APKLAYER_VULKAN_HOST under graphics = device. X23 (own instance, click 0.5.4 + this CLI): hello.vulkan 6 cycles PASS
+  (Mali-G57 MC2, 1.1.177, android_swapchain=1), hello.hwbitmap pictures 20/20, APKLAYER_GLES_ANGLE=on: "ANGLE GLES is unavailable with graphics = device".
 
 ## 2026-11-20: black screenshots on virgl, FP16 opaque windows (branch gfxfix)
 
