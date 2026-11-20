@@ -252,18 +252,21 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
             int n = apklayer_gfx_shared_modifiers(gfx->gbm, fourcc, mods, 64);
             if (n > 0) bo = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, mods, (unsigned)n, flags);
         }
-        /* shortcut: AMD under ANGLE gets GPU-render buffers with an explicit LINEAR modifier. Without one GBM reports no modifier, the Vulkan HAL
-         * and ANGLE's EGL import read that as LINEAR with GBM's pitch (1024 B for 161 px, RADV: 768) and refuse the layout (hardware bitmaps, a resized
-         * window's buffers). Tiled, DCC-aware modifiers (modifiers.c) are the way to the full speed. */
-        if (!bo && gfx->angle && gfx->amd && (usage & APKLAYER_GFX_RENDER)) {
-            uint64_t linear = DRM_FORMAT_MOD_LINEAR;
-            bo = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, &linear, 1, flags & ~GBM_BO_USE_LINEAR);
-        }
         if (!bo) bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
         /* NVIDIA's GBM makes no LINEAR render target (EINVAL; its EGL renders to no pitch-linear image either): SurfaceFlinger's capture
          * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
         if (!bo && !gfx->angle && (flags & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))
             bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags & ~GBM_BO_USE_LINEAR);
+        /* shortcut: AMD under ANGLE, GPU-render buffers whose GBM pitch is not the LINEAR one are made LINEAR. GBM reports no modifier for them; the Vulkan
+         * HAL and ANGLE's EGL read that as LINEAR with GBM's pitch (1024 B for 161 px, RADV: 768) and RADV refuses the layout (hardware bitmaps; the
+         * buffers of a resized window: SurfaceFlinger's import failed). Equal pitches keep GBM's layout (always LINEAR made the 3072x1920 windows black).
+         * Tiled, DCC-aware modifiers (modifiers.c) are the way to the full speed. */
+        if (bo && gfx->angle && gfx->amd && (usage & APKLAYER_GFX_RENDER)) {
+            uint64_t linear = DRM_FORMAT_MOD_LINEAR;
+            struct gbm_bo *lin = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, &linear, 1, flags & ~GBM_BO_USE_LINEAR);
+            if (lin && gbm_bo_get_stride_for_plane(lin, 0) != gbm_bo_get_stride_for_plane(bo, 0)) { gbm_bo_destroy(bo); bo = lin; }
+            else if (lin) gbm_bo_destroy(lin);
+        }
         if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, flags, strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);
         out->num_planes = gbm_bo_get_plane_count(bo);
