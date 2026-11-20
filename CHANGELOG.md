@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-20: Vulkan HAL: VK_ANDROID_external_memory_android_hardware_buffer (hardware bitmaps under ANGLE)
+
+- New `aosp/hals/graphics/vulkan/HardwareBuffer.cpp`: vkGetAndroidHardwareBufferPropertiesANDROID from our gralloc handle (dma-buf size,
+  vkGetMemoryFdPropertiesKHR types, VkFormat and the host's features at the buffer's modifier), vkCreateImage of an AHardwareBuffer image
+  with the buffer's explicit DRM layout, vkAllocateMemory importing its dma-buf (dedicated), and the AHardwareBuffer handle type answered in
+  vkGetPhysicalDeviceImageFormatProperties2. Advertised where the host has external_memory_fd, dma_buf, image_drm_format_modifier and
+  queue_family_foreign, not on Venus. Shortcut: the image takes the layout of the last properties query of the same size on its thread (ANGLE
+  and Skia always query right before they create). No YUV external formats, no export.
+- Build log: sync aosp/hals/graphics/vulkan to the Mac tree, `m vulkan.apklayer` (gsi_x86_64 userdebug), incremental, flock; a new source
+  file, so Soong regenerates its graph: two builds (11:42, then with diagnostics), both succeeded; x86_64 output f07e7aeb (first build).
+- First run: ANGLE enabled the extension (log `VK_ANDROID_external_memory_android_hardware_buffer on device`), but the hardware bitmap's
+  buffer had modifier 0x300000000e08014: NVIDIA's GBM picks a compressed block-linear kind (c=1, kind 0x08) for a render+sample buffer.
+  NVIDIA's EGL lists 6 compressed and 6 uncompressed tiled modifiers for AB24, its Vulkan driver only the 6 uncompressed ones
+  (0x300000000606010-15), so no Vulkan image could use the buffer.
+- Allocator (bridge/hals/graphics/modifiers.c, new): tiled gralloc buffers on NVIDIA are made with gbm_bo_create_with_modifiers2 from EGL's
+  uncompressed block-linear modifiers (Linux ANGLE's list in an ANGLE instance, already Vulkan's); other GPUs list none and keep GBM's
+  choice. readback.c's EGL modifier query is shared (apklayer_gfx_egl_modifiers).
+- Checked on the RTX 5060 Ti, hello-hwbitmap (built on the Mac) in a throwaway instance with a symlinked runtime copy: before, ANGLE on:
+  `copy config null`, `Could not create EGL image`. After, ANGLE on and off: `copy config HARDWARE`, `readback ff0000ff ffff8000`,
+  `crops 50/50`, `pictures 20/20`, ImageDecoder/BitmapFactory/decodeStream/decodeResource HARDWARE (tests/vm/hwbitmap.py's checks).
+  Not checked: YouTube itself; `apklayer screenshot` of this app is black in native mode and fails in ANGLE mode with the stock runtime too
+  (not this change). Deleted afterwards: the instance, the app, `~/apklayer-hwbitmap-{rt,libs}` (3.4 MB), the Mac's build script and log.
+
 ## 2026-11-20: Play services' 8 MB reply and `:persistent` exits closed (owner); YouTube thumbnails traced to hardware bitmaps under ANGLE
 
 - The owner reports both Play services items fixed; PLAN items closed.

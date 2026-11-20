@@ -17,3 +17,9 @@ int apklayer_gfx_upload(struct gbm_device *gbm, int fd, uint32_t width, uint32_t
 bool apklayer_gfx_transfer_supported(uint32_t fourcc);
 /* Whether the GPU cannot use a LINEAR buffer of fourcc as GL_TEXTURE_2D, which SurfaceFlinger binds: external-only (NVIDIA) or not listed. */
 bool apklayer_gfx_linear_external_only(struct gbm_device *gbm, uint32_t fourcc);
+/* The EGL display's modifiers for fourcc and their external-only flags: the count (0 when none are listed), at most max. */
+int apklayer_gfx_egl_modifiers(struct gbm_device *gbm, uint32_t fourcc, uint64_t *mods, unsigned *ext, int max);
+/* The modifiers a shared (gralloc) buffer of fourcc may use where the GPU's default would not import everywhere: NVIDIA's compressed
+ * block-linear kinds, which its Vulkan driver does not list (an AHardwareBuffer that ANGLE imports through Vulkan). The count, 0 when
+ * GBM's own choice is fine (no NVIDIA block-linear modifiers listed); at most max (modifiers.c). */
+int apklayer_gfx_shared_modifiers(struct gbm_device *gbm, uint32_t fourcc, uint64_t *mods, int max);

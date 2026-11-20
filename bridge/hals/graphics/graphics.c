@@ -240,7 +240,13 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
     int r = 0;
     flags = alloc_flags(gfx, fourcc, usage, flags, &supported);
     if (supported) {
-        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
+        struct gbm_bo *bo = NULL;
+        if (!(flags & GBM_BO_USE_LINEAR)) {  /* a tiled buffer: a layout every API imports (NVIDIA: no compressed kinds, modifiers.c) */
+            uint64_t mods[64];
+            int n = apklayer_gfx_shared_modifiers(gfx->gbm, fourcc, mods, 64);
+            if (n > 0) bo = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, mods, (unsigned)n, flags);
+        }
+        if (!bo) bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
         /* NVIDIA's GBM makes no LINEAR render target (EINVAL; its EGL renders to no pitch-linear image either): SurfaceFlinger's capture
          * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
         if (!bo && !gfx->angle && (flags & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))

@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "DeviceSelect.h"
+#include "HardwareBuffer.h"
 #include "TextureEmulation.h"
 #include "gralloc_handle.h"
 
@@ -125,6 +126,17 @@ bool nativeBufferSupported(VkPhysicalDevice physical) {
     if (!apklayer::hostGetenv("APKLAYER_VULKAN_PRESENT")) return false;
     for (const char* name : kNativeBufferNeeds) if (!hasExtension(physical, name)) return false;
     return true;
+}
+
+// VK_ANDROID_external_memory_android_hardware_buffer (HardwareBuffer.cpp): the same dma-buf import, without presentation. Not on Venus
+// (it aborts on a dma-buf another process allocated, see createNativeBufferImage).
+const char* const kHardwareBufferNeeds[] = {
+    VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME, VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
+    VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,  // the app's ownership transfers to and from the buffer's other users
+};
+bool hardwareBufferSupported(VkPhysicalDevice physical) {
+    for (const char* name : kHardwareBufferNeeds) if (!hasExtension(physical, name)) return false;
+    return !isVenus(physical);
 }
 
 VkResult grallocUsage(VkImageUsageFlags imageUsage, int* usage0) {
@@ -415,6 +427,12 @@ VkResult enumerateDeviceExtensions(VkPhysicalDevice physical, const char* layer,
         native.specVersion = 7;  // gralloc usage 1 and 2; vkAcquireImageANDROID and vkQueueSignalReleaseImageANDROID
         properties.push_back(native);
     }
+    if (hardwareBufferSupported(physical)) {
+        VkExtensionProperties ahb = {};
+        strcpy(ahb.extensionName, apklayer::vulkan::hardware_buffer::kName);
+        ahb.specVersion = 5;
+        properties.push_back(ahb);
+    }
     return copyExtensions(properties, count, out);
 }
 
@@ -423,6 +441,8 @@ VKAPI_ATTR VkResult VKAPI_CALL createImage(VkDevice device, const VkImageCreateI
     for (auto* link = reinterpret_cast<const VkBaseInStructure*>(info->pNext); link; link = link->pNext)
         if (link->sType == VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID)
             return createNativeBufferImage(device, info, allocator, reinterpret_cast<const VkNativeBufferANDROID*>(link), image);
+    VkResult imported;
+    if (apklayer::vulkan::hardware_buffer::createImage(device, info, allocator, image, &imported)) return imported;  // AHardwareBuffer memory
     VkResult emulated;
     if (apklayer::vulkan::textures::createImage(device, info, image, &emulated)) return emulated;  // ASTC/ETC2 the host lacks
     auto fn = hostDevice<PFN_vkCreateImage>(device, "vkCreateImage");
@@ -483,6 +503,7 @@ VKAPI_ATTR void VKAPI_CALL destroyDevice(VkDevice device, const VkAllocationCall
     }
     if (destroySemaphore) for (VkSemaphore semaphore : semaphores) destroySemaphore(device, semaphore, allocator);
     apklayer::vulkan::textures::destroyed(device);
+    apklayer::vulkan::hardware_buffer::destroyed(device);
     if (destroy) destroy(device, allocator);
 }
 
@@ -506,6 +527,7 @@ PFN_vkVoidFunction getDeviceProcAddr(VkDevice device, const char* name) {
     };
     for (auto& o : ours)
         if (!strcmp(name, o.name)) return o.needsNative && !native ? nullptr : o.function;
+    if (PFN_vkVoidFunction imported = apklayer::vulkan::hardware_buffer::deviceProc(device, name)) return imported;
     if (PFN_vkVoidFunction emulated = apklayer::vulkan::textures::deviceProc(device, name)) return emulated;
     auto fn = host<PFN_vkGetDeviceProcAddr>("vkGetDeviceProcAddr");
     return fn ? fn(device, name) : nullptr;
@@ -516,18 +538,19 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
     auto fn = host<PFN_vkCreateDevice>("vkCreateDevice");
     if (!fn) return VK_ERROR_INCOMPATIBLE_DRIVER;
     std::vector<const char*> names;
-    bool native = false;
+    bool native = false, hardwareBuffer = false;
     for (uint32_t i = 0; i < info->enabledExtensionCount; i++) {
         if (!strcmp(info->ppEnabledExtensionNames[i], VK_ANDROID_NATIVE_BUFFER_EXTENSION_NAME)) native = true;
+        else if (!strcmp(info->ppEnabledExtensionNames[i], apklayer::vulkan::hardware_buffer::kName)) hardwareBuffer = true;
         else names.push_back(info->ppEnabledExtensionNames[i]);
     }
-    if (native) {
-        auto add = [&](const char* name) {
-            if (std::none_of(names.begin(), names.end(), [&](const char* n) { return !strcmp(n, name); })) names.push_back(name);
-        };
-        for (const char* name : kNativeBufferNeeds) add(name);
+    auto add = [&](const char* name) {
+        if (std::none_of(names.begin(), names.end(), [&](const char* n) { return !strcmp(n, name); })) names.push_back(name);
+    };
+    if (native) for (const char* name : kNativeBufferNeeds) add(name);
+    if (hardwareBuffer) for (const char* name : kHardwareBufferNeeds) add(name);
+    if (native || hardwareBuffer)
         for (const char* name : kNativeBufferOptional) if (hasExtension(physical, name)) add(name);
-    }
     VkDeviceCreateInfo host = *info;
     host.enabledExtensionCount = names.size();
     host.ppEnabledExtensionNames = names.data();
@@ -535,6 +558,7 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
     apklayer::vulkan::textures::prepare(physical, &host, &textures);  // emulated ASTC/ETC2 are not asked of the host
     VkResult result = fn(physical, &host, allocator, device);
     apklayer::vulkan::textures::created(physical, result == VK_SUCCESS ? *device : VK_NULL_HANDLE, &textures, result);
+    if (result == VK_SUCCESS && hardwareBuffer) apklayer::vulkan::hardware_buffer::created(physical, *device);
     if (result == VK_SUCCESS && native) {
         // Resolve once while the device is being created. Extension functions may be driver-specific.
         NativeBufferDispatch dispatch = {
@@ -580,8 +604,12 @@ PFN_vkVoidFunction getInstanceProcAddr(VkInstance instance, const char* name) {
         return reinterpret_cast<PFN_vkVoidFunction>(enumerateDeviceExtensions);
     if (!strcmp(name, "vkCreateDevice")) return reinterpret_cast<PFN_vkVoidFunction>(createDevice);
     if (!strcmp(name, "vkGetDeviceProcAddr")) return reinterpret_cast<PFN_vkVoidFunction>(getDeviceProcAddr);
-    if (PFN_vkVoidFunction emulated = apklayer::vulkan::textures::instanceProc(name)) return emulated;  // ASTC/ETC2 reported
     auto fn = host<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+    PFN_vkVoidFunction emulated = apklayer::vulkan::textures::instanceProc(name);  // ASTC/ETC2 reported
+    // the AHardwareBuffer handle type in image-format queries, in front of the emulation's (or the host's) entry point
+    if (PFN_vkVoidFunction imported = apklayer::vulkan::hardware_buffer::instanceProc(name, emulated ? emulated : fn ? fn(instance, name) : nullptr))
+        return imported;
+    if (emulated) return emulated;
     return fn ? fn(instance, name) : nullptr;
 }
 

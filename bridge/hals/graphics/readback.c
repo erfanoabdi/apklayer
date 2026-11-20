@@ -586,6 +586,24 @@ int apklayer_gfx_upload(struct gbm_device *gbm, int fd, uint32_t width, uint32_t
     return r;
 }
 
+/* The EGL display's modifiers for fourcc (eglQueryDmaBufModifiersEXT, ANGLE's in an ANGLE instance): their count (0: none listed or no
+ * query), at most max into mods and ext (external-only flags). */
+int apklayer_gfx_egl_modifiers(struct gbm_device *gbm, uint32_t fourcc, uint64_t *mods, unsigned *ext, int max)
+{
+    unsigned (*query)(EGLp, int, int, uint64_t *, unsigned *, int *) = NULL;
+    EGLp dpy = NULL;
+    int major, minor, n = 0;
+    if (load()) {
+        dpy = gl.getPlatformDisplay(EGL_PLATFORM_GBM_KHR, gbm, NULL);
+        query = (unsigned (*)(EGLp, int, int, uint64_t *, unsigned *, int *))gl.getProcAddress("eglQueryDmaBufModifiersEXT");
+    }
+    if (!dpy || !query || !gl.initialize(dpy, &major, &minor) || !query(dpy, (int)fourcc, 0, NULL, NULL, &n) || n <= 0) return 0;
+    if (n > max) n = max;
+    // ANGLE's Vulkan modifier query can return the list without filling external_only: ordinary texture imports unless it says otherwise
+    for (int i = 0; i < n; i++) ext[i] = 0;
+    return query(dpy, (int)fourcc, n, mods, ext, &n) ? n : 0;
+}
+
 /* Whether a LINEAR buffer of fourcc is unusable as GL_TEXTURE_2D: listed only as external-only (NVIDIA), or not listed at all by a driver
  * that lists modifiers for the format. A driver that lists none answers false (Mesa without modifiers imports LINEAR as it always did). */
 bool apklayer_gfx_linear_external_only(struct gbm_device *gbm, uint32_t fourcc)
@@ -595,24 +613,11 @@ bool apklayer_gfx_linear_external_only(struct gbm_device *gbm, uint32_t fourcc)
     static int nseen;
     pthread_mutex_lock(&lock);
     for (int i = 0; i < nseen; i++) if (seen[i].fourcc == fourcc) { bool a = seen[i].answer; pthread_mutex_unlock(&lock); return a; }
-    bool answer = false;
-    unsigned (*query)(EGLp, int, int, uint64_t *, unsigned *, int *) = NULL;
-    EGLp dpy = NULL;
-    int major, minor, n = 0;
-    if (load()) {
-        dpy = gl.getPlatformDisplay(EGL_PLATFORM_GBM_KHR, gbm, NULL);
-        query = (unsigned (*)(EGLp, int, int, uint64_t *, unsigned *, int *))gl.getProcAddress("eglQueryDmaBufModifiersEXT");
-    }
-    if (dpy && query && gl.initialize(dpy, &major, &minor) && query(dpy, (int)fourcc, 0, NULL, NULL, &n) && n > 0 && n <= 256) {
-        uint64_t mods[256];
-        // ANGLE's Vulkan modifier query can return the list without filling external_only.
-        // Start with the same ordinary texture import assumption as the no-query path.
-        unsigned ext[256] = {0};
-        if (query(dpy, (int)fourcc, n, mods, ext, &n)) {
-            answer = true;
-            for (int i = 0; i < n; i++) if (mods[i] == DRM_FORMAT_MOD_LINEAR && !ext[i]) answer = false;
-        }
-    }
+    uint64_t mods[256];
+    unsigned ext[256];
+    int n = apklayer_gfx_egl_modifiers(gbm, fourcc, mods, ext, 256);
+    bool answer = n > 0;
+    for (int i = 0; i < n; i++) if (mods[i] == DRM_FORMAT_MOD_LINEAR && !ext[i]) answer = false;
     if (answer) fprintf(stderr, "apklayer-gfx: the GPU samples LINEAR fourcc 0x%x only as an external texture: CPU-drawn buffers it composes are tiled\n", fourcc);
     if (nseen < (int)(sizeof seen / sizeof *seen)) seen[nseen].fourcc = fourcc, seen[nseen].answer = answer, nseen++;
     pthread_mutex_unlock(&lock);

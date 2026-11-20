@@ -3,6 +3,7 @@ cc_library_shared {
     name: "vulkan.apklayer",
     srcs: [
         "Driver.cpp",
+        "HardwareBuffer.cpp",  // VK_ANDROID_external_memory_android_hardware_buffer (ANGLE's EGL_NATIVE_BUFFER_ANDROID images)
         // ASTC/ETC2 the host device lacks: gfxstream's emulation (gfxstream/, vendored unmodified, docs/THIRD_PARTY.md)
         "TextureEmulation.cpp",
         "TextureCommands.cpp",
@@ -11,7 +12,7 @@ cc_library_shared {
     ],
     local_include_dirs: ["gfxstream"],
     header_libs: ["hwvulkan_headers", "vulkan_headers", "libapklayer_gralloc_common_headers"],
-    shared_libs: ["libcutils", "liblog", "libdl"],
+    shared_libs: ["libcutils", "liblog", "libdl", "libnativewindow"],
     compile_multilib: "64",  // not yet 32-bit: arm32 Vulkan entry points are aapcs-vfp (VKAPI_ATTR) while the 32-bit process's host side is soft-float
     // -Wno-implicit-fallthrough: gfxstream's getShaderGroup (vendored unmodified) ends an exhaustive inner switch without a break
     cflags: ["-Wall", "-Werror", "-Wno-missing-field-initializers", "-Wno-unused-parameter", "-Wno-implicit-fallthrough"],
