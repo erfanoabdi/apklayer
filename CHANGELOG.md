@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-21: prebuilts update (branch prebupd): AOSP-side libraries since 77dd42af
+
+- Build log: `m libvulkan libapklayer_vulkan mapper.apklayer libapklayer_allocator libapklayer_vktest` (gsi_arm64 userdebug, then the x86_64 outputs checked), incremental, flock, vendor/apklayer 24fcfab (= main's aosp/), frameworks/native with patch 0010 applied once (necessary: stage the changed libraries of gralloc_format.h, 0010 and vktest.cpp into prebuilts).
+
 ## 2026-11-21: Vulkan enumerated 0 devices on the Halium X23 (branch malivk)
 
 - Build log: sync aosp/tools to the Mac tree's vendor/apklayer, `m libapklayer_vktest` (gsi_arm64 userdebug), incremental, flock (necessary: the probe asserted the host route's swapchain rule, which a device driver breaks; one test file). Succeeded (12:00): libapklayer_vktest.so arm64 d9f4124c (52,304 bytes), vendor/apklayer 24fcfab; not in prebuilts or the lock rows yet.
