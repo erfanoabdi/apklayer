@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-20: ANGLE screenshots on NVIDIA fixed (owner)
+
+- The owner reports SurfaceFlinger captures work in ANGLE mode on NVIDIA (the LINEAR capture buffer `EINVAL` of 2026-11-18); PLAN item closed.
+
 ## 2026-11-20: graphics libraries of 2026-11-18 into the prebuilts (both CPUs), arm64 Vulkan HAL with the emulation
 
 - The runtime's libapklayer_egl, libapklayer_vdisplay and mapper.apklayer (both CPUs) predate the 2026-11-18 commits (EGL DMA-BUF presentation,
