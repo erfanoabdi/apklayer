@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-20: Play services' 8 MB reply and `:persistent` exits closed (owner); YouTube thumbnails traced to hardware bitmaps under ANGLE
+
+- The owner reports both Play services items fixed; PLAN items closed.
+- YouTube 21.45 plays videos but shows no thumbnails (owner). Its last log (2026-11-19, ANGLE on Vulkan, RTX 5060 Ti) has 75 pairs of
+  `HWUI: Could not create EGL image, err =EGL_BAD_PARAMETER` / `Failed to allocate a hardware bitmap`: ANGLE imports an AHardwareBuffer through
+  `VK_ANDROID_external_memory_android_hardware_buffer`, which vulkan.apklayer does not offer. ANGLE is the NVIDIA default, so every app's hardware
+  bitmaps fail there. PLAN item updated.
+
 ## 2026-11-20: PGR chapter-menu slowdown and the ANGLE game retests closed (owner)
 
 - The owner reports PGR's Main story chapter menu no longer slows down, and the ANGLE retests on runtime 0.5.2 (PGR, AIDA64, Azur Lane,
