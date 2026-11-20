@@ -54,7 +54,7 @@ inline uint32_t toGfxUsage(uint64_t usage) {
 // Bytes per pixel of the first plane (RGB formats), used for the stride in pixels that gralloc reports.
 inline uint32_t bytesPerPixel(uint32_t fourcc) {
     switch (fourcc) {
-        case DRM_FORMAT_ABGR16161616F: return 8;
+        case DRM_FORMAT_ABGR16161616F: case DRM_FORMAT_XBGR16161616F: return 8;  // the X variant too: an FP16 EGL window's fourcc
         // the X and 10-bit variants: EGL window buffers (EglAttach) carry the host surface's own fourcc (Mesa's XRGB8888, AR30/XR30)
         case DRM_FORMAT_ABGR8888: case DRM_FORMAT_XBGR8888: case DRM_FORMAT_ARGB8888: case DRM_FORMAT_XRGB8888:
         case DRM_FORMAT_ABGR2101010: case DRM_FORMAT_XBGR2101010: case DRM_FORMAT_ARGB2101010: case DRM_FORMAT_XRGB2101010: return 4;

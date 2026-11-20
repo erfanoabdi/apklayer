@@ -37,6 +37,7 @@ struct apklayer_gfx {
     struct gbm_device *gbm;
     bool other_gpu;  /* not the compositor's GPU: window buffers must be importable there */
     bool angle;      /* ANGLE handles GPU transfers when a CPU buffer needs staging */
+    bool shadowed;   /* virtio-gpu: a dma-buf's mmap is the guest's shadow copy, not what the host GPU drew (GBM maps through a transfer) */
 };
 
 static int open_node(const char *path)
@@ -90,6 +91,9 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
     gfx->fd = fd;
     const char *angle = getenv("APKLAYER_ANGLE_ACTIVE");
     gfx->angle = angle && *angle;
+    drmVersionPtr version = drmGetVersion(fd);
+    gfx->shadowed = version && version->name && !strcmp(version->name, "virtio_gpu");
+    drmFreeVersion(version);
     gfx->gbm = gbm_create_device(fd);
     if (gfx->gbm && !allocates(gfx->gbm)) {
         fprintf(stderr, "apklayer-gfx: %s allocates no buffers (no GPU driver): choose another GPU (apklayer gpus)\n", render_node ? render_node : "the render node");
@@ -413,7 +417,7 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
     if (!m) { errno = ENOMEM; return NULL; }
     uint8_t *addr = NULL;
     size_t offset = buf->fourcc == 0 ? 0 : buf->offset[plane];
-    if (buf->fourcc != 0 && !buf->packed && buf->num_planes == 1 && buf->modifier == DRM_FORMAT_MOD_LINEAR) {
+    if (buf->fourcc != 0 && !buf->packed && buf->num_planes == 1 && buf->modifier == DRM_FORMAT_MOD_LINEAR && !gfx->shadowed) {
         uint64_t bytes = (uint64_t)buf->stride[0] * buf->alloc_height;
         if (bytes && bytes <= SIZE_MAX - offset &&
             (addr = map_linear_dma_buf(buf->fd[0], offset + (size_t)bytes, write, m))) {
@@ -441,7 +445,7 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             fd_data.stride = buf->stride[plane];
             fd_data.format = plane_format(sp, plane);
             uint64_t bytes = (uint64_t)fd_data.stride * fd_data.height;
-            if (buf->modifier == DRM_FORMAT_MOD_LINEAR && bytes && bytes <= SIZE_MAX - offset &&
+            if (buf->modifier == DRM_FORMAT_MOD_LINEAR && !gfx->shadowed && bytes && bytes <= SIZE_MAX - offset &&
                 (addr = map_linear_dma_buf(fd_data.fd, offset + (size_t)bytes, write, m))) {
                 *stride = fd_data.stride;
                 *mapping = m;
