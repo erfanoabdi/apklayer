@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-20: heavy tier skips the loop and local passes by default (PGR home scene clean in two-gear mode)
+
+- binary_translation 0081: RemoveLoopGuestContextAccesses and RemoveLocalGuestContextAccesses stay off for the ARM64 guest unless
+  BERBERIS_HEAVY_SKIP is set. 0077/0078 closed real byte-range holes in them but the home scene stayed black or noisy with either on;
+  with both off it is clean (owner checked, private runtime `~/apklayer-pgr-cpu/runtime`, no switches). The rest of the heavy tier stays on.
+- binary_translation 0082 (diagnostic): loop-region fuzz tests (500k integer cases, 0 diverged; SIMD only NaN-sign diffs, which point at
+  interpreter rounding, not heavy) and BERBERIS_HEAVY_DUMP to capture the game's regions for a replay test (not written yet).
+- Build log: `m libberberis_arm64 berberis_arm64_host_tests` (gsi_arm64 userdebug, Mac VM), incremental.
+
 ## 2026-11-19: spare JVMs no longer leave their AOT configurations behind (164 GB in one instance)
 
 - `~/.local/state/apklayer/default/cds` held 1,961 `<hash>.aotconf.<pid>` files of ended processes, 80-300 MB each (163 GB, the PC's

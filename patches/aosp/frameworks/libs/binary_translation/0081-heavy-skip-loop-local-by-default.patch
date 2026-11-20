@@ -1,0 +1,30 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: ARM64 heavy tier skips the loop and local guest-context passes by default
+
+PGR's home scene in two-gear mode is black or noisy with RemoveLoopGuestContextAccesses or RemoveLocalGuestContextAccesses on,
+clean with both off (after 0077/0078, 2026-11-19/20; checked by the owner). No generated test reproduces it yet, so both passes
+are off by default for the ARM64 guest; the other heavy passes stay on. BERBERIS_HEAVY_SKIP set (empty included) replaces the
+default. Module libberberis_backend_x86_64 (libberberis_arm64.so).
+
+diff --git a/cpu_emulation/backend/x86_64/code_gen.cc b/cpu_emulation/backend/x86_64/code_gen.cc
+index 8cc5d43..0604cbc 100644
+--- a/cpu_emulation/backend/x86_64/code_gen.cc
++++ b/cpu_emulation/backend/x86_64/code_gen.cc
+@@ -55,7 +55,16 @@ namespace {
+ // (any subset, comma separated) skips those heavy optimization passes one by one (disable-heavy-opts skips them all): to find the
+ // pass that breaks PGR's home scene in two-gear mode (clean with disable-heavy-opts, 2026-11-19).
+ bool HeavySkip(const char* name) {
+-  static const char* env = berberis::HostGetenv("BERBERIS_HEAVY_SKIP");
++  // apklayer patch (0081): the ARM64 guest skips the loop and local guest-context passes by default. Together they still corrupt PGR's home
++  // scene in two-gear mode after 0077/0078 (clean with both off, noise with either on, 2026-11-19), and no generated test reproduces it yet;
++  // they only keep guest registers in host registers longer. BERBERIS_HEAVY_SKIP set (empty included) replaces the default list.
++  static const char* env = [] {
++    const char* set = berberis::HostGetenv("BERBERIS_HEAVY_SKIP");
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++    if (set == nullptr) return "loop,local";
++#endif
++    return set;
++  }();
+   if (env == nullptr) return false;
+   size_t len = strlen(name);
+   for (const char* p = env; *p;) {

@@ -1,0 +1,223 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: heavy loop-region fuzz tests and BERBERIS_HEAVY_DUMP
+
+Diagnostics for the pass that 0081 turns off: LoopRegions / LoopRegionsSimd compare heavy against the interpreter on generated
+backward-branch loops (x9 counter, bases x1-x3; 500k integer cases, 0 diverged; SIMD only NaN-sign diffs), interpreter guard
+raised to 4096 steps. BERBERIS_HEAVY_DUMP=<file> appends each heavy region ("pc count words...") after code generation, to
+replay a game's regions in a test. Modules berberis_heavy_optimizer tests, libberberis_heavy_optimizer_arm64.
+
+diff --git a/cpu_emulation/heavy_optimizer/arm64/heavy_memory_differential_fuzz_tests.cc b/cpu_emulation/heavy_optimizer/arm64/heavy_memory_differential_fuzz_tests.cc
+index ad71ea7..9ad066d 100644
+--- a/cpu_emulation/heavy_optimizer/arm64/heavy_memory_differential_fuzz_tests.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/heavy_memory_differential_fuzz_tests.cc
+@@ -200,7 +200,7 @@ class Arm64HeavyMemoryDifferentialFuzz : public ::testing::Test {
+     ApplyInit(in);
+     state_.cpu.insn_addr = start;
+     int guard = 0;
+-    while (state_.cpu.insn_addr >= start && state_.cpu.insn_addr < stop && guard++ < 512) {
++    while (state_.cpu.insn_addr >= start && state_.cpu.insn_addr < stop && guard++ < 4096) {
+       InterpretInsn(&state_);
+     }
+     FullState itp = Capture();
+@@ -787,6 +787,148 @@ TEST_F(Arm64HeavyMemoryDifferentialFuzz, MixedMemoryRegions) {
+   EXPECT_GT(compared, 0);
+ }
+ 
++
++// apklayer patch (0081): loops. A region of setup, a body of random loads, stores (W/X/B/H, LDRSW, post-index, LDP/STP),
++// 32- and 64-bit arithmetic and a forward branch over one instruction, then SUBS x9 and B.NE back: the heavy tier keeps it
++// as an in-region loop, so the loop and local guest-context passes run on it together (PGR's home scene was noise in
++// two-gear mode, clean with both passes off). Bases x1-x3 point into the window, x9 counts down from 1-5.
++TEST_F(Arm64HeavyMemoryDifferentialFuzz, LoopRegions) {
++  Seed(0x100BE61005ULL);
++  const int kIters = 20000 * (getenv("BERBERIS_DIFFERENTIAL_FUZZ_EXHAUSTIVE") ? 25 : 1);
++  static const uint32_t kDst[] = {4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15};
++  auto dst = [&]() { return kDst[Rnd() % (sizeof(kDst) / sizeof(kDst[0]))]; };
++  auto src = [&]() { uint32_t r = Rnd() % 13; return r < 11 ? kDst[r] : (r == 11 ? 9u : 31u); };
++  auto base = [&]() { return 1 + static_cast<uint32_t>(Rnd() % 3); };
++  int compared = 0, diverged = 0;
++  for (int iter = 0; iter < kIters; iter++) {
++    uint32_t code[40];
++    int n = 0;
++    code[n++] = 0xD2800000u | ((1 + Rnd() % 5) << 5) | 9;  // movz x9, #1-5
++    const int loop_start = n;
++    const int body = 2 + static_cast<int>(Rnd() % 10);
++    for (int k = 0; k < body; k++) {
++      uint32_t rd = dst(), rn = src(), rm = src(), b = base();
++      bool w = Rnd() & 1;
++      switch (Rnd() % 16) {
++        case 0: code[n++] = 0xF9400000u | ((Rnd() % 16) << 10) | (b << 5) | rd; break;            // ldr x, [b, #8k]
++        case 1: code[n++] = 0xF9000000u | ((Rnd() % 16) << 10) | (b << 5) | rn; break;            // str x, [b, #8k]
++        case 2: code[n++] = 0xB9400000u | ((Rnd() % 16) << 10) | (b << 5) | rd; break;            // ldr w
++        case 3: code[n++] = 0xB9000000u | ((Rnd() % 16) << 10) | (b << 5) | rn; break;            // str w
++        case 4: code[n++] = (Rnd() & 1 ? 0x39400000u : 0x79400000u) | ((Rnd() % 32) << 10) | (b << 5) | rd; break;  // ldrb/ldrh
++        case 5: code[n++] = (Rnd() & 1 ? 0x39000000u : 0x79000000u) | ((Rnd() % 32) << 10) | (b << 5) | rn; break;  // strb/strh
++        case 6: code[n++] = 0xB9800000u | ((Rnd() % 16) << 10) | (b << 5) | rd; break;            // ldrsw
++        case 7: {  // post-index ldr/str x, +-8/16
++          int32_t imm = (Rnd() & 1 ? 8 : 16) * (Rnd() & 1 ? 1 : -1);
++          bool load = Rnd() & 1;  // a load writes rd (never x9, the counter), a store reads rn
++          code[n++] = (load ? 0xF8400400u : 0xF8000400u) | ((static_cast<uint32_t>(imm) & 0x1ff) << 12) | (b << 5) | (load ? rd : rn);
++          break;
++        }
++        case 8: {  // ldp/stp x
++          uint32_t rt2 = dst();
++          if (rt2 == rd) rt2 = rd == 4 ? 5 : 4;
++          code[n++] = (Rnd() & 1 ? 0xA9400000u : 0xA9000000u) | ((Rnd() % 8) << 15) | (rt2 << 10) | (b << 5) | rd;
++          break;
++        }
++        case 9: code[n++] = (w ? 0x11000000u : 0x91000000u) | ((Rnd() % 64) << 10) | (rn << 5) | rd; break;  // add imm
++        case 10: code[n++] = (w ? 0x0B000000u : 0x8B000000u) | (rm << 16) | (rn << 5) | rd; break;        // add reg
++        case 11: code[n++] = (w ? 0x4A000000u : 0xCA000000u) | (rm << 16) | (rn << 5) | rd; break;        // eor
++        case 12: code[n++] = (w ? 0x52800000u : 0xF2800000u) | ((Rnd() & 0xffff) << 5) | rd; break;       // movz w / movk x
++        case 13: code[n++] = (w ? 0x1B000000u : 0x9B000000u) | (rm << 16) | (src() << 10) | (rn << 5) | rd; break;  // madd
++        case 14: code[n++] = 0x9A800000u | (rm << 16) | ((Rnd() % 14) << 12) | (rn << 5) | rd; break;    // csel x
++        default:  // cbz/cbnz w, over the next instruction (a second block in the body)
++          code[n++] = (Rnd() & 1 ? 0x34000000u : 0x35000000u) | (2u << 5) | rn;
++          code[n++] = (w ? 0x51000000u : 0xD1000000u) | ((Rnd() % 64) << 10) | (rn << 5) | rd;  // sub imm
++          break;
++      }
++    }
++    code[n++] = 0xF1000529u;  // subs x9, x9, #1
++    code[n] = 0x54000001u | ((static_cast<uint32_t>(loop_start - n) & 0x7ffff) << 5);  // b.ne loop_start
++    n++;
++    SeedScratch();
++    InitState in = RandomInit();
++    for (uint32_t b = 1; b <= 3; b++) in.x[b] = ScratchBase() + kWindowBase - 256 + 128 * b;
++    std::string desc;
++    Result r = RunDifferential(code, n, in, &desc);
++    if (r == kDeclined) continue;
++    compared++;
++    if (r == kDiverge && ++diverged <= 10) ADD_FAILURE() << "iter " << iter << " " << desc;
++  }
++  fprintf(stderr, "LoopRegions: compared=%d diverged=%d\n", compared, diverged);
++  EXPECT_GT(compared, kIters / 4) << "heavy declined too many loop regions";
++  EXPECT_EQ(diverged, 0);
++}
++
++
++// apklayer patch (0081): the same loops over SIMD/FP: S/D/Q loads and stores (LDP/STP Q), vector and scalar FADD/FMUL/FMLA,
++// FMOV between X and D, DUP/INS from W, vector MOV. Registers, X values and memory hold finite floats of moderate magnitude,
++// so no NaN arises (whose payload x86 and Arm choose differently); 16-byte and 8-byte accesses meet in the same V slots.
++TEST_F(Arm64HeavyMemoryDifferentialFuzz, LoopRegionsSimd) {
++  Seed(0x51D100B5ULL);
++  const int kIters = 20000 * (getenv("BERBERIS_DIFFERENTIAL_FUZZ_EXHAUSTIVE") ? 25 : 1);
++  auto finite = [&]() -> uint32_t {
++    if (Rnd() % 8 == 0) return 0;
++    return ((Rnd() & 1) << 31) | ((127 - 6 + Rnd() % 13) << 23) | (Rnd() & 0x7fffff);
++  };
++  auto finite64 = [&]() -> uint64_t { return (static_cast<uint64_t>(finite()) << 32) | finite(); };
++  static const uint32_t kX[] = {4, 5, 6, 7, 8, 10, 11};
++  auto xr = [&]() { return kX[Rnd() % (sizeof(kX) / sizeof(kX[0]))]; };
++  auto vr = [&]() { return static_cast<uint32_t>(Rnd() % 8); };
++  auto base = [&]() { return 1 + static_cast<uint32_t>(Rnd() % 3); };
++  int compared = 0, diverged = 0;
++  for (int iter = 0; iter < kIters; iter++) {
++    uint32_t code[40];
++    int n = 0;
++    code[n++] = 0xD2800000u | ((1 + Rnd() % 5) << 5) | 9;  // movz x9, #1-5
++    const int loop_start = n;
++    const int body = 2 + static_cast<int>(Rnd() % 10);
++    for (int k = 0; k < body; k++) {
++      uint32_t vd = vr(), vn = vr(), vm = vr(), b = base();
++      switch (Rnd() % 14) {
++        case 0: code[n++] = 0x3DC00000u | ((Rnd() % 8) << 10) | (b << 5) | vd; break;   // ldr q, [b, #16k]
++        case 1: code[n++] = 0x3D800000u | ((Rnd() % 8) << 10) | (b << 5) | vn; break;   // str q
++        case 2: code[n++] = 0xFD400000u | ((Rnd() % 16) << 10) | (b << 5) | vd; break;  // ldr d
++        case 3: code[n++] = 0xFD000000u | ((Rnd() % 16) << 10) | (b << 5) | vn; break;  // str d
++        case 4: code[n++] = (Rnd() & 1 ? 0xBD400000u | vd : 0xBD000000u | vn) | ((Rnd() % 32) << 10) | (b << 5); break;  // ldr/str s
++        case 5: {  // ldp/stp q
++          uint32_t v2 = vr();
++          if (v2 == vd) v2 = (vd + 1) % 8;
++          code[n++] = (Rnd() & 1 ? 0xAD400000u : 0xAD000000u) | ((Rnd() % 4) << 15) | (v2 << 10) | (b << 5) | vd;
++          break;
++        }
++        case 6: code[n++] = 0x4E20D400u | (vm << 16) | (vn << 5) | vd; break;  // fadd v.4s
++        case 7: code[n++] = 0x6E20DC00u | (vm << 16) | (vn << 5) | vd; break;  // fmul v.4s
++        case 8: code[n++] = 0x4E20CC00u | (vm << 16) | (vn << 5) | vd; break;  // fmla v.4s
++        case 9: code[n++] = (Rnd() & 1 ? 0x1E602800u : 0x1E200800u) | (vm << 16) | (vn << 5) | vd; break;  // fadd d / fmul s
++        case 10: code[n++] = Rnd() & 1 ? (0x9E670000u | (xr() << 5) | vd) : (0x9E660000u | (vn << 5) | xr()); break;  // fmov d<-x / x<-d
++        case 11: code[n++] = (Rnd() & 1 ? 0x4E040C00u : 0x4E0C1C00u) | (xr() << 5) | vd; break;  // dup v.4s, w / ins v.s[1], w
++        case 12: code[n++] = 0x4EA01C00u | (vn << 16) | (vn << 5) | vd; break;  // mov v.16b
++        default: code[n++] = 0x0EA01C00u | (vn << 16) | (vn << 5) | vd; break;  // mov v.8b (upper half cleared)
++      }
++    }
++    code[n++] = 0xF1000529u;  // subs x9, x9, #1
++    code[n] = 0x54000001u | ((static_cast<uint32_t>(loop_start - n) & 0x7ffff) << 5);  // b.ne loop_start
++    n++;
++    SeedScratch();
++    for (size_t i = 0; i < kScratchBytes; i += 4) {
++      uint32_t f = finite();
++      memcpy(g_seed_mem_heavy + i, &f, 4);
++    }
++    memcpy(g_scratch_heavy, g_seed_mem_heavy, kScratchBytes);
++    InitState in = RandomInit();
++    for (uint32_t r : kX) in.x[r] = finite64();
++    for (int i = 0; i < 32; i++) in.v[i] = (static_cast<unsigned __int128>(finite64()) << 64) | finite64();
++    for (uint32_t b = 1; b <= 3; b++) in.x[b] = ScratchBase() + kWindowBase - 256 + 128 * b;
++    std::string desc;
++    Result r = RunDifferential(code, n, in, &desc);
++    if (r == kDeclined) continue;
++    compared++;
++    if (r == kDiverge && ++diverged <= 10) ADD_FAILURE() << "iter " << iter << " " << desc;
++  }
++  fprintf(stderr, "LoopRegionsSimd: compared=%d diverged=%d\n", compared, diverged);
++  EXPECT_GT(compared, kIters / 4) << "heavy declined too many SIMD loop regions";
++  EXPECT_EQ(diverged, 0);
++}
++
+ }  // namespace
+ 
+ }  // namespace berberis
+diff --git a/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc b/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
+index 7b52eeb..dd0c679 100644
+--- a/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
+@@ -20,7 +20,11 @@
+ #include <cstddef>
+ #include <cstdint>
+ #include <cstdlib>
++#include <cstdio>
+ #include <cstring>
++#include <string>
++#include <unistd.h>
++#include <fcntl.h>
+ #include <tuple>
+ 
+ #include "berberis/assembler/machine_code.h"
+@@ -95,6 +99,28 @@ unsigned InsnGroup(uint32_t insn) {
+   return 0;
+ }
+ 
++// apklayer patch (diagnostic, 0081): BERBERIS_HEAVY_DUMP=<file> appends one line per region the heavy tier compiles: its pc, the number of
++// instructions and their words (hex), for Arm64HeavyRegionReplay to run them again heavy vs interpreter. PGR's home scene stayed noise
++// after 0077/0078 while every generated test passed: its own regions are the corpus.
++void DumpHeavyRegion(GuestAddr pc, size_t count) {
++  static const int fd = [] {
++    const char* path = berberis::HostGetenv("BERBERIS_HEAVY_DUMP");
++    return path ? open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644) : -1;
++  }();
++  if (fd < 0 || count == 0) return;
++  std::string line = std::to_string(count);
++  char word[24];
++  snprintf(word, sizeof(word), "%lx ", static_cast<unsigned long>(pc));
++  line = word + line;
++  const uint32_t* insns = ToHostAddr<const uint32_t>(pc);
++  for (size_t i = 0; i < count; i++) {
++    snprintf(word, sizeof(word), " %08x", insns[i]);
++    line += word;
++  }
++  line += '\n';
++  if (write(fd, line.data(), line.size()) < 0) return;
++}
++
+ }  // namespace
+ 
+ // Optimizing (second-gear) translation of the ARM64 region at `pc`. Drives the
+@@ -146,6 +172,7 @@ std::tuple<GuestAddr, bool, size_t> HeavyOptimizeRegion(GuestAddr pc,
+   }
+ 
+   x86_64::GenCode(&machine_ir, machine_code);
++  DumpHeavyRegion(pc, number_of_instructions);  // apklayer patch (diagnostic, 0081)
+ 
+   return {stop_pc, frontend.success(), number_of_instructions};
+ }
