@@ -13,6 +13,8 @@ fail=0
 report() { if [ "$1" = 0 ]; then echo "PASS $2: $3"; else echo "FAIL $2: $3"; fail=1; fi; }
 run_app() { APKLAYER_JOPTS="-Dapklayer.runms=${3:-30000} $4" $A run "$1" > "$R/$2.out" 2>&1; }  # pkg, log, ms, extra options
 state=~/.local/state/apklayer/$APKLAYER_INSTANCE
+# the window shell is shared and belongs to the instance that started it (on the X23 the always-on `ut`), so its log is not in this instance's directory
+shlog() { f=$(readlink /proc/$(pgrep -u "$(id -u)" -x apklayer-shell | head -1)/fd/2 2>/dev/null); [ -f "$f" ] || f=$state/shell.log; echo "$f"; }
 
 $A stop >/dev/null 2>&1
 for apk in "$R"/apks/*.apk; do [ -e "$apk" ] && $A install "$apk" >/dev/null 2>&1; done
@@ -52,9 +54,10 @@ for g in "$@"; do
         loc=$(grep -a '^\[hw\] location' "$R/sensors.out" | head -1)
         [ "${n:-0}" -gt 0 ]; report $? sensors "$n sensors, $loc" ;;
     fullscreen)  # UiBench hides the system bars (script step) and shows them again: the navigation bar inset 84 -> 0 -> 84, the window whole screen and back
+        f0=$(grep -a -c 'fullscreen o' "$(shlog)")  # the shell's log has older runs: the new lines only
         run_app com.android.test.uibench fullscreen 24000 "-Dapklayer.debugkeys=true -Dapklayer.script=7000:navinset+8000:fullscreen:1+12000:navinset+13000:fullscreen:0+18000:navinset+19000:navinset"
         ins=$(sed -n 's/^\[apklayer\] navinset \(-\?[0-9]*\)$/\1/p' "$R/fullscreen.out" | tr '\n' ' ')
-        grep -a -q 'fullscreen on' "$state/shell.log" && grep -a -q 'fullscreen off' "$state/shell.log" && echo "$ins" | awk '{ exit !($1 > 0 && $2 == 0 && $3 == $1 && $4 == $1) }'  # 48 dp of the display: 84 px on the X23, 135 on the Quintus
+        [ "$(grep -a -c 'fullscreen o' "$(shlog)")" -ge $((f0 + 2)) ] && echo "$ins" | awk '{ exit !($1 > 0 && $2 == 0 && $3 == $1 && $4 == $1) }'  # 48 dp of the display: 84 px on the X23, 135 on the Quintus
         report $? fullscreen "navigation bar insets: $ins" ;;
     navbar)  # ut: a touch on the shell's navigation bar (Back, 180,1536 on the X23) reaches the app and gives the haptic click at the vibrator
         [ "$os" = ut ] || { echo "SKIP navbar: Lomiri touch only"; continue; }
@@ -64,7 +67,7 @@ for g in "$@"; do
         run_app hello.input navbar 50000 -Dhello.backlog=1
         wait
         b=$(grep -a -c 'back pressed' "$R/navbar.out"); h=$(cat "$state/hub.log" 2>/dev/null | grep -a -c 'haptic feedback')
-        bar=$(grep -a -o 'content [0-9x]* .*navigation bar [0-9]* logical' "$state/shell.log" | tail -1 | sed 's/ @.*navigation/ ... navigation/')
+        bar=$(grep -a -o 'content [0-9x]* .*navigation bar [0-9]* logical' "$(shlog)" | tail -1 | sed 's/ @.*navigation/ ... navigation/')
         [ "$b" -ge 1 ] && [ "$h" -gt "$h0" ]; report $? navbar "backs $b, haptic lines $h0 -> $h, $bar" ;;
     race)
         APKLAYER=$A python3 "$R/spare-race.py" hello.input 6 > "$R/race.out" 2>&1; r=$?; report $r race "$(tail -1 "$R/race.out" | cut -c1-200)" ;;
