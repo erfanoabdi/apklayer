@@ -15,12 +15,12 @@ ut)
     host=$(get UBPORTS); R=/home/${host%@*}/apklayer-phone-install; A=/opt/click.ubuntu.com/apklayer.erfanoabdi/current/usr/bin/apklayer
     click=$(ls "$dir"/apklayer.erfanoabdi_*_arm64.click | head -1)
     ssh "$host" "mkdir -p $R"; scp -q "$click" "$bundle" "$host:$R/"
-    ssh "$host" "gdbus call --system -d com.lomiri.click -o /com/lomiri/click -m com.lomiri.click.Install $R/$(basename "$click") && $A setup --bundle $R/$(basename "$bundle") | grep '^step' | cut -c1-160" ;;
+    ssh "$host" "gdbus call --system -d com.lomiri.click -o /com/lomiri/click -m com.lomiri.click.Install $R/$(basename "$click") && $A setup --update --bundle $R/$(basename "$bundle") | grep '^step' | cut -c1-160" ;;
 sfos)
     host=$(get SAILFISH); R=/userdata/apklayer/phone-install-${host%@*}; root=root@${host#*@}
     ssh "$host" "mkdir -p $R"; scp -q "$dir"/*.rpm "$bundle" "$host:$R/"
     ssh "$root" "cd $R && rpm -Uvh --replacepkgs *.rpm 2>&1 | tail -4"
-    ssh "$host" "apklayer setup --update --bundle $R/$(basename "$bundle") | grep '^step' | cut -c1-160" ;;
+    ssh "$host" "apklayer setup --update --bundle $R/$(basename "$bundle") | grep '^step' | cut -c1-160; apklayer stop >/dev/null 2>&1" ;;  # the old package's hub and shell keep running otherwise
 *) echo "phone-install: ut or sfos" >&2; exit 2 ;;
 esac
 ssh "$host" "rm -rf $R"
