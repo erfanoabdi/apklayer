@@ -53,7 +53,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Quintus: re-run `phone-test.sh sfos` groups with the current RPM (`tools/halium/unlock.sh sfos`).
 - Halium: vendor HALs, `media = device`, NewPipe network; wheel/stylus, text-input and the layout subtype cannot run under Lomiri: Sailfish/KDE check only.
 - Sailfish: a finger on the host dialog (Open Camera with CAMERA revoked was denied at once, no prompt seen); a geoclue fix outdoors.
-- Ubuntu Touch: turning by hand (the fake accelerometer did not reach sensorfwd). Fixed on branch utfix, checked only as manager screenshots on Parallels (not on the X23: needs the next click): Install dialog path field, UpdateBanner height, HubIncoming of a replaced Share (code only, needs Lomiri's Content Hub).
+- Ubuntu Touch: turning by hand (the fake accelerometer did not reach sensorfwd). On the 0.5.5 click the Install dialog is compact (screenshot on the X23); open: UpdateBanner height (no update offered to force it), HubIncoming of a replaced Share (needs Lomiri's Content Hub).
 - Bluetooth PIN dialog on a legacy device. A real USB serial adapter.
 - Push: a real Telegram/WhatsApp message with microG; the unit starting the stack at login.
 - By eye: window raise, text magnifier, portal file chooser, pkexec, Google sign-in, playback, audio, colours, IME look.
@@ -61,6 +61,6 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Apps: a Godot 4 game, JW Library thumbnails, a NewPipe download.
 
 ## Notifications on the phones
-- Lomiri (X23): cause found (it closes a popup when the sending bus connection ends; the hub's `gdbus call` ended at once); fixed by bridge/portal/notify-bus.py (one connection), `phone-test ut notify-bus` PASS, the Java side checked with a probe on the phone. Open: rerun `ut notify` (tap, action, dismiss) with a click that has the fix.
+- Lomiri (X23): popups now live ~5 s (bridge/portal/notify-bus.py, one bus connection; `ut notify` PASS, `ut notify-bus` PASS in 2 of 3 runs, one early failure unexplained). Open: popup tap, action and dismiss (not driven; needs a Lomiri screenshot or a bubble position).
 - Lipstick: swipe-away delete intent and action buttons (`x-nemo-remote-action-*`) are not driven by phone-test; group/summary stacking and a foreground-service entry need a human look at the events view.
 - The phones carry old host classes until the next click/RPM: rerun `phone-test.sh sfos notify` and `ut notify` after installing 0.5.x.
