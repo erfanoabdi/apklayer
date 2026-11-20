@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20: PGR chapter-menu slowdown and the ANGLE game retests closed (owner)
+
+- The owner reports PGR's Main story chapter menu no longer slows down, and the ANGLE retests on runtime 0.5.2 (PGR, AIDA64, Azur Lane,
+  3DMark) pass; both PLAN items closed. The dedicated GLES 3.2 probe that item named is not written.
+
 ## 2026-11-20: PLAN cleaned against the commits
 
 - Revert b57bba7e (2026-11-18) and the ASTC revert/reapply (7bcfb6b7, 7a180ac1, d4f58218) carried a 2026-11-16 copy of PLAN's Bugs, Startup
