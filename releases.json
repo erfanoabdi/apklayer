@@ -37,6 +37,10 @@
           }
         },
         "resolute": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.5.3/apklayer_0.5.3-1.resolute1_amd64.deb",
+            "sha256": "f3480eff564dab96c53c1766abec0ec8f8adb644d2884448e3dcf6028c8e9ec8"
+          },
           "arm64": {
             "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.5.3/apklayer_0.5.3-1.resolute1_arm64.deb",
             "sha256": "b42bb165940290e9a8b2535ed1a3029600a781793af4bdf2b02976de90164399"
@@ -56,7 +60,7 @@
       "clicks": {
         "arm64": {
           "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.5.3/apklayer.erfanoabdi_0.5.3_arm64.click",
-          "sha256": "24afa7b6b65d084d894e80ee18d7f3369ec633403189e2e5ed37eb7fda79cb1a"
+          "sha256": "bd0cf79edebd663188ee704121cced7eef57a60ebe6ac9e31a780ed5abef89b3"
         }
       }
     },
