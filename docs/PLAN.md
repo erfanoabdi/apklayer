@@ -17,7 +17,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Arknights: Endfield on NVIDIA runs past the login screen (owner, 2026-11-20); earlier Tencent ACE ended it ~60 s in (CHANGELOG 2026-11-12): check a longer session.
 - Play services sends a reply of exactly 8388608 bytes (`Large reply transaction`, code 46); since 2026-11-15 its caller gets BR_FAILED_REPLY as on the kernel. Which call it is and whether the caller copes is unknown: read hub.log for `Large reply transaction of 8388608` at the next one.
 - Play services' `:persistent` exits with 1 now and then ("Instance hub disconnected" for binds meanwhile); no System.exit caller seen: run with `APKLAYER_EXIT_TRACE=1 APKLAYER_JOPTS=-Dapklayer.exittrace=true` and read its component log at the next one.
-- YouTube 21.45: check the signed-in feed and a video in the owner's instance with the ApklayerBuffers.array fix (2026-11-16); signed out, the EU consent page was wider than the window ("Inloggen" cut off).
+- YouTube 21.45: videos load and play (owner, 2026-11-20); thumbnails stay empty. Signed out, the EU consent page was wider than the window ("Inloggen" cut off).
 
 ## Input / IME
 - Wheel and stylus (touchpad, tablet) never ran on real hardware; the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) go through the test input only.
