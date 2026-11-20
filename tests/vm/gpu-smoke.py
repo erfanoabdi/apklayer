@@ -39,6 +39,9 @@ finally:
 assert not unclean, 'services did not end cleanly at stop: %s' % unclean  # SurfaceFlinger's exit-time SIGSEGV (bionic_translation 0029)
 assert code == 0, 'UiBench JVM exited with %d' % code
 assert shot, 'no GPU buffer reached the compositor'
+if angle_start:  # the app does not log its buffers under ANGLE: SurfaceFlinger's log shows the compositor imported them
+    sf = (instance.STATE / 'surfaceflinger.log').read_text(errors='replace')
+    assert sf.count('apklayer.egl: imported buffer') >= 3, 'the compositor imported fewer than 3 buffers of the ANGLE app'
 count = pixels.colors(shot)
 assert count > 100, 'the window shows no drawn UI (%d colours)' % count
 print('PASS GPU smoke: UiBench drew its window, %d colours (%s)' % (count, shot))
