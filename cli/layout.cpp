@@ -69,6 +69,7 @@ Layout Layout::detect(bool setUp) {
     bool ours = installed || isDir(join(lib, "native"));
     l.native = getenvOr("APKLAYER_NATIVE", complete || !installed ? (ours ? join(lib, "native") : join(homeDir(), "arm64-native")) : bundle);
     l.androidLibs = getenvOr("APKLAYER_ANDROID_LIBS", ours ? join(l.native, "android-libs") : join(homeDir(), "android-arm64/lib64"));
+    l.angle = installed ? l.build : APKLAYER_LIB;  // a source tree's build dir has no angle/: meson install puts it beside native/
     l.bionic = getenvOr("APKLAYER_BT", ours ? join(lib, "bionic_translation/b") : join(homeDir(), "bt-arm/bionic_translation/b"));
     l.deps = getenvOr("APKLAYER_DEPS", ours ? l.native : join(homeDir(), ".cache/apklayer/deps"));
     l.arm32 = getenvOr("APKLAYER_ARM32", join(l.native, "arm32"));

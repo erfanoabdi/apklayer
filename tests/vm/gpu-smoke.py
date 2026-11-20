@@ -4,6 +4,7 @@ Window, dialog and resize behaviour: the gpu-window group (tests/vm/gpu-window-r
 import locale
 import os
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -22,7 +23,10 @@ try:
     proc = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     imported = 0
     shot = None
+    angle_start = None  # under ANGLE the app's EGL is ANGLE's: its buffers are logged by SurfaceFlinger only, so the picture is taken 4 s after ANGLE started
     for line in proc.stdout:
+        if 'ANGLE: Version' in line and angle_start is None: angle_start = time.monotonic()
+        if angle_start and shot is None and time.monotonic() - angle_start > 4: shot = instance.capture('gpu', PKG)
         if 'apklayer.egl: imported buffer' in line or 'apklayer.egl: attached buffer' in line:
             imported += 1
             if imported == 3 and shot is None:  # the app is presenting GPU buffers: take the picture now
@@ -35,6 +39,9 @@ finally:
 assert not unclean, 'services did not end cleanly at stop: %s' % unclean  # SurfaceFlinger's exit-time SIGSEGV (bionic_translation 0029)
 assert code == 0, 'UiBench JVM exited with %d' % code
 assert shot, 'no GPU buffer reached the compositor'
+if angle_start:  # the app does not log its buffers under ANGLE: SurfaceFlinger's log shows the compositor imported them
+    sf = (instance.STATE / 'surfaceflinger.log').read_text(errors='replace')
+    assert sf.count('apklayer.egl: imported buffer') >= 3, 'the compositor imported fewer than 3 buffers of the ANGLE app'
 count = pixels.colors(shot)
 assert count > 100, 'the window shows no drawn UI (%d colours)' % count
 print('PASS GPU smoke: UiBench drew its window, %d colours (%s)' % (count, shot))

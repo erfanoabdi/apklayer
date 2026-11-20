@@ -37,6 +37,7 @@ struct apklayer_gfx {
     struct gbm_device *gbm;
     bool other_gpu;  /* not the compositor's GPU: window buffers must be importable there */
     bool angle;      /* ANGLE handles GPU transfers when a CPU buffer needs staging */
+    bool amd;        /* amdgpu: GBM's implicit-modifier layout (pitch aligned its own way) is not what RADV or ANGLE derive from "LINEAR" */
     bool shadowed;   /* virtio-gpu: a dma-buf's mmap is the guest's shadow copy, not what the host GPU drew (GBM maps through a transfer) */
 };
 
@@ -93,6 +94,7 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
     gfx->angle = angle && *angle;
     drmVersionPtr version = drmGetVersion(fd);
     gfx->shadowed = version && version->name && !strcmp(version->name, "virtio_gpu");
+    gfx->amd = version && version->name && !strcmp(version->name, "amdgpu");
     drmFreeVersion(version);
     gfx->gbm = gbm_create_device(fd);
     if (gfx->gbm && !allocates(gfx->gbm)) {
@@ -255,6 +257,16 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
          * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
         if (!bo && !gfx->angle && (flags & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))
             bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags & ~GBM_BO_USE_LINEAR);
+        /* shortcut: AMD under ANGLE, GPU-render buffers whose GBM pitch is not the LINEAR one are made LINEAR. GBM reports no modifier for them; the Vulkan
+         * HAL and ANGLE's EGL read that as LINEAR with GBM's pitch (1024 B for 161 px, RADV: 768) and RADV refuses the layout (hardware bitmaps; the
+         * buffers of a resized window: SurfaceFlinger's import failed). Equal pitches keep GBM's layout (always LINEAR made the 3072x1920 windows black).
+         * Tiled, DCC-aware modifiers (modifiers.c) are the way to the full speed. */
+        if (bo && gfx->angle && gfx->amd && (usage & APKLAYER_GFX_RENDER)) {
+            uint64_t linear = DRM_FORMAT_MOD_LINEAR;
+            struct gbm_bo *lin = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, &linear, 1, flags & ~GBM_BO_USE_LINEAR);
+            if (lin && gbm_bo_get_stride_for_plane(lin, 0) != gbm_bo_get_stride_for_plane(bo, 0)) { gbm_bo_destroy(bo); bo = lin; }
+            else if (lin) gbm_bo_destroy(lin);
+        }
         if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, flags, strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);
         out->num_planes = gbm_bo_get_plane_count(bo);

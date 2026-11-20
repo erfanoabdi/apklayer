@@ -1,0 +1,20 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: no deferred swapchain image memory over a host Vulkan driver
+
+VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT (ANGLE sets it) makes the loader call vkCreateImage with a
+VkImageSwapchainCreateInfoKHR that names the loader's own Swapchain object. Over a host driver that reaches the host's
+vkCreateImage, which dereferences the handle as its own WSI swapchain (Mesa: a NULL device inside, SIGSEGV on a
+vkCreateImage dispatch trampoline). The flag is only permission to defer: allocating the buffers up front (the loader's
+non-deferred path, native-buffer images the HAL imports) is valid.
+Against frameworks/native 46018f54b424 (REVISION), after 0003.
+---
+--- a/vulkan/libvulkan/swapchain.cpp
++++ b/vulkan/libvulkan/swapchain.cpp
+@@ -2342,5 +2342,6 @@
+     // Note: don't do deferred allocation for shared present modes. There's only one buffer
+     // involved so very little benefit.
+-    if ((create_info->flags & VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT) &&
++    // apklayer patch: the host driver cannot create images for the loader's swapchain handle.
++    if (!driver::HostDispatchEnabled() && (create_info->flags & VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT) &&
+             !IsSharedPresentMode(create_info->presentMode)) {
+         // Don't want to touch the underlying gralloc buffers yet;
