@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-21: ANGLE on ARM64 via the Soong tree (branch anglearm)
+
+- Build log: `m libEGL_angle libGLESv2_angle libGLESv1_CM_angle` (gsi_arm64 userdebug), incremental, flock, ~/los24/external/angle (rev 1f4500d3) temporarily carrying patches 0003 (adapted), 0006, 0007 (necessary: the Oct-26 outputs there are unpatched); the tree is restored with `git checkout .` afterwards.
+
 ## 2026-11-21: prebuilts update (branch prebupd): AOSP-side libraries since 77dd42af
 
 - Runtime 0.5.5 from prebuilts 99acf395 (branch prebupd-prebuilts, local): libvulkan and libapklayer_vulkan (patch 0010; arm64 93da721d, x86_64 3b5cca85), mapper.apklayer (arm64 4252eb2d, x86_64 cbe82f96), libapklayer_allocator (arm64 d7c97c74, x86_64 7f346efa), libapklayer_vktest (arm64 d9f4124c, x86_64 2a0fee0b), both CPUs; lock rows and tools/release/versions updated, check-runtime.py ok. arm64 lock rows edited in place (the generator needs the UTM VM's staging); x86_64 libs built incrementally in the same session (x86_64 allocator and vktest were stale).
