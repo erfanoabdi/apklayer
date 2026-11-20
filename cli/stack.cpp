@@ -355,12 +355,13 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
-    if (ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
+    const bool angleGles = ne.env.count("APKLAYER_ANGLE_GLES");
+    if (angleGles || ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
         std::string file = join(inst.runtimeDir, "gles-angle.prop");
-        writeFile(file, "ro.hardware.egl=angle\n"
-                        "debug.angle.backend=2\n"
-                        "debug.angle.feature_overrides_enabled=exposeES32ForTesting\n"
-                        "debug.renderengine.vulkan=false\n");
+        std::string props = "ro.hardware.egl=angle\ndebug.renderengine.vulkan=false\n";
+        props += angleGles ? "debug.apklayer.angle_backend=gl\n" :
+                             "debug.angle.backend=2\ndebug.angle.feature_overrides_enabled=exposeES32ForTesting\n";
+        writeFile(file, props);
         propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
     }
     if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 3), deviceGraphicsProperties(inst));  // after the overrides' first copy
@@ -453,6 +454,12 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         s.argv = {l.btload(), bionicPath, lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
+        if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_GLES")) {
+            // The GLES backend and the compositor share the native driver.
+            const std::string angleShare = join(inst.root, "angle/share") + ":";
+            auto& dataDirs = s.env.at("XDG_DATA_DIRS");
+            if (dataDirs.rfind(angleShare, 0) == 0) dataDirs.erase(0, angleShare.size());
+        }
         if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
             // SurfaceFlinger uses apklayer's Android EGL shim for ANativeWindowBuffer-to-dmabuf handling. Point its
             // host EGL and GLES calls at Linux ANGLE too, so the compositor imports and samples app buffers on one Vulkan path.

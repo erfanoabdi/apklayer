@@ -1,0 +1,132 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] Select APKLayer's native EGL for the Android GLES backend
+
+Honor APKLayer's per-process backend choice for the Android default display.
+Android's EGL loader requests the Vulkan platform type explicitly. For the
+GLES backend, open APKLayer's EGL shim directly and resolve its exported EGL
+entry points before its host dispatch. Give ordinary EGL contexts separate
+native contexts so HWUI and the app can render on separate threads.
+
+diff --git a/src/libANGLE/Display.cpp b/src/libANGLE/Display.cpp
+index b96bfbc..ef8cdd5 100644
+--- a/src/libANGLE/Display.cpp
++++ b/src/libANGLE/Display.cpp
+@@ -1330,4 +1330,14 @@ Display *Display::GetDisplayFromNativeDisplay(EGLenum platform,
+
+     AttributeMap updatedAttribMap(attribMap);
++#if defined(ANGLE_PLATFORM_ANDROID) && defined(ANGLE_ENABLE_OPENGL)
++    // Android's EGL loader requests Vulkan explicitly. APKLayer can select GLES
++    // over its native EGL shim when Vulkan presentation is disabled or unavailable.
++    if (platform == EGL_PLATFORM_ANGLE_ANGLE && nativeDisplay == EGL_DEFAULT_DISPLAY &&
++        angle::GetEnvironmentVarOrAndroidProperty("ANGLE_DEFAULT_PLATFORM",
++                                                  "debug.apklayer.angle_backend") == "gl")
++    {
++        updatedAttribMap.insert(EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
++    }
++#endif
+     UpdateAttribsFromEnvironment(updatedAttribMap);
+
+diff --git a/src/libANGLE/renderer/gl/egl/DisplayEGL.cpp b/src/libANGLE/renderer/gl/egl/DisplayEGL.cpp
+index fcfae19..18839fd 100644
+--- a/src/libANGLE/renderer/gl/egl/DisplayEGL.cpp
++++ b/src/libANGLE/renderer/gl/egl/DisplayEGL.cpp
+@@ -32,4 +32,14 @@ namespace
+ {
+
++#if defined(ANGLE_PLATFORM_ANDROID)
++bool UseApklayerNativeEGL()
++{
++    static const bool enabled = angle::GetEnvironmentVarOrAndroidProperty(
++                                    "ANGLE_DEFAULT_PLATFORM", "debug.apklayer.angle_backend") ==
++                                "gl";
++    return enabled;
++}
++#endif
++
+ rx::RobustnessVideoMemoryPurgeStatus GetRobustnessVideoMemoryPurge(const egl::AttributeMap &attribs)
+ {
+@@ -112,4 +122,9 @@ const char *DisplayEGL::getEGLPath() const
+ {
+ #if defined(ANGLE_PLATFORM_ANDROID)
++    if (UseApklayerNativeEGL())
++    {
++        // Open the native driver directly. Android's libEGL would load ANGLE again.
++        return "libapklayer_egl.so";
++    }
+ #    if defined(__LP64__)
+     return "/system/lib64/libEGL.so";
+@@ -523,4 +538,10 @@ ContextImpl *DisplayEGL::createContext(const gl::State &state,
+     bool globalTextureShareGroup =
+         attribs.get(EGL_DISPLAY_TEXTURE_SHARE_GROUP_ANGLE, EGL_FALSE) == EGL_TRUE;
++    bool dedicatedContext = false;
++#if defined(ANGLE_PLATFORM_ANDROID)
++    // HWUI and the app can render on different threads. The native EGL context
++    // cannot be current on both at once. Preserve explicitly requested groups.
++    dedicatedContext = UseApklayerNativeEGL() && virtualizationGroup == EGL_DONT_CARE;
++#endif
+
+     std::shared_ptr<RendererEGL> renderer = mRenderer;
+@@ -535,7 +556,7 @@ ContextImpl *DisplayEGL::createContext(const gl::State &state,
+         }
+     }
+-    else if (virtualizationGroup != EGL_DONT_CARE)
++    else if (dedicatedContext || virtualizationGroup != EGL_DONT_CARE)
+     {
+-        renderer = mVirtualizationGroups[virtualizationGroup].lock();
++        renderer = dedicatedContext ? nullptr : mVirtualizationGroups[virtualizationGroup].lock();
+         if (!renderer)
+         {
+@@ -561,5 +582,8 @@ ContextImpl *DisplayEGL::createContext(const gl::State &state,
+             }
+
+-            mVirtualizationGroups[virtualizationGroup] = renderer;
++            if (!dedicatedContext)
++            {
++                mVirtualizationGroups[virtualizationGroup] = renderer;
++            }
+         }
+     }
+diff --git a/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.cpp b/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.cpp
+index ddf8455..64bab9c 100644
+--- a/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.cpp
++++ b/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.cpp
+@@ -10,4 +10,5 @@
+
+ #include <dlfcn.h>
++#include <string_view>
+
+ namespace rx
+@@ -34,4 +35,7 @@ egl::Error FunctionsEGLDL::initialize(EGLAttrib platformType,
+                                       void *eglHandle)
+ {
++#if defined(ANGLE_PLATFORM_ANDROID)
++    mPreferExportedSymbols = !eglHandle && std::string_view(libName) == "libapklayer_egl.so";
++#endif
+
+     if (eglHandle)
+@@ -65,4 +69,13 @@ egl::Error FunctionsEGLDL::initialize(EGLAttrib platformType,
+ void *FunctionsEGLDL::getProcAddress(const char *name) const
+ {
++#if defined(ANGLE_PLATFORM_ANDROID)
++    if (mPreferExportedSymbols)
++    {
++        // The shim's exported EGL calls handle Android displays and windows.
++        // Its eglGetProcAddress can return a direct host call instead.
++        void *symbol = dlsym(nativeEGLHandle, name);
++        return symbol ? symbol : reinterpret_cast<void *>(mGetProcAddressPtr(name));
++    }
++#endif
+     void *f = reinterpret_cast<void *>(mGetProcAddressPtr(name));
+     if (f)
+diff --git a/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.h b/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.h
+index 22cfaf9..906f32c 100644
+--- a/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.h
++++ b/src/libANGLE/renderer/gl/egl/FunctionsEGLDL.h
+@@ -29,4 +29,7 @@ class FunctionsEGLDL : public FunctionsEGL
+   private:
+     PFNEGLGETPROCADDRESSPROC mGetProcAddressPtr;
++#if defined(ANGLE_PLATFORM_ANDROID)
++    bool mPreferExportedSymbols = false;
++#endif
+ };
+ }  // namespace rx

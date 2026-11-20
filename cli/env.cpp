@@ -346,6 +346,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     dataDirs = runtimeShare;
     // Launches from the hub can inherit an ANGLE environment. Select its EGL mapping again below.
     env.erase("APKLAYER_ANGLE_ACTIVE");
+    env.erase("APKLAYER_ANGLE_GLES");
     for (const std::string& dir : split(getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"), ':'))
         if (dir != runtimeShare && dir != angleShare) dataDirs += ":" + dir;
     if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env, layout.java.empty() ? "lib64" : "lib");  // a layout with its own JVM: the 32-bit one
@@ -397,11 +398,11 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         fprintf(stderr, "apklayer: ANGLE GLES needs the host graphics provider; using the device GLES driver\n");
         useAngle = false;
     }
-    // ANGLE needs usable Vulkan presentation even when apps have forced Vulkan on.
+    // ANGLE uses its GLES backend when usable Vulkan presentation isn't detected.
     std::string vulkan = hostVulkanStaged && !vulkanDisabled ? hostVulkan(layout, env) : "";
-    if (useAngle && vulkan.empty()) {
-        fprintf(stderr, "apklayer: %s; using native GLES\n", vulkanDisabled ? "Vulkan is disabled" :
-                "ANGLE GLES needs a detected Vulkan device and presentation driver");
+    if (useAngle && vulkan.empty() && !exists(join(l, "libapklayer_egl.so"))) {
+        if (angleMode == "on") die("ANGLE's GLES backend needs libapklayer_egl.so");
+        fprintf(stderr, "apklayer: ANGLE's GLES backend needs libapklayer_egl.so; using native GLES\n");
         useAngle = false;
     }
     if (useAngle) {
@@ -417,13 +418,28 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         env["APKLAYER_VULKAN_PRESENT"] = "1";
         env["APKLAYER_VULKAN_VERSION"] = vulkan;
     }
-    if (useAngle) {
+    const bool angleVulkan = useAngle && !vulkan.empty();
+    if (angleVulkan) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
         std::string hostAngleEgl = getenvOr("APKLAYER_ANGLE_HOST_EGL", join(layout.build, "angle/host/libEGL_angle.so"));
         if (!exists(hostAngleEgl)) die("ANGLE GLES buffer transfers need the Linux ANGLE library at " + hostAngleEgl);
         env["APKLAYER_ANGLE_HOST_EGL"] = hostAngleEgl;
-        env["ANGLE_DEFAULT_PLATFORM"] = "vulkan";  // Linux ANGLE defaults to GL with both backends built.
         env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
+    } else if (useAngle) {
+        // ANGLE translates app GLES through the native driver. Buffer allocation and
+        // presentation use the normal native EGL path in this mode.
+        env["APKLAYER_ANGLE_GLES"] = "1";
+    }
+    if (useAngle) {
+        // The app's Vulkan setting can differ from the stack's. Pass the backend through
+        // to Bionic's app environment, where ANGLE can use it for this process.
+        env["ANGLE_DEFAULT_PLATFORM"] = angleVulkan ? "vulkan" : "gl";
+        auto& passthrough = env["APKLAYER_GUEST_ENV_PASSTHROUGH"];
+        const auto names = split(passthrough, ',');
+        for (const char* name : {"ANGLE_DEFAULT_PLATFORM", "ANGLE_FEATURE_OVERRIDES_ENABLED"}) {
+            if (env.count(name) && std::find(names.begin(), names.end(), name) == names.end())
+                passthrough = name + (passthrough.empty() ? std::string() : "," + passthrough);
+        }
         // Android's EGL loader asks for /system/lib{,64}/lib*_angle.so, but bionic_translation
         // opens libraries on the host filesystem. Add the runtime's mapped system dirs explicitly.
         std::string androidSystem = join(layout.native, "android-root/system");
@@ -442,12 +458,20 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
                   "libEGL.so libEGL.so\n"
                   "libGLESv1_CM.so libGLESv1_CM.so\n"
                   "libGLESv2.so libGLESv2.so\n"
-                  "libGLESv3.so libGLESv3.so\n");
+                  "libGLESv3.so libGLESv3.so\n"
+                  "app:libapklayer_egl.so libapklayer_egl.so\n");
         dataDirs = prepend(angleShare, dataDirs);
-        fprintf(stderr, "apklayer: ANGLE GLES enabled (Vulkan backend, %s)\n", gpu ? gpu->node.c_str() : "automatic GPU");
+        fprintf(stderr, "apklayer: ANGLE GLES enabled (%s backend, %s)\n", angleVulkan ? "Vulkan" : "OpenGL ES",
+                gpu ? gpu->node.c_str() : "automatic GPU");
     }
-    std::string gles = useAngle ? "3.2" : hostGles(layout, env);
+    std::string gles = angleVulkan ? "3.2" : hostGles(layout, env);
     if (size_t sp = gles.find(' '); sp != std::string::npos) gles.resize(sp), env["APKLAYER_GLES_AEP"] = "1";
+    if (useAngle && !angleVulkan) {
+        // ANGLE's GL renderer caps GLES at 3.1 even on a host GLES 3.2 driver.
+        if (gles == "3.2") gles = "3.1";
+        env.erase("APKLAYER_GLES_AEP");
+        env.erase("APKLAYER_GLES_VERSION");
+    }
     if (!useAngle && !env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
         // eglinfo probes a device of its own choosing: with several GPUs the claim is made anyway (a no-op on a 3.2 driver)
         if (gles.rfind("2.", 0) == 0 || gles == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";

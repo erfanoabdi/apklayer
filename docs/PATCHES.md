@@ -51,6 +51,7 @@ and list it here. (2026-11-14: JdkIdentityPatch also rewrites plain IndexOutOfBo
 | ANGLE 0004-cache-linux-dma-buf-modifiers | share Vulkan DRM modifier lists between Linux EGL capability queries and DMA-BUF imports for the lifetime of the display |
 | ANGLE 0005-fix-linux-rgb565-dma-buf-channel-order | map DRM RGB565 to Vulkan RGB565 so imported buffers preserve red and blue |
 | ANGLE 0006-use-saved-egl-thread-during-cleanup | use EGL's saved thread object when the Android pthread cleanup callback runs after C++ TLS is cleared |
+| ANGLE 0007-apklayer-android-gles-backend | allow APKLayer to select ANGLE's Android GLES backend and load the native EGL shim directly for Android displays and windows |
 - Robolectric 0028-window-add-requested-visible-types: `addToDisplay` takes the window's own requested visible types from the call (IWindowSession's `requestedVisibleTypes` argument, SDK 34+) instead of a fresh default (every bar visible): ViewRootImpl applies FLAG_FULLSCREEN and the theme's fullscreen before the add, so each new activity window had left fullscreen (PGR: fullscreen at the splash, a window again with its main activity); and only an application window filling the display decides the bars (DisplayPolicy's top fullscreen window): a dialog, popup or toast keeps the activity's.
 | 0028-getenv-home-set-by-app | `getenv("HOME")` returns a HOME the app set itself |
 | compat/gcc-before-13-cxx2b | `-std=c++2b` for gcc before 13 |
