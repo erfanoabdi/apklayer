@@ -97,6 +97,8 @@ for g in "$@"; do
         else
             grep -a -q '^\[nf\] received nf.OPEN' "$R/notify.out"; report $? notify-click "a tap on the popup sent the content intent (received: $(grep -a '^\[nf\] received' "$R/notify.out" | cut -d' ' -f3 | tr '\n' ' '); hub: $(grep -a -c 'notification click' "$state/hub.log" 2>/dev/null) clicks, $(grep -a 'closed by the desktop' "$state/hub.log" 2>/dev/null | head -3 | cut -d' ' -f2-7 | tr '\n' ';'))" 
         fi ;;
+    notify-bus)  # ut: a Notify from one bus connection (bridge/portal/notify-bus.py, what the hub uses on Lomiri) stays open (a gdbus call's popup is closed at once)
+        out=$(bash "$R/ut-notify-bus.sh" "$R"); echo "$out"; case $out in PASS*) true ;; *) false ;; esac; report $? notify-bus "${out#* }" ;;
     rotate)
         [ "$os" = sfos ] || { echo "SKIP rotate: Lipstick only"; continue; }
         old=$(dconf read /lipstick/orientationLock); dconf write /lipstick/orientationLock '"landscape"'

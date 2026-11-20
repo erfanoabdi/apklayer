@@ -110,10 +110,11 @@ export component AppWindow inherits MaterialWindow {
                 if Backend.busy : LinearProgressIndicator { width: 100%; height: 100%; indeterminate: true; }
             }
             if Backend.update-title != "" : HorizontalLayout {
+                max-height: banner.preferred-height + self.padding-top;
                 padding-left: MaterialStyleMetrics.padding_16;
                 padding-right: MaterialStyleMetrics.padding_16;
                 padding-top: MaterialStyleMetrics.padding_8;
-                UpdateBanner { horizontal-stretch: 1; }
+                banner := UpdateBanner { horizontal-stretch: 1; }
             }
             Rectangle {
                 vertical-stretch: 1;
@@ -221,7 +222,7 @@ export component AppWindow inherits MaterialWindow {
                     MaterialText { max-width: 340px; wrap: word-wrap; text: Backend.preview-permissions; style: MaterialTypography.body_small; color: MaterialPalette.on_surface_variant; accessible-label: "Permissions"; }
                 }
             }
-            apk-path := TextField { min-width: 280px; label: "Path of the .apk"; accessible-label: "APK path"; text <=> root.apk-path; accepted => { Backend.preview-path(self.text); } }
+            apk-path := TextField { min-width: 280px; max-height: 64px; label: "Path of the .apk"; accessible-label: "APK path"; text <=> root.apk-path; accepted => { Backend.preview-path(self.text); } }
             HorizontalLayout { alignment: start; TextButton { text: "Choose file…"; icon: AppIcons.folder; clicked => { Backend.install-chooser(); } } }
             for apk in Backend.found-apks: HorizontalLayout {
                 alignment: start;
@@ -241,7 +242,7 @@ export component AppWindow inherits MaterialWindow {
             spacing: MaterialStyleMetrics.spacing_12;
             MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
                            text: "Its own Android services, data and storage. Letters, digits, - and _."; }
-            instance-id := TextField { min-width: 280px; label: "Name"; accessible-label: "Instance name"; }
+            instance-id := TextField { min-width: 280px; max-height: 64px; label: "Name"; accessible-label: "Instance name"; }
         }
         default-action-clicked => { if instance-id.text != "" { Backend.create-instance(instance-id.text); instance-id.text = ""; self.close(); } }
         action-clicked => { self.close(); }
@@ -268,7 +269,7 @@ export component AppWindow inherits MaterialWindow {
             spacing: MaterialStyleMetrics.spacing_12;
             MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
                            text: "This instance uses the kernel's binder: its devices can only be made by an administrator. Set up asks for your password (polkit), or run:"; }
-            TextField { min-width: 280px; read-only: true; text: Backend.binder-command; }
+            TextField { min-width: 280px; max-height: 64px; read-only: true; text: Backend.binder-command; }
         }
         default-action-clicked => { Backend.setup-binder(Backend.binder-instance); self.close(); }
         action-clicked => { self.close(); }
@@ -281,8 +282,8 @@ export component AppWindow inherits MaterialWindow {
         actions: root.editing.source == "instance" ? ["Cancel", "Remove override"] : ["Cancel"];
         VerticalLayout {
             spacing: MaterialStyleMetrics.spacing_12;
-            prop-key := TextField { min-width: 280px; label: "Name"; accessible-label: "Property name"; text: root.editing.key; read-only: !root.editing-new; }
-            prop-value := TextField { min-width: 280px; label: "Value"; accessible-label: "Property value"; text: root.editing.value; }
+            prop-key := TextField { min-width: 280px; max-height: 64px; label: "Name"; accessible-label: "Property name"; text: root.editing.key; read-only: !root.editing-new; }
+            prop-value := TextField { min-width: 280px; max-height: 64px; label: "Value"; accessible-label: "Property value"; text: root.editing.value; }
             MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_small; color: MaterialPalette.on_surface_variant;
                            text: "Applies when instance " + Backend.instance + " starts next."; }
         }

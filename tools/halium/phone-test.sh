@@ -3,7 +3,7 @@
 # Ubuntu Touch X23 (UBPORTS in tests/vm/local.conf, key auth), sfos the Sailfish Quintus (SAILFISH). Copies tools/halium's helpers, spare-race.py and the hello
 # apps (the apks of $APKLAYER_APKS, default the repo's build/; tests/apps/build.sh builds them) into a scratch directory, runs phone-checks.sh there in an
 # instance of its own (ptest), prints PASS/FAIL per group, removes what it made (scratch, instance) and, on ut, locks the phone again when it woke it.
-# Groups: hello newpipe providers hidl hidl-host camera sensors fullscreen race notify (both), navbar (ut), rotate (sfos). Both phones are woken and unlocked first with
+# Groups: hello newpipe providers hidl hidl-host camera sensors fullscreen race notify (both), notify-bus (ut), navbar (ut), rotate (sfos). Both phones are woken and unlocked first with
 # unlock.sh (the X23's PIN, the Quintus' SAILFISH_LOCK, both in local.conf; apps are stopped while the phone is locked).
 set -u
 tag=${PHONE_TEST_TAG:-}; inst=ptest$tag  # PHONE_TEST_TAG=x: another scratch directory and instance (ptestx), so two runs on one phone do not meet
@@ -22,7 +22,7 @@ apks=${APKLAYER_APKS:-$repo/build}
 ssh() { command ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" "$@"; }
 h=$repo/tools/halium
 ssh "mkdir -p $R/apks" || exit 2
-scp -q $h/phone-checks.sh $h/ut-shot.sh $h/hidl-list.sh $h/ut-uitap.py $h/touch.py $repo/tests/vm/spare-race.py "$host:$R/"
+scp -q $h/phone-checks.sh $h/ut-shot.sh $h/hidl-list.sh $h/ut-notify-bus.sh $repo/bridge/portal/notify-bus.py $h/ut-uitap.py $h/touch.py $repo/tests/vm/spare-race.py "$host:$R/"
 for app in hello-input hello-camera hello-hardware hello-notify hello-hidl newpipe; do [ -e "$apks/$app.apk" ] && scp -q "$apks/$app.apk" "$host:$R/apks/"; done
 woke=0
 if [ $os = ut ]; then

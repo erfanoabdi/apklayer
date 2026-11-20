@@ -13,7 +13,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 
 ## Bugs
 - ANGLE on ARM64: build Android arm64 ANGLE and Linux aarch64 host EGL/GLES from the Google source, then verify Vulkan DMA-BUF import and SurfaceFlinger composition before packaging it.
-- arm64 graphics HALs of runtime 0.5.2 (egl, vdisplay, mapper of 2026-11-18; vulkan.apklayer with ASTC/ETC2 emulation and bind-at-create, Venus keeps the bind at acquire) never ran on an arm64 host: run groups `gpu gpu-window vulkan vulkan-textures` on UTM and a Halium phone check. Validation leftovers on NVIDIA: usage-02275 (emulated SRGB image views inherit STORAGE usage; a VkImageViewUsageCreateInfo would quiet it).
+- (Halium X23 done 2026-11-20: graphics = device Mali: UiBench draws, hello.hwbitmap readback and pictures 20/20; the Mali Vulkan HAL (vulkan.mali.so) enumerates 0 physical devices, hello.vulkan `count failed line 55`, not diagnosed; UTM and the groups not run.) arm64 graphics HALs of runtime 0.5.2 (egl, vdisplay, mapper of 2026-11-18; vulkan.apklayer with ASTC/ETC2 emulation and bind-at-create, Venus keeps the bind at acquire) never ran on an arm64 host: run groups `gpu gpu-window vulkan vulkan-textures` on UTM and a Halium phone check. Validation leftovers on NVIDIA: usage-02275 (emulated SRGB image views inherit STORAGE usage; a VkImageViewUsageCreateInfo would quiet it).
 - Arknights: Endfield on NVIDIA runs past the login screen (owner, 2026-11-20); earlier Tencent ACE ended it ~60 s in (CHANGELOG 2026-11-12): check a longer session.
 - Hardware bitmaps on NVIDIA (fix in tree, 2026-11-20: vulkan.apklayer's AHardwareBuffer import, uncompressed tiled gralloc buffers): in 0.5.4 (runtime 0.5.3): check YouTube's thumbnails; Venus/arm64 untested. `apklayer screenshot` under ANGLE on NVIDIA still fails on the stock runtime (seen 2026-11-20). YouTube signed out: the EU consent page was wider than the window ("Inloggen" cut off).
 
@@ -36,7 +36,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 ## Packaging and releases
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, OpenVPN importing an .ovpn. Open: `apklayer open` under the sandbox for a running app's `onNewIntent`; adaptive/vector icons in the install preview; Flatpak, Sailfish, Ubuntu Touch variants; the multi-file install queue.
 - Flatpak: launcher portal dialog.
-- JDK 25 on the phones (the only JDK since 0.5.2): Quintus runs it 1-2 s slower than 21 + CDS had; X23 untested on 25.
+- JDK 25 on the phones (the only JDK since 0.5.2): Quintus runs it 1-2 s slower than 21 + CDS had; X23 (2026-11-20, click 0.5.4, runtime 0.5.3, JDK 25 image): phone-test hello newpipe providers camera sensors navbar race hidl PASS; hello.input reaches `started Main` in 26-31 s after a stack start with no spare (no AOT cache yet: 31 s), 8-16 s with a spare/after the cache (noisy; the cache is made only after an app launch leaves an idle spare that trains and ends). Not measured against 21 (gone).
 - Release: PackageKit/pkexec install of the deb untested; the Flatpak `openjdk25` extension and 26.08 runtime are only built in CI.
 - System-app reinstall on runtime change: unchecked on a phone.
 
@@ -53,7 +53,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Quintus: re-run `phone-test.sh sfos` groups with the current RPM (`tools/halium/unlock.sh sfos`).
 - Halium: vendor HALs, `media = device`, NewPipe network; wheel/stylus, text-input and the layout subtype cannot run under Lomiri: Sailfish/KDE check only.
 - Sailfish: a finger on the host dialog (Open Camera with CAMERA revoked was denied at once, no prompt seen); a geoclue fix outdoors.
-- Ubuntu Touch: turning by hand (the fake accelerometer did not reach sensorfwd); the manager's Install dialog (path field fills half the screen); the update banner is half a screen tall while it runs (`manager/ui/setup.slint` `UpdateBanner`); `HubIncoming/<n>` of a replaced Share stays.
+- Ubuntu Touch: turning by hand (the fake accelerometer did not reach sensorfwd). Fixed on branch utfix, checked only as manager screenshots on Parallels (not on the X23: needs the next click): Install dialog path field, UpdateBanner height, HubIncoming of a replaced Share (code only, needs Lomiri's Content Hub).
 - Bluetooth PIN dialog on a legacy device. A real USB serial adapter.
 - Push: a real Telegram/WhatsApp message with microG; the unit starting the stack at login.
 - By eye: window raise, text magnifier, portal file chooser, pkexec, Google sign-in, playback, audio, colours, IME look.
@@ -61,6 +61,6 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Apps: a Godot 4 game, JW Library thumbnails, a NewPipe download.
 
 ## Notifications on the phones
-- Lomiri (X23) drops every org.freedesktop.Notifications notification within ~30 ms: find why (notifyplugin `pruneExpired`/QML, a setting, a clock/zone problem) or deliver through the click Postal route (`com.lomiri.Postal`); until then no popup, tap, action or dismiss can be checked there.
+- Lomiri (X23): cause found (it closes a popup when the sending bus connection ends; the hub's `gdbus call` ended at once); fixed by bridge/portal/notify-bus.py (one connection), `phone-test ut notify-bus` PASS, the Java side checked with a probe on the phone. Open: rerun `ut notify` (tap, action, dismiss) with a click that has the fix.
 - Lipstick: swipe-away delete intent and action buttons (`x-nemo-remote-action-*`) are not driven by phone-test; group/summary stacking and a foreground-service entry need a human look at the events view.
 - The phones carry old host classes until the next click/RPM: rerun `phone-test.sh sfos notify` and `ut notify` after installing 0.5.x.
