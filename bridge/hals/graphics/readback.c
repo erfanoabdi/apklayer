@@ -243,6 +243,8 @@ static void pack_upload_row(uint32_t fourcc, uint32_t width, unsigned bpp, const
 {
     if (fourcc == DRM_FORMAT_XBGR8888) {
         for (uint32_t x = 0; x < width; ++x) memcpy(dst + (size_t)x * 3, src + (size_t)x * 4, 3);
+    } else if (fourcc == DRM_FORMAT_XRGB8888 && bpp == 3) {  /* RGB texels (bpp: the caller's upload_bpp), see apklayer_gfx_upload */
+        for (uint32_t x = 0; x < width; ++x) { dst[(size_t)x * 3] = src[(size_t)x * 4 + 2]; dst[(size_t)x * 3 + 1] = src[(size_t)x * 4 + 1]; dst[(size_t)x * 3 + 2] = src[(size_t)x * 4]; }
     } else {
         memcpy(dst, src, (size_t)width * bpp);
         if (fourcc == DRM_FORMAT_XRGB8888)
@@ -541,6 +543,8 @@ int apklayer_gfx_readback(struct gbm_device *gbm, int fd, uint32_t width, uint32
     return r;
 }
 
+static bool xrgb_rgb_only;  /* an XRGB8888 BGRA upload failed once: the driver's image has an RGB base format */
+
 int apklayer_gfx_upload(struct gbm_device *gbm, int fd, uint32_t width, uint32_t height, uint32_t fourcc, uint32_t stride,
                         uint32_t offset, uint64_t modifier, const void *src, uint32_t src_stride)
 {
@@ -552,7 +556,18 @@ int apklayer_gfx_upload(struct gbm_device *gbm, int fd, uint32_t width, uint32_t
     };
     unsigned upload_bpp = bpp;
     switch (fourcc) {
-    case DRM_FORMAT_ARGB8888: case DRM_FORMAT_XRGB8888:
+    case DRM_FORMAT_XRGB8888:
+        /* apklayer patch: Mesa's XRGB8888 images have an RGB base format: a BGRA upload is GL_INVALID_OPERATION (Intel and AMD, the
+         * group gfx-readback). Once seen, XRGB uploads go as RGB texels (R and B swapped from the buffer's B,G,R,X). */
+        if (xrgb_rgb_only) {
+            upload.format = GL_RGB;
+            upload.alignment = 1;
+            upload_bpp = 3;
+        } else {
+            upload.format = GL_BGRA_EXT;
+        }
+        break;
+    case DRM_FORMAT_ARGB8888:
         upload.format = GL_BGRA_EXT;
         break;
     case DRM_FORMAT_XBGR8888: case DRM_FORMAT_BGR888:
@@ -583,6 +598,10 @@ int apklayer_gfx_upload(struct gbm_device *gbm, int fd, uint32_t width, uint32_t
     }
     int r = gpu_copy(gbm, fd, width, height, fourcc, stride, offset, modifier, &upload, NULL, 0);
     free(packed);
+    if (r && fourcc == DRM_FORMAT_XRGB8888 && !xrgb_rgb_only) {
+        xrgb_rgb_only = true;
+        return apklayer_gfx_upload(gbm, fd, width, height, fourcc, stride, offset, modifier, src, src_stride);
+    }
     return r;
 }
 
