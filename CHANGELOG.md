@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-20: ASTC through ANGLE on NVIDIA comes from the Vulkan HAL's emulation (checked)
+
+- hello-glformats (built on the Mac, tests/apps/build.sh) in a throwaway instance on the RTX 5060 Ti, `APKLAYER_GLES_ANGLE=on`, owner's runtime
+  with vulkan.apklayer eb1b4a59: renderer ANGLE on Vulkan, `GL_KHR_texture_compression_astc_ldr` listed, 110 checks pass, 0 fail (42 ASTC:
+  every block size 4x4-12x12, UNORM and sRGB; 6 ETC2, 1 EAC).
+- Same run with `APKLAYER_VULKAN_TEXTURE_EMULATION=0`: no ASTC extension, the 28 ASTC uploads fail with GL_INVALID_ENUM (SKIP); so ANGLE's
+  ASTC is the HAL's emulation, not ANGLE's own.
+- Native GLES (ANGLE off): NVIDIA's driver has ASTC itself (offscreen run: 208 pass, 0 fail).
+- The owner's runtime got libberberis_arm64 b59d5c1f and vulkan.apklayer eb1b4a59 (old copies kept as `*.before-20261120`).
+
 ## 2026-11-20: heavy tier skips the loop and local passes by default (PGR home scene clean in two-gear mode)
 
 - binary_translation 0081: RemoveLoopGuestContextAccesses and RemoveLocalGuestContextAccesses stay off for the ARM64 guest unless
