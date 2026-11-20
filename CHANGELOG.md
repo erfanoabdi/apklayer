@@ -25,6 +25,16 @@
 - Zero copy (strace -f -y, glbench window clear 6 s, app JVM and SurfaceFlinger; ANGLE on): no mmap, read, write or DMA_BUF_IOCTL_SYNC on any dma-buf, no glReadPixels, no "ANGLE GPU CPU-map path" line, on either GPU. AMD (360 frames): app 737 poll()s on sync_file fds (2.0 per frame, 3000 ms timeout), 1482 DRM_IOCTL_SYNCOBJ_WAIT + 1113 TIMELINE_WAIT (GPU syncobj waits, 7 per frame), 24 GEM mmaps in the whole run; SurfaceFlinger 2558 sync_file polls with timeout 0 (7 per frame, status checks), 365 AMDGPU_CS, 9 PRIME_FD_TO_HANDLE (its imports). Intel (188 frames, 31 fps under strace): app 393 sync_file polls (2.1 per frame), SurfaceFlinger 1515 (8 per frame, timeout 0).
 - Open: ANGLE 10-bit windows swap red and blue and fp16 windows are black (both GPUs); fences needs EGL_ANDROID_get_frame_timestamps under ANGLE; gl-formats' offscreen run needs the ANGLE property outside a stack; AMD's LINEAR buffers are slower than tiled/DCC ones (modifiers.c's explicit list for Mesa is the way); app-created images with VkImageSwapchainCreateInfoKHR still reach the host driver with the loader's handle; NVIDIA now takes the eager swapchain path too (not run).
 
+## 2026-11-21: UTM Venus run of the graphics groups (branch venus)
+
+- Host: UTM VM (Venus 'Apple M5 Max' next to llvmpipe), own tree ~/apklayer-venus, JDK 25 unpacked there (APKLAYER_NATIVE_JAVA), prebuilts 99acf395.
+  gpu (with hwbitmap.py: HARDWARE copy, crops, pictures, ImageDecoder, BitmapFactory), gpu-window, vulkan, vulkan-textures (on Venus), vulkan-select, window-formats,
+  texture-view, fences, gles1: PASS. No AOSP rebuild.
+- gfx-readback failed: the CPU-written RGBX/BGRX window buffers (usage with SCANOUT, as COMPOSER_OVERLAY gives) read back 0,0,0,ff; UTM's virglrenderer drops the
+  transfers into X8 scanout resources (the A variants and non-scanout X buffers are fine). `alloc_flags` drops SCANOUT for CPU-drawn X buffers on virtio_gpu.
+- vulkan-present: with APKLAYER_VULKAN_PRESENT=1 the swapchain is created (3 images) and the first present hangs in libvulkan_virtio's poll: Venus cannot use
+  a dma-buf imported from virgl (known, Driver.cpp). The test skips on a host whose only GPU is Venus.
+
 ## 2026-11-20: black screenshots on virgl, FP16 opaque windows (branch gfxfix)
 
 - Build log: sync aosp/hals/graphics/common to the Mac tree's vendor/apklayer, `m mapper.apklayer libapklayer_allocator` (gsi_arm64 userdebug),

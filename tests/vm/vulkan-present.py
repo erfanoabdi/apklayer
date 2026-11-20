@@ -27,6 +27,11 @@ def stop():
     instance.kill('[b]in/apklayer hub')
 
 
+# Venus (the UTM VM) imports a virgl dma-buf and then hangs or aborts on the first command that uses it (Driver.cpp nativeBufferSupported: opt-in only);
+# only a host whose every GPU Vulkan device is Venus is a skip
+drivers = [l.split('=')[1].strip() for l in subprocess.run(['vulkaninfo', '--summary'], capture_output=True, text=True).stdout.splitlines() if l.strip().startswith('driverName')]
+if 'venus' in drivers and not set(drivers) - {'venus', 'llvmpipe'}:
+    sys.exit('SKIP vulkan-present: the host Vulkan GPU is Venus: it cannot use dma-bufs imported from virgl (swapchain images hang or abort)')
 stop()
 app = None
 seen = []
