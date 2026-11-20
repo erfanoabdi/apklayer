@@ -3,7 +3,9 @@
 ## 2026-11-20: black screenshots on virgl, FP16 opaque windows (branch gfxfix)
 
 - Build log: sync aosp/hals/graphics/common to the Mac tree's vendor/apklayer, `m mapper.apklayer libapklayer_allocator` (gsi_arm64 userdebug),
-  incremental, flock (bytesPerPixel knows DRM_FORMAT_XBGR16161616F).
+  incremental, flock, vendor/apklayer c1cb2dc (bytesPerPixel knows DRM_FORMAT_XBGR16161616F). Succeeded (9:48): mapper.apklayer.so
+  arm64 4252eb2d (86,752 bytes), libapklayer_allocator.so arm64 d7c97c74; not yet in prebuilts or the lock rows. Checked: window-fp16-opaque
+  attached 4 XB4H buffers, 0 "Stride didn't match" (was one per frame).
 - Black `apklayer screenshot` (groups gpu, gpu-window, texture-view, window-formats) on Parallels' virgl since caf13ede (2026-11-18): the HAL
   mapped LINEAR dma-bufs with mmap; on virtio-gpu that is the guest's shadow copy, not what the host GPU drew (the desktop showed the window,
   only SurfaceFlinger's capture buffer read black). `apklayer_gfx.shadowed` (DRM driver virtio_gpu) keeps GBM's transfer-based map there.
