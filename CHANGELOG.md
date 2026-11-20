@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.3 (release notes; apklayer 0.5.3, Android runtime 0.5.1 from prebuilts ddcfd1a2)
+
+- Runtime (x86_64): libberberis_arm64 b59d5c1f (binary_translation 0072-0082: CPU patches, exact FRECPS/FRSQRTS/FMLS, the heavy tier's loop and
+  local passes off by default so PGR's two-gear home scene is clean) and vulkan.apklayer cf7b2089 (ASTC/ETC2 emulation where the GPU lacks
+  them; window buffers bound at vkCreateImage except on Venus: Arknights: Endfield on NVIDIA past the black screen / GPU fault).
+- Package: spare JVMs delete the AOT configurations of ended processes (cli/spare.cpp; one instance had 163 GB), ANGLE libraries from the
+  package win over runtime copies (cli/env.cpp), APKLAYER_VULKAN_TEXTURE_TRACE.
+- The prebuilts' `experiments/` folders are not in the bundle (runtime-bundle.sh packs x86_64/ and common/ only).
+
 ## 2026-11-20: Endfield on NVIDIA: window buffers get their memory at vkCreateImage (GPU fault fixed)
 
 - Endfield (owner's runtime, vulkan.apklayer eb1b4a59): the login dialog over a black screen; the kernel logs `Xid 31` (UnityMain, MMU fault
