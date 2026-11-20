@@ -7,6 +7,8 @@
   uapi values, Linux 4.6+). Both paths compile here; the release dry run 44731520621 passed every job, Sailfish included.
 - v0.5.3 re-released (owner's choice): the old release and tag (5a3a1443) deleted, v0.5.3 re-tagged at 333f8eba; release run 44736585981
   rebuilds it with the Sailfish RPMs and replaces the releases.json entry. prebuilts-v0.5.3 unchanged.
+- That run published without the resolute amd64 debs (Maven Central HTTP 429 on simulator-4.17.jar in fetch-dep): release deleted again
+  (tag kept) and the failed job rerun, so the release job republishes 0.5.3 with every file.
 
 ## 0.5.3 (release notes; apklayer 0.5.3, Android runtime 0.5.1 from prebuilts ddcfd1a2)
 
