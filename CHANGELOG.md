@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20: hardware-bitmap fix into prebuilts (both CPUs) for 0.5.4
+
+- Build log: `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock, Mac tree vendor/apklayer da01fa5 (= main fc5a44f4); the
+  x86_64 output is the gsi_x86_64 build of the same sources (second build of the entry below).
+
 ## 2026-11-20: Vulkan HAL: VK_ANDROID_external_memory_android_hardware_buffer (hardware bitmaps under ANGLE)
 
 - New `aosp/hals/graphics/vulkan/HardwareBuffer.cpp`: vkGetAndroidHardwareBufferPropertiesANDROID from our gralloc handle (dma-buf size,
