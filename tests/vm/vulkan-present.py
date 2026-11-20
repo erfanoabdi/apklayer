@@ -49,8 +49,10 @@ try:
                 line = raw.decode(errors='replace'); seen.append(line)
                 if any(tag in line for tag in ('vkswap:', '[hello-vulkan]', 'apklayer.vulkan', 'SIGSEGV', 'fatal error')):
                     print(line, flush=True)
-                if 'family != UINT32_MAX failed' in line:  # vktest.cpp / vkpresent.c: no graphics queue family that presents (virgl, Venus, llvmpipe)
-                    sys.exit('SKIP vulkan-present: the host Vulkan has no present-capable queue family')
+                if 'family != UINT32_MAX failed' in line:  # vktest.cpp / vkpresent.c: no graphics queue family that presents
+                    host = subprocess.run(['vulkaninfo', '--summary'], capture_output=True, text=True).stdout  # only a host without a GPU device (llvmpipe) is a skip
+                    if 'deviceType' in host and 'PHYSICAL_DEVICE_TYPE_CPU' in host and not any(t in host for t in ('INTEGRATED_GPU', 'DISCRETE_GPU', 'VIRTUAL_GPU')):
+                        sys.exit('SKIP vulkan-present: the host Vulkan has only a CPU device (no present-capable queue family)')
                 assert not any(tag in line for tag in ('FATAL EXCEPTION', 'fatal error has been detected')), line
                 if not captured and 'vkswap: presented 60 frames' in line:
                     shot = instance.capture('Vulkan swapchain frames', PKG)

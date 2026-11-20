@@ -75,16 +75,18 @@ int main(int argc, char **argv)
             printf("%s  %s %s (modifier 0x%llx): upload %d, readback %d, round trip %s\n", ok ? "PASS" : "FAIL", formats[f].name,
                    linear ? "LINEAR" : "tiled", (unsigned long long)mod, up, rd, ok ? "identical" : "differs");
             ok ? passes++ : failures++;
-            if (linear && !up && virtio) printf("SKIP  %s LINEAR bytes: virtio-gpu maps through transfers (not coherent with the GPU write)\n", formats[f].name);
-            else if (linear && !up) {
+            if (linear && !up) {
                 uint32_t map_stride = 0;
                 void *map_data = NULL;
                 uint8_t *p = gbm_bo_map(bo, 0, 0, w, h, GBM_BO_TRANSFER_READ, &map_stride, &map_data);
                 if (!p) printf("SKIP  %s LINEAR bytes: the driver does not map it\n", formats[f].name);
                 else {
                     int raw = same(src, src_stride, p, map_stride, w, h, bpp, formats[f].x_byte);
-                    printf("%s  %s LINEAR bytes as the GPU wrote them match the CPU layout\n", raw ? "PASS" : "FAIL", formats[f].name);
-                    raw ? passes++ : failures++;
+                    if (!raw && virtio) printf("SKIP  %s LINEAR bytes: virtio-gpu's map is not coherent with another context's GPU write\n", formats[f].name);
+                    else {
+                        printf("%s  %s LINEAR bytes as the GPU wrote them match the CPU layout\n", raw ? "PASS" : "FAIL", formats[f].name);
+                        raw ? passes++ : failures++;
+                    }
                     gbm_bo_unmap(bo, map_data);
                 }
             }
