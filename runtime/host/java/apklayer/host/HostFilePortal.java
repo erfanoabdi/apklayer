@@ -19,7 +19,7 @@ final class HostFilePortal {
 
     static Intent pick(Intent intent) throws IOException {
         String action = intent.getAction();
-        List<String> command = new ArrayList<>(List.of("python3", helper(), Intent.ACTION_CREATE_DOCUMENT.equals(action) ? "save" : Intent.ACTION_OPEN_DOCUMENT_TREE.equals(action) ? "directory" : "open"));
+        List<String> command = new ArrayList<>(List.of("python3", helper("file-chooser.py"), Intent.ACTION_CREATE_DOCUMENT.equals(action) ? "save" : Intent.ACTION_OPEN_DOCUMENT_TREE.equals(action) ? "directory" : "open"));
         if (intent.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)) command.add("--multiple");
         String name = intent.getStringExtra(Intent.EXTRA_TITLE);
         if (Intent.ACTION_CREATE_DOCUMENT.equals(action) && name != null) { command.add("--name"); command.add(name); }
@@ -48,12 +48,12 @@ final class HostFilePortal {
     }
 
     /** The helper script lives in the install root (bridge/portal), found from the CLI's own location (-Dapklayer.cli). */
-    private static String helper() {
+    static String helper(String script) {
         java.io.File cli = new java.io.File(System.getProperty("apklayer.cli", ""));
         for (java.io.File dir = cli.getAbsoluteFile().getParentFile(); dir != null; dir = dir.getParentFile()) {
-            java.io.File candidate = new java.io.File(dir, "bridge/portal/file-chooser.py");
+            java.io.File candidate = new java.io.File(dir, "bridge/portal/" + script);
             if (candidate.exists()) return candidate.getPath();
         }
-        return "bridge/portal/file-chooser.py";
+        return "bridge/portal/" + script;
     }
 }

@@ -55,6 +55,13 @@ final class DesktopNotifications {
 
     /** The popup's id (0 when the desktop has no notification service); {@code actions} is key, label, key, label...; {@code hints} the Notify hints (Boolean, Integer, Byte, Double or String values). */
     int show(String app, int replaces, String icon, String summary, String body, List<String> actions, java.util.Map<String, Object> hints) {
+        if (useBus()) {  // Lomiri drops a popup when its sender leaves the bus: one connection for all of them
+            String text = "(" + String.join(", ", quote(app), String.valueOf(replaces), quote(icon), quote(summary), quote(body)) + ", [" + String.join(",", actions.stream().map(DesktopNotifications::quote).toList()) + "], {"
+                    + String.join(",", hints.entrySet().stream().map(h -> quote(h.getKey()) + ": " + variant(h.getValue())).toList()) + "}, int32 -1)";
+            try { startMonitor(); } catch (IOException failure) { return 0; }
+            Matcher id = Pattern.compile("uint32 (\\d+)").matcher(busCall("notify " + text.replace("\n", "\\n").replace("\r", "")));
+            return id.find() ? Integer.parseInt(id.group(1)) : 0;
+        }
         List<String> quoted = new ArrayList<>();
         for (String action : actions) quoted.add(quote(action));
         List<String> hintList = new ArrayList<>();
@@ -74,8 +81,34 @@ final class DesktopNotifications {
     }
 
     void close(int id) {
+        if (useBus()) { busCall("close " + id); return; }
         try { tool("gdbus", "call", "--session", "--dest", SERVICE, "--object-path", PATH, "--method", SERVICE + ".CloseNotification", String.valueOf(id)).start().waitFor(); }
         catch (IOException | InterruptedException failure) { System.out.println("[apklayer-hub] cannot close a notification: " + failure); }
+    }
+
+    private Process bus;
+    private java.io.BufferedWriter busIn;
+    private BufferedReader busOut;
+
+    private boolean useBus() { return "lomiri".equals(shell()) && !"1".equals(System.getenv("APKLAYER_SANDBOX")); }
+
+    /** One request line to bridge/portal/notify-bus.py (started on first use), its one answer line ("" when it is gone). */
+    private synchronized String busCall(String line) {
+        try {
+            if (bus == null || !bus.isAlive()) {
+                bus = tool("python3", HostFilePortal.helper("notify-bus.py")).redirectErrorStream(false).start();
+                busIn = new java.io.BufferedWriter(new java.io.OutputStreamWriter(bus.getOutputStream()));
+                busOut = new BufferedReader(new InputStreamReader(bus.getInputStream()));
+                Process started = bus;
+                Runtime.getRuntime().addShutdownHook(new Thread(started::destroyForcibly));
+            }
+            busIn.write(line + "\n"); busIn.flush();
+            String answer = busOut.readLine();
+            return answer == null ? "" : answer;
+        } catch (IOException failure) {
+            System.out.println("[apklayer-hub] notification bus helper: " + failure);
+            return "";
+        }
     }
 
     private synchronized void startMonitor() throws IOException {
