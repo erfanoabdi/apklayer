@@ -22,7 +22,7 @@ else
     code=$(get SAILFISH_LOCK); [ -n "$code" ] || { echo "unlock: no SAILFISH_LOCK in $conf" >&2; S "rm -rf $R"; exit 2; }
     # root for uinput and mce, as phone-test.sh does (key auth); the code goes over stdin
     echo "$code" | command ssh -o BatchMode=yes -o ConnectTimeout=10 "root@${host#*@}" "sh $R/sf-unlock.sh $R" >/dev/null 2>&1
-    out=$(S 'mcetool 2>/dev/null' | sed -n 's/^Display state: *on.*/on/p;s/^Tklock mode: *\(.*\)/\1/p' | tr '\n' ' ')
+    out=$(command ssh -o BatchMode=yes -o ConnectTimeout=10 "root@${host#*@}" 'mcetool 2>/dev/null' | sed -n 's/^Display state: *on.*/on/p;s/^Touchscreen\/Keypad lock: *\(.*\)/\1/p' | tr '\n' ' ')
     case $out in *on*unlocked*) out=unlocked;; esac
 fi
 S "rm -rf $R"
