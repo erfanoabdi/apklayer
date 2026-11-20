@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-20: graphics libraries of 2026-11-18 into the prebuilts (both CPUs), arm64 Vulkan HAL with the emulation
+
+- The runtime's libapklayer_egl, libapklayer_vdisplay and mapper.apklayer (both CPUs) predate the 2026-11-18 commits (EGL DMA-BUF presentation,
+  virtual-display buffer reuse and monitor pacing, direct gralloc metadata, Halium overlays); arm64 vulkan.apklayer (49dc04fb, 69 KB) has
+  neither the ASTC/ETC2 emulation nor the bind-at-vkCreateImage fix.
+- Build log: sync aosp/hals/graphics to the Mac tree's vendor/apklayer, then `m libapklayer_egl libapklayer_vdisplay mapper.apklayer`
+  (gsi_x86_64 userdebug) and `m libapklayer_egl libapklayer_vdisplay mapper.apklayer vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock:
+  both succeeded (10:43 and 11:34, Mac tree vendor/apklayer f5e981c). x86_64 outputs ac9bb20f/d82a1c07/23c4ead4 are byte-identical to the copies the
+  owner's runtime runs since 2026-11-19 (Endfield, PGR); arm64 35a7c031/00730478/335fce43/61181951 (vulkan 1,070,520 bytes) are not run on an
+  arm64 host yet (UTM is not reachable from the NVIDIA PC): run groups gpu, gpu-window, vulkan, vulkan-textures there.
+- prebuilts 2fb670a6 (on ddcfd1a2), lock rows updated, runtime=0.5.2; 0.5.3 re-released from it (owner).
+
 ## 2026-11-20: Sailfish build: graphics HAL without linux/dma-buf.h
 
 - The v0.5.3 release's `sailfish` job failed: `bridge/hals/graphics/graphics.c` includes `linux/dma-buf.h` (since caf13ede, 2026-11-18), which
@@ -10,8 +22,12 @@
 - That run published without the resolute amd64 debs (Maven Central HTTP 429 on simulator-4.17.jar in fetch-dep): release deleted again
   (tag kept) and the failed job rerun, so the release job republishes 0.5.3 with every file.
 
-## 0.5.3 (release notes; apklayer 0.5.3, Android runtime 0.5.1 from prebuilts ddcfd1a2)
+## 0.5.3 (release notes; apklayer 0.5.3, Android runtime 0.5.2 from prebuilts 2fb670a6)
 
+- Runtime 0.5.2: the graphics HALs of 2026-11-18 on both CPUs (libapklayer_egl, libapklayer_vdisplay, mapper.apklayer: DMA-BUF window
+  presentation, virtual-display buffer reuse and monitor pacing, direct gralloc metadata, Halium overlays) and, on arm64, vulkan.apklayer with
+  the ASTC/ETC2 emulation and the bind-at-vkCreateImage fix (as on x86_64).
+- Sailfish OS RPMs again (the graphics HAL builds without linux/dma-buf.h).
 - Runtime (x86_64): libberberis_arm64 b59d5c1f (binary_translation 0072-0082: CPU patches, exact FRECPS/FRSQRTS/FMLS, the heavy tier's loop and
   local passes off by default so PGR's two-gear home scene is clean) and vulkan.apklayer cf7b2089 (ASTC/ETC2 emulation where the GPU lacks
   them; window buffers bound at vkCreateImage except on Venus: Arknights: Endfield on NVIDIA past the black screen / GPU fault).
