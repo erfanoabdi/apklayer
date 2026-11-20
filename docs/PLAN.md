@@ -13,7 +13,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 
 ## Bugs
 - ANGLE on ARM64: build Android arm64 ANGLE and Linux aarch64 host EGL/GLES from the Google source, then verify Vulkan DMA-BUF import and SurfaceFlinger composition before packaging it.
-- (Halium X23 done 2026-11-20: graphics = device Mali: UiBench draws, hello.hwbitmap readback and pictures 20/20; Vulkan fixed 2026-11-21 (branch malivk: the bare vulkan.mali.so was not found, cli/env.cpp maps it into the vendor namespace; Mali-G57 MC2, 1.1.177); UTM and the groups not run.) arm64 graphics HALs of runtime 0.5.2 (egl, vdisplay, mapper of 2026-11-18; vulkan.apklayer with ASTC/ETC2 emulation and bind-at-create, Venus keeps the bind at acquire) never ran on an arm64 host: run groups `gpu gpu-window vulkan vulkan-textures` on UTM and a Halium phone check. Validation leftovers on NVIDIA: usage-02275 (emulated SRGB image views inherit STORAGE usage; a VkImageViewUsageCreateInfo would quiet it).
+- arm64 graphics HALs: X23 (click 0.5.5, runtime 0.5.5, 2026-11-21) UiBench, hwbitmap, Vulkan (Mali-G57, present 600 frames) pass; Parallels virgl groups pass (black-screen cause: direct dma-buf mmap on virtio-gpu, fixed). Open: Venus. Validation leftovers on NVIDIA: usage-02275 (emulated SRGB image views inherit STORAGE usage; a VkImageViewUsageCreateInfo would quiet it).
 - Arknights: Endfield on NVIDIA runs past the login screen (owner, 2026-11-20); earlier Tencent ACE ended it ~60 s in (CHANGELOG 2026-11-12): check a longer session.
 - Hardware bitmaps on NVIDIA (fix in tree, 2026-11-20: vulkan.apklayer's AHardwareBuffer import, uncompressed tiled gralloc buffers): in 0.5.4 (runtime 0.5.3): check YouTube's thumbnails; Venus/arm64 untested. `apklayer screenshot` under ANGLE on NVIDIA still fails on the stock runtime (seen 2026-11-20). YouTube signed out: the EU consent page was wider than the window ("Inloggen" cut off).
 
@@ -36,7 +36,7 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 ## Packaging and releases
 - File associations (`docs/FILE-ASSOCIATIONS.md`, group `open-files`): needs a person: double-click of .apk/.apks/.xapk/.apkm in GNOME Files and Dolphin, OpenVPN importing an .ovpn. Open: `apklayer open` under the sandbox for a running app's `onNewIntent`; adaptive/vector icons in the install preview; Flatpak, Sailfish, Ubuntu Touch variants; the multi-file install queue.
 - Flatpak: launcher portal dialog.
-- JDK 25 on the phones (the only JDK since 0.5.2): Quintus runs it 1-2 s slower than 21 + CDS had; X23 (2026-11-20, click 0.5.4, runtime 0.5.3, JDK 25 image): phone-test hello newpipe providers camera sensors navbar race hidl PASS; hello.input reaches `started Main` in 26-31 s after a stack start with no spare (no AOT cache yet: 31 s), 8-16 s with a spare/after the cache (noisy; the cache is made only after an app launch leaves an idle spare that trains and ends). Not measured against 21 (gone).
+- JDK 25 on the phones (the only JDK since 0.5.2): X23 (click 0.5.5) groups pass, hello.vulkan starts 19 s with the stack up, 33 s cold; Quintus 4.5 s warm to first frame, AOT cache works; not measured against 21 (gone).
 - Release: PackageKit/pkexec install of the deb untested; the Flatpak `openjdk25` extension and 26.08 runtime are only built in CI.
 - System-app reinstall on runtime change: unchecked on a phone.
 

@@ -96,7 +96,7 @@ for g in "$@"; do
         report $ok notify-hints "progress bar, suppress-sound on the silent channel, the large icon, urgency$([ $os = sfos ] && echo ', Lipstick banner text')"
         grep -q 'member=CloseNotification' "$mon"; report $? notify-cancel "cancel() closed the shell's popup"
         if [ "$os" = ut ]; then  # Lomiri (2026-11-16, X23): its notification server closes every Notify within 50 ms (reason 1), also one sent by gdbus alone: no popup to tap
-            echo "SKIP notify-click: Lomiri closes the popups at once ($(grep -a -c 'member=NotificationClosed' "$mon") closes by the shell)"
+            echo "SKIP notify-click: tap/action not driven (popups now live ~5 s; $(grep -a -c 'member=NotificationClosed' "$mon") closes by the shell)"
         else
             grep -a -q '^\[nf\] received nf.OPEN' "$R/notify.out"; report $? notify-click "a tap on the popup sent the content intent (received: $(grep -a '^\[nf\] received' "$R/notify.out" | cut -d' ' -f3 | tr '\n' ' '); hub: $(grep -a -c 'notification click' "$state/hub.log" 2>/dev/null) clicks, $(grep -a 'closed by the desktop' "$state/hub.log" 2>/dev/null | head -3 | cut -d' ' -f2-7 | tr '\n' ';'))" 
         fi ;;
