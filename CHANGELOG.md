@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-20: PLAN cleaned against the commits
+
+- Revert b57bba7e (2026-11-18) and the ASTC revert/reapply (7bcfb6b7, 7a180ac1, d4f58218) carried a 2026-11-16 copy of PLAN's Bugs, Startup
+  and memory, Userspace binder and Native bridge sections back in; the 2026-11-17 cleanup (2d0d962b, 0722817b) had removed them (parked items
+  in NOTPLAN, PGR items in PGR-STATUS). Removed again; the arm64-HAL, ANGLE retest and heavy-tier replay items of today stay.
+- Closed: Play Store's intermittent `no base APK` (59ed8071: Play Store's split-only MODE_INHERIT_EXISTING sessions are merged with the
+  installed base), GApps sign-in (works, owner 2026-11-17), NewPipe Trending (owner).
+
 ## 2026-11-20: ANGLE screenshots on NVIDIA fixed (owner)
 
 - The owner reports SurfaceFlinger captures work in ANGLE mode on NVIDIA (the LINEAR capture buffer `EINVAL` of 2026-11-18); PLAN item closed.

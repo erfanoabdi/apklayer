@@ -17,12 +17,9 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - ANGLE on ARM64: build Android arm64 ANGLE and Linux aarch64 host EGL/GLES from the Google source, then verify Vulkan DMA-BUF import and SurfaceFlinger composition before packaging it.
 - arm64 graphics HALs of runtime 0.5.2 (egl, vdisplay, mapper of 2026-11-18; vulkan.apklayer with ASTC/ETC2 emulation and bind-at-create, Venus keeps the bind at acquire) never ran on an arm64 host: run groups `gpu gpu-window vulkan vulkan-textures` on UTM and a Halium phone check. Validation leftovers on NVIDIA: usage-02275 (emulated SRGB image views inherit STORAGE usage; a VkImageViewUsageCreateInfo would quiet it).
 - Arknights: Endfield on NVIDIA runs past the login screen (owner, 2026-11-20); earlier Tencent ACE ended it ~60 s in (CHANGELOG 2026-11-12): check a longer session.
-- Play Store installs fail intermittently with `INSTALL_FAILED_INVALID_APK: no base APK` (HubInstaller.staged; three Endfield sessions on 2026-11-15, a later one installed). HubInstaller's error now names the session's files and sizes: read it at the next failure.
 - Play services sends a reply of exactly 8388608 bytes (`Large reply transaction`, code 46); since 2026-11-15 its caller gets BR_FAILED_REPLY as on the kernel. Which call it is and whether the caller copes is unknown: read hub.log for `Large reply transaction of 8388608` at the next one.
 - Play services' `:persistent` exits with 1 now and then ("Instance hub disconnected" for binds meanwhile); no System.exit caller seen: run with `APKLAYER_EXIT_TRACE=1 APKLAYER_JOPTS=-Dapklayer.exittrace=true` and read its component log at the next one.
-- GApps sign-in (GMS 26.44): the chain of fixes up to 2026-11-16 (Cronet fallback, Services.bind deadlock, signer lineage, grpc-binder oneway uid on the userspace binder, .dm files, DelegateLastClassLoader overlay) gets Play services to check in; setup then reported "There was a problem communicating with Google servers" (DroidGuard `Couldn't fetch response`, Cronet Dynamite `ImplVersion`). Needs a human check: a sign-in in `gwd` (owner's credentials), then read its log (`-Dapklayer.traceuncaught=true`). The kernel binder still reads a oneway caller as nobody. Waydroid Android 13 works without Integrity (owner).
 - YouTube 21.45: check the signed-in feed and a video in the owner's instance with the ApklayerBuffers.array fix (2026-11-16); signed out, the EU consent page was wider than the window ("Inloggen" cut off).
-- NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 
 ## Input / IME
 - Wheel and stylus (touchpad, tablet) never ran on real hardware; the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) go through the test input only.
@@ -33,24 +30,8 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Storage: scoped storage follows symlinks only in the process that made one (or its children) and cwd-relative paths only under the instance's Android/; earlier links and `openat(dirfd, ...)` into another package's directory are not seen (needs a fd-based check).
 - Call audio: the hub polls the audio policy each second while two communication requesters compete; a native client carries uid 1000, so another process of the same app does not count; run `audio-uid` and `audio-backend-swap` on the x86 PC.
 
-## Startup and memory
-- The spare key churns with launches from terminals with different environments (allowlist, or the hub deriving the environment per launch).
-- Hyphenator nInit off-CPU on cold starts; cold JNI_OnLoad ~150 ms; a SIGKILLed waiter leaves its JVM until stop; spare-born processes have cwd = appsDir.
-- An app's first hub call waits for the hub boot (4-8 s under load): fewer classes before READY.
-- A sandboxed instance cannot write its CDS archive; "Preload Warning: Verification failed" lines in the dumping app's log.
-- Native side: SurfaceFlinger's shader-cache priming; the composer's GL context (~80 MB once an app drew) and SurfaceFlinger's Mali block; libraries services never use.
-- Audio without a sound server: a server started later is used only from the next stack start; audio-late-install failed once per host during a CDS write.
-- Owner to decide: whether Lomiri should suspend an unfocused apklayer window.
-
-## Userspace binder
-- Fewer hops per call (futex doorbells, reply without a second replier wakeup, a busy-poll window); measure SurfaceFlinger per frame and audio.
-- A Halium device without binderfs (host context fixed at /dev/binder): isHalium() needs binderfs today.
-
 ## Native bridge (x86_64)
 - PGR's home-scene noise is gone with the heavy tier's loop and local passes off (binary_translation 0081); the bug in those passes is not found: capture the game's regions with BERBERIS_HEAVY_DUMP and write the replay test (0082), then fix and turn them back on.
-- No translation cache across starts; Telegram (no x86_64 FOSS APK to test); the manager's "translated" label.
-- The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
-- Unity: `hpatchz`; no backtrace in the fault note; the app log cap misses Log lines.
 
 ## Sandbox (before it can be the default)
 - NVIDIA sandbox: broker and `nvidia-modprobe` (0660, missing nodes) run only on a real Debian-style NVIDIA box.
