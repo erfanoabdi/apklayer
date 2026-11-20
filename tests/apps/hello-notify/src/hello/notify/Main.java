@@ -44,7 +44,7 @@ public class Main extends Activity {
             @Override public void onReceive(Context context, Intent intent) { System.out.println("[nf] received " + intent.getAction()); }
         };
         IntentFilter filter = new IntentFilter();
-        for (String action : new String[] {"nf.OPEN", "nf.ACT1", "nf.ACT2", "nf.DEL"}) filter.addAction(action);
+        for (String action : new String[] {"nf.OPEN", "nf.ACT1", "nf.ACT2", "nf.ACT3", "nf.ACT4", "nf.DEL"}) filter.addAction(action);
         registerReceiver(receiver, filter, RECEIVER_EXPORTED);
         nm.createNotificationChannel(new NotificationChannel("high", "High", NotificationManager.IMPORTANCE_HIGH));
         nm.createNotificationChannel(new NotificationChannel("def", "Default", NotificationManager.IMPORTANCE_DEFAULT));
@@ -57,6 +57,14 @@ public class Main extends Activity {
         vib.enableVibration(true); vib.setVibrationPattern(new long[] {0, 200, 100, 200});
         nm.createNotificationChannel(vib);
 
+        if (Boolean.getBoolean("hello.buttons")) {  // only the notification phone-test swipes away and presses (the banner of the others would be in the way)
+            // never replaced, not auto-cancel: the target of phone-test's swipe-away (nf.DEL) and button taps (nf.ACT3, nf.ACT4)
+            nm.notify(12, base("def", "nf buttons", "swipe me away").setDeleteIntent(broadcast("nf.DEL", 5))
+                    .addAction(new Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_menu_send), "Third", broadcast("nf.ACT3", 6)).build())
+                    .addAction(new Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_menu_send), "Fourth", broadcast("nf.ACT4", 7)).build()).build());
+            System.out.println("[nf] POSTED active=" + nm.getActiveNotifications().length);
+            return;
+        }
         Bitmap large = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
         large.eraseColor(Color.rgb(200, 40, 40));
         nm.notify(1, base("high", "nf basic", "basic text").setLargeIcon(large).setSubText("sub").setShowWhen(true).setAutoCancel(true)

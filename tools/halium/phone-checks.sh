@@ -54,7 +54,7 @@ for g in "$@"; do
     fullscreen)  # UiBench hides the system bars (script step) and shows them again: the navigation bar inset 84 -> 0 -> 84, the window whole screen and back
         run_app com.android.test.uibench fullscreen 24000 "-Dapklayer.debugkeys=true -Dapklayer.script=7000:navinset+8000:fullscreen:1+12000:navinset+13000:fullscreen:0+18000:navinset+19000:navinset"
         ins=$(sed -n 's/^\[apklayer\] navinset \(-\?[0-9]*\)$/\1/p' "$R/fullscreen.out" | tr '\n' ' ')
-        grep -a -q 'fullscreen on' "$state/shell.log" && grep -a -q 'fullscreen off' "$state/shell.log" && case "$ins" in "84 0 84 84 ") true ;; *) false ;; esac
+        grep -a -q 'fullscreen on' "$state/shell.log" && grep -a -q 'fullscreen off' "$state/shell.log" && echo "$ins" | awk '{ exit !($1 > 0 && $2 == 0 && $3 == $1 && $4 == $1) }'  # 48 dp of the display: 84 px on the X23, 135 on the Quintus
         report $? fullscreen "navigation bar insets: $ins" ;;
     navbar)  # ut: a touch on the shell's navigation bar (Back, 180,1536 on the X23) reaches the app and gives the haptic click at the vibrator
         [ "$os" = ut ] || { echo "SKIP navbar: Lomiri touch only"; continue; }

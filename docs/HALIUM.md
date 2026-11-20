@@ -126,6 +126,9 @@ Never the GNSS HAL (its one client is the OS's location service): a GNSS backend
   MLS providers; no GeoClue 2. The `geoclue1` backend's names and GetPosition signature come from the binaries' dbus-glib data
   (MasterClient.SetRequirements(iibi), PositionStart; Position.GetPosition -> `(iiddd(idd))`); tested only against a stand-in
   (tests/vm/geoclue1-mock.py): a Sailfish build is needed to run it there (glibc 2.30).
+  The user's switch is Settings > Location (`/var/lib/location/location.conf`, `enabled=true`, the agreement accepted; GPS on needs `gps\enabled=true`
+  in it and connman's gps technology `Powered=true`): a privacy choice, so neither the RPM nor `apklayer setup` touches it; `apklayer status`
+  says "GeoClue 1, but Location is off in Settings". sensorfwd stops its sensors while the screen is off (apps see zeros): lit screen for tests.
 
 ## 2026-11-05: Volla X23 display facts for the mobile window style (read only)
 Read with this branch's `apklayer-shell --display-info` (built on UTM, copied to /tmp on the phone, run once against Lomiri's `wayland-0`, removed afterwards; nothing of `~/apklayer-dev` touched). Lomiri's wl_output: 720x1560 px, 65x140 mm, scale 1 (100%). Panel 6.0" (hypot 65,140 mm = 154 mm), 281 dpi -> density bucket 280 (`handheld_dpi()` is right; no fix needed). Cross-check: Lomiri's `GRID_UNIT_PX=14` (a grid unit is 8 dp: 14/8 = 1.75 = 280/160). `mobile 1`. Lomiri's environment (/proc/<lomiri>/environ): `XDG_CURRENT_DESKTOP=Lomiri`, `XDG_SESSION_DESKTOP=ubuntu-touch`, `DESKTOP_SESSION=ubuntu-touch`, `XDG_SESSION_TYPE=mir`, `QT_QUICK_CONTROLS_MOBILE=1`: `mobile_session()` matches the first two (case-insensitive) when the shell inherits them; started from ssh they are unset and the panel size alone gives mobile. Not checked on the phone (needs a window): Lomiri's maximize and top-bar area, touch on the navigation bar, Home's minimize.
@@ -510,11 +513,11 @@ weston's VNC backend stops repainting (no frame callbacks, no buffer releases) w
   `sh tools/release/sailfish-rpm.sh <version> <prebuilts> <out>` (no extra dev headers were needed: wayland, cairo, xkbcommon come from the target's repositories).
   A build that ends "Installed (but unpackaged) file(s) found" lacks a file in `rpm/apklayer.spec` (the VPN policy was).
 - `tools/halium/phone-install.sh <ut|sfos> <dir>`: copies the click or RPMs and the bundle over the LAN, installs (click: `gdbus ... com.lomiri.click.Install`,
-  Quintus: `rpm -Uvh --replacepkgs` as root), runs `apklayer setup --bundle`, removes its copies.
+  Quintus: `rpm -Uvh --replacepkgs` as root), runs `apklayer setup --update --bundle` (without `--update` a phone that has a runtime keeps it) and stops the default instance's stack (Quintus; its hub and shell are processes of the old package), removes its copies.
 - `tools/halium/phone-test.sh <ut|sfos> <group>...`: runs `phone-checks.sh` on the phone in an instance of its own (`ptest`) and prints PASS/FAIL per group:
   `hello` (hello.input, SurfaceFlinger's picture), `providers` (graphics, camera, media, vibrator are `device` by default), `hidl` (`hidl-list.sh`),
   `hidl-host` (hello.hidl: the instance's own manager and marker, an own service; `hidltool manager|local`), `camera` (hello.camera lists cameras, none is FAIL),
-  `sensors` (hello.hardware), `fullscreen` (UiBench hides and shows the system bars: the navigation bar inset 84, 0, 84), `navbar` (ut: touches on the bar's
+  `sensors` (hello.hardware), `fullscreen` (UiBench hides and shows the system bars: the navigation bar inset N, 0, N (84 px on the X23, 135 on the Quintus)), `navbar` (ut: touches on the bar's
   Back reach the app and the hub logs the vibrator's click), `notify` (`hello.notify`: every kind of notification reaches the shell's notification service, hints, replace, cancel, a tap on the Lipstick banner; Lomiri closes all of them at once: SKIP click; Lipstick pictures in `build/phone-shots`), `race` (`tests/vm/spare-race.py`), `rotate` (Sailfish: Lipstick's orientation lock turns the
   shell's display; the lock is put back). It copies what it needs, removes it and the instance, and wakes and unlocks the phone first with
   `tools/halium/unlock.sh <ut|sfos>` (apps are stopped while it is locked): the X23's PIN is `UBPORTS_PASSWORD` (swipe to the keypad, press the digits, then
