@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-20: black screenshots on virgl, FP16 opaque windows (branch gfxfix)
+
+- Build log: sync aosp/hals/graphics/common to the Mac tree's vendor/apklayer, `m mapper.apklayer libapklayer_allocator` (gsi_arm64 userdebug),
+  incremental, flock (bytesPerPixel knows DRM_FORMAT_XBGR16161616F).
+- Black `apklayer screenshot` (groups gpu, gpu-window, texture-view, window-formats) on Parallels' virgl since caf13ede (2026-11-18): the HAL
+  mapped LINEAR dma-bufs with mmap; on virtio-gpu that is the guest's shadow copy, not what the host GPU drew (the desktop showed the window,
+  only SurfaceFlinger's capture buffer read black). `apklayer_gfx.shadowed` (DRM driver virtio_gpu) keeps GBM's transfer-based map there.
+- `window-fp16-opaque` (Mesa 25.2 gives XB4H, XBGR16161616F): the mapper reported the stride in bytes (8192 for 1024 px, "Gralloc5: Stride
+  didn't match"), the import failed and the frame was copied; bytesPerPixel now has the X variant.
+- Tests: vulkan-present and vulkan-select (real) end with `SKIP <why>` where the host Vulkan has no present-capable queue family / only one
+  device; gfx-readback skips on virtio-gpu what virgl cannot do (raw LINEAR bytes after another context's write, BGRA upload into XRGB8888).
+
 ## 0.5.4 (release notes; apklayer 0.5.4, Android runtime 0.5.3 from prebuilts 77dd42af)
 
 - Hardware bitmaps on NVIDIA with ANGLE (the default there): images that apps decode into hardware bitmaps (YouTube's thumbnails, Glide's
