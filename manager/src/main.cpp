@@ -361,10 +361,15 @@ public:
 
     // the install dialog's file: the chooser (file-chooser.py: the portal, else Content Hub) for "open"; "import" receives an .apk shared to
     // apklayer from another app through Content Hub (--share: the apklayer-share peer)
+    // the file the dialog showed (a Share's HubIncoming copy) is not used when another one replaces it: its folder goes now, not never
+    void dropReplaced(const std::string& next) {
+        if (std::string old(ui_->global<Backend>().get_chosen_path()); !old.empty() && old != next) manager::dropImported(old);
+    }
+
     void chooseApk(const std::string& mode) {
         if (root_.empty()) { message("No file chooser: type the path of the .apk"); return; }
         later([chooser = root_ + "/bridge/portal/file-chooser.py", mode] { return manager::runProgram({"python3", chooser, mode}); }, [this](const Result& r) {
-            if (std::string path = manager::chosenFile(r); !path.empty()) { ui_->global<Backend>().set_chosen_path(slint::SharedString(path)); return; }
+            if (std::string path = manager::chosenFile(r); !path.empty()) { dropReplaced(path); ui_->global<Backend>().set_chosen_path(slint::SharedString(path)); return; }
             if (r.out.find("unavailable") == std::string::npos) { message("No file chosen"); return; }
             // no portal and no Content Hub: the .apk files in the usual folders, listed in the dialog
             auto found = std::make_shared<slint::VectorModel<InfoEntry>>();
@@ -405,7 +410,7 @@ private:
         b.set_instance(slint::SharedString(cli_.instance));
         b.on_refresh([this] { refresh(); });
         // a Content Hub import (Ubuntu Touch) is a copy for this install: dropped once installed
-        b.on_install_path([this](slint::SharedString path) { std::string p(path); action("Installing", {"install", p}, "", [p] { manager::dropImported(p); }, [this](const Result& r) { installed(r); }); });
+        b.on_install_path([this](slint::SharedString path) { std::string p(path); dropReplaced(p); action("Installing", {"install", p}, "", [p] { manager::dropImported(p); }, [this](const Result& r) { installed(r); }); });
         b.on_preview_path([this](slint::SharedString path) { preview(std::string(path)); });
         b.on_install_chooser([this] { chooseApk("open"); });
         b.on_open_app([this](slint::SharedString pkg) {

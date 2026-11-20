@@ -102,8 +102,10 @@ export component FirstRunPage {
 // M3 banner: an update, or apps to convert again after one; its progress while it runs
 export component UpdateBanner {
     VerticalLayout {
+        alignment: start;  // the card keeps its content's height (it was stretched over half the window while updating)
         FilledCard {
             VerticalLayout {
+                alignment: start;
                 padding: MaterialStyleMetrics.padding_16;
                 spacing: MaterialStyleMetrics.spacing_8;
                 MaterialText { text: Backend.update-title; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; wrap: word-wrap; }

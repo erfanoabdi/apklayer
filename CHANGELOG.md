@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-20: X23 round (branch utfix): JDK 25 check, Lomiri notifications, manager layout
+
+- X23 on the 0.5.4 click (installed through com.lomiri.click; runtime 0.5.3 bundle built on the Mac from prebuilts 77dd42af with runtime-bundle.sh, GNU tar/sha256sum shims, pushed over the LAN; `setup --update --bundle`): `phone-test.sh ut hello newpipe providers camera sensors navbar race hidl` PASS (the click's JDK is 25). `fullscreen` insets are right (84 0 84 84) but its shell.log grep fails in the ptest state dir, `hidl-host` needs hello-hidl.apk (not in build/): harness, not the click.
+- JDK 25 start: hello.input (own instance, X23): `started Main` 26-31 s after `stop` without a spare; the AOT cache (JEP 483) is made only when an idle spare trains after an app launch (cds/*.aot, 31 MB state dir); runs killed or taken by the launch leave empty `*.aotconf.*`. With the cache and a spare 8-16 s. Not compared with 21.
+- Graphics (graphics = device, Mali-G68): UiBench draws (SurfaceFlinger picture), hello.hwbitmap: HARDWARE readback ff0000ff ffff8000, crops 50/50, pictures 20/20. hello.vulkan: vulkan.mali.so loads, `vkEnumeratePhysicalDevices` count 0 (aosp/tools/vktest.cpp line 55), open.
+- Notifications: Lomiri's NotificationServer closes a popup when the connection that sent it leaves the bus (`serviceUnregistered`): `gdbus call` Notify closed at once (timeout 20 s), a Python Gio client that stays gets the 5 s expiry. DesktopNotifications now talks to Lomiri through bridge/portal/notify-bus.py (one connection, notify/close lines, GVariant text); phone-test group notify-bus. Probe of the Java class on the phone: shown, replaced (same id), closed once at the end.
+- Manager: dialog TextFields have max-height 64 px (the install path field filled half the screen on a phone), UpdateBanner and its row keep their content's height, a Share's HubIncoming copy is dropped when another file replaces it (install of another path or the chooser). Screenshots `manager --screenshot` on Parallels (before/after); the X23 needs a new click.
+
 ## 0.5.4 (release notes; apklayer 0.5.4, Android runtime 0.5.3 from prebuilts 77dd42af)
 
 - Hardware bitmaps on NVIDIA with ANGLE (the default there): images that apps decode into hardware bitmaps (YouTube's thumbnails, Glide's
