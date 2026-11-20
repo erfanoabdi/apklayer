@@ -277,6 +277,18 @@ std::string prepend(const std::string& dir, const std::string& path) {
 }
 }  // namespace
 
+// Android's Vulkan loader dlopens the bare vulkan.<ro.hardware.vulkan>.so (libvndksupport without a sphal namespace); bionic_translation's search then
+// misses it and glibc's dlopen fails (vkEnumeratePhysicalDevices: 0 devices on a Halium device). Mapped to the absolute path in the vendor's hw
+// directory, it loads in the vendor namespace like EGL's driver.
+static std::string vulkanDriverLines(const std::string& lib) {
+    std::string lines;
+    for (const char* key : {"ro.hardware.vulkan", "ro.board.platform"}) {
+        std::string name = "vulkan." + deviceProperty(key) + ".so", path = "/vendor/" + lib + "/hw/" + name;
+        if (name.size() > 10 && exists(path)) lines += name + " " + path + "\n";
+    }
+    return lines;
+}
+
 // A Halium device's graphics (providers.toml: graphics = device, docs/HALIUM.md): its vendor libraries load in bionic_translation's
 // vendor namespace (0039) with the VNDK of the vendor's Android version, and Android's own libEGL/libGLES (the device's driver from
 // /vendor/lib64/egl) replace apklayer's host-EGL ones: a cfg.d in the instance's directory, first in XDG_DATA_DIRS.
@@ -304,7 +316,7 @@ static void deviceGraphicsEnv(const Instance& instance, Env& env, const std::str
     makeDirs(join(share, "bionic_translation/cfg.d"));
     writeFile(join(share, "bionic_translation/cfg.d/device-graphics.cfg"),
               "# graphics = device: Android's own EGL loader and GLES (the device's driver), not apklayer's host EGL\n"
-              "libEGL.so libEGL.so\nlibGLESv1_CM.so libGLESv1_CM.so\nlibGLESv2.so libGLESv2.so\nlibGLESv3.so libGLESv3.so\n");
+              "libEGL.so libEGL.so\nlibGLESv1_CM.so libGLESv1_CM.so\nlibGLESv2.so libGLESv2.so\nlibGLESv3.so libGLESv3.so\n" + vulkanDriverLines(lib));
     env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
 }
 
@@ -356,7 +368,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     // system_server's services stay in the JVM; native clients use their existing unavailable-service fallbacks
     if (!env.count("APKLAYER_NO_SYSTEM_SERVER")) env["APKLAYER_NO_SYSTEM_SERVER"] = "1";
     // Android and host Vulkan loaders retain separate dispatch tables once the frontend is installed.
-    const bool hostVulkanStaged = exists(join(l, "libapklayer_vulkan.so")) && exists(join(l, "vulkan.apklayer.so"));
+    const bool hostVulkanStaged = !deviceGraphics(layout, instance) && exists(join(l, "libapklayer_vulkan.so")) && exists(join(l, "vulkan.apklayer.so"));  // graphics = device: the vendor's own Vulkan driver, no host loader behind libvulkan
     if (hostVulkanStaged) env["APKLAYER_VULKAN_HOST"] = "1";
     else env.erase("APKLAYER_VULKAN_HOST");
     const std::string vulkanSetting = getenvOr("APKLAYER_VULKAN_PRESENT", "");

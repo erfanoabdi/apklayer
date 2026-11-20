@@ -80,7 +80,8 @@ static int run(void* library, unsigned cycle) {
     printf("vktest: dma_buf=%d drm_modifier=%d semaphore_fd=%d sync_fd_features=0x%x android_swapchain=%d\n",
         dma, modifier, semaphoreFd, semaphoreProperties.externalSemaphoreFeatures, swapchain); fflush(stdout);
     // Android's swapchain exists when asked for (APKLAYER_VULKAN_PRESENT) and the host device can import dma-bufs and share sync fds (Driver.cpp)
-    REQUIRE(swapchain == (apklayer::hostGetenv("APKLAYER_VULKAN_PRESENT") && dma && modifier && semaphoreFd));
+    // (graphics = device: the vendor driver's own VK_ANDROID_native_buffer gives the swapchain, no host loader: APKLAYER_VULKAN_HOST unset)
+    REQUIRE(!apklayer::hostGetenv("APKLAYER_VULKAN_HOST") || swapchain == (apklayer::hostGetenv("APKLAYER_VULKAN_PRESENT") && dma && modifier && semaphoreFd));
     count = 0; vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count); vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, families.data());
     uint32_t family = UINT32_MAX;

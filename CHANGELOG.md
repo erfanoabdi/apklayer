@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-21: Vulkan enumerated 0 devices on the Halium X23 (branch malivk)
+
+- Build log: sync aosp/tools to the Mac tree's vendor/apklayer, `m libapklayer_vktest` (gsi_arm64 userdebug), incremental, flock (necessary: the probe asserted the host route's swapchain rule, which a device driver breaks; one test file). Result below.
+
 ## 2026-11-20: black screenshots on virgl, FP16 opaque windows (branch gfxfix)
 
 - Build log: sync aosp/hals/graphics/common to the Mac tree's vendor/apklayer, `m mapper.apklayer libapklayer_allocator` (gsi_arm64 userdebug),

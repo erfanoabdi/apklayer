@@ -109,6 +109,10 @@ GPU (Mali-G57 through Android's libEGL) in apklayer's processes; the vendor libr
   vendor.*, debug.mediatek.*. MediaTek's mapper and allocator derive a buffer's allocation format the same way, from usage and
   `debug.mediatek.disp_decompress` (1 on the device): without it SurfaceFlinger's mapper refused the device allocator's AFBC buffers
   ("Buffer alloc format 0x61900000001 does not match descriptor (derived) alloc format 0x1"). Other debug.* stay apklayer's.
+- Vulkan with graphics = device: Android's libvulkan asks libvndksupport for the bare `vulkan.<ro.hardware.vulkan>.so`, which has no sphal namespace here; the
+  linker's search missed it and glibc's dlopen (the fallback) failed, so `vkEnumeratePhysicalDevices` gave 0 devices (`vktest: count failed`). `deviceGraphicsEnv`
+  (cli/env.cpp) maps the name to `/vendor/<lib>/hw/vulkan.<name>.so` in device-graphics.cfg (vendor namespace, as EGL's absolute path), and no `APKLAYER_VULKAN_HOST`
+  (the host loader's dispatch table of libvulkan, aosp patch 0003) is set: the vendor driver is Android's own HAL. The X23 reports Mali-G57 MC2, Vulkan 1.1.177.
 - Apps that draw (SurfaceFlinger screenshots, `apklayer screenshot`): UiBench, Calculator, Telegram, NewPipe, Shattered Pixel Dungeon and Anuto
   (libgdx), OTR2 (bgfx, GLES 3.1). Scripts on the phone (`~/apklayer-dev`): `ut-shots.sh <pkg>...` (run 25 s, screenshot at the run's end,
   stop), `stackscan.py <pid> <tid>` (the stack scan above, `tools/debug/stackscan.py`).
