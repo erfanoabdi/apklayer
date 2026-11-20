@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-20: Endfield on NVIDIA: window buffers get their memory at vkCreateImage (GPU fault fixed)
+
+- Endfield (owner's runtime, vulkan.apklayer eb1b4a59): the login dialog over a black screen; the kernel logs `Xid 31` (UnityMain, MMU fault
+  at 0x4000, GPCCLIENT_PROP) and the HAL `QueueSignalReleaseImageANDROID failed: -4` (device lost) right after the ASTC decoder starts.
+  Reproduced (2 of 2 with the emulation, 0 of 1 without; without it Unity fails `vkCreateImage` of its 1920x1080 ASTC 4x4 image, vk -3).
+- nvidia-prolapse (Waydroid NVIDIA, where Endfield works) notes NVIDIA 615.71.09 accepts an ASTC vkCreateImage and reports size 0.
+- `APKLAYER_VULKAN_TEXTURE_TRACE=1` (TextureEmulation.cpp/TextureCommands.cpp): each emulated image's creation, memory requirements, bind,
+  uploads and decodes, and any image with size-0 requirements. Host test vulkan-textures-test passes with it on.
+- Not the emulation: with `APKLAYER_VULKAN_TEXTURE_TRACE=nodecode` (decoder skipped) the fault stayed; every emulated image had real sizes
+  and binds. hello-vulkan's swapchain (600 frames, no views) presents fine.
+- Cause, found with the Khronos validation layer (ANGLE's LinuxHost build, `VK_LAYER_PATH`): `VUID-VkImageViewCreateInfo-image-01020`, Unity
+  makes views of its swapchain images before any memory is bound. Driver.cpp bound a window buffer's dma-buf only at the first
+  vkAcquireImageANDROID (a workaround for Venus); NVIDIA bakes the address into the view, so the frame went to address 0.
+- Fix (Driver.cpp): the dma-buf is imported and bound inside vkCreateImage on every driver but Venus (driver ID), where it still waits for
+  the acquire. The owner confirmed Endfield runs (past the black screen). Rerun under validation: no device loss, no Xid, no 01020; left:
+  usage-02275 (14, the decoded SRGB image's views inherit STORAGE usage; a VkImageViewUsageCreateInfo would quiet it), PRESENT_SRC without
+  VK_KHR_swapchain on the host device and the loader's Android pNext struct (both expected here). Owner's runtime: vulkan.apklayer cf7b2089.
+- Build log: vulkan.apklayer x86_64, `m vulkan.apklayer` (gsi_x86_64 userdebug, ubuntu22-x86 after an OrbStack restart of the hung VM), 3 builds;
+  tools/lib/orb-build-vulkan.py replays a graph older than the emulation (69 KB output without it).
+
 ## 2026-11-20: ASTC through ANGLE on NVIDIA comes from the Vulkan HAL's emulation (checked)
 
 - hello-glformats (built on the Mac, tests/apps/build.sh) in a throwaway instance on the RTX 5060 Ti, `APKLAYER_GLES_ANGLE=on`, owner's runtime

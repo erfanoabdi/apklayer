@@ -109,6 +109,8 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyBufferToImage(VkCommandBuffer buffer, VkBuffer
     auto fn = host<PFN_vkCmdCopyBufferToImage>("vkCmdCopyBufferToImage");
     CompressedImageInfo* info = findImage(dst, nullptr);
     if (!info) return fn(buffer, src, dst, layout, count, regions);
+    TRACE("vkCmdCopyBufferToImage image %p layout %d regions %u (first: offset %llu mip %u %ux%u)", (void*)dst, layout, count,
+          (unsigned long long)regions[0].bufferOffset, regions[0].imageSubresource.mipLevel, regions[0].imageExtent.width, regions[0].imageExtent.height);
     for (uint32_t r = 0; r < count; r++) {
         VkBufferImageCopy region = info->getBufferImageCopy(regions[r]);
         fn(buffer, src, info->compressedMipmap(regions[r].imageSubresource.mipLevel), layout, 1, &region);
@@ -120,6 +122,7 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyBufferToImage2(VkCommandBuffer buffer, const V
     if (!c || !c->device->copyBufferToImage2) return;
     CompressedImageInfo* info = findImage(copy->dstImage, nullptr);
     if (!info) return c->device->copyBufferToImage2(buffer, copy);
+    TRACE("vkCmdCopyBufferToImage2 image %p regions %u", (void*)copy->dstImage, copy->regionCount);
     for (uint32_t r = 0; r < copy->regionCount; r++) {
         VkBufferImageCopy2 region = info->getBufferImageCopy(copy->pRegions[r]);
         VkCopyBufferToImageInfo2 one = *copy;
@@ -135,6 +138,7 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyImageToBuffer(VkCommandBuffer buffer, VkImage 
     auto fn = host<PFN_vkCmdCopyImageToBuffer>("vkCmdCopyImageToBuffer");
     CompressedImageInfo* info = findImage(src, nullptr);
     if (!info) return fn(buffer, src, layout, dst, count, regions);
+    TRACE("vkCmdCopyImageToBuffer image %p regions %u", (void*)src, count);
     for (uint32_t r = 0; r < count; r++) {
         VkBufferImageCopy region = info->getBufferImageCopy(regions[r]);
         fn(buffer, info->compressedMipmap(regions[r].imageSubresource.mipLevel), layout, dst, 1, &region);
@@ -146,6 +150,7 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyImageToBuffer2(VkCommandBuffer buffer, const V
     if (!c || !c->device->copyImageToBuffer2) return;
     CompressedImageInfo* info = findImage(copy->srcImage, nullptr);
     if (!info) return c->device->copyImageToBuffer2(buffer, copy);
+    TRACE("vkCmdCopyImageToBuffer2 image %p regions %u", (void*)copy->srcImage, copy->regionCount);
     for (uint32_t r = 0; r < copy->regionCount; r++) {
         VkBufferImageCopy2 region = info->getBufferImageCopy(copy->pRegions[r]);
         VkCopyImageToBufferInfo2 one = *copy;
@@ -162,6 +167,9 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyImage(VkCommandBuffer buffer, VkImage src, VkI
     CompressedImageInfo* from = findImage(src, nullptr);
     CompressedImageInfo* to = findImage(dst, nullptr);
     if (!from && !to) return fn(buffer, src, srcLayout, dst, dstLayout, count, regions);
+    TRACE("vkCmdCopyImage %p%s -> %p%s regions %u (first: mip %u -> %u, %ux%u)", (void*)src, from ? " (emulated)" : "", (void*)dst,
+          to ? " (emulated)" : "", count, regions[0].srcSubresource.mipLevel, regions[0].dstSubresource.mipLevel, regions[0].extent.width,
+          regions[0].extent.height);
     for (uint32_t r = 0; r < count; r++) {
         VkImageCopy region = CompressedImageInfo::getCompressedMipmapsImageCopy(regions[r], from, to);
         fn(buffer, from ? from->compressedMipmap(regions[r].srcSubresource.mipLevel) : src, srcLayout,
@@ -175,6 +183,8 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyImage2(VkCommandBuffer buffer, const VkCopyIma
     CompressedImageInfo* from = findImage(copy->srcImage, nullptr);
     CompressedImageInfo* to = findImage(copy->dstImage, nullptr);
     if (!from && !to) return c->device->copyImage2(buffer, copy);
+    TRACE("vkCmdCopyImage2 %p%s -> %p%s regions %u", (void*)copy->srcImage, from ? " (emulated)" : "", (void*)copy->dstImage, to ? " (emulated)" : "",
+          copy->regionCount);
     for (uint32_t r = 0; r < copy->regionCount; r++) {
         VkImageCopy2 region = CompressedImageInfo::getCompressedMipmapsImageCopy(copy->pRegions[r], from, to);
         VkCopyImageInfo2 one = *copy;
@@ -191,7 +201,13 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyImage2(VkCommandBuffer buffer, const VkCopyIma
 bool decode(VkCommandBuffer buffer, VkPipelineStageFlags src, VkPipelineStageFlags dst, const VkImageMemoryBarrier& barrier,
             CompressedImageInfo* info, Device* d, std::vector<VkImageMemoryBarrier>& out) {
     std::lock_guard<std::mutex> lock(d->decoding);
-    return info->decompressIfNeeded(&d->vk, buffer, src, dst, barrier, out);
+    bool ran = false;
+    if (skipDecode()) out.push_back(barrier);
+    else ran = info->decompressIfNeeded(&d->vk, buffer, src, dst, barrier, out);
+    TRACE("barrier image %p layout %d -> %d stages 0x%x -> 0x%x levels %u+%u layers %u+%u command buffer %p: %s", (void*)barrier.image,
+          barrier.oldLayout, barrier.newLayout, src, dst, barrier.subresourceRange.baseMipLevel, barrier.subresourceRange.levelCount,
+          barrier.subresourceRange.baseArrayLayer, barrier.subresourceRange.layerCount, (void*)buffer, ran ? "decoded" : "not decoded");
+    return ran;
 }
 
 VKAPI_ATTR void VKAPI_CALL cmdPipelineBarrier(VkCommandBuffer buffer, VkPipelineStageFlags src, VkPipelineStageFlags dst,

@@ -62,7 +62,10 @@ struct Unlink {
     std::vector<std::pair<VkBaseInStructure*, const VkBaseInStructure*>> original;
 };
 
-PFN_vkVoidFunction commandProc(VkDevice device, const char* name);  // TextureCommands.cpp
+PFN_vkVoidFunction commandProc(VkDevice device, const char* name);
+bool tracing();  // APKLAYER_VULKAN_TEXTURE_TRACE (TextureEmulation.cpp)
+bool skipDecode();  // APKLAYER_VULKAN_TEXTURE_TRACE=nodecode
+#define TRACE(...) do { if (::apklayer::vulkan::textures::tracing()) GFXSTREAM_INFO("texture trace: " __VA_ARGS__); } while (0)  // TextureCommands.cpp
 void forgetCommands(Device* device);                                // with gLock held
 
 }  // namespace apklayer::vulkan::textures

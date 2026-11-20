@@ -71,6 +71,7 @@ struct NativeBufferDispatch {
     PFN_vkGetSemaphoreFdKHR exportSemaphore = nullptr;
     VkQueue acquireQueue = VK_NULL_HANDLE;  // first queue in gQueueDevice's order, for the acquire fallback
     bool importSignaledSyncFd = false;
+    bool deferImport = false;  // Venus: the window buffer's dma-buf is imported at the first acquire (createNativeBufferImage)
 };
 std::map<VkDevice, NativeBufferDispatch> gNativeBuffer;  // devices created with VK_ANDROID_native_buffer
 
@@ -89,6 +90,16 @@ bool hasExtension(VkPhysicalDevice physical, const char* name) {
     if (fn(physical, nullptr, &count, properties.data()) != VK_SUCCESS) return false;
     for (const auto& p : properties) if (!strcmp(p.extensionName, name)) return true;
     return false;
+}
+
+// apklayer: Mesa's Venus (the UTM VM's virtual GPU): its own driver ID
+bool isVenus(VkPhysicalDevice physical) {
+    auto properties = host<PFN_vkGetPhysicalDeviceProperties2>("vkGetPhysicalDeviceProperties2");
+    if (!properties) return false;
+    VkPhysicalDeviceDriverProperties driver = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    VkPhysicalDeviceProperties2 all = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &driver};
+    properties(physical, &all);
+    return driver.driverID == VK_DRIVER_ID_MESA_VENUS;
 }
 
 bool supportsSyncFdImport(VkPhysicalDevice physical) {
@@ -279,13 +290,31 @@ VkResult createNativeBufferImage(VkDevice device, const VkImageCreateInfo* info,
     for (auto& entry : original) entry.first->pNext = entry.second;
     if (result != VK_SUCCESS) return result;
 
-    // The dma-buf import waits for vkAcquireImageANDROID (importPending): Mesa's Venus driver aborts when a gralloc allocation (another buffer of the
-    // swapchain, made by the allocator service) happens after an import. The loader allocates and creates all of a swapchain's images first.
+    // On Venus the dma-buf import waits for vkAcquireImageANDROID (importPending): Mesa's Venus driver aborts when a gralloc allocation (another
+    // buffer of the swapchain, made by the allocator service) happens after an import. The loader allocates and creates all of a swapchain's images
+    // first. Every other driver gets the memory bound here, as Vulkan requires before the app's first view of the image: NVIDIA bakes a view's
+    // address at creation, and a view made before the bind (Unity: its swapchain views and framebuffers right after vkCreateSwapchainKHR) renders
+    // to address 0 (Arknights: Endfield, Xid 31 MMU fault at 0x4000 in the raster output, device lost; the validation layer's VUID-VkImageViewCreateInfo-image-01020).
     int fd = fcntl(buffer->handle->data[0], F_DUPFD_CLOEXEC, 3);
     if (fd < 0) { destroyImage(device, *image, allocator); return VK_ERROR_TOO_MANY_OBJECTS; }
-    std::lock_guard<std::mutex> lock(gLock);
-    gImages[*image] = {device, VK_NULL_HANDLE, fd};
-    return VK_SUCCESS;
+    bool defer;
+    {
+        std::lock_guard<std::mutex> lock(gLock);
+        gImages[*image] = {device, VK_NULL_HANDLE, fd};
+        auto native = gNativeBuffer.find(device);
+        defer = native != gNativeBuffer.end() && native->second.deferImport;
+    }
+    if (defer) return VK_SUCCESS;
+    NativeBufferDispatch dispatch;
+    result = importPending(device, *image, &dispatch);
+    if (result == VK_SUCCESS) return VK_SUCCESS;
+    {
+        std::lock_guard<std::mutex> lock(gLock);
+        auto it = gImages.find(*image);
+        if (it != gImages.end()) { if (it->second.fd >= 0) close(it->second.fd); gImages.erase(it); }
+    }
+    destroyImage(device, *image, allocator);
+    return result;
 }
 
 // The memory of a native-buffer image: the dma-buf imported as dedicated memory and bound.
@@ -516,6 +545,7 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
             hostDevice<PFN_vkGetSemaphoreFdKHR>(*device, "vkGetSemaphoreFdKHR"),
         };
         dispatch.importSignaledSyncFd = dispatch.importSemaphore && dispatch.importFence && supportsSyncFdImport(physical);
+        dispatch.deferImport = isVenus(physical);
         std::lock_guard<std::mutex> lock(gLock);
         gNativeBuffer[*device] = dispatch;
     }

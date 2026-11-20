@@ -63,6 +63,25 @@ const char* environment(const char* name) {
 
 struct Emulation { bool astc = false, etc2 = false; };
 
+// APKLAYER_VULKAN_TEXTURE_TRACE=1: every emulated image's creation, memory requirements, bind and decode, and any image whose
+// memory requirements come back with size 0 (NVIDIA's ICD reports 0 for an ASTC image it lacks: a leak of the host's answer)
+}  // namespace
+bool tracing() {
+    static const bool on = [] { const char* v = environment("APKLAYER_VULKAN_TEXTURE_TRACE"); return v && *v && strcmp(v, "0"); }();
+    return on;
+}
+// APKLAYER_VULKAN_TEXTURE_TRACE=nodecode (diagnostic): traced, and the decoder never runs (the app's barrier reaches the decoded image as is)
+bool skipDecode() {
+    static const bool on = [] { const char* v = environment("APKLAYER_VULKAN_TEXTURE_TRACE"); return v && !strcmp(v, "nodecode"); }();
+    return on;
+}
+namespace {
+void traceRequirements(const char* path, VkImage image, bool emulatedImage, const VkMemoryRequirements& r) {
+    if (emulatedImage || r.size == 0)
+        TRACE("%s image %p%s: size %llu alignment %llu types 0x%x", path, (void*)image, emulatedImage ? " (emulated)" : "",
+              (unsigned long long)r.size, (unsigned long long)r.alignment, r.memoryTypeBits);
+}
+
 // what the physical device lacks (its own features, asked once)
 Emulation emulation(VkPhysicalDevice physical) {
     static std::mutex lock;
@@ -178,7 +197,9 @@ VKAPI_ATTR VkResult VKAPI_CALL getImageFormatProperties2(VkPhysicalDevice physic
 
 VKAPI_ATTR void VKAPI_CALL getImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* requirements) {
     host<PFN_vkGetImageMemoryRequirements>("vkGetImageMemoryRequirements")(device, image, requirements);
-    if (CompressedImageInfo* info = findImage(image, nullptr)) *requirements = info->getMemoryRequirements();
+    CompressedImageInfo* info = findImage(image, nullptr);
+    if (info) *requirements = info->getMemoryRequirements();
+    traceRequirements("vkGetImageMemoryRequirements", image, info, *requirements);
 }
 
 // the output image and its block images share one allocation: never a dedicated one (it would hold one image only)
@@ -195,10 +216,12 @@ VKAPI_ATTR void VKAPI_CALL getImageMemoryRequirements2(VkDevice device, const Vk
     Device* d = findDevice(device);
     if (!d || !d->getImageMemoryRequirements2) return;
     d->getImageMemoryRequirements2(device, query, requirements);
-    if (CompressedImageInfo* info = findImage(query->image, nullptr)) {
+    CompressedImageInfo* info = findImage(query->image, nullptr);
+    if (info) {
         requirements->memoryRequirements = info->getMemoryRequirements();
         notDedicated(requirements);
     }
+    traceRequirements("vkGetImageMemoryRequirements2", query->image, info, requirements->memoryRequirements);
 }
 
 // gfxstream's on_vkGetDeviceImageMemoryRequirements: the images made and measured, then destroyed
@@ -207,17 +230,28 @@ VKAPI_ATTR void VKAPI_CALL getDeviceImageMemoryRequirements(VkDevice device, con
     Device* d = findDevice(device);
     if (!d || !d->getDeviceImageMemoryRequirements) return;
     d->getDeviceImageMemoryRequirements(device, query, requirements);
-    if (!emulated({d->astc, d->etc2}, query->pCreateInfo->format)) return;
+    if (!emulated({d->astc, d->etc2}, query->pCreateInfo->format)) {
+        traceRequirements("vkGetDeviceImageMemoryRequirements", VK_NULL_HANDLE, false, requirements->memoryRequirements);
+        return;
+    }
     CompressedImageInfo info(device, *query->pCreateInfo, d->pipelines.get());
     VkImageCreateInfo output = info.getOutputCreateInfo(*query->pCreateInfo);
     Unlink chain(output.pNext, {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO});
     output.pNext = chain.head;
     VkImage image;
-    if (d->vk.vkCreateImage(device, &output, nullptr, &image) != VK_SUCCESS) return;
+    if (d->vk.vkCreateImage(device, &output, nullptr, &image) != VK_SUCCESS) {
+        TRACE("vkGetDeviceImageMemoryRequirements format %d: the output image was not created, the host's size %llu stays",
+              query->pCreateInfo->format, (unsigned long long)requirements->memoryRequirements.size);
+        return;
+    }
     info.setOutputImage(image);
     info.createCompressedMipmapImages(&d->vk, output);
     requirements->memoryRequirements = info.getMemoryRequirements();
     notDedicated(requirements);
+    TRACE("vkGetDeviceImageMemoryRequirements format %d %ux%u mips %u layers %u: size %llu alignment %llu types 0x%x",
+          query->pCreateInfo->format, query->pCreateInfo->extent.width, query->pCreateInfo->extent.height, query->pCreateInfo->mipLevels,
+          query->pCreateInfo->arrayLayers, (unsigned long long)requirements->memoryRequirements.size,
+          (unsigned long long)requirements->memoryRequirements.alignment, requirements->memoryRequirements.memoryTypeBits);
     info.destroy(&d->vk);
 }
 
@@ -226,7 +260,9 @@ VKAPI_ATTR VkResult VKAPI_CALL bindImageMemory(VkDevice device, VkImage image, V
     Device* d = nullptr;
     CompressedImageInfo* info = findImage(image, &d);
     if (result != VK_SUCCESS || !info) return result;
-    return info->bindCompressedMipmapsMemory(&d->vk, memory, offset);
+    result = info->bindCompressedMipmapsMemory(&d->vk, memory, offset);
+    TRACE("vkBindImageMemory image %p memory %p offset %llu: %d", (void*)image, (void*)memory, (unsigned long long)offset, result);
+    return result;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL bindImageMemory2(VkDevice device, uint32_t count, const VkBindImageMemoryInfo* binds) {
@@ -238,7 +274,11 @@ VKAPI_ATTR VkResult VKAPI_CALL bindImageMemory2(VkDevice device, uint32_t count,
     for (uint32_t i = 0; i < count; i++) {  // one at a time, as gfxstream's performBindImageMemory
         VkResult result = d->bindImageMemory2(device, 1, &binds[i]);
         CompressedImageInfo* info = findImage(binds[i].image, nullptr);
-        if (result == VK_SUCCESS && info) result = info->bindCompressedMipmapsMemory(&d->vk, binds[i].memory, binds[i].memoryOffset);
+        if (result == VK_SUCCESS && info) {
+            result = info->bindCompressedMipmapsMemory(&d->vk, binds[i].memory, binds[i].memoryOffset);
+            TRACE("vkBindImageMemory2 image %p memory %p offset %llu pNext %p: %d", (void*)binds[i].image, (void*)binds[i].memory,
+                  (unsigned long long)binds[i].memoryOffset, binds[i].pNext, result);
+        }
         if (result != VK_SUCCESS) return result;
     }
     return VK_SUCCESS;
@@ -254,6 +294,9 @@ VKAPI_ATTR VkResult VKAPI_CALL createImageView(VkDevice device, const VkImageVie
     VkImageViewCreateInfo ours = *create;
     Unlink chain(create->pNext, {VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT});
     ours.pNext = chain.head;
+    TRACE("vkCreateImageView image %p format %d type %d levels %u+%u layers %u+%u pNext %p", (void*)create->image, create->format,
+          create->viewType, create->subresourceRange.baseMipLevel, create->subresourceRange.levelCount, create->subresourceRange.baseArrayLayer,
+          create->subresourceRange.layerCount, create->pNext);
     if (emulated({d->astc, d->etc2}, create->format)) {
         ours.format = CompressedImageInfo::getOutputFormat(create->format);
     } else {
@@ -361,6 +404,9 @@ bool createImage(VkDevice device, const VkImageCreateInfo* create, VkImage* imag
     output.pNext = chain.head;
     // no app allocator: the block images and gfxstream's destroy() use none, and the output image goes with them
     *result = d->vk.vkCreateImage(device, &output, nullptr, image);
+    TRACE("vkCreateImage format %d -> %d, %ux%ux%u mips %u layers %u usage 0x%x flags 0x%x type %d tiling %d: %d image %p", create->format,
+          output.format, create->extent.width, create->extent.height, create->extent.depth, create->mipLevels, create->arrayLayers, create->usage,
+          create->flags, create->imageType, create->tiling, *result, *result == VK_SUCCESS ? (void*)*image : nullptr);
     if (*result != VK_SUCCESS) return true;
     info->setOutputImage(*image);
     info->createCompressedMipmapImages(&d->vk, output);
@@ -377,6 +423,7 @@ bool destroyImage(VkDevice, VkImage image) {
         std::lock_guard<std::mutex> lock(gLock);
         auto it = gImages.find(image);
         if (it == gImages.end()) return false;
+        TRACE("vkDestroyImage image %p", (void*)image);
         d = it->second.device;
         info = std::move(it->second.info);
         gImages.erase(it);
