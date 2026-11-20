@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
     auto type = [&](VkPhysicalDevice d) { VkPhysicalDeviceProperties2 p = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2}; p2(d, &p); return p.properties.deviceType; };
     auto all = pick(gipa, inst, "/dev/nonexistent");
     printf("host Vulkan devices: %zu\n", all.size());
-    assert(all.size() >= 2);
+    if (all.size() < 2) { puts("SKIP vulkan-select real: the host Vulkan lists only one device (needs a GPU next to llvmpipe)"); return 1; }  // tests/run: last line SKIP
     const char* gpuNode = argc > 2 ? argv[2] : "/dev/dri/renderD128";
     v = pick(gipa, inst, gpuNode);
     assert(v.size() == 1 && type(v[0]) != CPU);
