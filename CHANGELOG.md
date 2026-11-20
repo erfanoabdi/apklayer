@@ -7,7 +7,7 @@
   with both off it is clean (owner checked, private runtime `~/apklayer-pgr-cpu/runtime`, no switches). The rest of the heavy tier stays on.
 - binary_translation 0082 (diagnostic): loop-region fuzz tests (500k integer cases, 0 diverged; SIMD only NaN-sign diffs, which point at
   interpreter rounding, not heavy) and BERBERIS_HEAVY_DUMP to capture the game's regions for a replay test (not written yet).
-- Build log: `m libberberis_arm64 berberis_arm64_host_tests` (gsi_arm64 userdebug, Mac VM), incremental.
+- Build log: `m libberberis_arm64 berberis_arm64_host_tests` (gsi_x86_64 userdebug, Mac VM), incremental.
 - prebuilts 0b9b221f: x86_64 libberberis_arm64 b59d5c1f and vulkan.apklayer eb1b4a59 (ASTC/ETC2 HAL of d4f58218); lock rows updated.
 
 ## 2026-11-19: spare JVMs no longer leave their AOT configurations behind (164 GB in one instance)
