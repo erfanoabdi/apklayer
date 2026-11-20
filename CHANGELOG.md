@@ -1,9 +1,16 @@
 # Changelog
 
+## 0.5.4 (release notes; apklayer 0.5.4, Android runtime 0.5.3 from prebuilts 77dd42af)
+
+- Hardware bitmaps on NVIDIA with ANGLE (the default there): images that apps decode into hardware bitmaps (YouTube's thumbnails, Glide's
+  and Coil's defaults) were empty. The Vulkan HAL imports AHardwareBuffers (VK_ANDROID_external_memory_android_hardware_buffer), and shared
+  buffers on NVIDIA use uncompressed tiled layouts that its Vulkan driver imports (package: the graphics HAL; runtime: vulkan.apklayer, both CPUs).
+
 ## 2026-11-20: hardware-bitmap fix into prebuilts (both CPUs) for 0.5.4
 
 - Build log: `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock, Mac tree vendor/apklayer da01fa5 (= main fc5a44f4); the
-  x86_64 output is the gsi_x86_64 build of the same sources (second build of the entry below).
+  x86_64 output is the gsi_x86_64 build of the same sources (second build of the entry below). Succeeded; arm64 eedc9e8f (1,087,120 bytes),
+  x86_64 b8640076 (1,087,064 bytes). prebuilts 77dd42af (on 2fb670a6), lock rows updated, runtime=0.5.3.
 
 ## 2026-11-20: Vulkan HAL: VK_ANDROID_external_memory_android_hardware_buffer (hardware bitmaps under ANGLE)
 
