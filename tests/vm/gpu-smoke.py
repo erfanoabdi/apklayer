@@ -4,6 +4,7 @@ Window, dialog and resize behaviour: the gpu-window group (tests/vm/gpu-window-r
 import locale
 import os
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -22,7 +23,10 @@ try:
     proc = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     imported = 0
     shot = None
+    angle_start = None  # under ANGLE the app's EGL is ANGLE's: its buffers are logged by SurfaceFlinger only, so the picture is taken 4 s after ANGLE started
     for line in proc.stdout:
+        if 'ANGLE: Version' in line and angle_start is None: angle_start = time.monotonic()
+        if angle_start and shot is None and time.monotonic() - angle_start > 4: shot = instance.capture('gpu', PKG)
         if 'apklayer.egl: imported buffer' in line or 'apklayer.egl: attached buffer' in line:
             imported += 1
             if imported == 3 and shot is None:  # the app is presenting GPU buffers: take the picture now
