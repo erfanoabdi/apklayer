@@ -554,6 +554,10 @@ final class MethodSplitter {
          *  into ascending half-open ranges, so this is a plain bucket search and
          *  answers for an offset that is not an instruction start too (a try
          *  range end that landed in a data payload, say). */
+        /** The DEX offset where the part after {@code index} begins, Integer.MAX_VALUE for the last part. */
+        int partEnd(int index) { return index + 1 < starts.length ? starts[index + 1] : Integer.MAX_VALUE; }
+        int partStart(int index) { return starts[index]; }
+
         int partIndexOf(int dexOffset) {
             int lo = 0, hi = starts.length - 1, ans = 0;
             while (lo <= hi) {
@@ -692,6 +696,12 @@ final class MethodSplitter {
         if (cloning && clones.isEmpty()) return refuse("no handler can be cloned");
         List<int[]> spans = new ArrayList<>();
         for (TypeInference.TryBlock t : tries) {
+            // apklayer patch: a range whose every handler is cloned may be cut: each part gets the piece of it that lies in the part,
+            // pointing at its own copy of the handler (Translator.assignPartTries). One range can cover nearly a whole method (Play
+            // Store 30.4.17's qeb.d: 98% of 25,828 code units), which left no legal cut at all.
+            boolean allCloned = !t.catches.isEmpty();
+            for (TypeInference.Catch c : t.catches) allCloned &= clones.containsKey(c.handlerOffset);
+            if (allCloned) continue;
             int lo = Integer.MAX_VALUE, hi = -1;
             for (int i = 0; i < n; i++) {
                 if (off[i] >= t.startOffset && off[i] < t.endOffset) {
@@ -1093,8 +1103,8 @@ final class MethodSplitter {
      *
      * All of it checked:
      *   - it starts with move-exception (the copy consumes the exception the
-     *     JVM pushes, exactly like the original; Translator's handler-stub
-     *     path is never cloned);
+     *     JVM pushes, exactly like the original), or it discards the exception,
+     *     and the copy then pops it first as Translator's handler stub does;
      *   - it is a straight line of at most MAX_CLONE_INSNS reachable
      *     instructions ending in throw or return: no successor in the body, so
      *     where the copy sits cannot change what runs after it;
@@ -1102,9 +1112,10 @@ final class MethodSplitter {
      *     branch or switch target, the instruction before it does not fall
      *     through into it, and no other handler starts inside it;
      *   - no instruction of it is covered by a try range (the copy would need
-     *     handlers of its own), sits in a deferred-new window, or is of a
-     *     family outside cloneSafe (no monitors, no allocation, no
-     *     invoke-direct/super, no invoke-custom/polymorphic);
+     *     handlers of its own), sits in a deferred-new window opened before it,
+     *     or is of a family outside cloneSafe (no monitors, no invoke-super, no
+     *     invoke-custom/polymorphic); allocation and invoke-direct only as a
+     *     deferred `new` together with its own <init>, both inside the copy;
      *   - its entry state holds no uninitialized reference and `this` is
      *     initialized there: a frame naming uninitialized(N) points at a `new`
      *     by bytecode offset, which means nothing in another part.
@@ -1144,7 +1155,9 @@ final class MethodSplitter {
         for (int h : handlers) {
             Integer hi = indexOf.get(h);
             if (hi == null || !types.isReachable(h)) continue;
-            if ((norm.get(hi).opcode & 0xFF) != 0x0d) continue;          // move-exception
+            // move-exception, or a handler that discards the exception: its copy pops it first (Translator.emitHandlerClones), as the
+            // handler stub does (apklayer patch: Play Store 30.4.17's qeb.d, one try range over 98% of it, handlers `throw new
+            // AssertionError("Could not parse proto flag ...")`)
             if (thisUninit != null && thisUninit.contains(h)) continue;
             if (hi > 0 && types.isReachable(off[hi - 1])) {
                 for (int s : successors(norm.get(hi - 1))) {
@@ -1161,6 +1174,9 @@ final class MethodSplitter {
                                  || ref.kind == DexType.Ref.KIND_UNINIT_THIS)) continue candidates;
             }
             List<Integer> block = new ArrayList<>();
+            // a `new` whose <init> is also in the copy: its uninitialized reference never leaves the block (no frame inside the
+            // straight line names it), so allocation and that one constructor call are safe to copy
+            Set<Integer> ownInits = new java.util.HashSet<>();
             for (int k = hi; k < n && k < hi + MAX_CLONE_INSNS; k++) {
                 TypeInference.Insn in = norm.get(k);
                 if (!types.isReachable(in.offset) || jumpedTo.get(k)) continue candidates;
@@ -1169,11 +1185,18 @@ final class MethodSplitter {
                 if (nextSet >= 0 && nextSet < Math.max(in.nextOffset, in.offset + 1)) {
                     continue candidates;
                 }
-                if (insideDeferredNew(in.offset, deferredNew)) continue candidates;
                 int fam = TypeInference.familyOf(in.opcode);
-                if (!cloneSafe(fam)) continue candidates;
+                if (fam == TypeInference.F_NEW_INSTANCE && deferredNew != null && deferredNew.containsKey(in.offset)) {
+                    ownInits.add(deferredNew.get(in.offset));   // its window must close inside the block (checked at the end)
+                } else if (fam == TypeInference.F_INVOKE_DIRECT && ownInits.remove(in.offset)) {
+                    // the constructor call of a `new` copied above
+                } else {
+                    if (insideDeferredNew(in.offset, deferredNew) && !insideOwnWindow(in.offset, hi, off, deferredNew)) continue candidates;
+                    if (!cloneSafe(fam)) continue candidates;
+                }
                 block.add(in.offset);
                 if (fam == TypeInference.F_THROW || fam == TypeInference.F_RETURN) {
+                    if (!ownInits.isEmpty()) continue candidates;   // a `new` whose <init> is not in the copy
                     int[] b = new int[block.size()];
                     for (int j = 0; j < b.length; j++) b[j] = block.get(j);
                     out.put(h, b);
@@ -1454,6 +1477,14 @@ final class MethodSplitter {
             }
             default: return null;
         }
+    }
+
+    /** Whether every deferred-`new` window containing {@code offset} opened at or after the block's first instruction (index {@code hi}). */
+    private static boolean insideOwnWindow(int offset, int hi, int[] off, Map<Integer, Integer> deferredNew) {
+        for (Map.Entry<Integer, Integer> e : deferredNew.entrySet()) {
+            if (offset > e.getKey() && offset <= e.getValue() && e.getKey() < off[hi]) return false;
+        }
+        return true;
     }
 
     private static boolean insideDeferredNew(int offset, Map<Integer, Integer> deferredNew) {

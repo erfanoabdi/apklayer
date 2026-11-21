@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-21: dex2jvm splits methods inside a try range whose handlers are copied (MindTheGapps x86_64 Play Store and Play services)
+
+- MindTheGapps x86_64's Play Store 30.4.17 failed to start ("Failed to initialize FinskyApp": qeb.d()V needs code_length 109416) and its Play
+  services 22.21.16's persistent process crashed (deaq.<clinit> 104564): both methods were oversize stubs. qeb.d (25,828 code units) has one
+  try range over 98% of it, so MethodSplitter found no legal cut ("no valid cut within 65187 bytes"), and its handlers (`throw new
+  AssertionError("Could not parse proto flag ...")`, no move-exception) could not be cloned either.
+- MethodSplitter (replan only): a handler without move-exception may be cloned (the copy pops the exception, as the handler stub does), and so
+  may a deferred `new` with its own <init> inside the copy; a range whose every handler is cloned may be cut, each part keeping its piece of
+  the range (Translator.assignPartTries clips the ranges to the part) with its own handler copy. Methods the first plan already split come out
+  unchanged; only methods that used to be stubbed are affected.
+- Test (NVIDIA PC): standalone dex2jvm on both APKs: qeb.d and deaq.<clinit> in 3 parts each, no stub left; the owner's default instance
+  reconverted with it: Play Store launches (owner), and in a test instance it reaches MainActivity.
+
 ## 2026-11-21: Google apps from MindTheGapps 17.0.0 (owner)
 
 - `apklayer setup --gapps` takes MindTheGapps in place of LiteGapps: arm64 MindTheGapps-17.0.0-arm64-20261022_132445 (MindTheGapps' release),

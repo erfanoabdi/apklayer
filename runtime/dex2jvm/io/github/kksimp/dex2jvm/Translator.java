@@ -1718,13 +1718,16 @@ public final class Translator {
             finishPart(last, -1);
         }
 
-        /** The try blocks whose range starts in the current part. MethodSplitter
-         *  guarantees a range and its handlers never straddle a cut, so this
-         *  partitions them. */
+        /** The try blocks of the current part: each range clipped to the part. MethodSplitter lets a range straddle a cut only when
+         *  all of its handlers are cloned (apklayer patch), so a part holding a piece of it also holds a copy of each handler
+         *  (emitHandlerClones); every other range lies in one part, where clipping leaves it as it is. */
         void assignPartTries(List<TypeInference.TryBlock> tries) {
             List<TypeInference.TryBlock> mine = new ArrayList<>();
             for (TypeInference.TryBlock t : tries) {
-                if (split == null || split.partIndexOf(t.startOffset) == cur.index) mine.add(t);
+                if (split == null) { mine.add(t); continue; }
+                int lo = Math.max(t.startOffset, split.partStart(cur.index)), hi = Math.min(t.endOffset, split.partEnd(cur.index));
+                if (lo >= hi) continue;
+                mine.add(lo == t.startOffset && hi == t.endOffset ? t : new TypeInference.TryBlock(lo, hi, t.catches));
             }
             cur.tries = mine;
             for (TypeInference.TryBlock t : mine) cur.pendingRangeEnds.add(t.endOffset);
@@ -1770,6 +1773,8 @@ public final class Translator {
                 out.mark(l);
                 cur.cloneLabels.put(h, l);
                 cur.handlerEntryTypes.put(h, handlerTypes.get(h));
+                // a handler that discards the exception (no move-exception): drop it first, as emitHandlerStubs' stub does
+                if (!startsWithMoveException(h)) out.op(CodeWriter.POP);
                 for (int o : split.cloneBlock(h)) {
                     TypeInference.Insn insn = byOffset.get(o);
                     if (insn == null) {
