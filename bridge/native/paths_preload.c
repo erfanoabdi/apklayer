@@ -59,7 +59,18 @@ long apklayer_broker_xattr(const char *op, const char *path, const char *name, c
 #define ROUTE(p, flags) do { int h_ = apklayer_binder_route_open(p, flags); if (h_ != -2) { DONE(m); return h_; } } while (0)  /* m: MAP's */
 
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
-#define MAP(var, p) char *var = (char *)(p); bool var##_alloc = (p) && apklayer_apply_path_overrides(&var)
+/* apklayer patch: libhybris's linker (a Halium phone's Vulkan front end, in the same process as btload) opens the device's own /system and /vendor
+ * libraries by their Android paths; mapped into the runtime's android-root it found no libvulkan.so ("not found", a null call in ANGLE's eglInitialize). */
+static bool hybris_open(const char *p, void *ra)
+{
+    static const char *const roots[] = {"/system/", "/vendor/", "/odm/", "/product/", "/apex/", "/android/"};
+    Dl_info i;
+    if (!p || p[0] != '/') return false;
+    for (size_t k = 0; k < sizeof roots / sizeof *roots; k++)
+        if (!strncmp(p, roots[k], strlen(roots[k]))) return dladdr(ra, &i) && i.dli_fname && strstr(i.dli_fname, "libhybris");
+    return false;
+}
+#define MAP(var, p) char *var = (char *)(p); bool var##_alloc = (p) && !hybris_open(var, __builtin_return_address(0)) && apklayer_apply_path_overrides(&var)
 #define DONE(var) do { if (var##_alloc) free(var); } while (0)
 #define AT(var, p) MAP(var, (p) && (p)[0] == '/' ? (p) : NULL); const char *var##_use = var ? var : (p)
 #define MODE(flags, mode) do { mode = 0; if ((flags) & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); } } while (0)

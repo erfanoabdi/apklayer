@@ -86,6 +86,14 @@ template<class T> T hostDevice(VkDevice device, const char* name) {
     return proc ? reinterpret_cast<T>(proc(device, name)) : nullptr;
 }
 
+// apklayer patch: the sync-fd extension functions from the driver itself. libhybris's libvulkan.so.1 (a Halium phone) exports a stub for them that
+// jumps to null; the loader's vkGetDeviceProcAddr answers the vendor driver's function (null while the extension is not enabled on the device).
+template<class T> T hostDeviceFd(VkDevice device, const char* name) {
+    auto proc = host<PFN_vkGetDeviceProcAddr>("vkGetDeviceProcAddr");
+    if (auto fn = proc ? reinterpret_cast<T>(proc(device, name)) : nullptr) return fn;
+    return hostDevice<T>(device, name);
+}
+
 bool hasExtension(VkPhysicalDevice physical, const char* name) {
     auto fn = host<PFN_vkEnumerateDeviceExtensionProperties>("vkEnumerateDeviceExtensionProperties");
     uint32_t count = 0;
@@ -601,10 +609,10 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
         // Resolve once while the device is being created. Extension functions may be driver-specific.
         NativeBufferDispatch dispatch = {
             hostDevice<PFN_vkQueueSubmit>(*device, "vkQueueSubmit"),
-            hostDevice<PFN_vkImportSemaphoreFdKHR>(*device, "vkImportSemaphoreFdKHR"),
-            hostDevice<PFN_vkImportFenceFdKHR>(*device, "vkImportFenceFdKHR"),
+            hostDeviceFd<PFN_vkImportSemaphoreFdKHR>(*device, "vkImportSemaphoreFdKHR"),
+            hostDeviceFd<PFN_vkImportFenceFdKHR>(*device, "vkImportFenceFdKHR"),
             hostDevice<PFN_vkCreateSemaphore>(*device, "vkCreateSemaphore"),
-            hostDevice<PFN_vkGetSemaphoreFdKHR>(*device, "vkGetSemaphoreFdKHR"),
+            hostDeviceFd<PFN_vkGetSemaphoreFdKHR>(*device, "vkGetSemaphoreFdKHR"),
         };
         // the host loader exports vkImportFenceFdKHR for every device, but its trampoline jumps to null on one without VK_KHR_external_fence_fd (Venus)
         if (!hasExtension(physical, VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME)) dispatch.importFence = nullptr;

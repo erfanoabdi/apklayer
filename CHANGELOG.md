@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21: hybris bridge (branch hybridge): SurfaceFlinger's host ANGLE on the X23's libhybris Vulkan
+
+- Build log: `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock (necessary: Driver.cpp takes the sync-fd functions from vkGetDeviceProcAddr; libhybris's libvulkan.so.1 exports stubs for them that jump to null, a crash in the app's ANGLE on the Mali).
+- Cause of the compositor crash (apklayer patch in `bridge/native/paths_preload.c`): the path layer (LD_PRELOAD) maps every `/system`, `/vendor` open into the runtime's android-root, also those of libhybris's linker (a glibc library in the same process), which then found no `libvulkan.so` ("not found", a null call in ANGLE's eglInitialize). Opens from libhybris objects are no longer mapped.
+
 ## 2026-11-21: prebuilts update 2 (branch prebupd2): Venus vulkan.apklayer on both CPUs, arm64 ANGLE Android libraries
 
 - Build log: `m vulkan.apklayer` (gsi_x86_64 userdebug), incremental, flock (necessary: the x86_64 vulkan.apklayer in out/ (Nov 20) predates the merged Driver.cpp of venusvk; the arm64 one, 68469f4a, is current: vendor/apklayer Driver.cpp sha256 3583607c = main's). Succeeded (12:24): vulkan.apklayer.so x86_64 e05c44bb037016ad0b109c848e04adff651a8554326f1f973e9ac27eb15ba66b (1,087,112 bytes); vendor/apklayer a716f78 (= main's aosp/); lock row updated.
