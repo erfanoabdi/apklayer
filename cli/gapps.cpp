@@ -1,8 +1,8 @@
-// Google's own apps (MindTheGapps 17.0.0, the framework's SDK 37) as the instance's system apps, in place of microG: the zip is downloaded and checked,
+// Google's own apps (LiteGapps' superlite set from apklayer's gapps branch, the framework's SDK 37) as the instance's system apps, in place of microG: the zip is downloaded and checked,
 // tools/gapps.sh takes its APKs and XMLs out, the XMLs stay in <data>/apklayer/google-apps/etc -- the privileged allowlist that makes GmsCore a
 // privileged system app holding its signature permissions, sysconfig and default grants, read from there (gappsEtcDir) rather than copied into the
 // runtime's android-root, which a package build serves read-only -- and each APK is installed `--system` as the bundle's system apps are.
-// No Google code is in apklayer: MindTheGapps' release zips (arm64: MindTheGapps' own; x86_64: tling0001's builds), pinned by sha256 in downloads.json (APKLAYER_GAPPS_URL and APKLAYER_GAPPS_SHA256 override).
+// No Google code is in apklayer's main tree: the gapps branch's release zips (LiteGapps' files, unchanged; workflow gapps), pinned by sha256 in downloads.json (APKLAYER_GAPPS_URL and APKLAYER_GAPPS_SHA256 override).
 #include "gapps.h"
 
 #include <algorithm>
@@ -220,7 +220,7 @@ std::string installGapps(const Layout& layout, const Instance& instance, const s
     WorkDir staged{join(dir, ".work")};
     const std::string& work = staged.path;
     makeDirs(dir);
-    report("Downloading Google apps (about 300-550 MB)");
+    report("Downloading Google apps (about 350 MB)");
     if (std::string e = manager::fetch(zip.url, zip.sha256, file, progress); !e.empty()) return e;
     report("Unpacking");
     progress(-1);

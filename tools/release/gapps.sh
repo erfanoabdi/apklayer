@@ -2,7 +2,7 @@
 # gapps.sh <Google apps zip> <out dir>: the parts of a Google apps zip apklayer uses, for `apklayer setup --gapps` (cli/gapps.cpp): <out>/apks/*.apk
 # (system_ext and product priv-app/app) and <out>/etc/{permissions,sysconfig,default-permissions}/*.xml (both partitions in one, where
 # HostSystemConfig reads them through APKLAYER_EXTRA_ETC: not copied into <android-root>/system/etc, which a package build serves read-only).
-# Layouts: MindTheGapps (the zip holds system/{product,system_ext}/...; arm64 ships GmsCore inside the gmssystem APEX, an EROFS image that
+# Layouts: apklayer's gapps release (the gapps branch packed, data/downloads.json) and MindTheGapps (the zip holds system/{product,system_ext}/...; arm64 ships GmsCore inside the gmssystem APEX, an EROFS image that
 # fsck.erofs from erofs-utils unpacks) and LiteGapps (files/files.tar.xz holds <cpu>/<sdk>/system/...).
 # Left out: the Pixel feature lists (pixel_experience_*: Pixel-only features) and the dialer support library (its jar is not installed).
 set -eu
@@ -12,7 +12,7 @@ rm -rf "$out" && mkdir -p "$out/x" "$out/apks" "$out/etc"
 if unzip -l "$zip" files/files.tar.xz >/dev/null 2>&1; then  # LiteGapps
     unzip -p "$zip" files/files.tar.xz | tar -xJf - -C "$out/x"
     sys="$(find "$out/x" -mindepth 3 -maxdepth 3 -type d -name system | head -1)"
-else  # MindTheGapps
+else  # apklayer's gapps zip, MindTheGapps
     unzip -q "$zip" 'system/*' -d "$out/x"
     sys="$out/x/system"
 fi

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-21: Google apps from apklayer's gapps branch (LiteGapps superlite set, arm64 and x86_64)
+
+- New branch `gapps`: the smallest set `setup --gapps` installs, per CPU (`<cpu>/system/...`): Services Framework, Play services, Play Store,
+  the Calendar/Contacts sync adapters and Google's XMLs (no Pixel feature lists, no dialer support), from the latest LiteGapps SDK 37 builds:
+  arm64 superlite 2026-10-12, x86_64 core 2026-10-01 (LiteGapps builds no x86_64 superlite for any SDK; its core holds the same five APKs).
+  The APKs are unchanged (their native libraries stay inside: stripping ABIs would break Google's signatures); files over 50 MB are split
+  into 45 MB parts like the prebuilts branch (`join-parts.sh`, `SHA256SUMS`).
+- Workflow `gapps` (main, dispatch only: GitHub runs workflow_dispatch from the default branch): with `import` the runner downloads the
+  LiteGapps zips named in the branch's `sources` (sha256-checked, `import.sh`) and pushes the branch (about 700 MB: not pushed from the
+  owner's line, the 100 MB rule), then `pack.sh` makes reproducible zips (sorted, stored, fixed times/modes) for the prerelease
+  `gapps-<commit>`. data/downloads.json points at them; tools/release/gapps.sh reads them as it reads MindTheGapps (`system/` in the zip).
+- Test (NVIDIA PC): import.sh + pack.sh on the downloaded zips; two packs give the same sha256; gapps.sh on each zip gives the five APKs and
+  22 XMLs. Not run: `setup --gapps` in an instance with the new zips.
+
 ## 2026-11-21: "ASTC broken on AMD" not reproduced on Navi14 (Mesa 25.2.8); real-ASTC tests added
 
 - Owner's MacBook (Intel UHD 630 + AMD Navi14 RADV/radeonsi, Mesa 25.2.8), prebuilts e8904ab0: vulkan-textures, texture-view, gl-formats, gles1, gpu pass on both GPUs with `APKLAYER_GLES_ANGLE` off and on (window-formats fails with ANGLE on for 10-bit/fp16 windows on both GPUs, not ASTC). No ASTC defect found: Vulkan HAL emulation, ANGLE on top of it, and radeonsi's own CPU ASTC decoder all match astcenc.
