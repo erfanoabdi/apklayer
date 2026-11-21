@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-21: PGR download stall, run 4: no guest faults; double frees just before the lock errors
+
+- wesley-mp100, instance default restarted so its stack took berberis.log_faults=1 (0050) and PGR's lite mode; one 9-minute watch (user's OK):
+  1.79 GB at ~45 MB/s, then 12 SynchronizationLockException and 30 Download failed (Premature EOF, then read and connect timeouts), 0 B/s from 106 s.
+  0 guest fault signals (the translator's stderr reaches run.log): ACE's fault traps are not the trigger.
+- The translator's free checks (0006/0026) logged 8 frees, two of them (tid 14822, guest caller 0x7853e7ca04b0, 32-byte chunks, header 0x25) right
+  before the first download failure, the rest during the failures: "already in glibc's tcache (freed twice); left allocated". Guest code frees the
+  same block twice; the quarantine catches a second free that comes within its window, one that comes later frees the block's next owner (a lock or a
+  socket structure) while it is in use, which is the corruption the lock errors show. Android's Scudo aborts on any double free and PGR runs on phones,
+  so the double free is most likely caused by translation. Also seen around them: JavaBinder "FAILED BINDER TRANSACTION" (parcel 456 and 676 bytes).
+- Cleaned: log_faults unset (the running stack keeps it until its next start: it only logs), ~/apklayer-pgrdl (316 KB) removed.
+
 ## 2026-11-21: PGR download stall: what the translator gets right (test group `locks`)
 
 - PGR's libil2cpp.so (178 MB) cannot be read statically: its exported il2cpp_monitor_exit branches into code that is stored encrypted (decrypted at load);
