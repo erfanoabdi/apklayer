@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <log/log.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -60,6 +61,7 @@ struct NativeImage {
     VkDevice device;
     VkDeviceMemory memory;  // the imported dma-buf, VK_NULL_HANDLE until the import
     int fd;                 // our dup of the dma-buf while the import is pending, -1 after
+    int handleFd = -1;      // the gralloc handle's own fd number (Venus: replaced by the Venus-allocated dma-buf)
 };
 std::map<VkImage, NativeImage> gImages;  // native-buffer images
 std::map<VkQueue, VkDevice> gQueueDevice;
@@ -72,6 +74,7 @@ struct NativeBufferDispatch {
     PFN_vkGetSemaphoreFdKHR exportSemaphore = nullptr;
     VkQueue acquireQueue = VK_NULL_HANDLE;  // first queue in gQueueDevice's order, for the acquire fallback
     bool importSignaledSyncFd = false;
+    uint32_t hostVisibleTypes = 0;  // Venus: virgl's EGL reads only memory made from a host-visible type (a device-local-only one fails with GL_OUT_OF_MEMORY)
     bool deferImport = false;  // Venus: the window buffer's dma-buf is imported at the first acquire (createNativeBufferImage)
 };
 std::map<VkDevice, NativeBufferDispatch> gNativeBuffer;  // devices created with VK_ANDROID_native_buffer
@@ -312,7 +315,7 @@ VkResult createNativeBufferImage(VkDevice device, const VkImageCreateInfo* info,
     bool defer;
     {
         std::lock_guard<std::mutex> lock(gLock);
-        gImages[*image] = {device, VK_NULL_HANDLE, fd};
+        gImages[*image] = {device, VK_NULL_HANDLE, fd, buffer->handle->data[0]};
         auto native = gNativeBuffer.find(device);
         defer = native != gNativeBuffer.end() && native->second.deferImport;
     }
@@ -329,9 +332,44 @@ VkResult createNativeBufferImage(VkDevice device, const VkImageCreateInfo* info,
     return result;
 }
 
+// Venus cannot use a dma-buf another driver (virgl, the allocator's GBM) made, but virgl's EGL imports one Venus exported (tests/vm/venus-export-probe.c).
+// apklayer: the image's memory is allocated by Venus, exported as a dma-buf and put over the gralloc handle's fd (same number, so the buffer
+// the compositor attaches at the first queueBuffer is this one); the image keeps the gralloc buffer's explicit DRM layout.
+VkResult allocateExported(VkDevice device, VkImage image, int fd, int handleFd, uint32_t hostVisibleTypes) {
+    auto requirements = hostDevice<PFN_vkGetImageMemoryRequirements>(device, "vkGetImageMemoryRequirements");
+    auto allocate = hostDevice<PFN_vkAllocateMemory>(device, "vkAllocateMemory");
+    auto free = hostDevice<PFN_vkFreeMemory>(device, "vkFreeMemory");
+    auto bind = hostDevice<PFN_vkBindImageMemory>(device, "vkBindImageMemory");
+    auto getFd = hostDevice<PFN_vkGetMemoryFdKHR>(device, "vkGetMemoryFdKHR");
+    if (!requirements || !allocate || !free || !bind || !getFd) return VK_ERROR_INITIALIZATION_FAILED;
+    struct stat ours, theirs;  // the handle's fd must still be the buffer this image was made for
+    if (fstat(fd, &ours) || fstat(handleFd, &theirs) || ours.st_ino != theirs.st_ino || ours.st_dev != theirs.st_dev) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    VkMemoryRequirements need;
+    requirements(device, image, &need);
+    uint32_t types = need.memoryTypeBits & hostVisibleTypes ? need.memoryTypeBits & hostVisibleTypes : need.memoryTypeBits;
+    if (!types) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    VkExportMemoryAllocateInfo exportInfo = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, &exportInfo, image, VK_NULL_HANDLE};
+    VkMemoryAllocateInfo alloc = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &dedicated, need.size, static_cast<uint32_t>(__builtin_ctz(types))};
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkResult result = allocate(device, &alloc, nullptr, &memory);
+    if (result != VK_SUCCESS) return result;
+    VkMemoryGetFdInfoKHR get = {VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, nullptr, memory, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    int exported = -1;
+    result = getFd(device, &get, &exported);
+    if (result == VK_SUCCESS) result = bind(device, image, memory, 0);
+    if (result == VK_SUCCESS && dup3(exported, handleFd, O_CLOEXEC) < 0) result = VK_ERROR_TOO_MANY_OBJECTS;
+    if (exported >= 0) close(exported);
+    if (result != VK_SUCCESS) { free(device, memory, nullptr); return result; }
+    std::lock_guard<std::mutex> lock(gLock);
+    auto it = gImages.find(image);
+    if (it != gImages.end()) { close(it->second.fd); it->second.fd = -1; it->second.memory = memory; }
+    return VK_SUCCESS;
+}
+
 // The memory of a native-buffer image: the dma-buf imported as dedicated memory and bound.
 VkResult importPending(VkDevice device, VkImage image, NativeBufferDispatch* dispatch) {
-    int fd;
+    int fd, handleFd;
     {
         std::lock_guard<std::mutex> lock(gLock);
         auto native = gNativeBuffer.find(device);
@@ -340,7 +378,9 @@ VkResult importPending(VkDevice device, VkImage image, NativeBufferDispatch* dis
         auto it = gImages.find(image);
         if (it == gImages.end() || it->second.fd < 0) return VK_SUCCESS;  // not ours, or already imported
         fd = it->second.fd;
+        handleFd = it->second.handleFd;
     }
+    if (dispatch->deferImport) return allocateExported(device, image, fd, handleFd, dispatch->hostVisibleTypes);
     auto requirements = hostDevice<PFN_vkGetImageMemoryRequirements>(device, "vkGetImageMemoryRequirements");
     auto allocate = hostDevice<PFN_vkAllocateMemory>(device, "vkAllocateMemory");
     auto free = hostDevice<PFN_vkFreeMemory>(device, "vkFreeMemory");
@@ -570,6 +610,12 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
         };
         dispatch.importSignaledSyncFd = dispatch.importSemaphore && dispatch.importFence && supportsSyncFdImport(physical);
         dispatch.deferImport = isVenus(physical);
+        if (auto memoryProperties = host<PFN_vkGetPhysicalDeviceMemoryProperties>("vkGetPhysicalDeviceMemoryProperties")) {
+            VkPhysicalDeviceMemoryProperties types;
+            memoryProperties(physical, &types);
+            for (uint32_t i = 0; i < types.memoryTypeCount; i++)
+                if (types.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) dispatch.hostVisibleTypes |= 1u << i;
+        }
         std::lock_guard<std::mutex> lock(gLock);
         gNativeBuffer[*device] = dispatch;
     }

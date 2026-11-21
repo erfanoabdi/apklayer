@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-21: Vulkan swapchain on Venus (branch venusvk)
+
+- Build log: sync aosp/hals/graphics/vulkan to the Mac tree's vendor/apklayer, `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock (necessary: Venus-allocated swapchain memory in Driver.cpp, no other way to test it). Result below.
+
 ## 2026-11-21: ANGLE aarch64 from the Google source (branch anglearm2)
 
 - Host: OrbStack ubuntu22-x86 (17 cores, cross build: Parallels and UTM have no Linux arm64 clang/gn from Google and ~18 GB free), own tree ~/anglearm2-build (deleted after). `gclient sync --no-history` (target_os android, ~18 GB with deps and NDK), `patches/apply angle` applied 0001-0007 cleanly, arm64 sysroot installed by hand, checkout's ninja 1.12.
