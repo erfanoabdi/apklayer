@@ -205,6 +205,7 @@ struct window {
     struct wl_buffer *buffers[NBUF];
     struct wl_buffer *initial_buffer; /* blank display frame, freed on release */
     struct wl_buffer *dbufs[DBUF_MAX]; /* imported dmabuf buffers of a dmabuf window */
+    struct dshm *dshm;          /* dmabuf frames copied into wl_shm buffers: a compositor without linux-dmabuf (dmabuf_shm.c) */
     int pending_buf;            /* frame received before the first configure */
     int32_t pending_damage[4];
     int pending_dbuf;           /* dmabuf frame received before the first configure (committing a buffer earlier is an xdg-shell error) */
@@ -331,6 +332,9 @@ static inline void surface_damage(struct wl_surface *s, int32_t x, int32_t y, in
 void wlegl_bind(struct wl_registry *r, uint32_t name, uint32_t ver);  /* wlegl.c: libhybris's android_wlegl (Halium compositors) */
 void window_gralloc_frame(struct window *w, const int32_t *m, uint32_t len, const int *fds, int nfds);  /* wlegl.c */
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
+int dshm_import(struct window *w, const int32_t *m, int fd);  /* dmabuf_shm.c */
+void dshm_show(struct window *w, int buf, const int32_t *damage);
+void dshm_destroy(struct window *w);
 /* test input (testinput.c): the seat's and the compositor's events, injected into one window */
 void test_input(struct client *c, const uint8_t *p, uint32_t len);
 

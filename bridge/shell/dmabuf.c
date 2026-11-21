@@ -17,6 +17,7 @@ static const struct wl_buffer_listener dbuf_listener = { dbuf_release };
 
 void window_dmabuf_destroy(struct window *w)
 {
+    dshm_destroy(w);
     for (int i = 0; i < DBUF_MAX; i++) {
         if (w->dbufs[i]) wl_buffer_destroy(w->dbufs[i]);
         w->dbufs[i] = NULL;
@@ -36,7 +37,11 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
     }
     if (buf < 0 || buf >= DBUF_MAX) return;
     if (nfds > 0) {
-        if (!dmabuf_mgr) { fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1: cannot show a dmabuf frame\n"); return; }
+        if (!dmabuf_mgr) {  /* dmabuf_shm.c: the frames are copied */
+            if (dshm_import(w, m, fds[0]) < 0) return;
+            if (m[3] > 0 && m[4] > 0 && (m[3] != w->w || m[4] != w->h)) { w->w = m[3]; w->h = m[4]; if (w->configured) window_layout(w); }
+            goto pending;
+        }
         struct zwp_linux_buffer_params_v1 *p = zwp_linux_dmabuf_v1_create_params(dmabuf_mgr);
         uint64_t modifier = ((uint64_t)(uint32_t)m[7] << 32) | (uint32_t)m[6];
         /* Mutter lists only the implicit modifier for the 8888 formats: an explicit LINEAR it did not advertise makes the import fail (a black window) */
@@ -53,7 +58,8 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
         zwp_linux_buffer_params_v1_destroy(p);
         wl_buffer_add_listener(w->dbufs[buf], &dbuf_listener, w);
     }
-    if (!w->dbufs[buf]) return;
+    if (!w->dbufs[buf] && !(w->dshm && !dmabuf_mgr)) return;
+pending:
     if (!w->configured) {  // the first configure has not been acknowledged yet: show it from there
         if (w->pending_dbuf >= 0 && w->pending_dbuf != buf)
             send_msg(w->client, MSG_DMABUF_RELEASE, (int32_t[]){ w->id, w->pending_dbuf }, 2);
@@ -66,6 +72,7 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
 
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage)
 {
+    if (!dmabuf_mgr) { dshm_show(w, buf, damage); return; }
     w->framed = 1;
     wl_surface_attach(w->surface, w->dbufs[buf], 0, 0);
     surface_damage(w->surface, damage[0], damage[1], damage[2], damage[3]);
