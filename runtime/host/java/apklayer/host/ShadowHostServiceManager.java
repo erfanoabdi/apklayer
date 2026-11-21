@@ -102,6 +102,10 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
             if ("domain_verification".equals(name) && method.getName().equals("getDomainVerificationUserState")) return HostDomainVerification.userState((String) args[0], (Integer) args[1]);
             // the packages with a verification request pending: none, and a list, not the fake's null (Play services' DomainVerificationModuleInitIntentOperation iterates it, and ended its process)
             if ("domain_verification".equals(name) && method.getName().equals("queryValidVerificationPackageNames")) return new java.util.ArrayList<String>();
+            // tethering answers through a listener, and TetheringManager waits for it (ConditionVariable.block(60 s) on the app's clock, which stands
+            // while the main thread waits): Play services' main thread hung in isTetheringSupported, its providers with it, and the hub's binder threads
+            // that asked them; nothing started any more. A device without tethering answers TETHER_ERROR_UNSUPPORTED (3).
+            if (args != null) for (Object arg : args) if (arg instanceof android.net.IIntResultListener listener) listener.onResult(3);
             try {
                 return method.invoke(fake, args);
             } catch (InvocationTargetException e) {

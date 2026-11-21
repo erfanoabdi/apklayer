@@ -127,6 +127,20 @@
   and Coil's defaults) were empty. The Vulkan HAL imports AHardwareBuffers (VK_ANDROID_external_memory_android_hardware_buffer), and shared
   buffers on NVIDIA use uncompressed tiled layouts that its Vulkan driver imports (package: the graphics HAL; runtime: vulkan.apklayer, both CPUs).
 
+## 2026-11-21: Play services hung in isTetheringSupported, and the instance with it
+
+- Seen on the NVIDIA PC (owner's default instance, deb 0.5.2+local): Play Store stayed on its splash and later launches never came up; apps
+  with Google Play services started slowly or not at all. Thread dumps (SIGQUIT): Play services' main thread waited in
+  `ConnectivityManager.isTetheringSupported` -> `TetheringManager.RequestDispatcher.waitForResult` (`ConditionVariable.block(60 s)` on the app's
+  clock, which stands while the main thread waits: 17 h), right after its AppCertService started. Robolectric's fake "tethering" service answered
+  the call but never called the `IIntResultListener`. With that main thread gone, provider lookups into Play services held 8 of the hub's 9 binder
+  threads (`HubProviders.find`), so the hub answered nothing else: Play Store's `Settings.Secure.getString` (HostLocation.install) and
+  YouTube's `cancelJob` waited for ever.
+- Fix: a fake service call that carries an `IIntResultListener` (tethering's result callback) answers it at once with TETHER_ERROR_UNSUPPORTED,
+  as a device without tethering does (ShadowHostServiceManager.wrap). hello-devices prints `isTetheringSupported`; tests/vm/devices.sh expects false.
+- Test (NVIDIA PC, own instance, stock runtime 0.5.0 with the tree's host-classes.jar): hello.devices with the stock jar never got past the call
+  in 20 s (no PASS); with the fix `tethering supported=false in 7 ms`, PASS. `tests/run devices` not run (no test VM configured on this PC).
+
 ## 2026-11-20: hardware-bitmap fix into prebuilts (both CPUs) for 0.5.4
 
 - Build log: `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock, Mac tree vendor/apklayer da01fa5 (= main fc5a44f4); the

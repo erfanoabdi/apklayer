@@ -16,6 +16,11 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - arm64 graphics HALs: X23 (click 0.5.5, runtime 0.5.5, 2026-11-21) UiBench, hwbitmap, Vulkan (Mali-G57, present 600 frames) pass; Parallels virgl groups pass (black-screen cause: direct dma-buf mmap on virtio-gpu, fixed). UTM (Venus GPU, 2026-11-21): gpu gpu-window vulkan vulkan-textures vulkan-select window-formats gfx-readback texture-view fences gles1 pass; vulkan-present passes there since 2026-11-21 (Venus allocates the swapchain memory and exports it over the gralloc fd; ANGLE on Vulkan runs in the apps with the compositor on virgl). Validation leftovers on NVIDIA: usage-02275 (emulated SRGB image views inherit STORAGE usage; a VkImageViewUsageCreateInfo would quiet it).
 - Arknights: Endfield on NVIDIA runs past the login screen (owner, 2026-11-20); earlier Tencent ACE ended it ~60 s in (CHANGELOG 2026-11-12): check a longer session.
 - Hardware bitmaps on NVIDIA (fix in tree, 2026-11-20: vulkan.apklayer's AHardwareBuffer import, uncompressed tiled gralloc buffers): in 0.5.4 (runtime 0.5.3): check YouTube's thumbnails (Venus/arm64: hwbitmap passes on UTM through GL; the Vulkan HardwareBuffer import is off on Venus). `apklayer screenshot` under ANGLE on NVIDIA still fails on the stock runtime (seen 2026-11-20). YouTube signed out: the EU consent page was wider than the window ("Inloggen" cut off).
+- Hub binder threads: a provider lookup (`HubProviders.find`, ENDPOINT_GET_PROVIDER) waits without a limit for the provider's process,
+  inside a hub binder thread; a provider process with a stuck main thread used up the pool and the hub stopped answering (2026-11-21, tethering).
+  Wait at most as ActivityManager does (CONTENT_PROVIDER_WAIT_TIMEOUT, 20 s) and keep a thread free for incoming calls.
+- A launch whose window the user closed before the app attached it (Play Store at its splash, 2026-11-21) leaves the app JVM and `apklayer run`
+  running; the next launch of that app does not come up. Also seen: the package's main process twice (a component host and the launch's JVM).
 
 ## Input / IME
 - Wheel and stylus (touchpad, tablet) never ran on real hardware; the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) go through the test input only.

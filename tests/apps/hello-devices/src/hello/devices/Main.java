@@ -44,6 +44,10 @@ public final class Main extends Activity {
                             + " active=" + network.equals(cm.getActiveNetwork()));
                 }
                 System.out.println("[dev] usb devices=" + getSystemService(UsbManager.class).getDeviceList().size());
+                // a system API (Play services asks it at start): TetheringManager waits for the service's listener, which must answer (no tethering here)
+                long asked = System.nanoTime();
+                Object tethering = ConnectivityManager.class.getMethod("isTetheringSupported").invoke(cm);
+                System.out.println("[dev] tethering supported=" + tethering + " in " + (System.nanoTime() - asked) / 1_000_000 + " ms");
                 LocationManager lm = getSystemService(LocationManager.class);
                 System.out.println("[dev] location enabled=" + lm.isLocationEnabled() + " gps=" + lm.isProviderEnabled(LocationManager.GPS_PROVIDER) + " network=" + lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
                 System.out.println("[dev] PASS");
