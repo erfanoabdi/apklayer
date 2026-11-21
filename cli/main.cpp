@@ -26,6 +26,7 @@
 #include "spare.h"
 #include "unit.h"
 #include "version.h"
+#include "vkprobe.h"
 #include "vpn.h"
 
 using namespace apklayer;
@@ -108,6 +109,7 @@ int main(int argc, char** argv) {
         printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\ndefaultInstance\t%s\n", kVersion, kConverterAbi, kDataFormat, id.c_str());
         return 0;
     }
+    if (args[0] == "vulkan-probe") return vulkanProbe();  // internal: the host Vulkan level, no layout needed (cli/vkprobe.cpp)
     Layout layout = Layout::detect(args[0] != "setup" && args[0] != "config");  // setup sets the runtime up itself, after replacing a broken one; config needs none
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
     bool autostart = (args.size() >= 3 && args[0] == "instance" && args[1] == "autostart")  // systemctl --user is the user's, not apklayerd's

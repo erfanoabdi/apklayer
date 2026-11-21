@@ -6,6 +6,7 @@
 #include "binder.h"
 #include "halium.h"
 #include "providers.h"
+#include "vkprobe.h"
 
 #include <algorithm>
 #include <glob.h>
@@ -131,8 +132,15 @@ std::string hostVulkan(const Layout& layout, const Env& env, bool* venus) {
             if (version.size() > tag.size() && version.compare(version.size() - tag.size(), tag.size(), tag) == 0) *venus = true, version.resize(version.size() - tag.size());
             return version == "-" ? "" : version;
         }
-    if (!exists("/usr/bin/vulkaninfo")) return "";  // vulkan-tools is only recommended
     Spawn probe;
+    if (!exists("/usr/bin/vulkaninfo")) {  // vulkan-tools is only recommended (a Halium phone has none): ask the loader itself, in a child (a hybris libvulkan loads half of libhybris)
+        probe.argv = {realPath("/proc/self/exe"), "vulkan-probe"};
+        probe.env = hostToolEnv();  // not the stack's LD_PRELOAD and library path: hybris's libvulkan loads the vendor driver through its own linker
+        int st = 0;
+        std::string version = trim(runCapture(probe, &st));
+        if (cacheable) writeFile(cache, (st == 0 && !version.empty() ? version : "-") + "\n");
+        return st == 0 ? version : "";
+    }
     probe.argv = {"vulkaninfo", "--summary"};
     probe.env = env;
     int status = 0;
