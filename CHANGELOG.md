@@ -57,6 +57,13 @@
 - Notifications: Lomiri's NotificationServer closes a popup when the connection that sent it leaves the bus (`serviceUnregistered`): `gdbus call` Notify closed at once (timeout 20 s), a Python Gio client that stays gets the 5 s expiry. DesktopNotifications now talks to Lomiri through bridge/portal/notify-bus.py (one connection, notify/close lines, GVariant text); phone-test group notify-bus. Probe of the Java class on the phone: shown, replaced (same id), closed once at the end.
 - Manager: dialog TextFields have max-height 64 px (the install path field filled half the screen on a phone), UpdateBanner and its row keep their content's height, a Share's HubIncoming copy is dropped when another file replaces it (install of another path or the chooser). Screenshots `manager --screenshot` on Parallels (before/after); the X23 needs a new click.
 
+## 0.5.5 (release notes; apklayer 0.5.5, Android runtime 0.5.5 from prebuilts 99acf395)
+- Ubuntu Touch (Halium): Vulkan on the device's GPU works (the X23's Mali-G57 enumerates and presents): the vendor `vulkan.<hardware>.so` is now mapped into the vendor namespace. Notifications stay visible about 5 s (Lomiri dropped them at once when the sending bus connection ended: one persistent connection now). The manager's Install dialog and update banner no longer fill half the screen.
+- Virtual GPUs (virgl): `apklayer screenshot` and some window captures were black since 0.5.2 (a direct dma-buf mapping that is stale on virtio-gpu): fixed. Venus (UTM) passes the graphics groups; presenting a Vulkan swapchain on Venus remains unsupported.
+- ANGLE on Mesa (Intel, AMD, x86_64): no longer crashes at start (no deferred swapchain memory over a host driver); AMD allocates a few buffers LINEAR under ANGLE; hardware-bitmap and GL checks pass on both GPUs. Readback of XRGB8888 buffers works on Mesa. 10-bit and fp16 windows are wrong under ANGLE (open).
+- Sailfish: `apklayer setup --update` installs the runtime of the package (it was skipped when a runtime existed).
+- The Android runtime bundle is 0.5.5: libvulkan with patch 0010, the mapper and allocator accept Mesa's XBGR16161616F.
+
 ## 0.5.4 (release notes; apklayer 0.5.4, Android runtime 0.5.3 from prebuilts 77dd42af)
 
 - Hardware bitmaps on NVIDIA with ANGLE (the default there): images that apps decode into hardware bitmaps (YouTube's thumbnails, Glide's
