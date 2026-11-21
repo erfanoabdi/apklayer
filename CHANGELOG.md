@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21: Initialize the native Choreographer's JVM
+
+- YouTube's native display code skipped refresh-rate callback registration because AChoreographer had no JVM. The shim now runs Android's DisplayManagerGlobal JNI registration, which initializes the JVM bridge and registers the framework's native callback method.
+- A disposable x86_64 YouTube launch with the rebuilt shim played video without the AChoreographer registration warnings. Restoring activity focus in the same run still left the area below the player blank.
+
 ## 2026-11-21: Restore split APK paths in package contexts
 
 - The Play Services context created in YouTube reported 11 split names and a null `splitSourceDirs` array. Dynamite rejected the installed `DynamiteModulesC_installtime` split before loading it. The host now restores paths for the reported names from the installed files, preserving their order.
