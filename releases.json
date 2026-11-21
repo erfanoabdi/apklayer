@@ -40,6 +40,10 @@
           "arm64": {
             "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.5.5/apklayer_0.5.5-1.resolute1_arm64.deb",
             "sha256": "fb7da18878d4f41172a1ac03539066fb2c1fda9a25cdd4444d35ab72e1af845e"
+          },
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.5.5/apklayer_0.5.5-1.resolute1_amd64.deb",
+            "sha256": "d7aa2fb1372161dc0fb01cd2d22a2570115e3142d38f7b8f79599f6c55c79386"
           }
         },
         "trixie": {
