@@ -1,7 +1,7 @@
 {
   "gapps": {
-    "arm64": {"version": "2026-10-22", "url": "https://github.com/MindTheGapps/17.0.0-arm64/releases/download/MindTheGapps-17.0.0-arm64-20261022_132445/MindTheGapps-17.0.0-arm64-20261022_132445.zip", "sha256": "a6844eeb2613541558237e467b20feb01f8b45b2ebab0109834140ea59b6ca4d"},
-    "amd64": {"version": "2026-11-01", "url": "https://github.com/tling0001/MindTheGappsBuilds-for-x86_64/releases/download/20261101/MindTheGapps-17.0.0-x86_64-20261101.zip", "sha256": "a7bde1175ec8a611ad7a9d45cb21cbbdab93f010f23212d14d0aaf2ddb2e54a1"}
+    "arm64": {"version": "2026-10-12", "url": "https://github.com/erfanoabdi/apklayer/releases/download/gapps-c46a08dc/apklayer-gapps-arm64.zip", "sha256": "7b40ab070220afe80bf893ba604d9506c786036f6de1600c65148cb796f8ef8c"},
+    "amd64": {"version": "2026-10-01", "url": "https://github.com/erfanoabdi/apklayer/releases/download/gapps-c46a08dc/apklayer-gapps-x86_64.zip", "sha256": "7f14d4fd1f3ba5ecb65642e5f16bba5eb1d895814a67ce8e7cda5cd7a79da221"}
   },
   "microg": {"index": "https://microg.org/fdroid/repo/index-v1.json", "packages": ["com.google.android.gms", "com.android.vending"]},
   "fdroid": {"index": "https://f-droid.org/repo/index-v1.json", "packages": ["org.fdroid.fdroid"]}
