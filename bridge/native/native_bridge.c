@@ -235,6 +235,24 @@ static char *public_libraries(void)
     return out ? out : strdup(fallback);
 }
 
+/* libapklayer_nativeloader.so (nativeloader_host.c) answers Android's libnativeloader/libnativebridge (NativeActivity's loadNativeCode): it opens
+ * app libraries through this bridge, in the app's namespace. Bound once the namespace exists; the same file the shim linker maps those names to. */
+static void *bound_load(const char *path) { return nb && app_ns ? nb->loadLibraryExt(path, RTLD_NOW_BIONIC, app_ns) : NULL; }
+static void *bound_trampoline(void *handle, const char *name, const char *shorty, uint32_t len)
+{ return nb ? nb->getTrampolineWithJNICallType(handle, name, shorty, len, kJNICallTypeRegular) : NULL; }
+static const char *bound_error(void) { return nb ? nb->getError() : "no native bridge"; }
+static void bind_nativeloader(void)
+{
+    struct { void *(*load)(const char *); void *(*trampoline)(void *, const char *, const char *, uint32_t); const char *(*error)(void); } ops = { bound_load, bound_trampoline, bound_error };
+    const char *dir = getenv("APKLAYER_NATIVE");
+    char path[4096];
+    snprintf(path, sizeof path, "%s/libapklayer_nativeloader.so", dir ? dir : ".");
+    void *h = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
+    void (*bind)(const void *) = h ? (void (*)(const void *))dlsym(h, "apklayer_nativeloader_bind") : NULL;
+    if (bind) bind(&ops);
+    else fprintf(stderr, "[runtime] %s: %s (NativeActivity cannot open bridge libraries)\n", path, dlerror());
+}
+
 /* Loads the bridge and sets up the app's guest namespace (libnativeloader's classloader namespace: isolated, its own library dir,
  * linked to the guest system namespace for the public libraries). Returns NULL or an error message. */
 JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env, jclass c, jstring jbridge, jstring jisa, jstring jlibdir, jstring jcache)
@@ -263,6 +281,7 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env
         else if (!install_guest_environment(h))
             snprintf(err, sizeof err, "%s: guest environment authority unavailable", bridge);
         else {
+            bind_nativeloader();
             /* libart.so's maps line and file in the guest (libart_symbols.c; best effort). */
             if (!nb->loadLibraryExt("/apex/com.android.art/lib64/libart.so", RTLD_NOW_BIONIC, system))
                 fprintf(stderr, "[runtime] guest libart.so did not load: %s\n", nb->getError() ? nb->getError() : "?");

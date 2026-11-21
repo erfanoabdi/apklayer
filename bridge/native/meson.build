@@ -12,6 +12,9 @@ if jni_dep.found()
       'android_platform.c', 'properties.c', 'paths.c', 'android_stubs.c'],
     dependencies: jni_dep, link_with: dl_bio, c_args: native_cargs, override_options: native_opts)
 endif
+# libnativeloader/libnativebridge for Android's own libraries (bionic_translation.cfg): NativeActivity opens app libraries through it (nativeloader_host.c)
+shared_module('apklayer_nativeloader', 'nativeloader_host.c', name_prefix: 'lib', link_with: dl_bio, c_args: native_cargs,
+  override_options: native_opts, install: true, install_dir: native_dir)
 # the ELF at Android's libart.so path (the path layer serves /apex/com.android.art/lib64/libart.so from the Android root): ART's symbols as stubs and the JNI
 # tables' thunks, loaded by jni_art.c (docs/runtime-identity-matrix.md)
 # aarch64 hosts only: an x86_64 host's guest is arm64 code under the native bridge and gets the aarch64 build from the prebuilts' android-root (tools/lib/build-libart-arm64.sh)

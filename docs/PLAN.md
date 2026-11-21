@@ -18,6 +18,8 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Hardware bitmaps on NVIDIA (fix in tree, 2026-11-20: vulkan.apklayer's AHardwareBuffer import, uncompressed tiled gralloc buffers): in 0.5.4 (runtime 0.5.3): check YouTube's thumbnails (Venus/arm64: hwbitmap passes on UTM through GL; the Vulkan HardwareBuffer import is off on Venus). `apklayer screenshot` under ANGLE on NVIDIA still fails on the stock runtime (seen 2026-11-20). YouTube signed out: the EU consent page was wider than the window ("Inloggen" cut off).
 - A package's main process ran twice in the owner's instance (2026-11-21): a component host (`com.android.vending`, started for a bound service) and
   the launch's JVM beside it; on Android a launch joins the running process.
+- NativeActivity (2026-11-21, HostNativeActivity, libapklayer_nativeloader.so): no test app yet (a NativeActivity library needs the NDK: hello-nativeactivity
+  for x86_64 and arm64, input through its InputQueue, finish); a full 3DMark benchmark through its UI on NVIDIA (each workload, results screen).
 
 ## Input / IME
 - Wheel and stylus (touchpad, tablet) never ran on real hardware; the stylus slider (AXIS_WHEEL) and tool wheel (AXIS_SCROLL) go through the test input only.

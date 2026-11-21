@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-21: android.app.NativeActivity (every 3DMark benchmark)
+
+- Owner: all 3DMark benchmarks crash. Their workloads are NativeActivity subclasses (DiscoVulkanNativeActivity and the like); its natives were never
+  registered, so loadNativeCode answered 0 and getDlError null: "Unable to load native library .../lib3dmark_disco.so: null" (log of 2026-11-19).
+- Now: the framework's own android_app_NativeActivity and InputQueue JNI are registered (bridge/native/runtime_shim.c). Their main-thread queue
+  gets a real NativeMessageQueue (NativeQueueCarrier, taken out of HostSensorShadows, which uses it too), so the activity's work pipe sits on the
+  main thread's native Looper that AppHost polls (HostNativeActivity). The JNI opens the app's library through libnativeloader/libnativebridge,
+  of which only the _lazy stubs are staged: libapklayer_nativeloader.so answers both names (bionic_translation.cfg; nativeloader_host.c), on
+  the JNI shim's native bridge in the app's guest namespace for another CPU's library (Berberis wraps ANativeActivity_onCreate), else
+  bionic_translation's linker.
+- Test (NVIDIA PC, own instance, installed runtime 0.5.6 with the tree's shim, host classes, module and library mapping; 3DMark's
+  DiscoVulkanNativeActivity started directly): before "Unable to load native library ...: null"; after, lib3dmark_disco.so loads through the bridge,
+  its native code runs (3DMarkAndroid log lines), the activity goes through create/start/resume with its fullscreen surface, and ends itself
+  ("Invalid workload input setting value or key 'asset_root'": started without the launcher's settings). hardware group: the same verdicts as the
+  installed runtime (this PC's sensors/GNSS/vibrator/audio checks fail on both). A full benchmark run through 3DMark's UI is not done; no test
+  app here (no NDK on this PC to build a NativeActivity library).
+
 ## 2026-11-21: Arknights: Endfield ended in a StackOverflowError while downloading (stopSelf inside onDestroy)
 
 - Seen on the NVIDIA PC (owner's default instance, deb 0.5.5+local20261121.git665c6f11): Endfield died at "Resource downloading..." with

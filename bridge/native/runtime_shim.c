@@ -366,6 +366,9 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         "register_android_net_LocalSocketImpl", /* not GL: LocalSocket's natives, also absent from HostRuntime's list */
         "register_android_hardware_SensorManager", /* not GL: SystemSensorManager's, used over the stack's SensorService (HostSensorShadows) */
         "register_android_os_MessageQueue", /* not GL: the NativeMessageQueue a sensor event queue needs (HostSensorShadows); Robolectric's queue keeps its shadow */
+        /* not GL: android.app.NativeActivity (3DMark's workloads, NDK games) and the InputQueue it takes; both get a real NativeMessageQueue of
+         * the main thread (HostNativeActivity), their libraries open through libapklayer_nativeloader.so (nativeloader_host.c) */
+        "register_android_app_NativeActivity", "register_android_view_InputQueue",
         NULL
     };
     for (int i = 0; device_gl[i]; i++) {

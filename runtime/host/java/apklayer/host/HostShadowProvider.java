@@ -154,6 +154,9 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.nfc.tech.BasicTagTechnology", HostPlainShadows.BasicTagTechnology.class.getName()));
             entries.add(Map.entry("android.nfc.tech.IsoDep", HostPlainShadows.IsoDep.class.getName()));
         }
+        // android.app.NativeActivity over the framework's JNI (HostNativeActivity): 3DMark's workloads, NDK games
+        entries.add(Map.entry("android.app.NativeActivity", HostNativeActivity.NativeActivity.class.getName()));
+        entries.add(Map.entry("android.view.InputQueue", HostNativeActivity.InputQueue.class.getName()));
         if (HostSensorShadows.declared()) {  // the stack runs SensorService over the sensors HAL (providers.toml)
             entries.add(Map.entry("android.hardware.SensorManager", HostSensorShadows.SensorManager.class.getName()));
             entries.add(Map.entry("android.hardware.SystemSensorManager", HostSensorShadows.SystemSensorManager.class.getName()));
