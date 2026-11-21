@@ -454,13 +454,13 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         s.argv = {l.btload(), bionicPath, lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
-        if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_GLES")) {
+        if (name == "surfaceflinger" && (ne.env.count("APKLAYER_ANGLE_GLES") || ne.env.count("APKLAYER_ANGLE_DEVICE"))) {
             // The GLES backend and the compositor share the native driver.
             const std::string angleShare = join(inst.root, "angle/share") + ":";
             auto& dataDirs = s.env.at("XDG_DATA_DIRS");
             if (dataDirs.rfind(angleShare, 0) == 0) dataDirs.erase(0, angleShare.size());
         }
-        if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
+        if (name == "surfaceflinger" && ne.env.count("APKLAYER_ANGLE_ACTIVE") && !ne.env.count("APKLAYER_ANGLE_DEVICE")) {
             // SurfaceFlinger uses apklayer's Android EGL shim for ANativeWindowBuffer-to-dmabuf handling. Point its
             // host EGL and GLES calls at Linux ANGLE too, so the compositor imports and samples app buffers on one Vulkan path.
             const std::string& hostAngleEgl = ne.env.at("APKLAYER_ANGLE_HOST_EGL");

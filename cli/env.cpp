@@ -363,6 +363,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     dataDirs = runtimeShare;
     // Launches from the hub can inherit an ANGLE environment. Select its EGL mapping again below.
     env.erase("APKLAYER_ANGLE_ACTIVE");
+    env.erase("APKLAYER_ANGLE_DEVICE");
     env.erase("APKLAYER_ANGLE_GLES");
     for (const std::string& dir : split(getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"), ':'))
         if (dir != runtimeShare && dir != angleShare) dataDirs += ":" + dir;
@@ -410,14 +411,16 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     if (angleMode != "auto" && angleMode != "on" && angleMode != "off") die("APKLAYER_GLES_ANGLE: auto, on, or off");
     bool nvidiaGpu = gpu && gpu->vendorDevice.rfind("10de:", 0) == 0;
     bool useAngle = angleMode == "on" || (angleMode == "auto" && nvidiaGpu);
-    if (useAngle && deviceGraphics(layout, instance)) {
-        if (angleMode == "on") die("ANGLE GLES is unavailable with graphics = device");
-        fprintf(stderr, "apklayer: ANGLE GLES needs the host graphics provider; using the device GLES driver\n");
+    // graphics = device: ANGLE needs the host Vulkan/EGL plumbing (HAL buffer transfers, the compositor's host EGL), which the device's own
+    // gralloc/Mali do not have. Only an explicit "on" runs ANGLE's Vulkan backend straight on the vendor's Vulkan driver (Android-target libraries only).
+    const bool angleDevice = useAngle && angleMode == "on" && deviceGraphics(layout, instance);
+    if (useAngle && !angleDevice && deviceGraphics(layout, instance)) {
+        fprintf(stderr, "apklayer: ANGLE GLES needs the host graphics provider; using the device GLES driver (gles-angle=on tries ANGLE on the device's Vulkan)\n");
         useAngle = false;
     }
     // ANGLE uses its GLES backend when usable Vulkan presentation isn't detected.
     std::string vulkan = hostVulkanStaged && !vulkanDisabled ? hostVulkan(layout, env) : "";
-    if (useAngle && vulkan.empty() && !exists(join(l, "libapklayer_egl.so"))) {
+    if (useAngle && !angleDevice && vulkan.empty() && !exists(join(l, "libapklayer_egl.so"))) {
         if (angleMode == "on") die("ANGLE's GLES backend needs libapklayer_egl.so");
         fprintf(stderr, "apklayer: ANGLE's GLES backend needs libapklayer_egl.so; using native GLES\n");
         useAngle = false;
@@ -435,8 +438,12 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         env["APKLAYER_VULKAN_PRESENT"] = "1";
         env["APKLAYER_VULKAN_VERSION"] = vulkan;
     }
-    const bool angleVulkan = useAngle && !vulkan.empty();
-    if (angleVulkan) {
+    const bool angleVulkan = useAngle && (!vulkan.empty() || angleDevice);
+    if (angleDevice) {
+        env["APKLAYER_ANGLE_ACTIVE"] = "1";
+        env["APKLAYER_ANGLE_DEVICE"] = "1";  // no host ANGLE: the compositor keeps the vendor EGL (cli/stack.cpp)
+        env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
+    } else if (angleVulkan) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
         std::string hostAngleEgl = getenvOr("APKLAYER_ANGLE_HOST_EGL", join(layout.angle, "angle/host/libEGL_angle.so"));
         if (!exists(hostAngleEgl)) die("ANGLE GLES buffer transfers need the Linux ANGLE library at " + hostAngleEgl);
@@ -462,8 +469,9 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         std::string androidSystem = join(layout.native, "android-root/system");
         env["BIONIC_LD_LIBRARY_PATH"] = join(androidSystem, "lib64") + ":" + join(androidSystem, "lib") + ":" + env["BIONIC_LD_LIBRARY_PATH"];
         std::string vendorLib = layout.java.empty() ? "lib64" : "lib";
-        env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/" + vendorLib + ":/vendor/" + vendorLib + "/egl:/vendor/" + vendorLib + "/hw";
-        std::vector<std::string> shared = split(getenvOr("BIONIC_VENDOR_SHARED_LIBS", ""), ':');
+        if (!angleDevice)  // graphics = device already set it, with the vendor's VNDK dirs the Mali driver's dependencies need
+            env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/" + vendorLib + ":/vendor/" + vendorLib + "/egl:/vendor/" + vendorLib + "/hw";
+        std::vector<std::string> shared = split(env.count("BIONIC_VENDOR_SHARED_LIBS") ? env["BIONIC_VENDOR_SHARED_LIBS"] : getenvOr("BIONIC_VENDOR_SHARED_LIBS", ""), ':');  // graphics = device put libhidlbase there
         for (const char* name : {"libnativewindow.so", "liblog.so", "libvulkan.so"})
             if (std::find(shared.begin(), shared.end(), name) == shared.end()) shared.emplace_back(name);
         std::string sharedLibs;
