@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- These are configurations that should exist on devices supporting XR Projected features. -->
+<config>
+    <!--
+       Signals that the device supports XR Projected features and serves as a
+       mechanism to target devices which makes relevant applications
+       available for them in Play Store.
+    -->
+    <feature name="com.google.android.feature.XR_PROJECTED" />
+
+</config>

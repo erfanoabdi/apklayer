@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Date : Mon May 11 14:03:01 WIB 2026
+  ~ 
+  ~ Copyright (C) 2020 - 2026 The Litegapps Project
+  ~
+-->
+<!--
+This XML file declares which signature|privileged permissions should be granted to privileged
+applications on GMS or Google-branded devices.
+It allows additional grants on top of privapp-permissions-platform.xml
+-->
+<permissions>
+  <privapp-permissions package="com.google.android.gsf">
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.ALL_SERVICES"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.OTHER_SERVICES"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.mail"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.cl"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.android"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.androidsecure"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.sierra"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.sierraqa"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.sierrasandbox"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.youtube"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.YouTubeUser"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.talk"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.ig"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.lh2"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.mobile"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.cp"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.adsense"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.adwords"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.blogger"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.dodgeball"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.gbase"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.groups2"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.health"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.jotspot"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.knol"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.news"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.orkut"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.print"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.sitemaps"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.wifi"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.finance"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.local"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.ah"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.notebook"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.writely"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.wise"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.grandcentral"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.speechpersonalization"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.speech"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.goanna_mobile"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.panoramio"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.reader"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.geowiki"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.doraemon"/>
+    <permission name="com.google.android.providers.talk.permission.READ_ONLY"/>
+    <permission name="com.google.android.providers.talk.permission.WRITE_ONLY"/>
+    <permission name="com.google.android.gtalkservice.permission.GTALK_SERVICE"/>
+    <permission name="com.google.android.gtalkservice.permission.SEND_HEARTBEAT"/>
+    <permission name="com.google.android.permission.BROADCAST_DATA_MESSAGE"/>
+    <permission name="com.google.android.c2dm.permission.SEND"/>
+    <permission name="com.google.android.c2dm.permission.RECEIVE"/>
+    <permission name="com.google.android.xmpp.permission.BROADCAST"/>
+    <permission name="com.google.android.xmpp.permission.SEND_RECEIVE"/>
+    <permission name="com.google.android.xmpp.permission.XMPP_ENDPOINT_BROADCAST"/>
+    <permission name="com.google.android.xmpp.permission.USE_XMPP_ENDPOINT"/>
+    <permission name="com.android.vending.INTENT_VENDING_ONLY"/>
+    <permission name="com.google.android.providers.settings.permission.READ_GSETTINGS"/>
+    <permission name="com.google.android.providers.settings.permission.WRITE_GSETTINGS"/>
+    <permission name="com.google.android.providers.gsf.permission.READ_GSERVICES"/>
+    <permission name="com.google.android.providers.gsf.permission.WRITE_GSERVICES"/>
+    <permission name="com.google.android.gsf.subscribedfeeds.permission.C2D_MESSAGE"/>
+    <permission name="com.google.android.gsf.permission.C2D_MESSAGE"/>
+    <permission name="com.google.android.gsf.permission.CONNECTION"/>
+    <permission name="com.google.android.gsf.subscribedfeeds.permission.C2D_MESSAGE"/>
+    <permission name="com.google.android.gsf.permission.C2D_MESSAGE"/>
+    <permission name="com.google.android.c2dm.permission.SEND"/>
+    <permission name="com.google.android.c2dm.permission.RECEIVE"/>
+    <permission name="com.google.android.xmpp.permission.BROADCAST"/>
+    <permission name="com.google.android.xmpp.permission.XMPP_ENDPOINT_BROADCAST"/>
+    <permission name="android.permission.ACCESS_CACHE_FILESYSTEM"/>
+    <permission name="android.permission.ACCESS_DOWNLOAD_MANAGER"/>
+    <permission name="android.permission.ACCESS_DOWNLOAD_MANAGER_ADVANCED"/>
+    <permission name="android.permission.ACCESS_NETWORK_STATE"/>
+    <permission name="android.permission.ACCESS_WIFI_STATE"/>
+    <permission name="android.permission.AUTHENTICATE_ACCOUNTS"/>
+    <permission name="android.permission.BACKUP"/>
+    <permission name="android.permission.BROADCAST_STICKY"/>
+    <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE"/>
+    <permission name="android.permission.CHANGE_NETWORK_STATE"/>
+    <permission name="android.permission.CHANGE_WIFI_STATE"/>
+    <permission name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION"/>
+    <permission name="android.permission.DUMP"/>
+    <permission name="android.permission.GET_ACCOUNTS"/>
+    <permission name="android.permission.INTERNET"/>
+    <permission name="android.permission.INVOKE_CARRIER_SETUP"/>
+    <permission name="android.permission.MANAGE_ACCOUNTS"/>
+    <permission name="android.permission.MASTER_CLEAR"/>
+    <permission name="android.permission.PERSISTENT_ACTIVITY"/>
+    <permission name="android.permission.READ_CONTACTS"/>
+    <permission name="android.permission.READ_DREAM_STATE"/>
+    <permission name="android.permission.READ_NETWORK_USAGE_HISTORY"/>
+    <permission name="android.permission.READ_PHONE_STATE"/>
+    <permission name="android.permission.READ_SYNC_SETTINGS"/>
+    <permission name="android.permission.READ_SYNC_STATS"/>
+    <permission name="android.permission.REBOOT"/>
+    <permission name="android.permission.RECOVERY"/>
+    <permission name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <permission name="android.permission.RECEIVE_DATA_ACTIVITY_CHANGE"/>
+    <permission name="android.permission.SET_TIME"/>
+    <permission name="android.permission.STATUS_BAR"/>
+    <permission name="android.permission.UPDATE_DEVICE_STATS"/>
+    <permission name="android.permission.USE_CREDENTIALS"/>
+    <permission name="android.permission.VIBRATE"/>
+    <permission name="android.permission.WAKE_LOCK"/>
+    <permission name="android.permission.WRITE_CONTACTS"/>
+    <permission name="android.permission.WRITE_GSERVICES"/>
+    <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
+    <permission name="android.permission.WRITE_SETTINGS"/>
+    <permission name="android.permission.WRITE_SYNC_SETTINGS"/>
+    <permission name="com.android.vending.billing.BILLING_ACCOUNT_SERVICE"/>
+    <permission name="com.android.vending.billing.ADD_CREDIT_CARD"/>
+    <permission name="com.android.vending.INTENT_VENDING_ONLY"/>
+    <permission name="com.android.vending.TOS_ACKED"/>
+    <permission name="com.android.chrome.TOS_ACKED"/>
+    <permission name="com.google.android.googleapps.permission.ACCESS_GOOGLE_PASSWORD"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.ALL_SERVICES"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.YouTubeUser"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.mail"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_AUTH.youtube"/>
+    <permission name="com.google.android.googleapps.permission.GOOGLE_MAIL_SWITCH"/>
+    <permission name="com.google.android.gtalkservice.permission.GTALK_SERVICE"/>
+    <permission name="com.google.android.gtalkservice.permission.SEND_HEARTBEAT"/>
+    <permission name="com.google.android.permission.BROADCAST_DATA_MESSAGE"/>
+    <permission name="com.google.android.providers.gsf.permission.READ_GSERVICES"/>
+    <permission name="com.google.android.providers.gsf.permission.WRITE_GSERVICES"/>
+    <permission name="com.google.android.providers.settings.permission.READ_GSETTINGS"/>
+    <permission name="com.google.android.providers.settings.permission.WRITE_GSETTINGS"/>
+    <permission name="com.google.android.providers.talk.permission.READ_ONLY"/>
+    <permission name="com.google.android.providers.talk.permission.WRITE_ONLY"/>
+    <permission name="android.permission.INTERACT_ACROSS_USERS"/>
+    <permission name="android.permission.READ_DEVICE_CONFIG"/>
+    <permission name="android.permission.MANAGE_USERS"/>
+    <permission name="com.google.android.gsf.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"/>
+    <permission name="com.google.android.gsf.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"/>
+  </privapp-permissions>
+</permissions>
