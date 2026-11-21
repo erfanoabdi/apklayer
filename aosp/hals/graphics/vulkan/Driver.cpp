@@ -227,6 +227,29 @@ VKAPI_ATTR VkResult VKAPI_CALL acquireImageANDROID(VkDevice device, VkImage imag
     return result;
 }
 
+// A device without fence fds (Venus): the loader's present fence (VK_EXT_swapchain_maintenance1: ANGLE) calls vkImportFenceFdKHR through its driver table,
+// which stays null there. The fd is waited for here and the fence signalled by an empty submit. shortcut: the present call blocks until the frame's
+// GPU work is done, and the submit goes to the first queue without the app's synchronization; upgrade when a Venus app presents with fences.
+VKAPI_ATTR VkResult VKAPI_CALL importFenceFdEmulated(VkDevice device, const VkImportFenceFdInfoKHR* info) {
+    NativeBufferDispatch dispatch;
+    {
+        std::lock_guard<std::mutex> lock(gLock);
+        auto native = gNativeBuffer.find(device);
+        if (native == gNativeBuffer.end()) return VK_ERROR_INITIALIZATION_FAILED;
+        dispatch = native->second;
+    }
+    if (info->handleType != VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (!dispatch.submit || !dispatch.acquireQueue) return VK_ERROR_INITIALIZATION_FAILED;
+    if (info->fd >= 0) {
+        struct pollfd wait = {info->fd, POLLIN, 0};
+        while (poll(&wait, 1, -1) < 0 && errno == EINTR) {}
+    }
+    VkSubmitInfo signal = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    VkResult result = dispatch.submit(dispatch.acquireQueue, 1, &signal, info->fence);
+    if (result == VK_SUCCESS && info->fd >= 0) close(info->fd);  // a successful import takes the fd
+    return result;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL queueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitCount, const VkSemaphore* waits, VkImage, int* fenceFd) {
     if (waitCount == 0) { *fenceFd = -1; return VK_SUCCESS; }
     VkDevice device;
@@ -567,6 +590,11 @@ PFN_vkVoidFunction getDeviceProcAddr(VkDevice device, const char* name) {
     };
     for (auto& o : ours)
         if (!strcmp(name, o.name)) return o.needsNative && !native ? nullptr : o.function;
+    if (native && !strcmp(name, "vkImportFenceFdKHR")) {
+        std::lock_guard<std::mutex> lock(gLock);
+        auto it = gNativeBuffer.find(device);
+        if (it != gNativeBuffer.end() && !it->second.importFence) return reinterpret_cast<PFN_vkVoidFunction>(importFenceFdEmulated);
+    }
     if (PFN_vkVoidFunction imported = apklayer::vulkan::hardware_buffer::deviceProc(device, name)) return imported;
     if (PFN_vkVoidFunction emulated = apklayer::vulkan::textures::deviceProc(device, name)) return emulated;
     auto fn = host<PFN_vkGetDeviceProcAddr>("vkGetDeviceProcAddr");
@@ -608,6 +636,8 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
             hostDevice<PFN_vkCreateSemaphore>(*device, "vkCreateSemaphore"),
             hostDevice<PFN_vkGetSemaphoreFdKHR>(*device, "vkGetSemaphoreFdKHR"),
         };
+        // the host loader exports vkImportFenceFdKHR for every device, but its trampoline jumps to null on one without VK_KHR_external_fence_fd (Venus)
+        if (!hasExtension(physical, VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME)) dispatch.importFence = nullptr;
         dispatch.importSignaledSyncFd = dispatch.importSemaphore && dispatch.importFence && supportsSyncFdImport(physical);
         dispatch.deferImport = isVenus(physical);
         if (auto memoryProperties = ::host<PFN_vkGetPhysicalDeviceMemoryProperties>("vkGetPhysicalDeviceMemoryProperties")) {
