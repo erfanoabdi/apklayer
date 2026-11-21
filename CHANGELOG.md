@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-21: hybridreg
+
+- Build log (hybridreg): sync-aosp from the merged main tree (0eac5235) into ~/los24 vendor/apklayer (it carried acf5ebd, a branch state), then `m vulkan.apklayer` for gsi_x86_64 and gsi_arm64 userdebug, incremental, flock (necessary: regression run of the unguarded Driver.cpp change needs x86_64 and arm64 libraries built from main's sources). Result: vulkan.apklayer x86_64 9a6871566a939ca2e5e0d6f25639b3f8ede342e453fa906d6128ebb24498111d (1,087,128 bytes), arm64 167f98db5e51fc7f939b73181571850decc726b69b5d02a84e16876310486c7e (1,087,192 bytes, same size as the phone build f17efad0 from the same Driver.cpp sha256 b923186a; the bytes differ, not reproducible bit for bit); vendor/apklayer unchanged (acf5ebd already equals main's aosp/, sync-aosp made no commit).
+- Regression run of the merged tree (Driver.cpp hostDeviceFd, hybris_open, dmabuf_shm) on generic hosts, new libraries; each group in its own tests/run (a group right after another on the same instance sometimes fails to start, a harness race on the MacBook; every failure repeated once):
+  MacBook (Intel UHD 630 renderD128, AMD renderD129, Mesa 25.2.8, Plasma Wayland), gpu gpu-window gles1 window-formats vulkan texture-view fences: ANGLE off 7/7 on both GPUs; ANGLE on 5/7 on both (window-formats: 10-bit and fp16 not the clear colour; fences: timestamps unsupported; the known failures, unchanged).
+  UTM Venus: gpu vulkan vulkan-present window-formats gles1 all pass with ANGLE off; with ANGLE on vulkan vulkan-present window-formats gles1 pass, gpu fails in hwbitmap (known).
+  Parallels virgl: gpu gpu-window window-formats gfx-readback vulkan-textures pass.
+- Prebuilts: branch hybridreg-pre (e8904ab0 off a060fe99): the two libraries, MANIFEST row; deps/android-tree-files{,-x86_64}.lock rows edited by hand (the tool needs the VM and UTM staging). check-runtime.py passes for runtime 0.5.6.
+
 ## 2026-11-21: hybris bridge (branch hybridge): SurfaceFlinger's host ANGLE on the X23's libhybris Vulkan
 
 - Build log: `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock, twice (12:35 and 09:14 min; the first already compiled the final Driver.cpp, the second changed nothing) (necessary: Driver.cpp takes the sync-fd and memory-fd functions from vkGetDeviceProcAddr; libhybris's libvulkan.so.1 exports stubs for them that jump to null, a crash in the app's ANGLE on the Mali). Result: vulkan.apklayer.so arm64 f17efad0f9a12e37315ef625f911cac7e8991b764f85a212072e017096603ef3 (1,087,192 bytes). vendor/apklayer in ~/los24 carries acf5ebd (not in main: sync-aosp from branch hybridge); not staged into prebuilts.
