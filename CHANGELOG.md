@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-21: PGR download stalls at 0 KB/s: a broken Mono lock under translation, not the network
+
+- Host wesley-mp100 (Ryzen 7 5825U, KDE neon, WiFi RTL8852BE, deb 0.5.6, runtime 0.5.6, libberberis_arm64 b59d5c1f, instance default with the user's PGR; the
+  user approved the sessions, none past the login screen). Three 9-10 minute watches (start, sample every 15 s: cache growth, PGR's TCP bytes, connections,
+  the log's failures; stop PGR): lite (berberis.mode.<pkg> as set): 1.15 GB at ~40 MB/s, then 21 `SynchronizationLockException` and 21 `Download failed`,
+  0 B/s from 319 s on; two-gear: 4.3 GB at ~50 MB/s, lock errors at 121 s, 0 B/s from 151 s; interpret-only: 8.7 GB at ~50 MB/s (not slower), lock errors
+  at 182-212 s. In the stall the CDN sockets are ESTABLISHED with 0.2-3.8 MB unread in Recv-Q and the IL2CPP threadpool threads wait on futexes: the
+  data arrived, the downloader's async reads never completed. The exceptions come from correct `lock` blocks in Mono's own classes (SemaphoreSlim.Release,
+  IOAsyncResult.set_IsCompleted, Socket's async completion, CRI's LateUpdate): the owner check of IL2CPP's monitor fails. Ruled out: the activity
+  lifecycle (MainActivity and the SDK's GAME_WINDOW_STATUS return to resumed/1 after LoadingActivity finishes in onCreate), translation tier, network.
+  Read without finding a bug: the lite tier's LDXR/STXR, CAS, LDXP/STXP, CASP (one LOCK CMPXCHG/CMPXCHG16B each). Next step in docs/PLAN.md.
+- mp100 froze hard during the interpret-only run (journal ends 20 s after an HDMI-A-1 hotplug, no OOM/rtw89/amdgpu/hung-task message; memory and swap were
+  fine); cause unknown. PGR's mode is back to lite-translate-or-interpret; ~/apklayer-pgrdl (716 KB) removed; the download cache kept (35 GB, game data).
+
 ## 2026-11-21: Google apps from apklayer's gapps branch (LiteGapps superlite set, arm64 and x86_64)
 
 - New branch `gapps`: the smallest set `setup --gapps` installs, per CPU (`<cpu>/system/...`): Services Framework, Play services, Play Store,
