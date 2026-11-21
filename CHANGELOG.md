@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-11-21: Vulkan swapchain on Venus (branch venusvk)
+
+- Build log: sync aosp/hals/graphics/vulkan to the Mac tree's vendor/apklayer, `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock, five times, the
+  first failed to compile (necessary: Venus-allocated swapchain memory in Driver.cpp, the fence-fd report; a one-file module, nothing else rebuilt; the
+  gsi_x86_64 vulkan.apklayer is not rebuilt: the same Driver.cpp applies to an x86 Venus VM). Last build: vulkan.apklayer.so
+  arm64 68469f4aad94c37154c0bba0a32de2a96ddeefb5d344f9e2476de01caa92119f (1,087,192 bytes, soong intermediates path); the lock row (deps/android-tree-files.lock) is updated, the file is not yet in the prebuilts branch.
+- Evidence (tests/vm/venus-export-probe.c on the UTM VM, Venus 'Apple M5 Max' + virgl on one renderD128): (1) a dma-buf Venus allocates and exports (buffer
+  or explicit-LINEAR image memory, VkExportMemoryAllocateInfo DMA_BUF) is imported by virgl's EGL (EGL_EXT_image_dma_buf_import) and sampled: the Vulkan
+  GPU clear (vkCmdClearColorImage, sync_fd semaphore signalled in time) reads back exactly. It must be a HOST_VISIBLE memory type: type 0 (device-local only)
+  imports but reads GL_OUT_OF_MEMORY. (2) the other direction, a GBM (virgl) bo imported into Venus: vkAllocateMemory and vkBindImageMemory succeed, the first
+  submit that uses the image aborts (exit 134): the known limit, reproduced standalone (`venus-export-probe export|import`).
+- Cause of the stuck first present: the gralloc buffers of a swapchain are virgl's (the allocator's GBM), Venus aborts or never completes on them (not a missing
+  signal in our present path). Fix (Driver.cpp allocateExported): on Venus the image memory at the first acquire is allocated by Venus
+  (dedicated, exportable), exported with vkGetMemoryFdKHR and dup3'd over the gralloc handle's fd number, so the compositor attaches the Venus buffer
+  (same size, stride and modifier: the image keeps the gralloc buffer's explicit linear layout). Memory type: the first HOST_VISIBLE one of the image.
+- ANGLE (Vulkan) on Venus: (a) the app crashed at pc 0 in the Android loader's PresentOneSwapchain: the loader offers VK_EXT_swapchain_maintenance1
+  when sync fds import into fences (Venus reports it) but loads vkImportFenceFdKHR only for a device that lists VK_KHR_external_fence_fd (Venus does not):
+  Driver.cpp reports the sync-fd fence import absent then (vkGetPhysicalDeviceExternalFenceProperties), and the host fence import is no longer used there.
+  (b) SurfaceFlinger then aborted (signal 6, "Enter boot animation"): with ANGLE on Vulkan the compositor's Linux ANGLE imports the buffers the allocator made
+  (virgl), the same Venus limit. cli/env.cpp: on a Venus host the apps get ANGLE on Vulkan, the compositor and the buffer transfers stay on the native EGL
+  (APKLAYER_ANGLE_GLES=vulkan, the GLES mode's wiring; stack.cpp writes the Vulkan backend props). `hostVulkan` no longer skips Venus (it keeps a ` venus`
+  flag in its cache file).
+- Tests on the UTM VM (own tree, JDK 25, prebuilts 99acf395 + the rebuilt vulkan.apklayer.so): vulkan-present now PASS on Venus (600 frames, 93% of the
+  window magenta in the screenshot; the Venus skip is gone), gpu, gpu-window, window-formats, vulkan, vulkan-textures, vulkan-select, texture-view, fences,
+  gles1, gfx-readback PASS; with `APKLAYER_GLES_ANGLE=on` (ANGLE Vulkan 1.1.334 Venus in the app, compositor virgl): gpu-smoke, gpu-window, window-formats,
+  gles1, vulkan PASS.
+- Policy: every Venus host now advertises Vulkan to apps and presents it (hostVulkan no longer skips Venus), and each swapchain image holds two allocations (the
+  allocator's virgl bo and the Venus memory). Not exercised: a swapchain recreated on a gralloc buffer the compositor already attached (plain Vulkan).
+- Left: the app's AHardwareBuffer import (hardwareBufferSupported) stays off on Venus; the compositor and HAL transfers never use Vulkan there.
+
 ## 2026-11-21: ANGLE aarch64 from the Google source (branch anglearm2)
 
 - Host: OrbStack ubuntu22-x86 (17 cores, cross build: Parallels and UTM have no Linux arm64 clang/gn from Google and ~18 GB free), own tree ~/anglearm2-build (deleted after). `gclient sync --no-history` (target_os android, ~18 GB with deps and NDK), `patches/apply angle` applied 0001-0007 cleanly, arm64 sysroot installed by hand, checkout's ninja 1.12.

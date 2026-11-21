@@ -359,7 +359,7 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
     if (angleGles || ne.env.count("APKLAYER_ANGLE_ACTIVE")) {
         std::string file = join(inst.runtimeDir, "gles-angle.prop");
         std::string props = "ro.hardware.egl=angle\ndebug.renderengine.vulkan=false\n";
-        props += angleGles ? "debug.apklayer.angle_backend=gl\n" :
+        props += angleGles && ne.env.at("APKLAYER_ANGLE_GLES") != "vulkan" ? "debug.apklayer.angle_backend=gl\n" :
                              "debug.angle.backend=2\ndebug.angle.feature_overrides_enabled=exposeES32ForTesting\n";
         writeFile(file, props);
         propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);

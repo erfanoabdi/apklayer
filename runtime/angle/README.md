@@ -79,7 +79,8 @@ Build time on a 17-core x86_64 VM: LinuxHost 912 s (4139 steps), Android64 279 s
 | arm64 Android | `libGLESv1_CM_angle.so` (299792 B) | `36250a5be21ba813f58438107542108a3df9b1e7dc4ebb1db4c4b4e0a8617646` |
 | arm64 Android | `libGLESv2_angle.so` (6587592 B) | `e3b49cf723ffb709d6116fb80e0eafded83e9e4656ace8135aae941343b3529f` |
 
-Verified 2026-11-21 (`APKLAYER_GLES_ANGLE=on`, JDK 25, prebuilts 99acf395): Parallels (virgl) and UTM (virgl, Venus present but not used for presentation): groups gpu, gpu-window, gles1, window-formats, vulkan pass on ANGLE's OpenGL ES backend (`GL_RENDERER "ANGLE (Mesa, virgl, ...)"`). The Vulkan backend with the aarch64 host libraries ran only as an experiment (Venus allowed in `hostVulkan`, reverted): the compositor logs `compositor EGL: Linux ANGLE (Vulkan)` on `Virtio-GPU Venus` and the app's ANGLE starts too, but the app JVM then aborts (exit 134, Venus and imported dma-bufs); no real aarch64 desktop GPU with Vulkan was available, so that path (DMA-BUF import, composition) is not verified.
+Verified 2026-11-21 (`APKLAYER_GLES_ANGLE=on`, JDK 25, prebuilts 99acf395): Parallels (virgl) and UTM (virgl, Venus present but not used for presentation): groups gpu, gpu-window, gles1, window-formats, vulkan pass on ANGLE's OpenGL ES backend (`GL_RENDERER "ANGLE (Mesa, virgl, ...)"`). On a Venus host (UTM) the apps' ANGLE runs on its Vulkan backend (swapchain memory allocated by Venus, Driver.cpp) while SurfaceFlinger and the buffer transfers stay on the native EGL: the Linux ANGLE compositor (Vulkan) aborts on the virgl buffers the allocator makes. Verified 2026-11-21 on UTM: gpu-smoke, gpu-window, window-formats, gles1, vulkan with `APKLAYER_GLES_ANGLE=on`. The Linux host ANGLE on Vulkan (compositor path) is still unverified on a real aarch64 desktop GPU.
+
 
 ### arm64 ANGLE on a Halium GPU (Volla X23, Mali-G57 MC2, 2026-11-21)
 
