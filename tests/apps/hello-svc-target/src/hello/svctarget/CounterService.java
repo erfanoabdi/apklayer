@@ -37,5 +37,10 @@ public class CounterService extends Service {
     }
 
     // stopSelf from onDestroy is a no-op on Android (Endfield's download service does it; it recursed here until the stack overflowed)
-    @Override public void onDestroy() { System.out.println("[svc-t] destroyed"); stopSelf(); }
+    private int destroys;
+    @Override public void onDestroy() {
+        if (destroys++ > 0) { System.out.println("[svc-t] FAIL onDestroy ran again (" + destroys + " times) for one instance"); return; }
+        System.out.println("[svc-t] destroyed");
+        stopSelf();
+    }
 }

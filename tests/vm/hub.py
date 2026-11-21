@@ -146,6 +146,10 @@ try:
                         hub_wait('starting app hello.actprocess#hello.actprocess:remote', 1)
                     if TEST == 'activities' and PHASE == 'private' and target.exists():
                         assert 'PRIVATE STARTED' not in target.read_text(errors='replace'), 'private activity started'
+                    if TEST == 'services':  # the target's own verdicts (its log): onDestroy ran again for one instance (stopSelf inside it)
+                        for f in log.glob('component-hello.svctarget*.log'):
+                            bad = [l for l in f.read_text(errors='replace').splitlines() if '[svc-t] FAIL' in l]
+                            assert not bad, f.name + ': ' + bad[0]
                     if TEST == 'webview':
                         capture('webview', package)  # what the WebView drew, for a look afterwards
                         own_data_dir(package)

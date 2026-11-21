@@ -6,8 +6,10 @@
   java.lang.StackOverflowError: its HGDownloadService.onDestroy calls stopSelf(), and Services.stopSelf found the service still in RUNNING
   (removed only after onDestroy) and destroyed it again, 56 times over until the stack ran out.
 - Fix: a service being destroyed is marked (Services.Running.destroying); destroy() of it again does nothing and stopSelf answers false, as
-  ActiveServices does for a service that is already ending. Test: hello-svc-target's CounterService calls stopSelf() in onDestroy (group services,
-  phase selfstop and every phase that stops it).
+  ActiveServices does for a service that is already ending. Test: hello-svc-target's CounterService calls stopSelf() in onDestroy and prints
+  `[svc-t] FAIL` when onDestroy runs twice; tests/vm/hub.py fails a services phase on that line in the target's log. NVIDIA PC, own instance,
+  installed deb's runtime 0.5.6 with the tree's host-classes.jar: services (all 12) pass; selfstop with the deb's own host classes fails
+  ("onDestroy ran again (2 times)", StackOverflowError in the target's log).
 
 ## 2026-11-21: the hub stays answerable when a provider's process hangs; a window closed at the splash ends its launch
 
