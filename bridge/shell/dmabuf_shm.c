@@ -59,35 +59,46 @@ static struct dshm *state(struct window *w)
     return w->dshm;
 }
 
+static int refuse(struct window *w, int buf)
+{
+    send_msg(w->client, MSG_DMABUF_RELEASE, (int32_t[]){ w->id, buf }, 2);  /* the producer's slot must not starve */
+    return -1;
+}
+
 /* m: the DMABUF_FRAME payload; a first frame of the slot (fd >= 0) maps its dmabuf. 0 when the slot can be shown. */
 int dshm_import(struct window *w, const int32_t *m, int fd)
 {
     struct dshm *s = state(w);
     int buf = m[1];
-    if (!s) return -1;
+    if (!s) return refuse(w, buf);
     if (fd >= 0) {
+        uint64_t modifier = ((uint64_t)(uint32_t)m[7] << 32) | (uint32_t)m[6];
+        if (modifier != 0 && modifier != 0x00ffffffffffffffull) {  /* tiled or compressed: mapped, it would read as garbage */
+            fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1 and the dmabuf's modifier 0x%016llx is not linear\n", (unsigned long long)modifier);
+            return refuse(w, buf);
+        }
         uint32_t fourcc = (uint32_t)m[2];
         if (fourcc != FOURCC_ARGB8888 && fourcc != FOURCC_XRGB8888 && fourcc != FOURCC_ABGR8888 && fourcc != FOURCC_XBGR8888) {
             fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1 and format 0x%08x is not copied\n", fourcc);
-            return -1;
+            return refuse(w, buf);
         }
         if (s->in[buf].map) { munmap(s->in[buf].map, s->in[buf].len); close(s->in[buf].fd); s->in[buf].map = NULL; }
         size_t len = (size_t)(uint32_t)m[12] + (size_t)(uint32_t)m[8] * (uint32_t)m[4];
         void *map = mmap(NULL, len, PROT_READ, MAP_SHARED, fd, 0);
-        if (map == MAP_FAILED) { fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1 and the dmabuf does not map (modifier 0x%08x%08x)\n", (uint32_t)m[7], (uint32_t)m[6]); return -1; }
+        if (map == MAP_FAILED) { fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1 and the dmabuf does not map (modifier 0x%08x%08x)\n", (uint32_t)m[7], (uint32_t)m[6]); return refuse(w, buf); }
         s->in[buf].map = map; s->in[buf].len = len; s->in[buf].fd = dup(fd);
         s->in[buf].stride = m[8]; s->in[buf].fourcc = fourcc; s->in[buf].w = m[3]; s->in[buf].h = m[4]; s->in[buf].off = (uint32_t)m[12];
         fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1: window frames are copied into wl_shm buffers (buffer %d, %dx%d)\n", buf, m[3], m[4]);
     }
-    return s->in[buf].map ? 0 : -1;
+    return s->in[buf].map ? 0 : refuse(w, buf);
 }
 
 void dshm_show(struct window *w, int buf, const int32_t *damage)
 {
     struct dshm *s = w->dshm;
-    if (!s || buf < 0 || buf >= DBUF_MAX || !s->in[buf].map) return;
+    if (!s || buf < 0 || buf >= DBUF_MAX || !s->in[buf].map) { if (buf >= 0 && buf < DBUF_MAX) refuse(w, buf); return; }
     int width = s->in[buf].w, height = s->in[buf].h;
-    if ((s->w != width || s->h != height || !s->out[0].b) && out_make(s, width, height, s->in[buf].fourcc) < 0) return;
+    if ((s->w != width || s->h != height || !s->out[0].b) && out_make(s, width, height, s->in[buf].fourcc) < 0) { refuse(w, buf); return; }
     int o = -1;
     for (int k = 0; k < OUT_N && o < 0; k++) if (!s->out[(s->next + k) % OUT_N].busy) o = (s->next + k) % OUT_N;
     if (o < 0) o = s->next;  /* all held by the compositor: reuse the oldest (a torn frame beats none) */

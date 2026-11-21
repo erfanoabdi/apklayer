@@ -346,7 +346,7 @@ VkResult allocateExported(VkDevice device, VkImage image, int fd, int handleFd, 
     auto allocate = hostDevice<PFN_vkAllocateMemory>(device, "vkAllocateMemory");
     auto free = hostDevice<PFN_vkFreeMemory>(device, "vkFreeMemory");
     auto bind = hostDevice<PFN_vkBindImageMemory>(device, "vkBindImageMemory");
-    auto getFd = hostDevice<PFN_vkGetMemoryFdKHR>(device, "vkGetMemoryFdKHR");
+    auto getFd = hostDeviceFd<PFN_vkGetMemoryFdKHR>(device, "vkGetMemoryFdKHR");
     if (!requirements || !allocate || !free || !bind || !getFd) return VK_ERROR_INITIALIZATION_FAILED;
     struct stat ours, theirs;  // the handle's fd must still be the buffer this image was made for
     if (fstat(fd, &ours) || fstat(handleFd, &theirs) || ours.st_ino != theirs.st_ino || ours.st_dev != theirs.st_dev) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
