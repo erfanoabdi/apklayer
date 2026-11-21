@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-21: PGR download stall: what the translator gets right (test group `locks`)
+
+- PGR's libil2cpp.so (178 MB) cannot be read statically: its exported il2cpp_monitor_exit branches into code that is stored encrypted (decrypted at load);
+  it imports pthread_self and not gettid. Reading PGR's memory trips ACE (2026-11-16), so not done.
+- New test tests/apps/hello-arm64/locks.c (group `locks`, tests/vm/locks.sh; -Dhello.locks=<ms>): 8 guest threads, 4 Java threads entering through short
+  JNI calls, 4 socketpair readers (epoll_wait + recv) with writers, a spinner holding a value only in x19-x28, and a signaller sending SIGPWR to every
+  thread each millisecond (Boehm's stop-the-world; the SA_SIGINFO handler does an atomic). Checks: an il2cpp-style monitor (owner by CAS, exit checks
+  the owner) with pthread_self() and gettid() ids, ids stable per thread, the byte stream and return values of every read, locals live across the calls,
+  each thread's frames and the handler's frame and interrupted sp inside pthread_getattr_np's range, the register-only value found by a scan from the
+  handler's frame to the stack top (Boehm's view), and Dekker store-load order with DMB ISH and with STLR+LDAR (2,000,000 rounds each).
+- Result on the NVIDIA PC (Ryzen 5 5600, AMD: 0075's LOCK NOTL fence in use, runtime 0.5.6): PASS in lite, two-gear and interpret-only, every count 0
+  (up to 104 M lock rounds, 2.6 GB read, ~107,000 signals handled, the register value found 5,000+ times, 0 of 2 M forbidden Dekker outcomes). Built on
+  the Mac (NDK 30), run in a private data home (instance lockstest); the instance, home (258 MB), the Mac build dir and the disassembler venv removed.
+- So the lock, thread identity, socket, GC visibility and fence semantics of the three tiers are sound in isolation; what PGR adds is its anti-cheat
+  (ACE: fault traps and signals) and il2cpp's own monitor/GC internals. Next in docs/PLAN.md.
+
 ## 2026-11-21: PGR download stalls at 0 KB/s: a broken Mono lock under translation, not the network
 
 - Host wesley-mp100 (Ryzen 7 5825U, KDE neon, WiFi RTL8852BE, deb 0.5.6, runtime 0.5.6, libberberis_arm64 b59d5c1f, instance default with the user's PGR; the

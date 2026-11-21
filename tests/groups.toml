@@ -68,6 +68,12 @@ optional = true
 apps = ["hello-vulkan-arm64"]
 run = ["python3 -u tests/vm/vulkan-present.py hello.vulkan.arm64 hello.vulkan.arm64.Main"]
 
+[locks]
+# lock owner identity (pthread_self/gettid), socket reads, GC stack/register visibility and DMB/STLR-LDAR store-load order of an arm64-only JNI
+# library under a GC-like signal storm (tests/apps/hello-arm64/locks.c: PGR's download stall, every count 0 as on real arm64)
+apps = ["hello-arm64"]
+run = ["tests/vm/locks.sh"]
+
 [threads]
 # thread lifetime stress (create/join/detach/exit/signal/fork, 2000 iterations) of an arm64-only JNI library: the lines are real arm64's (binary_translation 0039)
 apps = ["hello-arm64"]

@@ -23,6 +23,9 @@ public class Main extends Activity {
     private static native int missingGlFunctions();
     private static native int ignoreTerm();
     private static native String threadStress(int n);
+    private static native String lockStress(int ms);
+    private static native int lockJava(int slot, int n);
+    private static native boolean lockStopped();
     private static native int uid();
     private static native int ownerUid(String path);
     private static native int procView();
@@ -68,6 +71,17 @@ public class Main extends Activity {
             boolean ok = javaMaps && nativeBits == 255 && "Dalvik".equals(System.getProperty("java.vm.name"));
             log("ART maps " + (ok ? "PASS" : "FAIL") + " java=" + javaMaps + " nativeBits=" + nativeBits);
             TextView text = new TextView(this); text.setText("ART maps: " + ok); setContentView(text);
+            return;
+        }
+        if (System.getProperty("hello.locks") != null) {  // lock owner identity under translation (locks.c); -Dhello.locks=<ms>
+            Thread[] java = new Thread[4];
+            for (int i = 0; i < java.length; i++) {  // Java threads entering the library through short JNI calls, as Unity's main thread does per frame
+                java[i] = new Thread(() -> { int slot = -1; while (!lockStopped()) slot = lockJava(slot, 16); }, "lock-java-" + i);
+                java[i].start();
+            }
+            String report = lockStress(Integer.getInteger("hello.locks", 5000));
+            for (Thread t : java) { try { t.join(); } catch (InterruptedException e) { throw new AssertionError(e); } }
+            log("locks " + report);
             return;
         }
         if (System.getProperty("hello.threads") != null) {  // thread lifetime stress (threads.c); -Dhello.threads=<iterations>
