@@ -41,9 +41,11 @@ def run(cmd, **env):
 def main():
     work = Path(tempfile.mkdtemp(prefix='astc-probe-'))
     results, worst = [], 0
-    for srgb in (0, 1):
+    # rowlen 1: the uploads name their rows in texels (bufferRowLength/bufferImageHeight, as Unity's do; the HAL must round them up to whole
+    # blocks: Endfield's 6x6 textures came out sheared on AMD, CHANGELOG 2026-11-21); the host GLES path has no such copies
+    for rowlen, srgb in [(r, c) for r in ((0,) if PROBE.startswith('gl:') else (0, 1)) for c in (0, 1)]:
         for i, (bx, by) in enumerate(BLOCKS):
-            name = '%dx%d%s' % (bx, by, '-srgb' if srgb else '')
+            name = '%dx%d%s%s' % (bx, by, '-srgb' if srgb else '', '-rowlen' if rowlen else '')
             files, refs = [], []
             for layer in range(2):
                 for level in range(2):
@@ -66,7 +68,8 @@ def main():
                     if q.returncode: p = subprocess.CompletedProcess([], q.returncode, 'FAIL astc-gl exit %d: %s' % (q.returncode, q.stdout.strip()[-100:]), q.stderr); break
                     p.stdout = 'device ' + q.stdout.split('renderer ')[-1].splitlines()[0] + '\n'
             else:
-                p = run([PROBE, str(fmt), str(W), str(H), str(bx), str(by), str(bb), str(work / name), '2', '2'] + files, **({'PROBE_GPU': GPU} if GPU else {}))
+                p = run([PROBE, str(fmt), str(W), str(H), str(bx), str(by), str(bb), str(work / name), '2', '2'] + files,
+                        **dict({'PROBE_GPU': GPU} if GPU else {}, **({'PROBE_ROW_LENGTH': '1'} if rowlen else {})))
             line = [l for l in p.stdout.splitlines() if l.startswith(('FAIL', 'PASS', 'SKIP'))]
             status = 'PASS'
             detail = []

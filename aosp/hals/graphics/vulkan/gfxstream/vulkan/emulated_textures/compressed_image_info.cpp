@@ -540,8 +540,10 @@ VkBufferImageCopy CompressedImageInfo::getBufferImageCopy(
     VkBufferImageCopy region = origRegion;
     uint32_t mipLevel = region.imageSubresource.mipLevel;
     region.imageSubresource.mipLevel = 0;
-    region.bufferRowLength /= mBlock.width;
-    region.bufferImageHeight /= mBlock.height;
+    // apklayer patch (docs/PATCHES.md): the row length and image height count texels; a row holds ceil(length / block width) blocks,
+    // so a truncating division (gfxstream's) lost a block per row of any width that is not a block multiple (ASTC 6x6 of a 1024 texture)
+    region.bufferRowLength = ceil_div(region.bufferRowLength, mBlock.width);
+    region.bufferImageHeight = ceil_div(region.bufferImageHeight, mBlock.height);
     region.imageOffset.x /= mBlock.width;
     region.imageOffset.y /= mBlock.height;
     region.imageExtent = compressedMipmapPortion(region.imageExtent, mipLevel);
@@ -553,8 +555,10 @@ VkBufferImageCopy2 CompressedImageInfo::getBufferImageCopy(
     VkBufferImageCopy2 region = origRegion;
     uint32_t mipLevel = region.imageSubresource.mipLevel;
     region.imageSubresource.mipLevel = 0;
-    region.bufferRowLength /= mBlock.width;
-    region.bufferImageHeight /= mBlock.height;
+    // apklayer patch (docs/PATCHES.md): the row length and image height count texels; a row holds ceil(length / block width) blocks,
+    // so a truncating division (gfxstream's) lost a block per row of any width that is not a block multiple (ASTC 6x6 of a 1024 texture)
+    region.bufferRowLength = ceil_div(region.bufferRowLength, mBlock.width);
+    region.bufferImageHeight = ceil_div(region.bufferImageHeight, mBlock.height);
     region.imageOffset.x /= mBlock.width;
     region.imageOffset.y /= mBlock.height;
     region.imageExtent = compressedMipmapPortion(region.imageExtent, mipLevel);

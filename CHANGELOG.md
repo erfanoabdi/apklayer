@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-21: Endfield's world blocky on AMD: emulated ASTC uploads with a row length lost a block per row
+
+- Build log: `m vulkan.apklayer` (gsi_x86_64 userdebug), incremental, flock (necessary: the fix below is in the HAL's vendored gfxstream emulation; mp100 is x86_64).
+  Result (vendor/apklayer aaab7c1): vulkan.apklayer.so x86_64 56fe106d3c19b9c0f655f3b1daed14a10ce32ca0c97c0330806632a3ad4e6491 (1,087,128 bytes). arm64 not rebuilt;
+  neither is in the prebuilts yet.
+- Endfield (wesley-mp100, RADV Renoir, Vulkan, deb 0.5.6) draws its title and loading screens as a grid of small scrambled tiles; the UI is sharp.
+  RADV lacks ASTC/ETC2, so vulkan.apklayer's gfxstream emulation decodes them; Endfield needs ASTC (with APKLAYER_VULKAN_TEXTURE_EMULATION=0 Unity
+  asserts IsFormatSupported and stops). The same picture with RADV_DEBUG=nodcc and with BERBERIS_MODE=two-gear (interpret-only never got past black).
+- Found and fixed on the way (gfxstream, both getBufferImageCopy variants): bufferRowLength/bufferImageHeight were divided by the block size with
+  truncation; a row holds ceil(length / block) blocks, so an upload that names its row length lost a block per row whenever the width is not a block
+  multiple (any ASTC 6x6 power-of-two texture). Reproduced with tests/vm/astc-probe.py's new `-rowlen` cases (PROBE_ROW_LENGTH=1): all 28 failed on
+  mp100's Renoir, all 28 pass with the fix (worst diff 1); tight uploads pass both ways. The probe was built here from the tree's vulkan-headers and
+  gfxstream's astc-encoder library (astcraw + a PNG wrapper standing in for the astcenc CLI, whose image loaders the tree does not carry).
+- Not Endfield's cause: with the fixed HAL (private APKLAYER_ANDROID_LIBS copy on mp100, the launch's androidlibs confirmed) the title screen is the
+  same. Its trace: 250 emulated images (ASTC 4x4 UI atlas 2048x1024 filled by vkCmdCopyImage of sub-images, ASTC 6x6 textures up to 1024x1024 with
+  full mip chains uploaded tightly in one copy, per-mip SHADER_READ -> TRANSFER_SRC transitions), every one decoded when it becomes readable. Open in
+  docs/PLAN.md.
+- This PC: the NVIDIA Vulkan device stopped loading in this session (vulkaninfo lists only llvmpipe; nvidia-smi sees the RTX 5060 Ti, ICD json present).
+- Cleaned: mp100 ~/apklayer-endfield, ~/apklayer-astcprobe, ~/apklayer-vkfix; the probe build dir here.
+
 ## 2026-11-21: PGR download stall, run 5: IL2CPP frees one block from two threads back to back; 128-bit CAS sound
 
 - Run 5 on wesley-mp100 (BERBERIS_LOG_FREES=1 in the launch's environment, PGR's /proc/<pid>/maps copied from outside): 6.3 GB, then 10 lock errors at

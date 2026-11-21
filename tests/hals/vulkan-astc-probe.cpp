@@ -147,11 +147,15 @@ int main(int argc, char** argv) {
     dev<PFN_vkMapMemory>("vkMapMemory")(gDevice, bufferMemory, 0, size, 0, reinterpret_cast<void**>(&data));
     memset(data, 0xAA, size);
     std::vector<VkBufferImageCopy> up, back, dec;
+    // PROBE_ROW_LENGTH=1: the copies name the rows in texels (bufferRowLength = width, bufferImageHeight = height), as Unity's uploads do; the
+    // buffer layout is the same as tightly packed (a row holds ceil(width / block width) blocks either way)
+    const bool rowLength = getenv("PROBE_ROW_LENGTH") != nullptr;
     for (Sub& s : subs) {
         memcpy(data + s.up, s.data.data(), s.blocks);
         VkImageSubresourceLayers sl = {VK_IMAGE_ASPECT_COLOR_BIT, s.level, s.layer, 1};
-        up.push_back({s.up, 0, 0, sl, {0, 0, 0}, {s.w, s.h, 1}});
-        back.push_back({s.back, 0, 0, sl, {0, 0, 0}, {s.w, s.h, 1}});
+        uint32_t rl = rowLength ? s.w : 0, ih = rowLength ? s.h : 0;
+        up.push_back({s.up, rl, ih, sl, {0, 0, 0}, {s.w, s.h, 1}});
+        back.push_back({s.back, rl, ih, sl, {0, 0, 0}, {s.w, s.h, 1}});
         dec.push_back({s.dec, 0, 0, sl, {0, 0, 0}, {s.w, s.h, 1}});
     }
     VkCommandPoolCreateInfo pci = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, nullptr, 0, family};
