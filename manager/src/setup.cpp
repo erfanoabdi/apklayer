@@ -210,7 +210,7 @@ void Setup::wire() {
         for (size_t i = steps_->row_count(); i-- > 0;)  // a retry: the extras as chosen now
             if (auto row = steps_->row_data(i); row && (row->id == "microg" || row->id == "gapps" || row->id == "fdroid")) steps_->erase(i);
         if (google == "microg") steps_->push_back(SetupStep{"microg", "microG", "Services and Companion", "", false});
-        if (google == "gapps") steps_->push_back(SetupStep{"gapps", "Google Play", "Play services and Play Store (LiteGapps)", "", false});
+        if (google == "gapps") steps_->push_back(SetupStep{"gapps", "Google Play", "Play services and Play Store (MindTheGapps)", "", false});
         if (fdroid) steps_->push_back(SetupStep{"fdroid", "F-Droid", "From f-droid.org", "", false});
         b.set_setup_running(true);
         std::thread([this, cli = cli_, google, fdroid] { runSetup(cli, google, fdroid); }).detach();

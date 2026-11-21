@@ -12,7 +12,7 @@ namespace apklayer {
 // The download sources (docs/DOWNLOADS.md): <root>/downloads.json (data/ in a source tree) with the user's file over it. "" or the error naming the file.
 std::string loadDownloads(const Layout& layout, manager::Downloads& d);
 
-// Installs (or updates) the LiteGapps build of this CPU; report names what it does. "" when it worked, else what failed.
+// Installs (or updates) the MindTheGapps build of this CPU; report names what it does. "" when it worked, else what failed.
 std::string installGapps(const Layout& layout, const Instance& instance, const std::function<void(const std::string&)>& report, const manager::Progress& progress);
 // Google's apps installed (the Services Framework is theirs alone; microG has none)
 bool gappsInstalled(const Layout& layout);

@@ -15,7 +15,7 @@ Where `apklayer setup --gapps`, `--microg` and `--fdroid` download from is data,
 Edit nothing under `/usr`: write `~/.config/apklayer/downloads.json` (`$XDG_CONFIG_HOME/apklayer/downloads.json`) with only what changes. It is merged over the installed file per entry: `gapps.arm64` (url, sha256 and version together), `microg`, `fdroid` (index and packages together). Entries it lacks stay as installed. So a new LiteGapps build for arm64 is
 
 ```json
-{"gapps": {"arm64": {"url": "https://.../LiteGapps-arm64-new.zip/download", "sha256": "..."}}}
+{"gapps": {"arm64": {"url": "https://.../MindTheGapps-17.0.0-arm64-new.zip", "sha256": "..."}}}
 ```
 
 The environment wins over both files: `APKLAYER_GAPPS_URL`, `APKLAYER_GAPPS_SHA256`, `APKLAYER_MICROG_INDEX`, `APKLAYER_FDROID_INDEX`.

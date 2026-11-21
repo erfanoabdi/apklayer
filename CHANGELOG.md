@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-21: Google apps from MindTheGapps 17.0.0 (owner)
+
+- `apklayer setup --gapps` takes MindTheGapps in place of LiteGapps: arm64 MindTheGapps-17.0.0-arm64-20261022_132445 (MindTheGapps' release),
+  x86_64 MindTheGapps-17.0.0-x86_64-20261101 (tling0001's builds), sha256-pinned in data/downloads.json. tools/release/gapps.sh reads both layouts
+  (MindTheGapps: system/{product,system_ext} in the zip; LiteGapps: files/files.tar.xz) and takes Play services out of arm64's gmssystem APEX (an
+  EROFS payload) with fsck.erofs: erofs-utils is a Recommends of the deb.
+- The x86_64 build carries Play services 22.21.16 and Play Store 30.4.17 (2022) signed with Google's older key: on an instance with LiteGapps'
+  26.45.31 / 54.3.07 they only replace those after an uninstall (the setup keeps a newer installed version). Done by hand on the owner's default
+  instance at the owner's request (Play services' 110 MB and Play Store's 6.6 MB of data went; a copy of the LiteGapps apps, XMLs and marker is
+  in ~/apklayer-mindthegapps/backup-litegapps).
+- Test (NVIDIA PC): gapps.sh on the x86_64 zip gives the five installed APKs and 11 XMLs; the arm64 zip stops with "install erofs-utils" here (not
+  installed): the APEX path is not run yet.
+
 ## 2026-11-21: Process start times (Process.getStartElapsedRealtime/getStartUptimeMillis)
 
 - Apps read 0: apklayer never set them, as ActivityThread.handleBindApplication does (Process.setStartTimes). YouTube's startup trace then logged
