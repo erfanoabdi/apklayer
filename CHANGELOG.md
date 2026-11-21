@@ -10,7 +10,7 @@
 - Workflow `gapps` (main, dispatch only: GitHub runs workflow_dispatch from the default branch): with `import` the runner downloads the
   LiteGapps zips named in the branch's `sources` (sha256-checked, `import.sh`) and pushes the branch (about 700 MB: not pushed from the
   owner's line, the 100 MB rule), then `pack.sh` makes reproducible zips (sorted, stored, fixed times/modes) for the prerelease
-  `gapps-<commit>` (first: gapps-c46a08dc, arm64 7b40ab07..., x86_64 7f14d4fd..., the same sha256 as the local pack). data/downloads.json points at them; tools/release/gapps.sh reads them as it reads MindTheGapps (`system/` in the zip).
+  `gapps-<commit>` (first: gapps-c46a08dc, arm64 7b40ab07..., x86_64 7f14d4fd..., the same sha256 as the local pack). data/downloads.json points at them (the workflow's last step writes and pushes it); tools/release/gapps.sh reads them as it reads MindTheGapps (`system/` in the zip).
 - Test (NVIDIA PC): import.sh + pack.sh on the downloaded zips; two packs give the same sha256; gapps.sh on each zip gives the five APKs and
   22 XMLs. Not run: `setup --gapps` in an instance with the new zips.
 

@@ -13,8 +13,8 @@ Where `apklayer setup --gapps`, `--microg` and `--fdroid` download from is data,
 The `gapps` zips are apklayer's own release `gapps-<commit>` (assets `apklayer-gapps-arm64.zip`, `apklayer-gapps-x86_64.zip`): the `gapps` branch holds
 LiteGapps' superlite set unchanged (Services Framework, Play services, Play Store, the two sync adapters, Google's XMLs; its `sources` names the
 LiteGapps zips) and the workflow `gapps` packs it. A new LiteGapps build: edit `sources` on the `gapps` branch, `gh workflow run gapps -f import=true`
-(the runner downloads LiteGapps and pushes the branch), then put the release's URL and the `SHA256SUMS` it prints here (the zips are reproducible:
-`sh pack.sh <out>` on a checkout gives the same sha256).
+(the runner downloads LiteGapps and pushes the branch); the same run points `data/downloads.json` on `main` at the new release (URLs, sha256,
+LiteGapps' build date as the version) and pushes it. The zips are reproducible: `sh pack.sh <out>` on a checkout gives the same sha256.
 
 ## Changing a URL or hash after install
 

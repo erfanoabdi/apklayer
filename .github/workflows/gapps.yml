@@ -1,6 +1,7 @@
 # Google apps for `apklayer setup --gapps` (docs/DOWNLOADS.md): packs the gapps branch (LiteGapps' APKs and XMLs, arm64 and x86_64) into
 # apklayer-gapps-<cpu>.zip and publishes them as the prerelease gapps-<gapps commit>. With `import`, the run first fills the gapps branch from the
-# LiteGapps zips its `sources` file names (import.sh, ~700 MB from SourceForge on the runner) and pushes it. Run by hand: gh workflow run gapps [-f import=true]
+# LiteGapps zips its `sources` file names (import.sh, ~700 MB from SourceForge on the runner) and pushes it. Last, main's data/downloads.json
+# gets the release's URLs and sha256 (pushed when they changed). Run by hand: gh workflow run gapps [-f import=true]
 name: gapps
 
 on:
@@ -46,3 +47,31 @@ jobs:
             gh release create "$tag" -R "$GITHUB_REPOSITORY" --target "$commit" --prerelease --latest=false --title "$tag" --notes-file notes.md
           fi
           gh release upload "$tag" -R "$GITHUB_REPOSITORY" --clobber out/apklayer-gapps-arm64.zip out/apklayer-gapps-x86_64.zip out/SHA256SUMS
+          echo "tag=$tag" >> "$GITHUB_ENV"
+      # main's data/downloads.json (what `setup --gapps` downloads) points at this release: url, sha256, LiteGapps' build date as the version
+      - uses: actions/checkout@v4
+        with: {ref: main, path: main, sparse-checkout: data, fetch-depth: 1}
+      - name: Point downloads.json at the release
+        working-directory: main
+        run: |
+          python3 - "$tag" ../out/SHA256SUMS ../gapps/sources <<'EOF'
+          import json, re, sys
+          tag, sums, sources = sys.argv[1:]
+          sha = {l.split()[1]: l.split()[0] for l in open(sums) if l.strip()}
+          dates = {l.split()[0]: re.search(r"-(\d{4})(\d\d)(\d\d)-official", l).expand(r"\1-\2-\3") for l in open(sources) if l.strip() and not l.startswith("#")}
+          p = "data/downloads.json"
+          text = open(p).read()
+          d = json.loads(text)
+          base = f"https://github.com/{__import__('os').environ['GITHUB_REPOSITORY']}/releases/download/{tag}/"
+          for key, cpu in (("arm64", "arm64"), ("amd64", "x86_64")):
+              name = f"apklayer-gapps-{cpu}.zip"
+              new = json.dumps({"version": dates[cpu], "url": base + name, "sha256": sha[name]})
+              text = re.sub(rf'^(\s*"{key}": )\{{[^\n]*?\}}', lambda m: m.group(1) + new, text, count=1, flags=re.M)
+          json.loads(text)  # still JSON
+          open(p, "w").write(text)
+          EOF
+          git add data/downloads.json
+          if git diff --cached --quiet; then echo "downloads.json already points at $tag"; exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "downloads.json: Google apps from the release $tag (workflow gapps)"
+          for i in 1 2 3; do git push -q origin HEAD:main && exit 0; git pull -q --rebase origin main; done; exit 1
