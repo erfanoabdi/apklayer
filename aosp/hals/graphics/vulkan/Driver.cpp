@@ -610,7 +610,7 @@ VkResult createDevice(VkPhysicalDevice physical, const VkDeviceCreateInfo* info,
         };
         dispatch.importSignaledSyncFd = dispatch.importSemaphore && dispatch.importFence && supportsSyncFdImport(physical);
         dispatch.deferImport = isVenus(physical);
-        if (auto memoryProperties = host<PFN_vkGetPhysicalDeviceMemoryProperties>("vkGetPhysicalDeviceMemoryProperties")) {
+        if (auto memoryProperties = ::host<PFN_vkGetPhysicalDeviceMemoryProperties>("vkGetPhysicalDeviceMemoryProperties")) {
             VkPhysicalDeviceMemoryProperties types;
             memoryProperties(physical, &types);
             for (uint32_t i = 0; i < types.memoryTypeCount; i++)

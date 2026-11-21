@@ -144,7 +144,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         };
         std::string api = field("apiVersion"), type = field("deviceType"), driver = field("driverID");
         unsigned major = 0, minor = 0;
-        if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU" || driver == "DRIVER_ID_MESA_VENUS") continue;
+        if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU") continue;
         if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor), label = gpu.substr(1, gpu.find(':') - 1);
     }
     if (!version.empty()) {  // hardware level 1: the features of CTS's VulkanFeaturesTest.determineHardwareLevel, all set on the best device ("<major>.<minor> 1")
