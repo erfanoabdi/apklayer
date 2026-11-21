@@ -119,7 +119,7 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
 // shortcut: any such device counts, not only the instance's GPU (APKLAYER_GPU); the driver still checks the extensions on its own device.
 std::string hostVulkan(const Layout& layout, const Env& env, bool* venus) {
     *venus = false;
-    std::string cache = join(layout.runtimeHome, "apklayer-host-vulkan");
+    std::string cache = join(layout.runtimeHome, "apklayer-host-vulkan2");  // not the old name: its readers know no venus flag (and skipped Venus)
     // Loader overrides can change which drivers are visible for this launch.
     const char* driverOverrides[] = {"VK_ICD_FILENAMES", "VK_DRIVER_FILES", "VK_ADD_DRIVER_FILES",
                                      "VK_LOADER_DRIVERS_SELECT", "VK_LOADER_DRIVERS_DISABLE"};
