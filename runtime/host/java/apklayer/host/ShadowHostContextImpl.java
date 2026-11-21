@@ -202,6 +202,9 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     /** The app's ApplicationInfo names its extracted native libraries (SoLoader, ReLinker...): where `apklayer install` put the arm64 ones. */
     @Implementation protected android.content.pm.ApplicationInfo getApplicationInfo() {
         android.content.pm.ApplicationInfo info = real("getApplicationInfo");
+        if (info != null && info.splitNames != null && info.splitNames.length != 0 && info.splitSourceDirs == null) {
+            ShadowHostPackageManager.installedPaths(info);
+        }
         String libdir = System.getProperty("apklayer.libdir");
         if (info != null && libdir != null && info.packageName != null && info.packageName.equals(real.getPackageName()) && info.nativeLibraryDir == null) {
             info.nativeLibraryDir = libdir;

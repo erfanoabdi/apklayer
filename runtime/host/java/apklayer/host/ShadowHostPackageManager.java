@@ -154,6 +154,16 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
                 app.splitSourceDirs = app.splitPublicSourceDirs = java.util.Arrays.stream(splits).map(java.io.File::getPath).toArray(String[]::new);
             }
         }
+        // apklayer patch: a package context can carry split names after its code paths were cleared.
+        // Resolve the installed files in the existing name order (Dynamite indexes both arrays together).
+        if (app.splitNames != null && app.splitNames.length != 0 && app.splitSourceDirs == null) {
+            java.io.File[] splits = java.util.Arrays.stream(app.splitNames)
+                    .map(name -> new java.io.File(dir, "split_" + name + ".apk")).toArray(java.io.File[]::new);
+            if (java.util.Arrays.stream(splits).allMatch(file -> dir.equals(file.getParentFile()) && file.isFile())) {
+                app.splitSourceDirs = java.util.Arrays.stream(splits).map(java.io.File::getPath).toArray(String[]::new);
+                if (app.splitPublicSourceDirs == null) app.splitPublicSourceDirs = app.splitSourceDirs;
+            }
+        }
         if (app.sharedLibraryInfos == null && !app.packageName.equals(System.getProperty("apklayer.package"))) HostSharedLibraries.recordOther(app, apk);  // its own: HostSharedLibraries.record
         if (app.sourceDir != null) return;
         app.sourceDir = app.publicSourceDir = apk.getPath();
