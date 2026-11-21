@@ -1,0 +1,48 @@
+# Google apps for `apklayer setup --gapps` (docs/DOWNLOADS.md): packs the gapps branch (LiteGapps' APKs and XMLs, arm64 and x86_64) into
+# apklayer-gapps-<cpu>.zip and publishes them as the prerelease gapps-<gapps commit>. With `import`, the run first fills the gapps branch from the
+# LiteGapps zips its `sources` file names (import.sh, ~700 MB from SourceForge on the runner) and pushes it. Run by hand: gh workflow run gapps [-f import=true]
+name: gapps
+
+on:
+  workflow_dispatch:
+    inputs:
+      import:
+        description: fill the gapps branch from LiteGapps (its sources file) first
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency: gapps
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: gapps, path: gapps}
+      - name: Import LiteGapps into the gapps branch
+        if: ${{ inputs.import }}
+        working-directory: gapps
+        run: |
+          sh import.sh
+          git add -A
+          if git diff --cached --quiet; then echo "gapps: unchanged"; exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "Google apps from $(grep -v '^#' sources | awk '{n=$2; sub(/\/download$/,"",n); sub(/.*\//,"",n); printf "%s%s", s, n; s=", "}')"
+          git push -q origin HEAD:gapps
+      - name: Pack
+        run: sh gapps/pack.sh out
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit="$(git -C gapps rev-parse HEAD)"
+          tag="gapps-$(git -C gapps rev-parse --short=8 HEAD)"
+          if ! gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            { echo "Google apps for \`apklayer setup --gapps\` from the gapps branch ($commit), LiteGapps:"; echo; grep -v '^#' gapps/sources | awk '{print "- " $1 ": " $2}'
+              echo; echo '```'; cat out/SHA256SUMS; echo '```'; } > notes.md
+            gh release create "$tag" -R "$GITHUB_REPOSITORY" --target "$commit" --prerelease --latest=false --title "$tag" --notes-file notes.md
+          fi
+          gh release upload "$tag" -R "$GITHUB_REPOSITORY" --clobber out/apklayer-gapps-arm64.zip out/apklayer-gapps-x86_64.zip out/SHA256SUMS
