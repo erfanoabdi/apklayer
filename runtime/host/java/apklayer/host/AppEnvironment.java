@@ -71,6 +71,13 @@ final class AppEnvironment {
                 };
         if (apk != null && !describing && !HubHost.hub) {  // an app process: Android-shaped traces, threads and reflection, the app's own target SDK
             Thread.currentThread().setName("main");  // the sandbox's "SDK 36 Main Thread", and its group "SDK 36"
+            // as ActivityThread.handleBindApplication: the process's start on the app's clocks. Left at 0, Process.getStartElapsedRealtime() made
+            // YouTube's startup trace "time out after" the host's whole uptime (2026-11-21); apps measure their cold start and defer work by it.
+            // CLOCK_MONOTONIC (System.nanoTime on Linux): the clock the app's SystemClock is stepped to (AppHost), not yet here (Robolectric's 100 ms)
+            long elapsed = System.nanoTime() / 1_000_000, uptime = elapsed;
+            org.robolectric.util.ReflectionHelpers.callStaticMethod(android.os.Process.class, "setStartTimes",
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(long.class, elapsed), org.robolectric.util.ReflectionHelpers.ClassParameter.from(long.class, uptime),
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(long.class, elapsed), org.robolectric.util.ReflectionHelpers.ClassParameter.from(long.class, uptime));
             try {
                 java.lang.reflect.Field groupName = ThreadGroup.class.getDeclaredField("name");
                 groupName.setAccessible(true);  // (not through Unsafe: see AppClassLoader.dexElements)

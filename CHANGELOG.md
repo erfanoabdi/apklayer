@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-21: Process start times (Process.getStartElapsedRealtime/getStartUptimeMillis)
+
+- Apps read 0: apklayer never set them, as ActivityThread.handleBindApplication does (Process.setStartTimes). YouTube's startup trace then logged
+  "Trace Application creation timed out after 78174128 ms", the host's whole uptime. AppEnvironment sets them for an app process before its
+  Application, on CLOCK_MONOTONIC (System.nanoTime), the clock the app's SystemClock is stepped to (SystemClock itself is still Robolectric's 100 ms there).
+- Test (NVIDIA PC, own instance, installed runtime 0.5.6 with the tree's host classes): a probe read 0/0 before, then the launch time (171 ms before
+  onCreate, SystemClock's clock); YouTube no longer logs the timeout. activities: 10 of 12 pass; relaunch.py and early-close.py look for the
+  instance's own shell.log, and this session's shell was started from another instance (they passed in the private-home run earlier today).
+  YouTube's blank watch panels stay (docs/PLAN.md).
+
 ## 2026-11-21: Initialize the native Choreographer's JVM
 
 - YouTube's native display code skipped refresh-rate callback registration because AChoreographer had no JVM. The shim now runs Android's DisplayManagerGlobal JNI registration, which initializes the JVM bridge and registers the framework's native callback method.
