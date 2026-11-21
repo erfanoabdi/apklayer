@@ -139,6 +139,8 @@ std::string hostVulkan(const Layout& layout, const Env& env, bool* venus) {
         int st = 0;
         std::string version = trim(runCapture(probe, &st));
         if (cacheable) writeFile(cache, (st == 0 && !version.empty() ? version : "-") + "\n");
+        const std::string tag = " venus";  // the probe names Venus like the cache does
+        if (version.size() > tag.size() && version.compare(version.size() - tag.size(), tag.size(), tag) == 0) *venus = true, version.resize(version.size() - tag.size());
         return st == 0 ? version : "";
     }
     probe.argv = {"vulkaninfo", "--summary"};

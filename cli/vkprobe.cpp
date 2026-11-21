@@ -1,12 +1,13 @@
 // `apklayer vulkan-probe`: the best GPU's Vulkan level through the host's libvulkan.so.1, for hosts without vulkaninfo (a Halium phone: libhybris's
 // Vulkan front end over the vendor driver, no ICD files; any Khronos loader works the same). Prints "<major>.<minor> [1]" like hostVulkan's vulkaninfo path.
 // The Vulkan ABI is declared here (the few structs used) so the CLI needs no Vulkan headers.
-// shortcut: no Venus detection (needs 1.2 driver properties; the vulkaninfo path has it), the VM hosts that run Venus have vulkaninfo.
+// Venus (Mesa's virtio-gpu Vulkan, deviceName "Virtio-GPU Venus (...)") is appended as " venus", which hostVulkan turns into its venus flag.
 #include "vkprobe.h"
 
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 namespace apklayer {
 namespace {
@@ -34,14 +35,15 @@ int vulkanProbe() {
     uint32_t count = 16;
     if (enumerate(instance, &count, devices) < 0) return 1;  // VK_INCOMPLETE (> 0) still fills 16
     uint32_t best = 0;
-    bool level1 = false;
+    bool level1 = false, venus = false;
     for (uint32_t i = 0; i < count; i++) {
         alignas(8) uint32_t p[512] = {};
         props(devices[i], p);
         if (p[4] == 4) continue;  // VK_PHYSICAL_DEVICE_TYPE_CPU: no game target
-        uint32_t api = p[0] >> 12 & 0x3ff | (p[0] >> 22) << 16;  // major<<16 | minor, as hostVulkan orders them
+        uint32_t api = ((p[0] >> 12) & 0x3ff) | ((p[0] >> 22) << 16);  // major<<16 | minor, as hostVulkan orders them
         if (api <= best) continue;
         best = api;
+        venus = strstr(reinterpret_cast<const char*>(p + 5), "Venus") != nullptr;  // VkPhysicalDeviceProperties::deviceName, at offset 20
         uint32_t f[64] = {};
         feats(devices[i], f);
         // the features of CTS's VulkanFeaturesTest.determineHardwareLevel (the vulkaninfo path's list, by VkPhysicalDeviceFeatures index)
@@ -50,7 +52,7 @@ int vulkanProbe() {
         for (int index : kLevel1) level1 = level1 && f[index];
     }
     if (!best) return 1;
-    printf("%u.%u%s\n", best >> 16, best & 0xffff, level1 ? " 1" : "");
+    printf("%u.%u%s%s\n", best >> 16, best & 0xffff, level1 ? " 1" : "", venus ? " venus" : "");
     return 0;
 }
 }  // namespace apklayer
