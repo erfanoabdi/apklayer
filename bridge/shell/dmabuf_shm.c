@@ -2,8 +2,18 @@
  * buffers are not gralloc buffers): the dmabuf of a DMABUF_FRAME is mapped (the host allocator's linear dumb buffers map; a tiled or compressed one does not)
  * and each frame is copied into a wl_shm buffer. Slower than the zero-copy path, which stays the one wherever the compositor has linux-dmabuf. */
 #define _GNU_SOURCE
-#include <linux/dma-buf.h>
 #include <sys/ioctl.h>
+#if __has_include(<linux/dma-buf.h>)
+#include <linux/dma-buf.h>
+#else
+/* Sailfish OS's kernel headers have no linux/dma-buf.h: the sync ioctl as the kernel's uapi defines it (Linux 4.6+), as bridge/hals/graphics/graphics.c */
+#include <linux/types.h>
+struct dma_buf_sync { __u64 flags; };
+#define DMA_BUF_SYNC_READ (1 << 0)
+#define DMA_BUF_SYNC_START (0 << 2)
+#define DMA_BUF_SYNC_END (1 << 2)
+#define DMA_BUF_IOCTL_SYNC _IOW('b', 0, struct dma_buf_sync)
+#endif
 #include <sys/mman.h>
 #include <unistd.h>
 #include "shell.h"
