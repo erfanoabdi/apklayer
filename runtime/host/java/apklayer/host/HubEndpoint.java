@@ -21,6 +21,10 @@ final class HubEndpoint extends Binder {
     private final Handler main = new Handler(Looper.getMainLooper());
     /** The hub's connection and the service it is bound to (one connection may be bound to several services here) -> the local connection. */
     private final Map<java.util.List<Object>, ServiceConnection> connections = new HashMap<>();
+    /** ActivityManagerService.CONTENT_PROVIDER_WAIT_TIMEOUT. */
+    static final long PROVIDER_WAIT_MS = 20_000;
+    /** The providers this process installed at its start (AppEnvironment.installProviders), by authority. */
+    static final Map<String, android.content.ContentProvider> INSTALLED = new java.util.concurrent.ConcurrentHashMap<>();
     HubEndpoint(Context context, int hubPid) { this.context = context; this.hubPid = hubPid; attachInterface(null, HubProtocol.ENDPOINT); }
     int hubPid() { return hubPid; }
     @Override protected boolean onTransact(int code, Parcel request, Parcel reply, int flags) throws RemoteException {
@@ -126,10 +130,21 @@ final class HubEndpoint extends Binder {
         }
         if (code == HubProtocol.ENDPOINT_GET_PROVIDER) {
             String authority = request.readString(); request.enforceNoDataAvail();
-            // the provider is created on first use, and its onCreate may need a looper: on the main thread, not on this binder thread
-            java.util.concurrent.CompletableFuture<android.content.ContentProvider> created = new java.util.concurrent.CompletableFuture<>();
-            main.post(() -> { try { created.complete(org.robolectric.shadows.ShadowContentResolver.getProvider(android.net.Uri.parse("content://" + authority))); } catch (Throwable failure) { created.completeExceptionally(failure); } });
-            android.content.ContentProvider provider = created.join();
+            // a provider the process installed at its start is published, as on Android: handed out from this thread, whatever the main thread does
+            // (Play services' main thread hung for hours, and with it every hub binder thread that asked for one of its providers)
+            android.content.ContentProvider provider = INSTALLED.get(authority);
+            if (provider == null) {
+                // one created on first use, whose onCreate may need a looper: on the main thread, at most as long as ActivityManager waits for a
+                // provider to be published (CONTENT_PROVIDER_WAIT_TIMEOUT); then none, which the caller takes as an unknown provider
+                java.util.concurrent.CompletableFuture<android.content.ContentProvider> created = new java.util.concurrent.CompletableFuture<>();
+                main.post(() -> { try { created.complete(org.robolectric.shadows.ShadowContentResolver.getProvider(android.net.Uri.parse("content://" + authority))); } catch (Throwable failure) { created.completeExceptionally(failure); } });
+                try { provider = created.get(PROVIDER_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); }
+                catch (java.util.concurrent.TimeoutException late) { System.out.println("[apklayer] provider " + authority + ": the main thread did not create it in " + PROVIDER_WAIT_MS + " ms"); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+                catch (java.util.concurrent.ExecutionException failure) {
+                    throw failure.getCause() instanceof RuntimeException r ? r : new IllegalStateException(failure.getCause());
+                }
+            }
             if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] provider " + authority + " -> " + provider + " (context " + (provider == null ? null : provider.getContext()) + ")");
             reply.writeNoException();
             reply.writeStrongBinder(provider == null ? null : provider.getIContentProvider().asBinder());

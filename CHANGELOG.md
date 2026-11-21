@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-21: the hub stays answerable when a provider's process hangs; a window closed at the splash ends its launch
+
+- Provider lookups (owner's Play services hang, entry below): a provider the process installed at its start is handed to the hub from the endpoint's
+  binder thread (HubEndpoint.INSTALLED, filled by AppEnvironment.installProviders), as Android's published providers need no main thread; one
+  created on first use waits for the main thread at most 20 s (CONTENT_PROVIDER_WAIT_TIMEOUT), then none. The hub's binder pool is system_server's
+  31 threads instead of an app's 8 (RealBinder.startPool1, `apklayer.binderthreads`; a shim without it keeps 8, registered on its own so
+  older host classes still load).
+- Early close: a CLOSE that reaches the window sink (the app has not taken the window yet) sends SIGTERM to the launcher named by
+  `APKLAYER_CLOSE_ENDS` when it is the sink's parent (bridge/hals/graphics/display.c, set by cli/run.cpp); the launcher keeps a signal that comes
+  before its JVM exists and hands it over (passSignalsTo(0)). Before, the JVM ran on without a window and the next launch went to it.
+- Tests (NVIDIA PC, tree rebased on origin/main 4d481799, built and installed against the upstream prebuilts e8904ab with a private
+  XDG_RUNTIME_DIR/data/state home, so the owner's apklayerd and apps were not used): providers basic denied death idle and the new `stuck` (the
+  provider's main thread sleeps 40 s; 12 lookups of its other authorities and a Settings read answer in 21 ms; without the HubEndpoint change
+  TimeoutException) pass; activities (all 11) and the new tests/vm/early-close.py pass (the run ends at once, no JVM left; the deb's CLI ran on 15 s
+  and more); devices.sh: `tethering supported=false in 7 ms`, then "not exactly one network" (this PC has tailscale0 beside Ethernet).
+  Not exercised: the 20 s wait of a provider created on first use; the 31-thread pool on its own (the stuck test passes through the fast path).
+
 ## 2026-11-21: hybridreg
 
 - Build log (hybridreg): sync-aosp from the merged main tree (0eac5235) into ~/los24 vendor/apklayer (it carried acf5ebd, a branch state), then `m vulkan.apklayer` for gsi_x86_64 and gsi_arm64 userdebug, incremental, flock (necessary: regression run of the unguarded Driver.cpp change needs x86_64 and arm64 libraries built from main's sources). Result: vulkan.apklayer x86_64 9a6871566a939ca2e5e0d6f25639b3f8ede342e453fa906d6128ebb24498111d (1,087,128 bytes), arm64 167f98db5e51fc7f939b73181571850decc726b69b5d02a84e16876310486c7e (1,087,192 bytes, same size as the phone build f17efad0 from the same Driver.cpp sha256 b923186a; the bytes differ, not reproducible bit for bit); vendor/apklayer unchanged (acf5ebd already equals main's aosp/, sync-aosp made no commit).

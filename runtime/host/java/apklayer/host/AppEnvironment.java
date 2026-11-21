@@ -359,8 +359,10 @@ final class AppEnvironment {
                     app.getPackageManager().setComponentEnabledSetting(new android.content.ComponentName(app, info.name),
                             PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0);
                     provider.attachInfo(app, info);
-                    for (String authority : info.authority.split(";"))
+                    for (String authority : info.authority.split(";")) {
                         org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(authority, provider);
+                        HubEndpoint.INSTALLED.put(authority, provider);
+                    }
                 } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                     System.out.println("[apklayer] provider " + info.name + " not started: " + e);
                 }

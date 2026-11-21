@@ -133,18 +133,21 @@ static jobject lookup(JNIEnv *env, jclass cls, jstring name)
     return result;
 }
 
-static void start_pool(JNIEnv *env, jclass cls)
+/* threads: the pool's size; the hub asks for system_server's 31 (it answers every app's calls and also waits on them), others 8 */
+static void start_pool_sized(JNIEnv *env, jclass cls, jint threads)
 {
-    (void)env; (void)cls;
+    (void)cls;
     void *ndk = bionic_dlopen("libbinder_ndk.so", 2);
     bool (*set_max)(uint32_t) = ndk ? bionic_dlsym(ndk, "ABinderProcess_setThreadPoolMaxThreadCount") : NULL;
     void (*start)(void) = ndk ? bionic_dlsym(ndk, "ABinderProcess_startThreadPool") : NULL;
-    if (!set_max || !start || !set_max(8)) {
+    if (!set_max || !start || threads < 1 || !set_max((uint32_t)threads)) {
         (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalStateException"), "Cannot start native Binder pool");
         return;
     }
     start();
 }
+
+static void start_pool(JNIEnv *env, jclass cls) { start_pool_sized(env, cls, 8); }
 
 /* The helper class apklayer.host.RealBinder (an uninstrumented host class; natives registered under their plain names). */
 /* libapklayer-preload's binder route (LD_PRELOAD, global scope): absent when the process runs without it */
@@ -179,5 +182,8 @@ int apklayer_register_binderhelper(JNIEnv *env, jclass helper)
         {"setSenderUid0", "(I)I", (void *)set_sender_uid},
     };
     if ((*env)->RegisterNatives(env, helper, methods, sizeof methods / sizeof *methods) < 0) return -1;
+    /* on its own: host classes older than the sized pool lack it, and keep the fixed one */
+    JNINativeMethod sized[] = {{"startPool1", "(I)V", (void *)start_pool_sized}};
+    if ((*env)->RegisterNatives(env, helper, sized, 1) < 0) (*env)->ExceptionClear(env);
     return 0;
 }

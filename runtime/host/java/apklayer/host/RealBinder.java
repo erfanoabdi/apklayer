@@ -17,7 +17,9 @@ public final class RealBinder {
     public static synchronized void init() {
         if (started) return;
         NativeMedia.ensureInitialized();
-        startPool();
+        // apklayer.binderthreads: the hub's 31 (HubHost), as system_server; a shim without startPool1 starts its fixed 8
+        try { startPool1(Integer.getInteger("apklayer.binderthreads", 8)); }
+        catch (UnsatisfiedLinkError older) { startPool(); }
         started = true;
     }
 
@@ -56,6 +58,7 @@ public final class RealBinder {
     private static native boolean publish0(String name, IBinder binder, boolean allowIsolated);
     private static native IBinder lookup0(String name);
     private static native void startPool();
+    private static native void startPool1(int threads);
     private static boolean publishNative(String name, IBinder binder, boolean allowIsolated) { return publish0(name, binder, allowIsolated); }
     private static IBinder lookupNative(String name) { return lookup0(name); }
 }

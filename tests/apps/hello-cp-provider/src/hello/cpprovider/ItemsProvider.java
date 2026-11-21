@@ -49,6 +49,8 @@ public class ItemsProvider extends ContentProvider {
         Uri items = Uri.parse("content://hello.cpprovider.items/items");
         if (method.equals("grant")) getContext().grantUriPermission(arg, items, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION | android.content.Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
         if (method.equals("revoke")) getContext().revokeUriPermission(items, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        // the main thread stuck (Play services in isTetheringSupported, 2026-11-21): the providers of this process still answer the hub
+        if (method.equals("stall")) new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { Thread.sleep(40_000); } catch (InterruptedException ignored) {} });  // real time: Robolectric's SystemClock.sleep only moves its clock
         Bundle out = new Bundle();
         out.putInt("pid", Process.myPid());
         out.putInt("callerPid", Binder.getCallingPid());

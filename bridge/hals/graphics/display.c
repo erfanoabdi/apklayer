@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -25,6 +26,7 @@
 #define MSG_CONFIGURE 107
 #define MSG_NAVBAR_LAYER 17
 #define MSG_NAVBAR_PIXELS 116
+#define MSG_CLOSE 103
 #define WINDOW_ID 1
 #define SLOTS 8
 
@@ -96,6 +98,13 @@ static void reply(struct apklayer_display *d, uint32_t type, uint32_t len, const
         if (fn) { fn(atomic_load(&d->navbar_user), mfd, body[1], body[2]); mfd = -1; }  /* the callback owns the fd */
     } else if (type == MSG_DMABUF_RELEASE && len >= 8) {
         if (d->cb.released) d->cb.released(d->cb.user, body[1]);
+    } else if (type == MSG_CLOSE && len >= 4 && body[0] == WINDOW_ID) {
+        /* apklayer patch: the user closed the window before the app took it over (the shell sends CLOSE to the app once it has): the launch
+         * ends, as `apklayer stop` would. The launcher names itself (APKLAYER_CLOSE_ENDS, cli/run.cpp); it forwards the signal to the JVM.
+         * Before, a JVM stuck at its splash ran on without a window and the next launch was handed to it (Play Store, 2026-11-21). */
+        const char *ends = getenv("APKLAYER_CLOSE_ENDS");
+        pid_t launcher = ends ? (pid_t)atoi(ends) : 0;
+        if (launcher > 1 && launcher == getppid()) { fprintf(stderr, "apklayer.display: window closed before the app took it: ending launch %d\n", (int)launcher); kill(launcher, SIGTERM); }
     }
     if (mfd >= 0) close(mfd);
 }

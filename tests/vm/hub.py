@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
-every JVM is owned and reaped. Tests: providers (basic denied death observe files grant idle: basic, then the provider's host ends once idle), services (start selfstop sticky private filters own late oneway respawn rebind framework),
+every JVM is owned and reaped. Tests: providers (basic denied death observe files grant idle stuck: idle is basic, then the provider's host ends once idle; stuck: its main thread hangs, its providers and the hub still answer), services (start selfstop sticky private filters own late oneway respawn rebind framework),
 activities (result explicit again private up), processes (kill: an activity in android:process ":remote"), pendingintents (broadcast targets cancel forresult), notifications (click cancel muted channels settings), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors

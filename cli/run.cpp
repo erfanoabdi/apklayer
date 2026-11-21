@@ -233,6 +233,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     std::string spareKey = appSpareKey(l, inst, jvm, nj.env, sandboxPackage);
     int vdisplay = 0;
     int self = getpid();
+    passSignalsTo(0);  // from here a SIGTERM (the window closed before the app took it: display.c) is kept and given to the JVM once it exists
     // one virtual display per app window (its own layer stack and sink per launch); pid-based ids cannot collide, and the title identifies instance and
     // launch. The primary display is headless, so the sink is required (a component host has no window).
     if (mode == RunMode::App) {
@@ -254,6 +255,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};
         sink.env = ne.env;
         if (!appShell.empty()) sink.env["APKLAYER_SHELL"] = appShell;
+        sink.env["APKLAYER_CLOSE_ENDS"] = std::to_string(self);  // the window closed before the app took it ends this launch (bridge/hals/graphics/display.c)
         sink.logFile = join(inst.logs(), "vdisplay-" + package + "-" + std::to_string(self) + ".log");
         vdisplay = spawn(sink);
         window = {"-Dapklayer.layerstack=" + std::to_string(self), "-Dapklayer.displaywindow=" + title};

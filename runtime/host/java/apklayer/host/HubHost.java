@@ -17,6 +17,8 @@ public final class HubHost {
     static volatile boolean hub;  // this JVM is the hub (its own package registers as a headless process)
     public static void run(AndroidSandbox sandbox, Path apk) {
         booting = hub = true;
+        // the hub answers every app and waits on their processes inside its binder threads (a provider lookup): system_server's pool size, not an app's 8
+        System.setProperty("apklayer.binderthreads", "31");
         Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());
         // the instance's spare (cli/spare.cpp), before the hub's own setup (~1 s): the first app launch, or the first component host, finds it warm
         try { new ProcessBuilder(System.getProperty("apklayer.cli"), "app-spare").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start(); }

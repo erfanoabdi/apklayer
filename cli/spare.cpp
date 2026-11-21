@@ -179,6 +179,7 @@ void passSignalsTo(int pid) {
     struct sigaction sa{};
     sa.sa_handler = forward;
     for (int sig : {SIGINT, SIGTERM, SIGHUP}) sigaction(sig, &sa, nullptr);
+    if (pid > 0 && forwarded) kill(pid, SIGTERM);  // a signal before the target existed (passSignalsTo(0)): the launch was ended while it started
 }
 
 int awaitAppSpare(int conn, int jvmPid) {

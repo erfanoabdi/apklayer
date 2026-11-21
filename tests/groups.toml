@@ -262,7 +262,7 @@ run = ["python3 -u tests/vm/hub-smoke.py", "python3 -u tests/vm/binder.py bound"
 [providers]
 apps = ["hello-cp-provider", "hello-cp-client", "hello-cp-denied"]
 run = ["python3 -u tests/vm/hub.py providers basic", "python3 -u tests/vm/hub.py providers denied", "python3 -u tests/vm/hub.py providers death",
-       "python3 -u tests/vm/hub.py providers idle"]
+       "python3 -u tests/vm/hub.py providers idle", "python3 -u tests/vm/hub.py providers stuck"]
 
 [services]
 apps = ["hello-svc-target", "hello-svc-caller", "hello-svc-late"]  # hello-svc-late: installed again by the late phase while a host runs
@@ -290,7 +290,8 @@ apps = ["hello-act-target", "hello-act-caller", "hello-act-process", "hello-act-
 run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",
        "python3 -u tests/vm/hub.py activities private", "python3 -u tests/vm/hub.py activities up", "python3 -u tests/vm/relaunch.py",
        "python3 -u tests/vm/hub.py processes kill", "python3 -u tests/vm/hub.py restart saved", "python3 -u tests/vm/exit-deadline.py",
-       "python3 -u tests/vm/exit-deadline.py held", "python3 -u tests/vm/exit-deadline.py spare"]
+       "python3 -u tests/vm/exit-deadline.py held", "python3 -u tests/vm/exit-deadline.py spare",
+       "python3 -u tests/vm/early-close.py"]
 
 [pendingintents]
 apps = ["hello-pi-holder", "hello-pi-creator", "hello-act-target", "hello-svc-target"]

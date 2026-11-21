@@ -5,7 +5,7 @@
   <application android:label="cp-provider">
     <provider android:name=".ItemsProvider" android:authorities="hello.cpprovider.items" android:exported="true"
         android:readPermission="hello.cpprovider.permission.READ" android:writePermission="hello.cpprovider.permission.WRITE"/>
-    <provider android:name=".OpenProvider" android:authorities="hello.cpprovider.open" android:exported="true"/>
+    <provider android:name=".OpenProvider" android:authorities="hello.cpprovider.open;hello.cpprovider.o1;hello.cpprovider.o2;hello.cpprovider.o3;hello.cpprovider.o4;hello.cpprovider.o5;hello.cpprovider.o6;hello.cpprovider.o7;hello.cpprovider.o8;hello.cpprovider.o9;hello.cpprovider.o10;hello.cpprovider.o11;hello.cpprovider.o12" android:exported="true"/>
     <provider android:name=".PrivateProvider" android:authorities="hello.cpprovider.private" android:exported="false"/>
   </application>
 </manifest>

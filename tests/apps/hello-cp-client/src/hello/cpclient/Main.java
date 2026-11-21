@@ -115,6 +115,24 @@ public class Main extends Activity {
                 require("alpha,beta,".equals(names(resolver, ITEMS)), "restarted provider rows");
                 System.out.println("[cpc] PASS death: provider restarted by the hub, new pid=" + second.getInt("pid"));
             }
+            case "stuck" -> {
+                // the provider's main thread hangs; more lookups of its providers at once than the hub had binder threads (each authority is
+                // one lookup: the resolver keeps a provider per authority), then a settings read, which the hub itself answers
+                require("open,".equals(names(resolver, OPEN)), "open provider rows");
+                resolver.call(ITEMS, "stall", null, null);
+                Thread.sleep(500);  // the stall runs on the provider's main thread now
+                java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(13);
+                java.util.List<java.util.concurrent.Future<String>> answers = new java.util.ArrayList<>();
+                long asked = System.nanoTime();
+                for (int i = 1; i <= 12; i++) { Uri other = Uri.parse("content://hello.cpprovider.o" + i + "/x"); answers.add(pool.submit(() -> names(resolver, other))); }
+                answers.add(pool.submit(() -> String.valueOf(android.provider.Settings.Global.getInt(resolver, android.provider.Settings.Global.AUTO_TIME, -1))));
+                for (java.util.concurrent.Future<String> answer : answers) {
+                    String got = answer.get(10, java.util.concurrent.TimeUnit.SECONDS);  // a TimeoutException fails the scenario
+                    require(answers.indexOf(answer) == 12 ? !got.isEmpty() : "open,".equals(got), "answer " + answers.indexOf(answer) + ": " + got);
+                }
+                pool.shutdownNow();
+                System.out.println("[cpc] PASS stuck: 12 provider lookups and a settings read in " + (System.nanoTime() - asked) / 1_000_000 + " ms with the provider's main thread stuck");
+            }
             default -> System.out.println("[cpc] unknown scenario");
         }
     }
