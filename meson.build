@@ -153,10 +153,17 @@ if not arm32_only and host_machine.cpu_family() == 'aarch64' and fs.exists('runt
                      'runtime/angle/aarch64/host/libGLESv2_angle.so'),
     install_dir: pkg_lib / 'angle/host')
   install_symlink('libapklayer_hostGLESv2.so', pointing_to: 'libGLESv2_angle.so', install_dir: pkg_lib / 'angle/host')
-  if fs.exists('runtime/angle/aarch64/vendor/lib64/egl/libEGL_angle.so')
-    install_data(files('runtime/angle/aarch64/vendor/lib64/egl/libEGL_angle.so',
-                       'runtime/angle/aarch64/vendor/lib64/egl/libGLESv1_CM_angle.so',
-                       'runtime/angle/aarch64/vendor/lib64/egl/libGLESv2_angle.so'),
+endif
+# the arm64 Android-target set (phones, Halium, Linux arm64): from runtime/angle/aarch64/vendor if built here, else from the prebuilts branch (arm64/angle/vendor/lib64/egl)
+if not arm32_only and host_machine.cpu_family() == 'aarch64'
+  angle_vendor = ''
+  foreach d : ['runtime/angle/aarch64/vendor/lib64/egl', prebuilts != '' ? prebuilts / 'arm64/angle/vendor/lib64/egl' : '']
+    if angle_vendor == '' and d != '' and fs.exists(d / 'libEGL_angle.so')
+      angle_vendor = d
+    endif
+  endforeach
+  if angle_vendor != ''
+    install_data(files(angle_vendor / 'libEGL_angle.so', angle_vendor / 'libGLESv1_CM_angle.so', angle_vendor / 'libGLESv2_angle.so'),
       install_dir: pkg_lib / 'angle/vendor/lib64/egl')
   endif
 endif

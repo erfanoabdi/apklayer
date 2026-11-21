@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21: prebuilts update 2 (branch prebupd2): Venus vulkan.apklayer on both CPUs, arm64 ANGLE Android libraries
+
+- Build log: `m vulkan.apklayer` (gsi_x86_64 userdebug), incremental, flock (necessary: the x86_64 vulkan.apklayer in out/ (Nov 20) predates the merged Driver.cpp of venusvk; the arm64 one, 68469f4a, is current: vendor/apklayer Driver.cpp sha256 3583607c = main's). Succeeded (12:24): vulkan.apklayer.so x86_64 e05c44bb037016ad0b109c848e04adff651a8554326f1f973e9ac27eb15ba66b (1,087,112 bytes); vendor/apklayer a716f78 (= main's aosp/); lock row updated.
+- Runtime 0.5.6 from prebuilts a060fe99 (branch prebupd2-prebuilts, local): vulkan.apklayer (arm64 68469f4a, x86_64 e05c44bb; Venus-allocated swapchain memory, fence-fd report) and `arm64/angle/vendor/lib64/egl/` (ANGLE GN Android arm64: libEGL_angle 7308fc76, libGLESv1_CM_angle 36250a5b, libGLESv2_angle e3b49cf7; the 22 MB host libraries are not shipped). meson.build installs the arm64 Android set from `runtime/angle/aarch64/vendor` or else `<prebuilts>/arm64/angle/vendor/lib64/egl` on aarch64 (also without the host libraries); lock row, runtime/angle/README.md, docs/THIRD_PARTY.md, tools/release/versions updated; check-runtime.py ok. Parallels (tree removed): ANGLE libs land in inst/lib/apklayer/angle/vendor/lib64/egl, gpu, window-formats, vulkan pass; UTM Venus: vulkan-present passes (Venus swapchain, 90+ frames, 93% magenta).
+
 ## 2026-11-21: Vulkan swapchain on Venus (branch venusvk)
 
 - Build log: sync aosp/hals/graphics/vulkan to the Mac tree's vendor/apklayer, `m vulkan.apklayer` (gsi_arm64 userdebug), incremental, flock, five times, the
