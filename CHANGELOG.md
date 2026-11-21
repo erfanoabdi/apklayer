@@ -12,7 +12,16 @@
   owner's line, the 100 MB rule), then `pack.sh` makes reproducible zips (sorted, stored, fixed times/modes) for the prerelease
   `gapps-<commit>` (first: gapps-c46a08dc, arm64 7b40ab07..., x86_64 7f14d4fd..., the same sha256 as the local pack). data/downloads.json points at them (the workflow's last step writes and pushes it); tools/release/gapps.sh reads them as it reads MindTheGapps (`system/` in the zip).
 - Test (NVIDIA PC): import.sh + pack.sh on the downloaded zips; two packs give the same sha256; gapps.sh on each zip gives the five APKs and
-  22 XMLs. Not run: `setup --gapps` in an instance with the new zips.
+  22 XMLs. The x86_64 URL in downloads.json downloads and its sha256 matches.
+- Test (NVIDIA PC, deb 0.5.5+local CLI, runtime 0.5.6, `main`'s gapps.sh and downloads.json in a private APKLAYER_ROOT copy, private XDG
+  data/config/state/runtime dirs, new instance `gappstest`): `setup --gapps` downloads gapps-c46a08dc's x86_64 zip, installs the system apps
+  and the five Google APKs as system apps (Play services 26.26.34, Play Store 52.4.41, GSF, both sync adapters), keeps the 22 XMLs in
+  google-apps/etc, and writes the zip's sha256 as the marker. After a restart Play Store's MainActivity is RESUMED in 11 s, with Play services,
+  its persistent process and the Calendar sync adapter running (`apklayer screenshot` wrote no file: not followed up). A deb older than this
+  gapps.sh cannot read the zip (its gapps.sh knows only LiteGapps' files.tar.xz), so the zips are for packages built from here on.
+- Isolation pitfall: a private XDG_RUNTIME_DIR needs the session's wayland-N (and pipewire-0, pulse/native) linked in, or the composer
+  finds no display and no install works. The always-on unit a Google install turns on (`apklayer-instance@<id>.service`, the real user
+  systemd) runs with the session's environment: it started `gappstest` in the owner's data home too (dirs removed, autostart off).
 
 ## 2026-11-21: "ASTC broken on AMD" not reproduced on Navi14 (Mesa 25.2.8); real-ASTC tests added
 
