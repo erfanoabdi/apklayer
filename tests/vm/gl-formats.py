@@ -30,6 +30,23 @@ def verdicts(text):
     return checks, exts
 
 
+def etc2_rows(text):
+    """(format, row) -> RGBA8 bytes of the etc2d lines (random ETC2/EAC blocks sampled as texels)."""
+    rows = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 5 and parts[:2] == ['glformats:', 'etc2d']: rows[(parts[2], int(parts[3]))] = bytes.fromhex(parts[4])
+    return rows
+
+
+def etc2_differences(label, got, ref):
+    """Texels (any channel off by more than 1: decoders round their own way) of the ETC2/EAC random blocks that differ from the host driver alone."""
+    bad = {}
+    for key, row in got.items():
+        if key in ref and any(abs(a - b) > 1 for a, b in zip(row, ref[key])): bad[key[0]] = bad.get(key[0], 0) + 1
+    return ['%s etc2 %s: %d of 16 rows differ from the host driver alone' % (label, name, n) for name, n in sorted(bad.items())]
+
+
 def reference():
     exe = OUT / 'glformats-linux'
     cc = subprocess.run(['cc', '-O1', '-o', str(exe), 'tests/bench/glformats/linux.c', '-lEGL', '-lGLESv2', '-lgbm', '-lm'], capture_output=True, text=True)
@@ -69,13 +86,15 @@ def window():
 instance.stop()
 try:
     ref = reference()
-    off = offscreen()
+    # the offscreen entry loads the app's library with btload, outside a launch: ANGLE's libraries are linked into the system directory only by a launch,
+    # so with APKLAYER_GLES_ANGLE=on only the window run exercises the stack
+    off = offscreen() if ENV.get('APKLAYER_GLES_ANGLE') != 'on' else None
     win = window()
 finally:
     instance.stop()
 bad = []
-off_checks, off_exts = verdicts(off)
-assert 'glformats: done' in off, 'the offscreen run did not finish:\n' + off[-1500:]
+off_checks, off_exts = verdicts(off or '')
+assert off is None or 'glformats: done' in off, 'the offscreen run did not finish:\n' + off[-1500:]
 if ref:
     ref_checks, ref_exts = verdicts(ref)
     for name, v in off_checks.items():
@@ -85,6 +104,9 @@ if ref:
     if extra: print('extensions only the wrapper lists: %s' % ' '.join(extra))
 else:
     bad += ['offscreen %s FAIL' % n for n, v in off_checks.items() if v == 'FAIL']
+if ref:
+    bad += etc2_differences('offscreen', etc2_rows(off or ''), etc2_rows(ref))
+    bad += etc2_differences('window', etc2_rows(win), etc2_rows(ref))
 win_checks, _ = verdicts(win)
 assert 'glformats: done' in win, 'the window run did not finish:\n' + win[-1500:]
 bad += ['window %s FAIL' % n for n, v in win_checks.items() if v == 'FAIL' and (not ref or ref and (ref_checks.get(n) != 'FAIL'))]

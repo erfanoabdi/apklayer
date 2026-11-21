@@ -553,6 +553,185 @@ static void test_compressed(void)
     test_compressed_one(0x83F3, "s3tc-dxt5", 4, 4, dxt5, 16, dxt5_want, 0.012f, "solid", 0);
 }
 
+#include "astc-real.h"
+
+/* Real ASTC blocks (gen-astc.py: astcenc's encode of a noisy picture with partial edge blocks) sampled texel by texel against astcenc's own decode:
+ * the void-extent blocks above never reach the weight/partition/endpoint decode that a driver without ASTC does on the CPU or in a shader. */
+static void test_astc_real(void)
+{
+    static const int dims[14][2] = { {4,4}, {5,4}, {5,5}, {6,5}, {6,6}, {8,5}, {8,6}, {8,8}, {10,5}, {10,6}, {10,8}, {10,10}, {12,10}, {12,12} };
+    for (unsigned k = 0; k < sizeof astc_real / sizeof *astc_real; k++) {
+        const int srgb = astc_real[k].srgb, w = astc_real[k].w, h = astc_real[k].h;
+        char name[64];
+        snprintf(name, sizeof name, "astc-real-%dx%d%s", dims[astc_real[k].index][0], dims[astc_real[k].index][1], srgb ? "-srgb" : "");
+        while (glGetError()) {}
+        GLuint t;
+        glGenTextures(1, &t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glCompressedTexImage2D(GL_TEXTURE_2D, 0, (srgb ? GL_SRGB_ASTC_4x4 : GL_RGBA_ASTC_4x4) + astc_real[k].index, w, h, 0, astc_real[k].bytes, astc_real[k].blocks);
+        GLenum err = glGetError();
+        if (err) { out("glformats: %s SKIP glCompressedTexImage2D error 0x%x", name, err); glDeleteTextures(1, &t); continue; }
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        struct rt r;
+        if (!rt_make(&r, GL_RGBA8, w, h, 0)) { result(name, 0, "no %dx%d target", w, h); continue; }
+        glDisable(GL_BLEND);
+        quad_tex(t);
+        unsigned char *got = malloc((size_t)w * h * 4);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, got);
+        int bad = 0, worst = 0, first = -1;
+        for (int i = 0; i < w * h * 4; i++) {
+            int want = astc_real[k].rgba[i];
+            if (srgb && (i & 3) != 3) want = (int)(srgb_dec(want / 255.f) * 255.f + 0.5f);  /* the sampler returns linear */
+            int d = abs(got[i] - want);
+            if (d > worst) worst = d;
+            if (d > (srgb ? 4 : 3)) { bad++; if (first < 0) first = i; }
+        }
+        if (bad) result(name, 0, "%d of %d values off (max %d), first at texel %d,%d channel %d: got %d want %d", bad, w * h * 4, worst, first / 4 % w, first / 4 / w, first & 3,
+                        got[first], astc_real[k].rgba[first]);
+        else result(name, 1, "%dx%d texels match astcenc (max diff %d)", w, h, worst);
+        free(got);
+        rt_free(&r);
+        glDeleteTextures(1, &t);
+    }
+}
+
+/* Random ETC2/EAC blocks (every mode: individual, differential, T, H, planar, punch-through, EAC tables) as texels: the rows are printed (etc2d lines) and
+ * tests/vm/gl-formats.py compares them between the host driver alone and the wrapper's runs, within one level. */
+static void test_etc2_random(void)
+{
+    static const struct { GLenum fmt; const char *name; int bytes; } f[] = {
+        { 0x9274, "rgb8", 8 }, { 0x9275, "srgb8", 8 }, { 0x9276, "rgb8-a1", 8 }, { 0x9277, "srgb8-a1", 8 }, { 0x9278, "rgba8-eac", 16 },
+        { 0x9279, "srgb8-a8-eac", 16 }, { 0x9270, "r11", 8 }, { 0x9272, "rg11", 16 } };
+    const int w = 16, h = 16, blocks = (w / 4) * (h / 4);
+    for (unsigned k = 0; k < sizeof f / sizeof *f; k++) {
+        unsigned char data[16 * 16], *rows = malloc((size_t)w * h * 4);
+        unsigned long long x = 0x9E3779B97F4A7C15ull + k;
+        for (int i = 0; i < blocks * f[k].bytes; i++) { x = x * 6364136223846793005ull + 1442695040888963407ull; data[i] = x >> 56; }
+        while (glGetError()) {}
+        GLuint t;
+        glGenTextures(1, &t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glCompressedTexImage2D(GL_TEXTURE_2D, 0, f[k].fmt, w, h, 0, blocks * f[k].bytes, data);
+        GLenum err = glGetError();
+        if (err) { out("glformats: etc2-random-%s SKIP glCompressedTexImage2D error 0x%x", f[k].name, err); glDeleteTextures(1, &t); free(rows); continue; }
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        struct rt r;
+        if (!rt_make(&r, GL_RGBA8, w, h, 0)) { result("etc2-random", 0, "no target"); free(rows); continue; }
+        glDisable(GL_BLEND);
+        quad_tex(t);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rows);
+        for (int y = 0; y < h; y++) {
+            char hex[16 * 8 + 1];
+            for (int i = 0; i < w * 4; i++) sprintf(hex + 2 * i, "%02x", rows[y * w * 4 + i]);
+            out("glformats: etc2d %s %d %s", f[k].name, y, hex);
+        }
+        { char n[48]; snprintf(n, sizeof n, "etc2-random-%s", f[k].name); result(n, 1, "random blocks sampled (compared with the host driver alone by the test)"); }
+        free(rows);
+        rt_free(&r);
+        glDeleteTextures(1, &t);
+    }
+}
+
+/* ASTC with a mip chain and an array: the block data of the first test image is level 0 (all blocks) and, for level 1, its first block cut to the
+ * level's size (a level that fits one block); an immutable texture, glCompressedTexSubImage2D, the second level read through the base level. */
+static void test_astc_levels(void)
+{
+    static const int dims[14][2] = { {4,4}, {5,4}, {5,5}, {6,5}, {6,6}, {8,5}, {8,6}, {8,8}, {10,5}, {10,6}, {10,8}, {10,10}, {12,10}, {12,12} };
+    for (unsigned k = 0; k < sizeof astc_real / sizeof *astc_real; k++) {
+        const int srgb = astc_real[k].srgb, bx = dims[astc_real[k].index][0], by = dims[astc_real[k].index][1], w = astc_real[k].w, h = astc_real[k].h;
+        const int w1 = w / 2 > 0 ? w / 2 : 1, h1 = h / 2 > 0 ? h / 2 : 1;
+        char name[64];
+        snprintf(name, sizeof name, "astc-levels-%dx%d%s", bx, by, srgb ? "-srgb" : "");
+        while (glGetError()) {}
+        GLuint t;
+        glGenTextures(1, &t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glTexStorage2D(GL_TEXTURE_2D, 2, (srgb ? 0x93D0 : 0x93B0) + astc_real[k].index, w, h);
+        glCompressedTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, (srgb ? 0x93D0 : 0x93B0) + astc_real[k].index, astc_real[k].bytes, astc_real[k].blocks);
+        glCompressedTexSubImage2D(GL_TEXTURE_2D, 1, 0, 0, w1, h1, (srgb ? 0x93D0 : 0x93B0) + astc_real[k].index, 16, astc_real[k].blocks);
+        GLenum err = glGetError();
+        if (err) { out("glformats: %s SKIP storage/sub image error 0x%x", name, err); glDeleteTextures(1, &t); continue; }
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        int bad = 0, worst = 0;
+        for (int lvl = 0; lvl < 2; lvl++) {
+            const int lw = lvl ? w1 : w, lh = lvl ? h1 : h;
+            glBindTexture(GL_TEXTURE_2D, t);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, lvl);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, lvl);
+            struct rt r;
+            if (!rt_make(&r, GL_RGBA8, lw, lh, 0)) { bad++; continue; }
+            glDisable(GL_BLEND);
+            quad_tex(t);
+            unsigned char *got = malloc((size_t)lw * lh * 4);
+            glReadPixels(0, 0, lw, lh, GL_RGBA, GL_UNSIGNED_BYTE, got);
+            for (int y = 0; y < lh; y++)
+                for (int xx = 0; xx < lw; xx++)
+                    for (int c = 0; c < 4; c++) {
+                        int want = astc_real[k].rgba[(y * w + xx) * 4 + c];  /* level 1: the first block's top-left lw x lh texels of level 0's decode */
+                        if (srgb && c != 3) want = (int)(srgb_dec(want / 255.f) * 255.f + 0.5f);
+                        int d = abs(got[(y * lw + xx) * 4 + c] - want);
+                        if (d > worst) worst = d;
+                        if (d > (srgb ? 4 : 3)) bad++;
+                    }
+            free(got);
+            rt_free(&r);
+        }
+        result(name, !bad, "levels 0 (%dx%d) and 1 (%dx%d): %d values off (max %d)", w, h, w1, h1, bad, worst);
+        glDeleteTextures(1, &t);
+    }
+}
+
+/* ASTC in a 2D array texture: both layers get the first test image's blocks (glTexStorage3D, glCompressedTexSubImage3D), layer 1 is sampled. */
+static void test_astc_array(void)
+{
+    static const int dims[14][2] = { {4,4}, {5,4}, {5,5}, {6,5}, {6,6}, {8,5}, {8,6}, {8,8}, {10,5}, {10,6}, {10,8}, {10,10}, {12,10}, {12,12} };
+    GLuint p = make_prog(VS, "#version 300 es\nprecision highp float; uniform highp sampler2DArray t; in vec2 uv; out vec4 o; void main(){ o = texture(t, vec3(uv, 1.)); }");
+    if (!p) { result("astc-array", 0, "shader does not build"); return; }
+    for (unsigned k = 0; k < sizeof astc_real / sizeof *astc_real; k++) {
+        const int srgb = astc_real[k].srgb, w = astc_real[k].w, h = astc_real[k].h;
+        const GLenum fmt = (srgb ? 0x93D0 : 0x93B0) + astc_real[k].index;
+        char name[64];
+        snprintf(name, sizeof name, "astc-array-%dx%d%s", dims[astc_real[k].index][0], dims[astc_real[k].index][1], srgb ? "-srgb" : "");
+        while (glGetError()) {}
+        GLuint t;
+        glGenTextures(1, &t);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, t);
+        glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, fmt, w, h, 2);
+        for (int layer = 0; layer < 2; layer++) glCompressedTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, layer, w, h, 1, fmt, astc_real[k].bytes, astc_real[k].blocks);
+        GLenum err = glGetError();
+        if (err) { out("glformats: %s SKIP array upload error 0x%x", name, err); glDeleteTextures(1, &t); continue; }
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        struct rt r;
+        if (!rt_make(&r, GL_RGBA8, w, h, 0)) { result(name, 0, "no target"); continue; }
+        glDisable(GL_BLEND);
+        glUseProgram(p);
+        glUniform1f(glGetUniformLocation(p, "z"), 0);
+        glUniform1f(glGetUniformLocation(p, "k"), 1);
+        glUniform1i(glGetUniformLocation(p, "t"), 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, t);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        unsigned char *got = malloc((size_t)w * h * 4);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, got);
+        int bad = 0, worst = 0;
+        for (int i = 0; i < w * h * 4; i++) {
+            int want = astc_real[k].rgba[i];
+            if (srgb && (i & 3) != 3) want = (int)(srgb_dec(want / 255.f) * 255.f + 0.5f);
+            int d = abs(got[i] - want);
+            if (d > worst) worst = d;
+            if (d > (srgb ? 4 : 3)) bad++;
+        }
+        result(name, !bad, "layer 1 of 2: %d of %d values off (max %d)", bad, w * h * 4, worst);
+        free(got);
+        rt_free(&r);
+        glDeleteTextures(1, &t);
+    }
+}
+
 /* the shaders, a VAO and the extension list (test_info prints the driver's facts) */
 static int formats_prepare(void (*print)(const char *))
 {
@@ -577,6 +756,10 @@ static int formats_tests(void)
     test_depth_msaa();
     test_fetch();
     test_compressed();
+    test_astc_real();
+    test_astc_levels();
+    test_astc_array();
+    test_etc2_random();
     out("glformats: done fails=%d", fails);
     return fails;
 }

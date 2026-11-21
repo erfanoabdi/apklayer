@@ -429,7 +429,9 @@ run = ["b/bridge/hals/graphics/vulkan-select-test real"]
 [vulkan-textures]
 # ASTC/ETC2 emulation of the Vulkan HAL (TextureEmulation.cpp, gfxstream's decoder) on the host's GPU: features and formats reported, ASTC
 # blocks of two mip levels uploaded, decoded at the readable barrier (version-1 and synchronization2), texels and blocks read back
-run = ["b/bridge/hals/graphics/vulkan-textures-test"]
+run = ["b/bridge/hals/graphics/vulkan-textures-test",
+       # real encoded blocks (astcenc), every ASTC block size, UNORM/sRGB, mips, layers, partial blocks against astcenc's decode (needs astcenc, python3-numpy, python3-pil)
+       "if command -v astcenc >/dev/null && python3 -c 'import numpy, PIL' 2>/dev/null; then APKLAYER_VULKAN_TEXTURE_EMULATION=force python3 -u tests/vm/astc-probe.py b/bridge/hals/graphics/vulkan-astc-probe; else echo 'SKIP astc-probe: needs astcenc, python3-numpy, python3-pil'; fi"]
 
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)

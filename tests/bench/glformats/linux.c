@@ -11,7 +11,8 @@ static void print(const char *line) { puts(line); }
 
 int main(void)
 {
-    int fd = open("/dev/dri/renderD128", O_RDWR);
+    const char *node = getenv("APKLAYER_GPU");  /* a render node path selects the GPU, as for the instance */
+    int fd = open(node && node[0] == '/' ? node : "/dev/dri/renderD128", O_RDWR);
     EGLDisplay d = eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR, gbm_create_device(fd), NULL);
     eglInitialize(d, NULL, NULL);
     eglBindAPI(EGL_OPENGL_ES_API);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-21: "ASTC broken on AMD" not reproduced on Navi14 (Mesa 25.2.8); real-ASTC tests added
+
+- Owner's MacBook (Intel UHD 630 + AMD Navi14 RADV/radeonsi, Mesa 25.2.8), prebuilts e8904ab0: vulkan-textures, texture-view, gl-formats, gles1, gpu pass on both GPUs with `APKLAYER_GLES_ANGLE` off and on (window-formats fails with ANGLE on for 10-bit/fp16 windows on both GPUs, not ASTC). No ASTC defect found: Vulkan HAL emulation, ANGLE on top of it, and radeonsi's own CPU ASTC decoder all match astcenc.
+- New tests with real encoded blocks (the old ones only had void-extent blocks): `tests/vm/astc-probe.py` + `tests/hals/vulkan-astc-probe.cpp` (every block size, UNORM/sRGB, 2 mips x 2 layers, 61x45 partial blocks, against astcenc's decode, in group vulkan-textures), and in gl-formats `astc-real`, `astc-levels` (glTexStorage2D + sub-image, base level), `astc-array`, `etc2-random` (random ETC2/EAC blocks compared with the host driver alone); `tests/bench/glformats/gen-astc.py` makes astc-real.h. gl-formats skips its btload offscreen run with ANGLE on.
+- Likeliest cause on the colleague's machine (not reproduced): a host GLES without ASTC (older Mesa, or the Mesa CPU decoder's known failures) with ANGLE off, since auto uses ANGLE only on NVIDIA; `APKLAYER_GLES_ANGLE=on` gives ASTC from the HAL's emulation.
+
 ## 2026-11-21: dex2jvm splits methods inside a try range whose handlers are copied (MindTheGapps x86_64 Play Store and Play services)
 
 - MindTheGapps x86_64's Play Store 30.4.17 failed to start ("Failed to initialize FinskyApp": qeb.d()V needs code_length 109416) and its Play
