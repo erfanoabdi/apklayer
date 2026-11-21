@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21: ANGLE screenshot allocation on NVIDIA
+
+- SurfaceFlinger's RGBA screenshot buffer (usage `0xb33`) needs GPU rendering and CPU access. NVIDIA GBM rejects the linear allocation with EINVAL. The graphics HAL now retries with the uncompressed tiled modifiers already used for shared images. The mapper reads those buffers through ANGLE's EGL transfer path.
+- Local NVIDIA verification with the new host HAL in a disposable runtime: the screenshot allocation check returns 0 (installed HAL: -22 under ANGLE), and `apklayer screenshot` captures YouTube's consent UI and the activity that follows. The readback suite's other failures also occur with the installed HAL. The VM runner requires `APKLY_VM` on this checkout.
+
 ## 2026-11-21: android.app.NativeActivity (every 3DMark benchmark)
 
 - Owner: all 3DMark benchmarks crash. Their workloads are NativeActivity subclasses (DiscoVulkanNativeActivity and the like); its natives were never

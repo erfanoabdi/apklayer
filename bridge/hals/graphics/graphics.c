@@ -251,12 +251,18 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
     flags = alloc_flags(gfx, fourcc, usage, flags, &supported);
     if (supported) {
         struct gbm_bo *bo = NULL;
-        if (!(flags & GBM_BO_USE_LINEAR)) {  /* a tiled buffer: a layout every API imports (NVIDIA: no compressed kinds, modifiers.c) */
+        if (flags & GBM_BO_USE_LINEAR) bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
+        /* apklayer patch: NVIDIA GBM rejects LINEAR render targets such as SurfaceFlinger's screenshot buffer.
+         * ANGLE can render to the shared tiled modifiers and the mapper can read them back through EGL. */
+        bool cpu_render = gfx->angle && !bo && (flags & GBM_BO_USE_LINEAR) && (flags & GBM_BO_USE_RENDERING)
+            && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
+            && !(gfx->other_gpu && (usage & APKLAYER_GFX_SCANOUT)) && apklayer_gfx_transfer_supported(fourcc);
+        if (!(flags & GBM_BO_USE_LINEAR) || cpu_render) {
             uint64_t mods[64];
             int n = apklayer_gfx_shared_modifiers(gfx->gbm, fourcc, mods, 64);
-            if (n > 0) bo = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, mods, (unsigned)n, flags);
+            if (n > 0) bo = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, mods, (unsigned)n, flags & ~GBM_BO_USE_LINEAR);
         }
-        if (!bo) bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
+        if (!bo && !(flags & GBM_BO_USE_LINEAR)) bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
         /* NVIDIA's GBM makes no LINEAR render target (EINVAL; its EGL renders to no pitch-linear image either): SurfaceFlinger's capture
          * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
         if (!bo && !gfx->angle && (flags & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))

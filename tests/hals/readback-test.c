@@ -4,7 +4,7 @@
  * pattern's too, so the CPU conversion matches the format's real layout (a swizzle both ways wrong would still round-trip).
  * Then the HAL's own path for a software-rendered window (apklayer_gfx_alloc with the composer's usage, a CPU map written, unmapped, mapped
  * again and read): on a GPU that samples LINEAR only externally (NVIDIA) that buffer is tiled and both maps go through the GPU.
- * Usage: readback-test [render node]. Exit 0 when every format the device allocates passes. */
+ * Also exercise SurfaceFlinger's CPU-readable render target. Usage: readback-test [render node]. */
 #include "../../bridge/hals/graphics/readback.h"
 #include "apklayer/graphics.h"
 
@@ -124,6 +124,15 @@ int main(int argc, char **argv)
         ok ? passes++ : failures++;
         free(pattern);
         apklayer_gfx_buffer_close(&b);
+    }
+    const uint32_t capture = APKLAYER_GFX_RENDER | APKLAYER_GFX_SAMPLE | APKLAYER_GFX_SCANOUT |
+                             APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE;
+    if (gfx && apklayer_gfx_supports(gfx, DRM_FORMAT_ABGR8888, capture)) {
+        struct apklayer_gfx_buffer b;
+        int result = apklayer_gfx_alloc(gfx, w, h, DRM_FORMAT_ABGR8888, capture, &b);
+        printf("%s  RGBA screenshot buffer: allocation returned %d\n", result ? "FAIL" : "PASS", result);
+        if (result) failures++;
+        else { passes++; apklayer_gfx_buffer_close(&b); }
     }
     if (gfx) apklayer_gfx_close(gfx);
     printf("%d passed, %d failed\n", passes, failures);
