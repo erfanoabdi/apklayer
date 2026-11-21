@@ -122,9 +122,8 @@ bool supportsSyncFdImport(VkPhysicalDevice physical) {
            (fence.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT);
 }
 
-// OPT-IN (APKLAYER_VULKAN_PRESENT=1): on the UTM VM's Venus GPU (virglrenderer on macOS) a virgl dma-buf imports and binds but Venus aborts on the first
-// command that uses the image, even in a standalone C program (PLAN archive P7.5). Advertised by default, Vulkan games would try the swapchain and die
-// instead of falling back to GL. Hosts whose driver can use imported dma-bufs (native Linux GPUs) can enable it.
+// APKLAYER_VULKAN_PRESENT=1 (the CLI sets it where the host has a Vulkan GPU). Venus (the UTM VM) aborts on the first command that uses a dma-buf made by
+// another driver (virgl: tests/vm/venus-export-probe.c); its swapchain images are allocated by Venus itself (allocateExported). Others import the gralloc's.
 bool nativeBufferSupported(VkPhysicalDevice physical) {
     if (!apklayer::hostGetenv("APKLAYER_VULKAN_PRESENT")) return false;
     for (const char* name : kNativeBufferNeeds) if (!hasExtension(physical, name)) return false;
@@ -305,9 +304,8 @@ VkResult createNativeBufferImage(VkDevice device, const VkImageCreateInfo* info,
     for (auto& entry : original) entry.first->pNext = entry.second;
     if (result != VK_SUCCESS) return result;
 
-    // On Venus the dma-buf import waits for vkAcquireImageANDROID (importPending): Mesa's Venus driver aborts when a gralloc allocation (another
-    // buffer of the swapchain, made by the allocator service) happens after an import. The loader allocates and creates all of a swapchain's images
-    // first. Every other driver gets the memory bound here, as Vulkan requires before the app's first view of the image: NVIDIA bakes a view's
+    // On Venus the memory waits for vkAcquireImageANDROID (importPending): Mesa's Venus driver aborts when a gralloc allocation (another buffer
+    // of the swapchain, made by the allocator service) happens after an import. The loader allocates and creates all of a swapchain's images first. Every other driver gets the memory bound here, as Vulkan requires before the app's first view of the image: NVIDIA bakes a view's
     // address at creation, and a view made before the bind (Unity: its swapchain views and framebuffers right after vkCreateSwapchainKHR) renders
     // to address 0 (Arknights: Endfield, Xid 31 MMU fault at 0x4000 in the raster output, device lost; the validation layer's VUID-VkImageViewCreateInfo-image-01020).
     int fd = fcntl(buffer->handle->data[0], F_DUPFD_CLOEXEC, 3);

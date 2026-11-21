@@ -114,16 +114,23 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
 }
 
 // Vulkan presentation (VK_ANDROID_native_buffer in aosp/hals/graphics/vulkan/Driver.cpp) where the host has a GPU device that imports dma-bufs:
-// its API version as "major.minor", "" without one. Venus (virtio-gpu Vulkan on the VMs) aborts on imported dma-bufs and CPU devices are no game
-// target. shortcut: any such device counts, not only the instance's GPU (APKLAYER_GPU); the driver still checks the extensions on its own device.
-std::string hostVulkan(const Layout& layout, const Env& env) {
+// its API version as "major.minor", "" without one. CPU devices are no game target. *venus: the best device is Mesa's Venus (virtio-gpu Vulkan on the VMs):
+// it presents only through buffers it allocated itself (Driver.cpp), so the compositor and the buffer transfers stay on the native EGL.
+// shortcut: any such device counts, not only the instance's GPU (APKLAYER_GPU); the driver still checks the extensions on its own device.
+std::string hostVulkan(const Layout& layout, const Env& env, bool* venus) {
+    *venus = false;
     std::string cache = join(layout.runtimeHome, "apklayer-host-vulkan");
     // Loader overrides can change which drivers are visible for this launch.
     const char* driverOverrides[] = {"VK_ICD_FILENAMES", "VK_DRIVER_FILES", "VK_ADD_DRIVER_FILES",
                                      "VK_LOADER_DRIVERS_SELECT", "VK_LOADER_DRIVERS_DISABLE"};
     bool cacheable = std::none_of(std::begin(driverOverrides), std::end(driverOverrides), [&](const char* name) { return env.count(name); });
     if (cacheable)
-        if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
+        if (auto cached = freshCache(cache); cached && !trim(*cached).empty()) {
+            std::string version = trim(*cached);
+            const std::string tag = " venus";  // the cache keeps the flag after the version
+            if (version.size() > tag.size() && version.compare(version.size() - tag.size(), tag.size(), tag) == 0) *venus = true, version.resize(version.size() - tag.size());
+            return version == "-" ? "" : version;
+        }
     if (!exists("/usr/bin/vulkaninfo")) return "";  // vulkan-tools is only recommended
     Spawn probe;
     probe.argv = {"vulkaninfo", "--summary"};
@@ -145,7 +152,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         std::string api = field("apiVersion"), type = field("deviceType"), driver = field("driverID");
         unsigned major = 0, minor = 0;
         if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU") continue;
-        if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor), label = gpu.substr(1, gpu.find(':') - 1);
+        if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor), label = gpu.substr(1, gpu.find(':') - 1), *venus = driver == "DRIVER_ID_MESA_VENUS";
     }
     if (!version.empty()) {  // hardware level 1: the features of CTS's VulkanFeaturesTest.determineHardwareLevel, all set on the best device ("<major>.<minor> 1")
         probe.argv = {"vulkaninfo", "--text"};
@@ -161,7 +168,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         }
         if (level1) version += " 1";
     }
-    if (cacheable) writeFile(cache, (version.empty() ? "-" : version) + "\n");
+    if (cacheable) writeFile(cache, (version.empty() ? "-" : version) + (*venus ? " venus" : "") + "\n");
     return version;
 }
 
@@ -416,7 +423,8 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         useAngle = false;
     }
     // ANGLE uses its GLES backend when usable Vulkan presentation isn't detected.
-    std::string vulkan = hostVulkanStaged && !vulkanDisabled ? hostVulkan(layout, env) : "";
+    bool venus = false;
+    std::string vulkan = hostVulkanStaged && !vulkanDisabled ? hostVulkan(layout, env, &venus) : "";
     if (useAngle && vulkan.empty() && !exists(join(l, "libapklayer_egl.so"))) {
         if (angleMode == "on") die("ANGLE's GLES backend needs libapklayer_egl.so");
         fprintf(stderr, "apklayer: ANGLE's GLES backend needs libapklayer_egl.so; using native GLES\n");
@@ -436,7 +444,12 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         env["APKLAYER_VULKAN_VERSION"] = vulkan;
     }
     const bool angleVulkan = useAngle && !vulkan.empty();
-    if (angleVulkan) {
+    if (angleVulkan && venus) {
+        // Venus: the apps' ANGLE runs on Vulkan (swapchain memory Venus allocates), but the compositor and the transfers import buffers the allocator
+        // made (virgl), which Venus aborts on: they stay on the native EGL, as in the GLES mode (stack.cpp tells the two modes apart by the value)
+        env["APKLAYER_ANGLE_GLES"] = "vulkan";
+        env["ANGLE_FEATURE_OVERRIDES_ENABLED"] = "exposeES32ForTesting";
+    } else if (angleVulkan) {
         env["APKLAYER_ANGLE_ACTIVE"] = "1";
         std::string hostAngleEgl = getenvOr("APKLAYER_ANGLE_HOST_EGL", join(layout.angle, "angle/host/libEGL_angle.so"));
         if (!exists(hostAngleEgl)) die("ANGLE GLES buffer transfers need the Linux ANGLE library at " + hostAngleEgl);

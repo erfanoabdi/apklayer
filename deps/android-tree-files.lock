@@ -492,7 +492,7 @@ b1d96a0d309363a40abcb1496522d6c35e229e523a569be668fd34c2985b0221 51576 android-a
 eb4063fce9b7978113485387f3c8bc760e339a17775dc6e45edafcf1ba7cf9a5 35656 android-arm64/lib64/shared-file-region-aidl-cpp.so out/target/product/generic_arm64/system/lib64/shared-file-region-aidl-cpp.so same
 a1b7d20f8fddaf0eab061f19563f20975ba4e044431457993944c62a516a2785 101896 android-arm64/lib64/spatializer-aidl-cpp.so out/target/product/generic_arm64/system/lib64/spatializer-aidl-cpp.so patched
 12d8ab9631d7d0d958c21ba8cfa000142e8f06d34b40ee88aa5446d2f96f201a 51872 android-arm64/lib64/volumegroupcallback-aidl-cpp.so out/target/product/generic_arm64/system/lib64/volumegroupcallback-aidl-cpp.so same
-2af63a012a44361ea5bbce68bd7df9e51d283291fa1e9f13545cfab54bd74fc4 1087184 android-arm64/lib64/vulkan.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/vulkan/vulkan.apklayer/android_arm64_armv8-a_shared/vulkan.apklayer.so apklayer
+68469f4aad94c37154c0bba0a32de2a96ddeefb5d344f9e2476de01caa92119f 1087192 android-arm64/lib64/vulkan.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/vulkan/vulkan.apklayer/android_arm64_armv8-a_shared/vulkan.apklayer.so apklayer
 462cc40ec0aebe6433e1654fb171c8843df6f9bde0d420c5d16ea94765b34dec 6148 arm64-native/android-root/.DS_Store bridge/native/android-root/.DS_Store apklayer
 2f380f4a3d05a8d90c2106f50da75064e9ce57a598599dc5404f8f69a0223aa9 120 arm64-native/android-root/._.DS_Store (staged from the tree's build outputs, see CHANGELOG.md) same
 41a711319e141ef185031258e1757ebdf250bb5803fc60ad50e966ebfd35df1e 1619 arm64-native/android-root/apex/com.android.i18n/etc/aconfig_flags.pb (staged from the tree's build outputs, see CHANGELOG.md) same
