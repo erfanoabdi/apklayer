@@ -219,6 +219,7 @@ final class ScriptRunner {
         int[] at = new int[2];
         v.getLocationOnScreen(at);
         String text = v instanceof android.widget.TextView ? " \"" + ((android.widget.TextView) v).getText() + "\"" : "";
+        if (v.getId() != android.view.View.NO_ID) try { text += " id=" + v.getResources().getResourceEntryName(v.getId()) + "(0x" + Integer.toHexString(v.getId()) + ")"; } catch (RuntimeException noName) { }
         System.out.println("[apklayer] view " + "  ".repeat(depth) + v.getClass().getName() + " vis=" + v.getVisibility() + " alpha=" + v.getAlpha()
                 + " scale=" + v.getScaleX() + " " + v.getWidth() + "x" + v.getHeight() + "@" + at[0] + "," + at[1] + text);
         // Compose draws its text itself: the semantics tree reaches us as accessibility nodes (the view's provider), texts only
