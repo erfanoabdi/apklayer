@@ -228,6 +228,68 @@ static void dekker(int variant) {
     for (int i = 0; i < 2; i++) pthread_join(t[i], NULL);
 }
 
+/* A tagged lock-free stack (pointer + ABA counter swapped as one 128-bit pair), the shape of a runtime's free lists: 8 threads pop a node, own it
+ * (an exchange of its owner flag must find it free), release it and push it back. Variant 0: LDAXP/STLXP loop, 1: CASPAL (LSE). A node owned by two
+ * threads at once is a broken 128-bit compare-and-swap; on arm64 there is none. */
+#define STACK_NODES 64
+#define STACK_THREADS 8
+#define STACK_OPS 400000
+typedef struct node { struct node* next; atomic_int owned; } node;
+static node nodes[STACK_NODES];
+static __attribute__((aligned(16))) volatile uint64_t stack_head[2];  /* [0] pointer, [1] tag */
+static atomic_long stack_double_owned[2], stack_ops[2];
+static int stack_variant;
+
+static int cas128(volatile uint64_t* addr, uint64_t old_lo, uint64_t old_hi, uint64_t new_lo, uint64_t new_hi) {
+    if (stack_variant == 0) {
+        uint64_t lo, hi;
+        uint32_t fail;
+        __asm__ volatile("1: ldaxp %0, %1, [%3]\n"
+                         "   cmp %0, %4\n ccmp %1, %5, #0, eq\n b.ne 2f\n"
+                         "   stlxp %w2, %6, %7, [%3]\n cbnz %w2, 1b\n b 3f\n"
+                         "2: clrex\n mov %w2, #1\n"
+                         "3:\n"
+                         : "=&r"(lo), "=&r"(hi), "=&r"(fail)
+                         : "r"(addr), "r"(old_lo), "r"(old_hi), "r"(new_lo), "r"(new_hi)
+                         : "memory", "cc");
+        return fail == 0;
+    }
+    register uint64_t x0 __asm__("x0") = old_lo, x1 __asm__("x1") = old_hi, x2 __asm__("x2") = new_lo, x3 __asm__("x3") = new_hi;
+    __asm__ volatile(".arch_extension lse\n caspal x0, x1, x2, x3, [%4]" : "+r"(x0), "+r"(x1) : "r"(x2), "r"(x3), "r"(addr) : "memory");
+    return x0 == old_lo && x1 == old_hi;
+}
+
+static void* stack_thread(void* arg) {
+    (void)arg;
+    for (int i = 0; i < STACK_OPS; i++) {
+        node* n;
+        for (;;) {  /* pop */
+            uint64_t lo = stack_head[0], hi = stack_head[1];
+            n = (node*)lo;
+            if (n == NULL) { sched_yield(); continue; }
+            if (cas128(stack_head, lo, hi, (uint64_t)n->next, hi + 1)) break;
+        }
+        if (atomic_exchange(&n->owned, 1) != 0) atomic_fetch_add(&stack_double_owned[stack_variant], 1);
+        atomic_store(&n->owned, 0);
+        for (;;) {  /* push */
+            uint64_t lo = stack_head[0], hi = stack_head[1];
+            n->next = (node*)lo;
+            if (cas128(stack_head, lo, hi, (uint64_t)n, hi + 1)) break;
+        }
+        atomic_fetch_add(&stack_ops[stack_variant], 1);
+    }
+    return NULL;
+}
+
+static void tagged_stack(int variant) {
+    stack_variant = variant;
+    for (int i = 0; i < STACK_NODES; i++) { nodes[i].next = i + 1 < STACK_NODES ? &nodes[i + 1] : NULL; atomic_store(&nodes[i].owned, 0); }
+    stack_head[0] = (uint64_t)&nodes[0]; stack_head[1] = 0;
+    pthread_t t[STACK_THREADS];
+    for (int i = 0; i < STACK_THREADS; i++) pthread_create(&t[i], NULL, stack_thread, NULL);
+    for (int i = 0; i < STACK_THREADS; i++) pthread_join(t[i], NULL);
+}
+
 static void* signaller(void* arg) {
     (void)arg;
     struct timespec ms = {0, 1000000};
@@ -256,6 +318,8 @@ JNIEXPORT jstring JNICALL Java_hello_arm64_Main_lockStress(JNIEnv* env, jclass c
     sigaction(SIGPWR, &sa, NULL);
     dekker(0);
     dekker(1);
+    tagged_stack(0);
+    tagged_stack(1);
     pthread_t g[GUEST_THREADS], s, rd[IO_PAIRS], wr[IO_PAIRS];
     static int pairs[IO_PAIRS][2];
     for (int i = 0; i < GUEST_THREADS; i++) pthread_create(&g[i], NULL, guest_thread, NULL);
@@ -274,17 +338,19 @@ JNIEXPORT jstring JNICALL Java_hello_arm64_Main_lockStress(JNIEnv* env, jclass c
     for (int i = 0; i < IO_PAIRS; i++) { shutdown(pairs[i][0], SHUT_RDWR); pthread_join(rd[i], NULL); pthread_join(wr[i], NULL); close(pairs[i][0]); close(pairs[i][1]); }
     pthread_join(s, NULL);
     pthread_join(sp_thread, NULL);
-    char out[1100];
+    char out[1300];
     long bad = atomic_load(&not_owner[0]) + atomic_load(&not_owner[1]) + atomic_load(&both_inside[0]) + atomic_load(&both_inside[1]) +
                atomic_load(&id_changed) + atomic_load(&handler_mismatch) + atomic_load(&seq_errors) + atomic_load(&ret_errors) + atomic_load(&live_errors) +
-               atomic_load(&local_outside[0]) + atomic_load(&local_outside[1]) + atomic_load(&handler_outside) + atomic_load(&sp_outside) + atomic_load(&regs_missed) + dekker_both_zero[0] + dekker_both_zero[1];
+               atomic_load(&local_outside[0]) + atomic_load(&local_outside[1]) + atomic_load(&handler_outside) + atomic_load(&sp_outside) + atomic_load(&regs_missed) + dekker_both_zero[0] + dekker_both_zero[1] +
+               atomic_load(&stack_double_owned[0]) + atomic_load(&stack_double_owned[1]);
     snprintf(out, sizeof out,
              "%s threads=%d rounds=%ld not_owner self=%ld tid=%ld both_inside self=%ld tid=%ld id_changed=%ld handler_mismatch=%ld handled=%ld"
-             " io_bytes=%ld seq_errors=%ld ret_errors=%ld live_errors=%ld stack: local_outside guest=%ld java=%ld handler_outside=%ld sp_outside=%ld regs found=%ld missed=%ld dekker both_zero dmb=%ld stlr_ldar=%ld of %d",
+             " io_bytes=%ld seq_errors=%ld ret_errors=%ld live_errors=%ld stack: local_outside guest=%ld java=%ld handler_outside=%ld sp_outside=%ld regs found=%ld missed=%ld dekker both_zero dmb=%ld stlr_ldar=%ld of %d stack128 double_owned ldxp=%ld casp=%ld ops=%ld/%ld",
              bad == 0 ? "PASS" : "FAIL", atomic_load(&nthreads), atomic_load(&rounds), atomic_load(&not_owner[0]), atomic_load(&not_owner[1]),
              atomic_load(&both_inside[0]), atomic_load(&both_inside[1]), atomic_load(&id_changed), atomic_load(&handler_mismatch), atomic_load(&handled),
              atomic_load(&io_bytes), atomic_load(&seq_errors), atomic_load(&ret_errors), atomic_load(&live_errors),
-             atomic_load(&local_outside[0]), atomic_load(&local_outside[1]), atomic_load(&handler_outside), atomic_load(&sp_outside), atomic_load(&regs_found), atomic_load(&regs_missed), dekker_both_zero[0], dekker_both_zero[1], DEKKER_ROUNDS);
+             atomic_load(&local_outside[0]), atomic_load(&local_outside[1]), atomic_load(&handler_outside), atomic_load(&sp_outside), atomic_load(&regs_found), atomic_load(&regs_missed), dekker_both_zero[0], dekker_both_zero[1], DEKKER_ROUNDS,
+             atomic_load(&stack_double_owned[0]), atomic_load(&stack_double_owned[1]), atomic_load(&stack_ops[0]), atomic_load(&stack_ops[1]));
     return (*env)->NewStringUTF(env, out);
 }
 

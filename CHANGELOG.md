@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-21: PGR download stall, run 5: IL2CPP frees one block from two threads back to back; 128-bit CAS sound
+
+- Run 5 on wesley-mp100 (BERBERIS_LOG_FREES=1 in the launch's environment, PGR's /proc/<pid>/maps copied from outside): 6.3 GB, then 10 lock errors at
+  166 s. Two double-free reports: one at startup in ACE's libanort.so (+0x119f44), and one just before the stall: a 32-byte block freed by tid 17098 at
+  libil2cpp.so +0x4216f9c and, as the very next free of the process, again by tid 17091 at libil2cpp.so +0x42764b0 (file offsets; IL2CPP's runtime code,
+  near il2cpp_monitor_exit, stored encrypted in the file). Two threads that both own one block: the same broken mutual exclusion as the lock errors.
+- Group `locks` now also hammers a tagged lock-free stack (pointer + ABA counter as one 128-bit pair; 8 threads, 3.2 M pops and pushes) with an
+  LDAXP/STLXP loop and with CASPAL: no node owned by two threads, lite and interpret-only (NVIDIA PC). So the 128-bit pair atomics are sound too.
+- Cleaned: the lockstest instance and home, the Mac build dir.
+
 ## 2026-11-21: PGR download stall, run 4: no guest faults; double frees just before the lock errors
 
 - wesley-mp100, instance default restarted so its stack took berberis.log_faults=1 (0050) and PGR's lite mode; one 9-minute watch (user's OK):
