@@ -5,7 +5,7 @@ These x86_64 and x86 Android EGL/GLES libraries are built from Google ANGLE revi
 
 For ANGLE's Vulkan backend, APKLayer requests GLES 3.2 exposure by setting `exposeES32ForTesting` in the host's `ANGLE_FEATURE_OVERRIDES_ENABLED` environment variable and Android's `debug.angle.feature_overrides_enabled` property.
 
-ANGLE is packaged for x86 and x86_64 Android guests on x86_64 Linux hosts. There is no ARM64 ANGLE build or runtime payload.
+ANGLE is packaged for x86 and x86_64 Android guests on x86_64 Linux hosts. On aarch64 hosts Meson installs the arm64 build from `runtime/angle/aarch64/{host,vendor/lib64/egl}` when those files exist (see "aarch64" below); without them the package has no ANGLE and `APKLAYER_GLES_ANGLE=on` stops with "ANGLE GLES libraries are not installed". ANGLE stays off by default there (`auto` selects it only on NVIDIA).
 
 Meson packages the files under `runtime/angle/vendor` into `/usr/lib/apklayer/angle/vendor`. Runtime setup links them into `/system/lib` and `/system/lib64`, where Android 17's EGL loader looks for the `angle` suffix when `ro.hardware.egl=angle`.
 
@@ -59,3 +59,24 @@ Linux host SHA-256:
 |---|---|
 | `libEGL_angle.so` | `eee504738cc482eb4e3411af5dbc09b4a182dd453a89afbf4105258bd6e90936` |
 | `libGLESv2_angle.so` | `eb17f2857b7d2444fb937106733fb2e906e7bac47313e941b25a75c383c222e2` |
+
+## aarch64 (Linux host and arm64 Android guest)
+
+Same revision and patches (`patches/apply angle <checkout>` applied all seven cleanly). Google ships no Linux arm64 clang or gn, so the build runs on an x86_64 Linux machine and cross-compiles with Chromium's clang and the Debian bullseye arm64 sysroot (`python3 build/linux/sysroot_scripts/install-sysroot.py --arch=arm64`); `gclient sync --no-history` with `target_os = ["android"]`. Use the checkout's own `third_party/ninja/ninja` (1.12; Ubuntu 22.04's 1.11 cannot read the generated files) and `buildtools/linux64/gn gen`.
+
+| Output directory | Additional GN arguments (plus the common ones above) | Ninja targets |
+|---|---|---|
+| `out/LinuxHost` | `target_os="linux"`, `target_cpu="arm64"`, `angle_use_custom_libvulkan=false`, `angle_build_tests=false` | `libEGL libGLESv2` |
+| `out/Android64` | `target_os="android"`, `target_cpu="arm64"`, `android_ndk_api_level=37`, `angle_enable_context_mutex=false` | `libEGL libGLESv2 libGLESv1_CM` |
+
+Build time on a 17-core x86_64 VM: LinuxHost 912 s (4139 steps), Android64 279 s. The files are copied to `runtime/angle/aarch64/host/` and `runtime/angle/aarch64/vendor/lib64/egl/` (not committed to git; the checksums below identify them). The Soong build of the tree's `external/angle` (branch anglearm) has no patch 0007 (the GLES backend), so it cannot run ANGLE on hosts without Vulkan presentation (virgl): use the GN build for the vendor libraries.
+
+| ABI | Library | SHA-256 |
+|---|---|---|
+| aarch64 host | `libEGL_angle.so` (493200 B) | `b5a33d48820b3751685c7f39914482a73828d580961e63f7b03f1533859692a5` |
+| aarch64 host | `libGLESv2_angle.so` (22287032 B) | `cdb095c33bb7ef6bc5686d588fce2ea6235f52d639a8f073c8eb3cd3a0cb76ec` |
+| arm64 Android | `libEGL_angle.so` (311856 B) | `7308fc76e0aede088a884d5534f404a03b72007de9721c561498b56dcf74d9e7` |
+| arm64 Android | `libGLESv1_CM_angle.so` (299792 B) | `36250a5be21ba813f58438107542108a3df9b1e7dc4ebb1db4c4b4e0a8617646` |
+| arm64 Android | `libGLESv2_angle.so` (6587592 B) | `e3b49cf723ffb709d6116fb80e0eafded83e9e4656ace8135aae941343b3529f` |
+
+Verified 2026-11-21 (`APKLAYER_GLES_ANGLE=on`, JDK 25, prebuilts 99acf395): Parallels (virgl) and UTM (virgl, Venus present but not used for presentation): groups gpu, gpu-window, gles1, window-formats, vulkan pass on ANGLE's OpenGL ES backend (`GL_RENDERER "ANGLE (Mesa, virgl, ...)"`). The Vulkan backend with the aarch64 host libraries ran only as an experiment (Venus allowed in `hostVulkan`, reverted): the compositor logs `compositor EGL: Linux ANGLE (Vulkan)` on `Virtio-GPU Venus` and the app's ANGLE starts too, but the app JVM then aborts (exit 134, Venus and imported dma-bufs); no real aarch64 desktop GPU with Vulkan was available, so that path (DMA-BUF import, composition) is not verified.

@@ -75,7 +75,12 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
     std::string packaged = join(layout.angle, "angle/vendor");
     static const char* libs[] = {"libEGL_angle.so", "libGLESv1_CM_angle.so", "libGLESv2_angle.so"};
     bool packageHasAll = true, runtimeHasAll = true;
-    for (const char* abi : {"lib64", "lib"})
+#if defined(__aarch64__)
+    static const char* abis[] = {"lib64"};  // no 32-bit guests on arm64
+#else
+    static const char* abis[] = {"lib64", "lib"};
+#endif
+    for (const char* abi : abis)
         for (const char* name : libs) {
             packageHasAll = packageHasAll && exists(join(join(packaged, std::string(abi) + "/egl"), name));
             runtimeHasAll = runtimeHasAll && exists(join(join(system, abi), name));
@@ -88,7 +93,7 @@ bool angleLibrariesAvailable(const Layout& layout, std::string& reason) {
     }
     // The package's ANGLE always wins: each runtime entry becomes a link to it, replacing a copy a runtime brought (a Meson install with
     // android_runtime=true, an older bundle) or a link to elsewhere, so a package update's ANGLE reaches apps at their next start.
-    for (const char* abi : {"lib64", "lib"}) {
+    for (const char* abi : abis) {
         std::string dir = join(system, abi);
         makeDirs(dir);
         for (const char* name : libs) {

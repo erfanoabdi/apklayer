@@ -147,6 +147,19 @@ if not arm32_only and host_machine.cpu_family() == 'x86_64'
       install_dir: pkg_lib / 'angle/vendor' / abi / 'egl')
   endforeach
 endif
+# aarch64 hosts: Linux and Android-target ANGLE built from the same revision (runtime/angle/README.md); absent files leave the package without ANGLE.
+if not arm32_only and host_machine.cpu_family() == 'aarch64' and fs.exists('runtime/angle/aarch64/host/libEGL_angle.so')
+  install_data(files('runtime/angle/aarch64/host/libEGL_angle.so',
+                     'runtime/angle/aarch64/host/libGLESv2_angle.so'),
+    install_dir: pkg_lib / 'angle/host')
+  install_symlink('libapklayer_hostGLESv2.so', pointing_to: 'libGLESv2_angle.so', install_dir: pkg_lib / 'angle/host')
+  if fs.exists('runtime/angle/aarch64/vendor/lib64/egl/libEGL_angle.so')
+    install_data(files('runtime/angle/aarch64/vendor/lib64/egl/libEGL_angle.so',
+                       'runtime/angle/aarch64/vendor/lib64/egl/libGLESv1_CM_angle.so',
+                       'runtime/angle/aarch64/vendor/lib64/egl/libGLESv2_angle.so'),
+      install_dir: pkg_lib / 'angle/vendor/lib64/egl')
+  endif
+endif
 install_data('bridge/native/apklayer.prop', 'bridge/native/bionic_translation.cfg', install_dir: share_dir / 'bridge/native')
 install_data('bridge/native/profiles/pixel5.prop', 'bridge/native/profiles/pixel5-extra.prop', 'bridge/native/profiles/desktop.prop', install_dir: share_dir / 'bridge/native/profiles')  # tools/device-profile.sh
 # (its links to the libraries are copied as links: Meson's install_subdir fails on a link whose target is missing when it installs again)

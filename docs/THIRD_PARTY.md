@@ -7,6 +7,7 @@
 | `runtime/dex2jvm/` (`io.github.kksimp.dex2jvm`) | kksimp/dex2jvm (https://github.com/kksimp/dex2jvm, commit in `.dex2jvm-commit`), copied with one marked patch (interface checkcasts, docs/PATCHES.md) plus apklayer's own `HostDefaults.java`; its LICENSE and NOTICE are beside it | Apache-2.0 |
 | `runtime/angle/vendor/` | x86_64 and x86 Android EGL/GLES libraries built from Google ANGLE revision `f0d596b6f9e3dfe7a068786790516c035b1dfde4`; applied patches and checksums are listed in `runtime/angle/README.md` | BSD-3-Clause |
 | `runtime/angle/host/` | x86_64 Linux EGL/GLES libraries built from the same Google ANGLE revision for Vulkan DMA-BUF transfers; `angle_use_custom_libvulkan=false` uses the host system Vulkan loader; provenance and checksums in `runtime/angle/README.md` | BSD-3-Clause |
+| `runtime/angle/aarch64/` (not in git; staged from the build, checksums in `runtime/angle/README.md`) | aarch64 Linux host and arm64 Android EGL/GLES libraries built from the same Google ANGLE revision with the same patches | BSD-3-Clause |
 | `tests/uibench/uibench.apk` | AOSP UiBench test app | Apache-2.0 |
 | `archive/**` (removed; git tag `archive-last`) | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
 

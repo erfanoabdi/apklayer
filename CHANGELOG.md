@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-21: ANGLE aarch64 from the Google source (branch anglearm2)
+
+- Host: OrbStack ubuntu22-x86 (17 cores, cross build: Parallels and UTM have no Linux arm64 clang/gn from Google and ~18 GB free), own tree ~/anglearm2-build (deleted after). `gclient sync --no-history` (target_os android, ~18 GB with deps and NDK), `patches/apply angle` applied 0001-0007 cleanly, arm64 sysroot installed by hand, checkout's ninja 1.12.
+- Built: out/LinuxHost (linux arm64, libEGL/libGLESv2, 912 s) and out/Android64 (android arm64, libEGL/libGLESv2/libGLESv1_CM, 279 s). Sizes and sha256 in runtime/angle/README.md.
+- Meson installs them on aarch64 when `runtime/angle/aarch64/` is staged; cli/env.cpp's ANGLE library check looks for lib64 only on aarch64 (no 32-bit guests). Guard for graphics = device and the `auto` rule (NVIDIA only) unchanged.
+- Tests (Parallels virgl, UTM virgl, `APKLAYER_GLES_ANGLE=on`, JDK 25, prebuilts 99acf395): gpu, gpu-window, gles1, window-formats, vulkan pass on ANGLE's GL backend with the GN Android libs (the Soong libs lack patch 0007 and fail on virgl). Vulkan backend on Venus (experiment, reverted): compositor "Linux ANGLE (Vulkan)" works, app aborts (134) on dma-buf import.
+
 ## 2026-11-21: ANGLE on ARM64 via the Soong tree (branch anglearm)
 
 - Build log: `m libEGL_angle libGLESv2_angle libGLESv1_CM_angle` (gsi_arm64 userdebug), incremental, flock, ~/los24/external/angle (rev 1f4500d3) temporarily carrying patches 0003 (adapted), 0006, 0007 (necessary: the Oct-26 outputs there are unpatched); the tree is restored with `git checkout .` afterwards.
