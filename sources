@@ -1,0 +1,6 @@
+# <cpu> <LiteGapps zip URL> <sha256>: the builds import.sh takes the Google apps from (latest SDK 37 builds, 2026-11-21).
+# Both CPUs get LiteGapps' "superlite" set: Services Framework, Play services, Play Store and the Calendar/Contacts sync adapters. LiteGapps
+# builds no x86_64 superlite (only core and lite, for any SDK): x86_64 "core" holds exactly these five APKs. Every variant of a CPU carries the
+# same APK files, and the sync adapters are the same files on both CPUs.
+arm64 https://sourceforge.net/projects/litegapps/files/litegapps/arm64/37/superlite/2026-10-12/LiteGapps-superlite-arm64-17.0-20261012-official.zip/download b50c45dad3044f48916fb68818152ac971a61afbaac97c285caed251ea7d2f95
+x86_64 https://sourceforge.net/projects/litegapps/files/litegapps/x86_64/37/core/2026-10-01/LiteGapps-core-x86_64-17.0-20261001-official.zip/download 975501feb5f0a68cf023847291155eaa33e76fe6db8dae3c588e12af61d4bba0
