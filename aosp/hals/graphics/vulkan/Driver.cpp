@@ -227,29 +227,6 @@ VKAPI_ATTR VkResult VKAPI_CALL acquireImageANDROID(VkDevice device, VkImage imag
     return result;
 }
 
-// A device without fence fds (Venus): the loader's present fence (VK_EXT_swapchain_maintenance1: ANGLE) calls vkImportFenceFdKHR through its driver table,
-// which stays null there. The fd is waited for here and the fence signalled by an empty submit. shortcut: the present call blocks until the frame's
-// GPU work is done, and the submit goes to the first queue without the app's synchronization; upgrade when a Venus app presents with fences.
-VKAPI_ATTR VkResult VKAPI_CALL importFenceFdEmulated(VkDevice device, const VkImportFenceFdInfoKHR* info) {
-    NativeBufferDispatch dispatch;
-    {
-        std::lock_guard<std::mutex> lock(gLock);
-        auto native = gNativeBuffer.find(device);
-        if (native == gNativeBuffer.end()) return VK_ERROR_INITIALIZATION_FAILED;
-        dispatch = native->second;
-    }
-    if (info->handleType != VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    if (!dispatch.submit || !dispatch.acquireQueue) return VK_ERROR_INITIALIZATION_FAILED;
-    if (info->fd >= 0) {
-        struct pollfd wait = {info->fd, POLLIN, 0};
-        while (poll(&wait, 1, -1) < 0 && errno == EINTR) {}
-    }
-    VkSubmitInfo signal = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    VkResult result = dispatch.submit(dispatch.acquireQueue, 1, &signal, info->fence);
-    if (result == VK_SUCCESS && info->fd >= 0) close(info->fd);  // a successful import takes the fd
-    return result;
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL queueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitCount, const VkSemaphore* waits, VkImage, int* fenceFd) {
     if (waitCount == 0) { *fenceFd = -1; return VK_SUCCESS; }
     VkDevice device;
@@ -590,11 +567,6 @@ PFN_vkVoidFunction getDeviceProcAddr(VkDevice device, const char* name) {
     };
     for (auto& o : ours)
         if (!strcmp(name, o.name)) return o.needsNative && !native ? nullptr : o.function;
-    if (native && !strcmp(name, "vkImportFenceFdKHR")) {
-        std::lock_guard<std::mutex> lock(gLock);
-        auto it = gNativeBuffer.find(device);
-        if (it != gNativeBuffer.end() && !it->second.importFence) return reinterpret_cast<PFN_vkVoidFunction>(importFenceFdEmulated);
-    }
     if (PFN_vkVoidFunction imported = apklayer::vulkan::hardware_buffer::deviceProc(device, name)) return imported;
     if (PFN_vkVoidFunction emulated = apklayer::vulkan::textures::deviceProc(device, name)) return emulated;
     auto fn = host<PFN_vkGetDeviceProcAddr>("vkGetDeviceProcAddr");
@@ -671,6 +643,14 @@ VKAPI_ATTR VkResult VKAPI_CALL enumeratePhysicalDeviceGroups(VkInstance instance
     return apklayer::vulkan::enumeratePhysicalDeviceGroups(host<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"), instance, count, out);
 }
 
+// The Android loader offers VK_EXT_swapchain_maintenance1 (present fences: ANGLE) when sync fds import into fences, and then calls vkImportFenceFdKHR, which it
+// loads only for a device that lists VK_KHR_external_fence_fd. Venus reports the import but lacks the extension (a null call): report it as absent.
+VKAPI_ATTR void VKAPI_CALL externalFenceProperties(VkPhysicalDevice physical, const VkPhysicalDeviceExternalFenceInfo* info, VkExternalFenceProperties* out) {
+    if (auto fn = ::host<PFN_vkGetPhysicalDeviceExternalFenceProperties>("vkGetPhysicalDeviceExternalFenceProperties")) fn(physical, info, out);
+    if (info->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT && !hasExtension(physical, VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME))
+        out->externalFenceFeatures = 0;
+}
+
 PFN_vkVoidFunction getInstanceProcAddr(VkInstance instance, const char* name) {
     // the instance's GPU only (DeviceSelect.cpp)
     if (!strcmp(name, "vkEnumeratePhysicalDevices")) return reinterpret_cast<PFN_vkVoidFunction>(enumeratePhysicalDevices);
@@ -678,6 +658,8 @@ PFN_vkVoidFunction getInstanceProcAddr(VkInstance instance, const char* name) {
         return reinterpret_cast<PFN_vkVoidFunction>(enumeratePhysicalDeviceGroups);
     if (!strcmp(name, "vkEnumerateDeviceExtensionProperties"))
         return reinterpret_cast<PFN_vkVoidFunction>(enumerateDeviceExtensions);
+    if (!strcmp(name, "vkGetPhysicalDeviceExternalFenceProperties") || !strcmp(name, "vkGetPhysicalDeviceExternalFencePropertiesKHR"))
+        return reinterpret_cast<PFN_vkVoidFunction>(externalFenceProperties);
     if (!strcmp(name, "vkCreateDevice")) return reinterpret_cast<PFN_vkVoidFunction>(createDevice);
     if (!strcmp(name, "vkGetDeviceProcAddr")) return reinterpret_cast<PFN_vkVoidFunction>(getDeviceProcAddr);
     auto fn = host<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
