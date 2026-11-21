@@ -36,5 +36,6 @@ public class CounterService extends Service {
         return intent == null ? START_STICKY : intent.getIntExtra("mode", START_NOT_STICKY);
     }
 
-    @Override public void onDestroy() { System.out.println("[svc-t] destroyed"); }
+    // stopSelf from onDestroy is a no-op on Android (Endfield's download service does it; it recursed here until the stack overflowed)
+    @Override public void onDestroy() { System.out.println("[svc-t] destroyed"); stopSelf(); }
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-21: Arknights: Endfield ended in a StackOverflowError while downloading (stopSelf inside onDestroy)
+
+- Seen on the NVIDIA PC (owner's default instance, deb 0.5.5+local20261121.git665c6f11): Endfield died at "Resource downloading..." with
+  java.lang.StackOverflowError: its HGDownloadService.onDestroy calls stopSelf(), and Services.stopSelf found the service still in RUNNING
+  (removed only after onDestroy) and destroyed it again, 56 times over until the stack ran out.
+- Fix: a service being destroyed is marked (Services.Running.destroying); destroy() of it again does nothing and stopSelf answers false, as
+  ActiveServices does for a service that is already ending. Test: hello-svc-target's CounterService calls stopSelf() in onDestroy (group services,
+  phase selfstop and every phase that stops it).
+
 ## 2026-11-21: the hub stays answerable when a provider's process hangs; a window closed at the splash ends its launch
 
 - Provider lookups (owner's Play services hang, entry below): a provider the process installed at its start is handed to the hub from the endpoint's

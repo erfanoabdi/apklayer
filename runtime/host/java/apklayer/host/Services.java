@@ -32,6 +32,9 @@ public final class Services {
         /** As ActiveServices' IntentBindRecord: onBind once per distinct intent (Intent.filterEquals), onUnbind when its last client goes, onRebind when that returned true. */
         final Map<Intent.FilterComparison, Filter> filters = new HashMap<>();
         boolean started;
+        /** onDestroy runs: a stopSelf/stopService/unbind from inside it finds the service gone, as ActiveServices does (Endfield's
+         * HGDownloadService.onDestroy calls stopSelf: each call destroyed it again until the stack overflowed, 2026-11-21) */
+        boolean destroying;
         int lastStartId, startResult;
         IBinder traced;
         int connections;
@@ -103,6 +106,8 @@ public final class Services {
     private static void destroy(String key, Running r) {
         // ServiceController.destroy idles the main looper too: a bind queued meanwhile (the hub's next client) would bind this dying instance and the
         // process would exit under it; it waits (DEFERRED) and binds a fresh instance once this one is gone
+        if (r.destroying) return;
+        r.destroying = true;
         boolean nested = creating;
         creating = true;
         try { r.controller.destroy(); } finally { creating = nested; }
@@ -227,10 +232,10 @@ public final class Services {
         // As ActivityManager: the answer now, onDestroy later on the main thread. A caller off the main thread never waits for it (it may hold a lock
         // that the service's onDestroy takes: Meet's background thread stopped a service whose onDestroy waited for that thread's lock).
         Running seen = RUNNING.get(className(cn));
-        boolean stops = seen != null && (id < 0 || id == seen.lastStartId);
+        boolean stops = seen != null && !seen.destroying && (id < 0 || id == seen.lastStartId);
         Runnable stop = () -> {
             Running r = RUNNING.get(className(cn));
-            if (r == null || (id >= 0 && id != r.lastStartId)) return;
+            if (r == null || r.destroying || (id >= 0 && id != r.lastStartId)) return;
             r.started = false;
             if (r.connections == 0) destroy(className(cn), r);
         };
