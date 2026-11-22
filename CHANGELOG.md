@@ -20,6 +20,14 @@
 - This PC: the NVIDIA Vulkan device stopped loading in this session (vulkaninfo lists only llvmpipe; nvidia-smi sees the RTX 5060 Ti, ICD json present).
 - Cleaned: mp100 ~/apklayer-endfield, ~/apklayer-astcprobe, ~/apklayer-vkfix; the probe build dir here.
 
+## 2026-11-22: PGR download stall, run 7: the exact check that throws "Object has not been locked by this thread"
+
+- Dumped libil2cpp.so's decrypted rodata (60 MB) and text (100 MB) from the live process on mp100 (login screen only, user's OK; dump gzipped, pulled over Tailscale, remote copy deleted). Found the one code reference to the message by ADRP+ADD on its string (rva 0x1a90a23): rva 0x428287c, in a helper at rva 0x4282834 (file offset = rva - 0x4000).
+- The helper is Monitor's "get monitor or throw": `mon = obj->monitor` ([obj+8]); null -> "Object is not synchronized"; `ldar owner,[mon+8]`; owner == `CurrentThreadId()` (rva 0x42542f8 -> 0x4219a7c -> PLT stub 0x9d51910, an import near pthread_self/pthread_attr_destroy in the PLT/GOT slots at 0xa3b6ea0..ea8, i.e. the thread id is pthread_self() or a close sibling) passes; else the byte at [mon+0x10] decides (0 -> throws). Exit's fast path (rva 0x4282710) decrements the recursion count at [mon+0x14] and, at zero, releases with LDAXR/STLXR + DMB ISH.
+- So the error means `owner != current thread id` at Exit although this thread entered: either the id this thread sees changed between Enter and Exit, or the monitor was recycled (the freed-twice 32-byte blocks fit this: the monitor free list is an LDAXR/STLXR stack at 0xaa2c070, as in the tagged-stack test already passed). The mutex itself is not the suspect; the identity or the recycling is.
+- Next: at guest pc rva 0x428287c log `[mon+8]`, the current thread id and `[mon+0x14]` (a one-shot probe, `BERBERIS_LOG_*` style) and run PGR to the stall; compare with the thread id logged at the matching Enter (rva of Enter's store of the owner not yet found: search stores to [mon+8] from the same helper family near 0x4282898).
+- Cleaned: mp100 `~/apklayer-pgrdump*` removed, instance default stopped; local scratch dump and venv deleted. PGR data was cleared at the owner's request (see run 6).
+
 ## 2026-11-22: PGR download stall, run 6: the two free sites read from the decrypted library (user's OK, mp100, instance default, login screen only)
 
 - Dumped 0x500 bytes around libil2cpp.so +0x4216f9c and +0x42764b0 from the running game's memory (`/proc/<pid>/mem` via sudo; ACE did not react; no account logged in), saved as `tests/data/pgr-il2cpp/fn_*.bin`. The library is decrypted in the process (valid arm64).
