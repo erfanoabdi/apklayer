@@ -64,7 +64,7 @@ struct sharpen {
 
 static const char *VS = "attribute vec2 p; varying vec2 uv; void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }";
 
-/* AMD FidelityFX Super Resolution 1 (MIT): EASU, an edge adaptive upscale (12 taps, a Lanczos-like kernel stretched along the edge it finds), then RCAS,
+/* AMD FidelityFX Super Resolution 1 (MIT): EASU, an edge adaptive upscale (12 taps, a Lanczos-like kernel stretched along the edge it finds; apklayer patch: the sharpest lobe ends at 0.25 - 0.10 instead of 0.25 - 0.04, measured better on text and line art at 640x360..1280x720), then RCAS,
  * a sharpening that limits itself so it cannot ring. Written for GLES2 (no gather: the taps are fetched at texel centres) after AMD's ffx_fsr1.h.
  * A source larger than the output (render scale above 100) is averaged down instead. */
 static const char *FS_UP =
@@ -117,7 +117,7 @@ static const char *FS_UP =
     "  len = len * 0.5; len *= len;\n"
     "  float stretch = dot(dir, dir) / max(abs(dir.x), abs(dir.y));\n"
     "  vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 - 0.5 * len);\n"
-    "  float lob = 0.5 + ((0.25 - 0.04) - 0.5) * len, clp = 1.0 / lob;\n"
+    "  float lob = 0.5 + ((0.25 - 0.10) - 0.5) * len, clp = 1.0 / lob;\n"
     "  vec3 aC = vec3(0.0); float aW = 0.0;\n"
     "  tap(aC, aW, vec2(0.0, -1.0) - pp, dir, len2, lob, clp, b);\n"
     "  tap(aC, aW, vec2(1.0, -1.0) - pp, dir, len2, lob, clp, c);\n"

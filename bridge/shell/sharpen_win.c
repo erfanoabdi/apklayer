@@ -205,7 +205,7 @@ int sharpen_win_show(struct window *w, int buf)
         sw->pending = -1;
     }
     sharpen_set_mode(sw->s, w->filter - 1);  /* 0 FSR 1, 1 NIS, 2 SGSR 1, 3 Lanczos 3, 4 Anime4K */
-    int rc = sharpen_render(sw->s, buf, ow, oh, w->filter == 2 ? 0.3f : w->filter == 3 ? 1.0f : 0.65f, &slot, &fresh);
+    int rc = sharpen_render(sw->s, buf, ow, oh, w->filter == 2 ? 0.3f : w->filter == 3 ? 1.0f : 0.55f, &slot, &fresh);  /* NIS 0.3, SGSR 1.0, else (FSR 1, Lanczos) 0.55 */
     if (rc == -2) { if (sw->pending != buf) sw->pending_ms = now_ms(); sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;
