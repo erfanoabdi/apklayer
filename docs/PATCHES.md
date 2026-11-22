@@ -328,4 +328,8 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - apklayer patch in `bridge/shell/sharpen.c` (FS_UP): the sharpest EASU lobe ends at 0.25 - 0.10 where AMD's ffx_fsr1.h has 0.25 - 0.04 (sharper text and line art at the same smooth-image quality; default RCAS sharpness 0.55).
 - apklayer patch in `bridge/shell/sharpen.c` (FS_NIS, end of main): the output luma is clamped to the 2x2 central source luma range widened by 0.3 of it (the 6-tap bank rings on text; not part of NVIDIA's NIS_Scaler.h); default sharpness 0.3.
 - apklayer patch in `bridge/shell/sharpen.c` (FS_SGSR): a Catmull-Rom base (five bilinear taps) replaces plain bilinear under the SGSR delta, and every pixel stays inside its four nearest texels (Qualcomm's sgsr1_shader_mobile.frag uses bilinear and no clamp).
+- apklayer patch in `bridge/shell/sharpen.c` (FS_CAS): RCAS strength is multiplied by smoothstep(0.04, 0.25, local range) mixed to 0.1..1.0 (AMD's ffx_fsr1.h applies it at full strength everywhere); (FS_UP): the EASU stretch `len` is multiplied by a gradient-coherence smoothstep so weak gradients (texture, noise) are not stretched along a random direction.
+- apklayer patch in `bridge/shell/sharpen.c` (FS_NIS, edgeMap): the hard gates (ratio > 2.2, contrast > 0.0625) are ramps (1.2..1.3, 0.0625..0.2).
+- apklayer patch in `bridge/shell/sharpen.c` (FS_SGSR): the `edge > 8/255` gate is smoothstep(4/255, 12/255) and the delta limit is `sharp * 23/255` (Qualcomm's shader: hard gate, fixed limit).
+- apklayer patch in `bridge/shell/geometry.c` / `sharpen_win.c`: the render filter's output size is round(logical size * s120 / 120) with the compositor's wp_fractional_scale numerator (`window_output_px`), not a whole-percent product.
 
