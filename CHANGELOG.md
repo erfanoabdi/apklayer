@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 render filter watchdog: a frame never waits more than 100 ms
+- PGR froze with the upscale on after "all 5 output buffers are held by the compositor": the newest frame waited for a release that may come late or never. Now a frame waiting over 100 ms for an output buffer is shown as the app's own (unfiltered) one (`sharpen_win_poll`), so the app keeps getting its buffers back; the main loop polls every 25 ms while one waits.
+
 ## 2026-11-22 a resized window no longer wedges the display sink
 - PGR froze when it went fullscreen (and resizes froze apps in general): the app's seven old-size buffers stayed acquired by the display sink until their slots were replaced, the first new buffer made eight ("max acquired buffer count reached: 7 (max 6)") and the app waited for ever. The shell now gives the other buffers back (and drops their wl_buffers and the render filter's copies) when a buffer of a new size is imported.
 

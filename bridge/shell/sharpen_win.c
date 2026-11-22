@@ -35,6 +35,7 @@ struct swin {
     int thread_done, thread_rc;
     struct kept sample;             /* the first buffer, for the helper (its own dups) */
     int said_ok, said_fail, said_skip, ok_n, fail_n;
+    long long pending_ms;           /* when the waiting frame started to wait (the watchdog in sharpen_win_poll) */
     int pending;                    /* an app buffer waiting for a free output buffer (-1: none; held back until it is drawn) */
     int keep;                       /* the buffer being shown again is the compositor's already: not given back here */
     struct window *win;
@@ -125,6 +126,15 @@ void sharpen_win_poll(void)
     for (int i = 0; i < MAX_WINDOWS; i++) {
         struct window *w = &windows[i];
         struct swin *sw = w->client ? w->sharp : NULL;
+        /* watchdog: a frame waiting for a free output buffer for over 100 ms (the compositor releases late or not at all) is shown as the app's own, so the app never stalls */
+        if (sw && sw->state == S_READY && sw->pending >= 0 && w->configured && now_ms() - sw->pending_ms > 100) {
+            static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
+            int b = sw->pending;
+            sw->pending = -1;
+            if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[shell] %s: render filter: no output buffer for 100 ms, buffer %d shown as it is\n", w->title, b);
+            window_dmabuf_attach(w, b, whole);
+            continue;
+        }
         if (!sw || sw->state != S_PREPARING || !__atomic_load_n(&sw->thread_done, __ATOMIC_ACQUIRE)) continue;
         pthread_join(sw->thread, NULL);
         kept_close(&sw->sample);
@@ -162,7 +172,7 @@ void sharpen_win_poll(void)
 int sharpen_win_timeout(void)
 {
     for (int i = 0; i < MAX_WINDOWS; i++)
-        if (windows[i].client && windows[i].sharp && ((struct swin *)windows[i].sharp)->state == S_PREPARING) return 25;
+        if (windows[i].client && windows[i].sharp && (((struct swin *)windows[i].sharp)->state == S_PREPARING || ((struct swin *)windows[i].sharp)->pending >= 0)) return 25;
     return -1;
 }
 
@@ -196,7 +206,7 @@ int sharpen_win_show(struct window *w, int buf)
     }
     sharpen_set_mode(sw->s, w->filter - 1);  /* 0 FSR 1, 1 NIS, 2 SGSR 1, 3 integer */
     int rc = sharpen_render(sw->s, buf, ow, oh, w->filter == 2 ? 0.4f : w->filter == 3 ? 1.0f : 0.65f, &slot, &fresh);
-    if (rc == -2) { sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
+    if (rc == -2) { if (sw->pending != buf) sw->pending_ms = now_ms(); sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;
         if (!sw->said_fail++) fprintf(stderr, "[shell] %s: render filter: the pass could not draw %dx%d -> %dx%d (shown as it is)\n", w->title, sw->w[buf], sw->h[buf], ow, oh);
