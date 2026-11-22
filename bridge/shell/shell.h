@@ -133,6 +133,9 @@ enum { EV_DOWN = 0, EV_UP = 1, EV_MOVE = 2, EV_HOVER = 3, EV_SECONDARY = 4, EV_K
 #define NBUF 2
 struct client {
     int fd, pid;
+    int stalled;               /* its socket was full and it did not drain it (client_send in client.c) */
+    uint8_t *pend;             /* messages waiting for the socket to drain, in order (client_flush) */
+    size_t pend_len, pend_cap;
     int refresh_mhz;           /* last output rate sent to this client */
     char pkg[128];
     size_t last_clipboard_len;
@@ -282,6 +285,7 @@ void maliit_enable(struct window *w, int enable);  /* maliit.c: the host keyboar
 void maliit_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* the field's text around the cursor */
 void text_input_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* textinput.c: set_surrounding_text */
 void text_input_send(struct window *w, int before, int after, const char *commit, const char *preedit);  /* textinput.c: one MSG_IME */
+void client_flush(struct client *c);  /* client.c: send what waits in the client's queue */
 int send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
 void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd);  /* with fd (SCM_RIGHTS) unless it is < 0 */
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b);  /* client.c */

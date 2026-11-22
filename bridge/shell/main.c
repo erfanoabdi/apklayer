@@ -96,7 +96,7 @@ int main(int argc, char **argv)
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (clients[i].fd < 0) continue;
             who[n] = &clients[i];
-            pfd[n++] = (struct pollfd){ .fd = clients[i].fd, .events = POLLIN };
+            pfd[n++] = (struct pollfd){ .fd = clients[i].fd, .events = (short)(POLLIN | (clients[i].pend_len ? POLLOUT : 0)) };
         }
         { int st = sharpen_win_timeout(); if (st >= 0 && (timeout < 0 || st < timeout)) timeout = st; }  /* the render filter's helper */
         if (repeat_key >= 0) {
@@ -129,6 +129,7 @@ int main(int argc, char **argv)
             else if (cfd >= 0) close(cfd);
         }
         for (int i = 2 + CLIPBOARD_FDS + MALIIT_FDS + GAMEPAD_FDS; i < n; i++) {
+            if (who[i]->fd >= 0 && (pfd[i].revents & POLLOUT)) client_flush(who[i]);
             if (who[i]->fd >= 0 && (pfd[i].revents & (POLLIN | POLLHUP | POLLERR))) client_read(who[i]);
         }
     }

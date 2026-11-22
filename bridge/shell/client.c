@@ -4,17 +4,77 @@
 
 /* ---- sending to apps ---- */
 
+/* Messages to an app never block the shell. The sockets are blocking, and a write to an app that has stopped reading (a hung one, or one that crashed and is still writing
+ * its core: PGR's 541 MB took 92 s) froze the shell's single thread in the kernel: no Wayland dispatch, no answer to xdg_wm_base pings, KWin's "not responding" helper then
+ * killed the shell with SIGABRT (core of 2026-11-22 20:44:48; the stuck write was a 24 byte hover event). Now every send is MSG_DONTWAIT. Input and vsync messages that find
+ * the socket full are dropped (stale by the time the app reads); the others (configure, release, ...) wait in a per-client queue that is flushed as soon as the socket
+ * drains (POLLOUT in the main loop, client_flush) and keeps the order; a queue past 256 KB drops the new message. A message carrying an fd cannot be queued: it is dropped. */
+#define CLIENT_QUEUE_MAX (256 * 1024)
+
+void client_flush(struct client *c)
+{
+    while (c && c->fd >= 0 && c->pend_len > 0) {
+        ssize_t n = send(c->fd, c->pend, c->pend_len, MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return;  /* EAGAIN: later; any other error: the read side sees the hang-up */
+        memmove(c->pend, c->pend + n, c->pend_len - (size_t)n);
+        c->pend_len -= (size_t)n;
+    }
+    if (c && c->pend_len == 0 && c->stalled) { fprintf(stderr, "[shell] %s reads its socket again\n", c->pkg[0] ? c->pkg : "?"); c->stalled = 0; }
+}
+
+static void client_queue(struct client *c, const uint8_t *data, size_t size)
+{
+    if (c->pend_len + size > CLIENT_QUEUE_MAX) return;  /* the app is far behind: this one is lost */
+    if (c->pend_len + size > c->pend_cap) {
+        size_t cap = c->pend_cap ? c->pend_cap * 2 : 4096;
+        while (cap < c->pend_len + size) cap *= 2;
+        uint8_t *p = realloc(c->pend, cap);
+        if (!p) return;
+        c->pend = p;
+        c->pend_cap = cap;
+    }
+    memcpy(c->pend + c->pend_len, data, size);
+    c->pend_len += size;
+}
+
+static int client_send(struct client *c, const void *data, size_t size, int pass_fd, int droppable)
+{
+    if (!c || c->fd < 0) return -1;
+    if (c->pend_len > 0) client_flush(c);
+    if (c->pend_len > 0) {  /* the earlier messages are still waiting: keep the order */
+        if (!droppable && pass_fd < 0) client_queue(c, data, size);
+        return -1;
+    }
+    struct iovec iov = { (void *)data, size };
+    char control[CMSG_SPACE(sizeof(int))] = { 0 };
+    struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1 };
+    if (pass_fd >= 0) {
+        mh.msg_control = control;
+        mh.msg_controllen = sizeof control;
+        struct cmsghdr *cm = CMSG_FIRSTHDR(&mh);
+        cm->cmsg_level = SOL_SOCKET;
+        cm->cmsg_type = SCM_RIGHTS;
+        cm->cmsg_len = CMSG_LEN(sizeof(int));
+        memcpy(CMSG_DATA(cm), &pass_fd, sizeof pass_fd);
+    }
+    ssize_t n;
+    do n = sendmsg(c->fd, &mh, MSG_NOSIGNAL | MSG_DONTWAIT); while (n < 0 && errno == EINTR);
+    if (n == (ssize_t)size) return 0;
+    if (n > 0) { client_queue(c, (const uint8_t *)data + n, size - (size_t)n); return 0; }  /* the rest follows in order */
+    if (errno != EAGAIN && errno != EWOULDBLOCK) { fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno)); return -1; }
+    if (!c->stalled) fprintf(stderr, "[shell] %s does not read its socket (hung or dying?): input is dropped, the rest waits in a queue\n", c->pkg[0] ? c->pkg : "?");
+    c->stalled = 1;
+    if (!droppable && pass_fd < 0) client_queue(c, data, size);
+    return -1;
+}
+
 int send_msg(struct client *c, uint32_t type, const int32_t *v, int n)
 {
     if (!c || c->fd < 0) return -1;
     uint32_t buf[2 + 16] = { type, (uint32_t)(n * 4) };
     memcpy(buf + 2, v, (size_t)n * 4);
-    size_t size = 8 + (size_t)n * 4;
-    ssize_t written = write(c->fd, buf, size);
-    if (written < 0 && errno != EAGAIN) {
-        fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno));
-    }
-    return written == (ssize_t)size ? 0 : -1;
+    return client_send(c, buf, 8 + (size_t)n * 4, -1, type == MSG_INPUT || type == MSG_VSYNC);
 }
 
 void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd)
@@ -23,16 +83,7 @@ void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int f
     if (!c || c->fd < 0) return;
     uint32_t buf[2 + 16] = { type, (uint32_t)(n * 4) };
     memcpy(buf + 2, v, (size_t)n * 4);
-    struct iovec iov = { buf, 8 + (size_t)n * 4 };
-    char control[CMSG_SPACE(sizeof(int))] = { 0 };
-    struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1, .msg_control = control, .msg_controllen = sizeof control };
-    struct cmsghdr *cm = CMSG_FIRSTHDR(&mh);
-    cm->cmsg_level = SOL_SOCKET;
-    cm->cmsg_type = SCM_RIGHTS;
-    cm->cmsg_len = CMSG_LEN(sizeof(int));
-    memcpy(CMSG_DATA(cm), &fd, sizeof fd);
-    if (sendmsg(c->fd, &mh, MSG_NOSIGNAL) < 0 && errno != EAGAIN)
-        fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno));
+    client_send(c, buf, 8 + (size_t)n * 4, fd, 1);
 }
 
 /* Variable-length message (text payloads): header and data in one write. */
@@ -44,8 +95,7 @@ void send_bytes(struct client *c, uint32_t type, const char *data, size_t len)
     uint32_t hdr[2] = { type, (uint32_t)len };
     memcpy(buf, hdr, 8);
     memcpy(buf + 8, data, len);
-    if (write(c->fd, buf, 8 + len) < 0 && errno != EAGAIN)
-        fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno));
+    client_send(c, buf, 8 + len, -1, 0);
     free(buf);
 }
 
@@ -68,6 +118,7 @@ static void client_drop(struct client *c)
     for (int i = 0; i < MAX_WINDOWS; i++)
         if (windows[i].client == c) window_destroy(&windows[i]);
     for (int i = 0; i < c->nfds; i++) close(c->fds[i]);
+    free(c->pend);
     fprintf(stderr, "[shell] %s (pid %d) disconnected\n", c->pkg[0] ? c->pkg : "?", c->pid);
     close(c->fd);
     memset(c, 0, sizeof *c);
