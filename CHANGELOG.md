@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22: per-app render scale for fullscreen games
+
+- `apklayer settings set render-scale[.<package>] 10..100` (percent; unset or 100 = full): a game that is fullscreen renders into a display of that share of the window's pixels; the shell scales the picture back over the window (the viewport already did that for any buffer size), so the screen's aspect ratio is kept (width, height and the screen size the app reads all scale by the same percent; the app's integer truncation is under a pixel). The logical size and dp stay (the density follows the told scale), windowed or after leaving fullscreen the app has its full size again (`want_fullscreen`, mobile.c). Read at the app's start (cli/run.cpp -> APKLAYER_RENDER_SCALE -> display.c -> MSG_RENDER_SCALE 20 -> client.render_scale -> geometry.c); `settings set` says "from the app's next start".
+- Built (`ninja -C b bridge/shell/apklayer-shell cli/apklayer`, display.c): compiles. New group `render-scale` (tests/vm/render-scale.py: UiBench windowed, fullscreen at 50%, left): written, NOT run (no VM config on this PC); the manager's settings page has no field for it yet.
+
 ## 2026-11-21: Endfield's world blocky on AMD: emulated ASTC uploads with a row length lost a block per row
 
 - Build log: `m vulkan.apklayer` (gsi_x86_64 userdebug), incremental, flock (necessary: the fix below is in the HAL's vendored gfxstream emulation; mp100 is x86_64).

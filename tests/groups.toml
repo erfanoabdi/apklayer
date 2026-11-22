@@ -361,6 +361,10 @@ run = ["python3 -u tests/vm/window-geometry.py"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py --mobile", "python3 -u tests/vm/fullscreen-key.py"]
 
+[render-scale]  # the per-app render scale of a fullscreen game (APKLAYER_RENDER_SCALE, settings render-scale[.<package>])
+needs = ["com.android.test.uibench"]
+run = ["python3 -u tests/vm/render-scale.py"]
+
 [decoration]
 # server-side title bars under sway (headless, its own socket) when sway is on the VM, else under the desktop's own compositor if it has xdg-decoration (KDE)
 needs = ["com.android.test.uibench"]

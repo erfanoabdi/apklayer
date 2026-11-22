@@ -214,6 +214,12 @@ static struct apklayer_display *display_open(const char *name, uint32_t width, u
         int32_t wm[3] = { WINDOW_ID, !strcmp(mode, "mobile") ? 2 : !strcmp(mode, "desktop") ? 1 : 0, nb && !strcmp(nb, "on") ? 1 : nb && !strcmp(nb, "off") ? 2 : 0 };
         send_msg(d, 15 /* MSG_WINDOW_MODE */, wm, sizeof wm, NULL, 0);
     }
+    /* apklayer patch: the app's render scale (`apklayer settings` render-scale, cli/run.cpp): the shell lowers the display a fullscreen game renders into */
+    const char *rscale = getenv("APKLAYER_RENDER_SCALE");
+    if (rscale && *rscale) {
+        int32_t rs[2] = { WINDOW_ID, atoi(rscale) };
+        send_msg(d, 20 /* MSG_RENDER_SCALE */, rs, sizeof rs, NULL, 0);
+    }
     char create[12 + 2 + 64];
     int32_t hdr[3] = { WINDOW_ID, (int32_t)width, (int32_t)height };
     memcpy(create, hdr, 12);

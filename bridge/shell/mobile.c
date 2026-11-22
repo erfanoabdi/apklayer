@@ -167,6 +167,7 @@ void window_set_fullscreen(struct window *w, int on)
     if (w->want_fullscreen == !!on) return;
     w->want_fullscreen = !!on;
     fprintf(stderr, "[shell] %s: fullscreen %s\n", w->title, on ? "on" : "off");
+    if (w->configured && w->client->render_scale > 0) window_send_configure(w);  /* the render scale follows the fullscreen state */
     if (!w->toplevel) return;
     if (on) xdg_toplevel_set_fullscreen(w->toplevel, NULL);
     else {

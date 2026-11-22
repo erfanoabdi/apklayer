@@ -248,8 +248,13 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 else if (line.compare(0, eq, "window-mode." + package) == 0) specific = line.substr(eq + 1);
             }
             if (!specific.empty() || !general.empty()) ne.env["APKLAYER_WINDOW_MODE"] = nj.env["APKLAYER_WINDOW_MODE"] = specific.empty() ? general : specific;
-            for (const std::string& line : split(readFile(join(inst.root, "settings")).value_or(""), '\n'))  // the navigation bar on desktop windows (navbar auto|on|off)
+            std::string scale, scaleOwn;  // the render scale (render-scale, the app's own render-scale.<package> first): a fullscreen game's share of the window's pixels
+            for (const std::string& line : split(readFile(join(inst.root, "settings")).value_or(""), '\n')) {  // the navigation bar on desktop windows (navbar auto|on|off)
                 if (line.compare(0, 7, "navbar=") == 0) ne.env["APKLAYER_NAVBAR"] = nj.env["APKLAYER_NAVBAR"] = line.substr(7);
+                if (line.compare(0, 13, "render-scale=") == 0) scale = line.substr(13);
+                else if (line.compare(0, 14 + package.size(), "render-scale." + package + "=") == 0) scaleOwn = line.substr(14 + package.size());
+            }
+            if (!scaleOwn.empty() || !scale.empty()) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = scaleOwn.empty() ? scale : scaleOwn;
         }
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};
