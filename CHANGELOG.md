@@ -34,6 +34,8 @@
 
 - Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64` (existing module; one new header, no new source file). Why: run 11's `locks` phase shows LDXR/STXR losing nodes to ABA (35% of the pops).
 - Patch 0084: `runtime_primitives/exclusive_epoch.h` (a 16 KB table of counters below 2 GB, indexed by address bits 4..13); interpreter and lite tier: LDXR reads the counter before the value and keeps it in the upper half of cpu.reservation_value, STXR fails when it moved and bumps it on success; the heavy tier bails on LDXR/STXR so such regions stay lite-translated. LDXP/STXP (pairs) are unchanged.
+- Result: the first design (counter checked before the CAS, bumped after it) cut the lost nodes of the llsc64 phase from 1126640/1141852 to 373719/23920; the remaining window (CAS done, bump pending) was closed by doing check, CAS and bump under a per-entry lock (a 64-bit lock word beside the 32-bit counter; the assembler has Xchgq with a memory operand, not Xchgl; the lock is released on a fault too). Two builds failed on that way (Xchgl), the third passed: `locks` on the NVIDIA PC (private instance, private APKLAYER_ANDROID_LIBS copy with the new library, 3 s stress): PASS, `llsc64 double_owned plain=0 delay=0`, every other count 0.
+- Not yet: PGR's download at full speed with the new library (mp100); the cost of the lock in STXR-heavy code; the unit tests of the lite/interpreter exclusives in the AOSP tree (not run); LDXP/STXP are unchanged.
 
 ## 2026-11-22: PGR download stall, run 11: the translator's LDXR/STXR is ABA-unsafe (locks group now fails)
 

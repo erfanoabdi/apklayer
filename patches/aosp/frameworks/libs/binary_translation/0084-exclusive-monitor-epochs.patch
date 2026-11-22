@@ -1,0 +1,232 @@
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] apklayer patch: exclusive-monitor epochs (LDXR/STXR no longer ABA-unsafe)
+
+LDXR/STXR were a compare-and-swap of the loaded value: an ABA sequence (pop, pop, push of the same node on an untagged LL/SC free list) let a stale STXR succeed, which arm64 forbids (any store to the reserved granule clears the monitor). A 16 KB table of counters below 2 GB (runtime_primitives/exclusive_epoch.h, indexed by address bits 4..13, each entry a 32-bit counter and a 64-bit lock word): LDXR reads its counter before the value and keeps it in the upper half of cpu.reservation_value; STXR takes the entry lock, fails when the counter moved, does the compare-and-swap, bumps the counter and unlocks (also on a fault). Interpreter and lite tier; the heavy tier bails on LDXR/STXR so such regions stay lite-translated. LDXP/STXP unchanged. Module libberberis_arm64. Tested: tests/apps/hello-arm64/locks.c llsc64 phase (1.1 million lost nodes before, 0 after).
+---
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -39,6 +39,7 @@
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/guest_state/guest_state.h"
+ #include "berberis/kernel_api/run_guest_syscall.h"
++#include "berberis/runtime_primitives/exclusive_epoch.h"  // apklayer patch (0084)
+ #include "berberis/runtime_primitives/interpret_helpers.h"
+ #include "berberis/runtime_library/runtime_library.h"
+ 
+@@ -4125,6 +4126,17 @@
+         if (args.op == Decoder::AtomicOp::kLdxr) {
+           state_->cpu.reservation_address = base;
+           memcpy(&state_->cpu.reservation_value, &val, sizeof(val));
++          // apklayer patch (0084): the counter read BEFORE the value would be the safe order; the interpreter's load above is a single atomic
++          // load and the epoch is read after it, so re-read the epoch first and the value again (a changed value gives the new pair).
++          uint64_t epoch = ExclEpochLoad(base);
++          switch (args.size) {
++            case 0: val = AtomicLoad<uint8_t>(host_addr); break;
++            case 1: val = AtomicLoad<uint16_t>(host_addr); break;
++            case 2: val = AtomicLoad<uint32_t>(host_addr); break;
++            case 3: val = AtomicLoad<uint64_t>(host_addr); break;
++          }
++          memcpy(&state_->cpu.reservation_value, &val, sizeof(val));
++          memcpy(reinterpret_cast<uint8_t*>(&state_->cpu.reservation_value) + 8, &epoch, sizeof(epoch));
+         }
+         if (args.rt < 31) state_->cpu.x[args.rt] = val;
+         break;
+@@ -4135,13 +4147,22 @@
+         uint64_t expected;
+         memcpy(&expected, &state_->cpu.reservation_value, sizeof(expected));
+         bool success = false;
++        uint64_t saved_epoch;
++        memcpy(&saved_epoch, reinterpret_cast<uint8_t*>(&state_->cpu.reservation_value) + 8, sizeof(saved_epoch));
+         if (state_->cpu.reservation_address == base) {
+-          switch (args.size) {
+-            case 0: success = AtomicCAS<uint8_t>(host_addr, expected, new_val); break;
+-            case 1: success = AtomicCAS<uint16_t>(host_addr, expected, new_val); break;
+-            case 2: success = AtomicCAS<uint32_t>(host_addr, expected, new_val); break;
+-            case 3: success = AtomicCAS<uint64_t>(host_addr, expected, new_val); break;
++          // apklayer patch (0084): counter check, compare-and-swap and bump under the entry's lock (exclusive_epoch.h).
++          uint32_t* slot = ExclEpochSlot(base);
++          if (slot) ExclEpochLock(slot);
++          if (!slot || __atomic_load_n(slot, __ATOMIC_ACQUIRE) == saved_epoch) {
++            switch (args.size) {
++              case 0: success = AtomicCAS<uint8_t>(host_addr, expected, new_val); break;
++              case 1: success = AtomicCAS<uint16_t>(host_addr, expected, new_val); break;
++              case 2: success = AtomicCAS<uint32_t>(host_addr, expected, new_val); break;
++              case 3: success = AtomicCAS<uint64_t>(host_addr, expected, new_val); break;
++            }
++            if (success && slot) __atomic_store_n(slot, __atomic_load_n(slot, __ATOMIC_RELAXED) + 1, __ATOMIC_RELEASE);
+           }
++          if (slot) ExclEpochUnlock(slot);
+         }
+         state_->cpu.reservation_address = 0;
+         // Rs gets 0 on success, 1 on failure.
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
+@@ -427,6 +427,14 @@
+ 
+       case Decoder::AtomicOp::kLdxr: {
+         // Load-exclusive: load value and set reservation in ThreadState.
++        // apklayer patch (0084): the address's epoch counter is read BEFORE the value and kept in the upper half of reservation_value.
++        uint32_t* excl_table = ExclEpochTable();
++        if (excl_table) {
++          as_.Movq(Assembler::rax, base);
++          as_.Andq(Assembler::rax, static_cast<int32_t>(kExclEpochMask));
++          as_.Movl(Assembler::rax, {.base = Assembler::rax, .disp = static_cast<int32_t>(reinterpret_cast<uintptr_t>(excl_table))});
++          as_.Movq({.base = Assembler::rbp, .disp = static_cast<int32_t>(offsetof(ThreadState, cpu.reservation_value)) + 8}, Assembler::rax);
++        }
+         Register res = LoadUntagged(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
+         if (!success()) return;
+ 
+@@ -470,6 +478,29 @@
+         as_.Cmpq(Assembler::rax, base);
+         as_.Jcc(Condition::kNotEqual, *fail_label);
+ 
++        // apklayer patch (0084): counter check, compare-and-swap and bump under the address entry's lock (exclusive_epoch.h: [0] counter, [1] lock;
++        // the counter LDXR saw is in the upper half of reservation_value). A store through an exclusive in between, even of the same value,
++        // clears the monitor on arm64.
++        uint32_t* excl_table = ExclEpochTable();
++        const int32_t tbl = static_cast<int32_t>(reinterpret_cast<uintptr_t>(excl_table));
++        Register idx = Assembler::rax;
++        AssemblerBase::Label* fail_locked = as_.MakeLabel();
++        if (excl_table) {
++          idx = AllocTempReg();
++          if (!success()) return;
++          as_.Movq(idx, base);
++          as_.Andq(idx, static_cast<int32_t>(kExclEpochMask));
++          AssemblerBase::Label* spin = as_.MakeLabel();
++          as_.Bind(spin);
++          as_.Movq(Assembler::rax, static_cast<int64_t>(1));
++          as_.Xchgq(Assembler::rax, {.base = idx, .disp = tbl + 8});
++          as_.Testl(Assembler::rax, Assembler::rax);
++          as_.Jcc(Condition::kNotEqual, *spin);
++          as_.Movl(Assembler::rax, {.base = idx, .disp = tbl});
++          as_.Cmpq(Assembler::rax, {.base = Assembler::rbp, .disp = resv_val_off + 8});
++          as_.Jcc(Condition::kNotEqual, *fail_locked);
++        }
++
+         // Expected value into RAX for LOCK CMPXCHG.
+         as_.Movq(Assembler::rax, {.base = Assembler::rbp, .disp = resv_val_off});
+ 
+@@ -486,24 +517,38 @@
+         AssemblerBase::Label* recovery_cont = as_.MakeLabel();
+         as_.Jmp(*recovery_cont);
+         as_.Bind(recovery_label);
++        if (excl_table) {  // a fault in the store: the lock must not stay held
++          as_.Xorl(Assembler::rax, Assembler::rax);
++          as_.Movq({.base = idx, .disp = tbl + 8}, Assembler::rax);
++        }
+         ExitGeneratedCode(GetInsnAddr());
+         as_.Bind(recovery_cont);
+ 
+         // CMPXCHG sets ZF on success. Rs = 0 on success, 1 on failure.
++        as_.Jcc(Condition::kNotEqual, excl_table ? *fail_locked : *fail_label);
++        if (excl_table) {
++          as_.Movl(Assembler::rax, {.base = idx, .disp = tbl});
++          as_.Addl(Assembler::rax, static_cast<int32_t>(1));
++          as_.Movl({.base = idx, .disp = tbl}, Assembler::rax);
++          as_.Xorl(Assembler::rax, Assembler::rax);
++          as_.Movq({.base = idx, .disp = tbl + 8}, Assembler::rax);  // unlock
++        }
+         if (args.rs < 31) {
+           Register status = AllocTempReg();
+           if (!success()) return;
+-          as_.Movq(status, static_cast<int64_t>(1));  // assume failure
+-          AssemblerBase::Label* done_label = as_.MakeLabel();
+-          as_.Jcc(Condition::kNotEqual, *done_label);  // ZF=0 means CAS failed
+           as_.Xorl(status, status);  // success: status = 0
+-          as_.Bind(done_label);
+           SetReg(args.rs, status);
+         }
+ 
+         AssemblerBase::Label* end_label = as_.MakeLabel();
+         as_.Jmp(*end_label);
+ 
++        // Counter moved or the CAS failed (the lock is held): unlock, then the failure below.
++        as_.Bind(fail_locked);
++        if (excl_table) {
++          as_.Xorl(Assembler::rax, Assembler::rax);
++          as_.Movq({.base = idx, .disp = tbl + 8}, Assembler::rax);
++        }
+         // Reservation mismatch: store fails, Rs = 1.
+         as_.Bind(fail_label);
+         if (args.rs < 31) {
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
+@@ -34,6 +34,7 @@
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/guest_state/guest_state.h"
+ #include "berberis/lite_translator/lite_translate_region.h"
++#include "berberis/runtime_primitives/exclusive_epoch.h"  // apklayer patch (0084)
+ #include "berberis/runtime_primitives/platform.h"
+ 
+ #include "allocator.h"
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -1824,6 +1824,12 @@
+   const int32_t resv_addr_off = static_cast<int32_t>(offsetof(ThreadState, cpu.reservation_address));
+   const int32_t resv_val_off = static_cast<int32_t>(offsetof(ThreadState, cpu.reservation_value));
+ 
++  // apklayer patch (0084): the heavy tier has no exclusive-monitor epochs (exclusive_epoch.h): a region with LDXR/STXR stays lite-translated.
++  if (args.op == Decoder::AtomicOp::kLdxr || args.op == Decoder::AtomicOp::kStxr) {
++    Undefined();
++    return;
++  }
++
+   switch (args.op) {
+     case Decoder::AtomicOp::kLdar: {
+       // Load-acquire: x86-TSO provides acquire ordering for all loads.
+--- /dev/null
++++ b/runtime_primitives/include/berberis/runtime_primitives/exclusive_epoch.h
+@@ -0,0 +1,53 @@
++// apklayer patch (0084): exclusive-monitor epochs. LDXR/STXR are modelled as a compare-and-swap of the loaded value, which an ABA sequence defeats
++// (arm64: any store to the reserved granule by another thread clears the monitor, even of the same value): an untagged LL/SC free list loses nodes
++// (PGR's IL2CPP monitors, CHANGELOG 2026-11-22 run 11). A table of counters, indexed by address bits 4..13 (16 bytes apart), kept below 2 GB so
++// translated code can address it with a 32-bit displacement: LDXR saves its counter (before it loads the value) in the unused upper half of
++// cpu.reservation_value, STXR fails when the counter moved, a successful STXR bumps it. Stores that do not go through STXR stay invisible.
++#ifndef BERBERIS_RUNTIME_PRIMITIVES_EXCLUSIVE_EPOCH_H_
++#define BERBERIS_RUNTIME_PRIMITIVES_EXCLUSIVE_EPOCH_H_
++
++#include <sys/mman.h>
++
++#include <cstdint>
++
++namespace berberis {
++
++constexpr uintptr_t kExclEpochMask = 0x3ff0;  // byte offset of the entry (addr & mask), entries 16 bytes apart (a 4-byte counter each)
++
++inline uint32_t* ExclEpochTable() {
++  static uint32_t* table = []() -> uint32_t* {
++#ifdef MAP_32BIT
++    void* p = mmap(nullptr, kExclEpochMask + 16, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
++    if (p == MAP_FAILED || reinterpret_cast<uintptr_t>(p) + kExclEpochMask + 16 > 0x7fffffffULL) return nullptr;
++    return static_cast<uint32_t*>(p);
++#else
++    return nullptr;
++#endif
++  }();
++  return table;
++}
++inline uint32_t* ExclEpochSlot(uint64_t addr) {
++  uint32_t* t = ExclEpochTable();
++  return t ? reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(t) + (addr & kExclEpochMask)) : nullptr;
++}
++// Entry layout (16 bytes): [0] 32-bit counter, [8] 64-bit lock word. A STXR checks the counter, does its compare-and-swap and bumps the counter under the lock, so no
++// other STXR to the entry is in between; LDXR reads without it (counter first, then the value).
++inline void ExclEpochLock(uint32_t* slot) {
++  uint64_t* lock = reinterpret_cast<uint64_t*>(slot + 2);
++  while (__atomic_exchange_n(lock, uint64_t{1}, __ATOMIC_ACQUIRE) != 0) {
++    while (__atomic_load_n(lock, __ATOMIC_RELAXED) != 0) __builtin_ia32_pause();
++  }
++}
++inline void ExclEpochUnlock(uint32_t* slot) { __atomic_store_n(reinterpret_cast<uint64_t*>(slot + 2), uint64_t{0}, __ATOMIC_RELEASE); }
++inline uint64_t ExclEpochLoad(uint64_t addr) {
++  uint32_t* s = ExclEpochSlot(addr);
++  return s ? __atomic_load_n(s, __ATOMIC_ACQUIRE) : 0;
++}
++inline void ExclEpochBump(uint64_t addr) {
++  uint32_t* s = ExclEpochSlot(addr);
++  if (s) __atomic_fetch_add(s, 1, __ATOMIC_RELEASE);
++}
++
++}  // namespace berberis
++
++#endif  // BERBERIS_RUNTIME_PRIMITIVES_EXCLUSIVE_EPOCH_H_
