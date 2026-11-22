@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-22 render filter: output slots reused least-recently-used first (flicker suspect)
+- PGR flickered with the Vulkan default. Not reproduced (a CPU-rewritten shared buffer, 300 frames, comes out the right colour on both backends; GLES and Vulkan outputs equal at PGR's 1720x720 to 3440x1440). Suspect: the ring drew into the first free slot, i.e. the one the compositor had just released, while a Vulkan write has no implicit sync on the compositor's earlier GPU reads on every driver (NVIDIA). Both backends now draw into the free slot that was used longest ago (`used`/`tick`). Needs a human check in PGR; `APKLAYER_SHARPEN_BACKEND=gles` still forces the old backend.
+
+## 2026-11-22: exclusive-monitor epochs (patch 0084), build log
+
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64` (existing module; one new header, no new source file). Why: run 11's `locks` phase shows LDXR/STXR losing nodes to ABA (35% of the pops).
+- Patch 0084: `runtime_primitives/exclusive_epoch.h` (a 16 KB table of counters below 2 GB, indexed by address bits 4..13); interpreter and lite tier: LDXR reads the counter before the value and keeps it in the upper half of cpu.reservation_value, STXR fails when it moved and bumps it on success; the heavy tier bails on LDXR/STXR so such regions stay lite-translated. LDXP/STXP (pairs) are unchanged.
+
 ## 2026-11-22: PGR download stall, run 11: the translator's LDXR/STXR is ABA-unsafe (locks group now fails)
 
 - Candidate from an offline review of patches 0024/0033: LDXR/STXR are modelled as a compare-and-swap of the value (reservation address + loaded value), so a store of the same value by another thread does not clear the monitor, as arm64 does. The old `locks` stack test is tagged (128-bit pointer + counter), so it could not see it.
