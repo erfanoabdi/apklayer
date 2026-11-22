@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 a resized window no longer wedges the display sink
+- PGR froze when it went fullscreen (and resizes froze apps in general): the app's seven old-size buffers stayed acquired by the display sink until their slots were replaced, the first new buffer made eight ("max acquired buffer count reached: 7 (max 6)") and the app waited for ever. The shell now gives the other buffers back (and drops their wl_buffers and the render filter's copies) when a buffer of a new size is imported.
+
 ## 2026-11-22 Play Store ended in Application.onCreate after a GApps reinstall
 - AppOpsManager.checkPackage threw "Package com.android.vending belongs to 10041" (a provider call in Application.onCreate: Settings.Secure.getString) and the process exited with 1, about every 6 s. A process naming its own package (-Dapklayer.package) is now accepted. The cause of the differing uids after the reinstall is not found.
 

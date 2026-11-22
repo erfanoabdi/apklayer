@@ -58,7 +58,19 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
         for (int i = 0; i < nfds; i++)
             zwp_linux_buffer_params_v1_add(p, fds[i], i, (uint32_t)m[12 + i], (uint32_t)m[8 + i], (uint32_t)(modifier >> 32), (uint32_t)modifier);
         if (w->dbufs[buf]) wl_buffer_destroy(w->dbufs[buf]);
-        if (m[3] > 0 && m[4] > 0 && (m[3] != w->w || m[4] != w->h)) { w->w = m[3]; w->h = m[4]; if (w->configured) window_layout(w); }  /* the display changed size */
+        if (m[3] > 0 && m[4] > 0 && (m[3] != w->w || m[4] != w->h)) {  /* the display changed size */
+            /* the app's other buffers are of the old size and will not be shown again, yet the display sink keeps them acquired until their slots are replaced:
+             * with the new buffers that passes its six ("max acquired buffer count reached: 7", the app then waits for ever: PGR going fullscreen). Given back now. */
+            for (int i = 0; i < DBUF_MAX; i++) {
+                if (i == buf || !w->dbufs[i]) continue;
+                if (w->plain_buf == i) w->plain_buf = -1;
+                sharpen_win_forget(w, i);  /* the render filter's copy of it too */
+                wl_buffer_destroy(w->dbufs[i]);
+                w->dbufs[i] = NULL;
+                send_msg(w->client, MSG_DMABUF_RELEASE, (int32_t[]){ w->id, i }, 2);
+            }
+            w->w = m[3]; w->h = m[4]; if (w->configured) window_layout(w);
+        }
         w->dbufs[buf] = zwp_linux_buffer_params_v1_create_immed(p, m[3], m[4], (uint32_t)m[2], 0);
         zwp_linux_buffer_params_v1_destroy(p);
         wl_buffer_add_listener(w->dbufs[buf], &dbuf_listener, w);
