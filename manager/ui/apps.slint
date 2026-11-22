@@ -133,11 +133,11 @@ component AppDetail {
                     padding: MaterialStyleMetrics.padding_16;
                     spacing: MaterialStyleMetrics.spacing_8;
                     MaterialText { text: "Sharper picture at a lower render scale"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
-                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. RSR is AMD's Radeon Super Resolution, which is FSR 1 (smooth edges at any scale; the shell runs the same algorithm itself on any GPU); NIS is NVIDIA's Image Scaling (crisper text, made for up to twice the size). Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. RSR is AMD's Radeon Super Resolution, which is FSR 1 (smooth edges at any scale; the shell runs the same algorithm itself on any GPU); NIS is NVIDIA's Image Scaling (crisper text, made for up to twice the size); SGSR is Qualcomm's Snapdragon Game Super Resolution 1 (sharp edges, light on the GPU); Integer keeps hard pixel edges for whole-number scales (50% shows each pixel as 2x2). Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Off", value: "" }, { label: "RSR", value: "sharp" }, { label: "NIS", value: "nis" }] : HorizontalLayout {
+                        for choice in [{ label: "Off", value: "" }, { label: "RSR", value: "sharp" }, { label: "NIS", value: "nis" }, { label: "SGSR", value: "sgsr" }, { label: "Integer", value: "integer" }] : HorizontalLayout {
                             if Backend.app-render-filter-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
                         }

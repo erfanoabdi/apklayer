@@ -45,7 +45,7 @@ struct sharpen {
     PFNEGLDESTROYSYNCKHRPROC destroy_sync;
     PFNEGLDUPNATIVEFENCEFDANDROIDPROC dup_fence;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, nis_prog, mid_tex, mid_fbo, vbo;
+    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, int_prog, mid_tex, mid_fbo, vbo;
     int mode;  /* 0: FSR 1, 1: NIS */
     int mid_w, mid_h;
     struct slot out[SLOTS];
@@ -148,6 +148,69 @@ static const char *FS_CAS =
     "  vec3 lobeV = max(-hitMin, hitMax);\n"
     "  float lobe = max(-0.1875, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp)) * nz;\n"
     "  gl_FragColor = vec4(clamp((lobe * (b + d + h + f) + e) / (4.0 * lobe + 1.0), 0.0, 1.0), 1.0);\n"
+    "}\n";
+
+/* Snapdragon Game Super Resolution 1 (Qualcomm, BSD-3-Clause, sgsr1_shader_mobile.frag, RGBA mode) as GLES2: textureGather is four texel-centre fetches of the green
+ * channel; one pass into the output dmabuf. A source at least as large as the output (render scale 100 and up) is just sampled. */
+static const char *FS_SGSR =
+    "#extension GL_OES_EGL_image_external : require\n"
+    "precision highp float;\n"
+    "uniform samplerExternalOES tex; uniform vec2 src; uniform float sharp; varying vec2 uv;\n"
+    "vec4 G(vec2 c) { vec2 q = c * src; /* a texel corner: the four texels round it, x y z w as textureGather orders them */\n"
+    "  return vec4(texture2D(tex, (q + vec2(-0.5, 0.5)) / src).g, texture2D(tex, (q + vec2(0.5, 0.5)) / src).g, texture2D(tex, (q + vec2(0.5, -0.5)) / src).g, texture2D(tex, (q + vec2(-0.5, -0.5)) / src).g); }\n"
+    "float lz(float x) { float a = x - 4.0; float b = x * a - a; a *= a; return b * a; }\n"
+    "vec2 wy(float dx, float dy, float c, float std) { float x = (dx * dx + dy * dy) * 0.55 + clamp(abs(c) * std, 0.0, 1.0); float w = lz(x); return vec2(w, w * c); }\n"
+    "void main() {\n"
+    "  vec3 color = texture2D(tex, uv).rgb;\n"
+    "  vec2 inv = 1.0 / src;\n"
+    "  vec2 ic = uv * src + vec2(-0.5, 0.5), ip = floor(ic), coord = ip * inv, pl = ic - ip;\n"
+    "  vec4 left = G(coord);\n"
+    "  float edge = abs(left.z - left.y) + abs(color.g - left.y) + abs(color.g - left.z);\n"
+    "  if (edge > 8.0 / 255.0) {\n"
+    "    coord.x += inv.x;\n"
+    "    vec4 right = G(coord + vec2(inv.x, 0.0));\n"
+    "    vec4 ud; ud.xy = G(coord + vec2(0.0, -inv.y)).wz; ud.zw = G(coord + vec2(0.0, inv.y)).yx;\n"
+    "    float mean = (left.y + left.z + right.x + right.w) * 0.25;\n"
+    "    left -= vec4(mean); right -= vec4(mean); ud -= vec4(mean);\n"
+    "    float cw = color.g - mean;\n"
+    "    float sum = dot(abs(left), vec4(1.0)) + dot(abs(right), vec4(1.0)) + dot(abs(ud), vec4(1.0));\n"
+    "    float std = 2.181818 / sum;\n"
+    "    vec2 a = wy(pl.x, pl.y + 1.0, ud.x, std);\n"
+    "    a += wy(pl.x - 1.0, pl.y + 1.0, ud.y, std);\n"
+    "    a += wy(pl.x - 1.0, pl.y - 2.0, ud.z, std);\n"
+    "    a += wy(pl.x, pl.y - 2.0, ud.w, std);\n"
+    "    a += wy(pl.x + 1.0, pl.y - 1.0, left.x, std);\n"
+    "    a += wy(pl.x, pl.y - 1.0, left.y, std);\n"
+    "    a += wy(pl.x, pl.y, left.z, std);\n"
+    "    a += wy(pl.x + 1.0, pl.y, left.w, std);\n"
+    "    a += wy(pl.x - 1.0, pl.y - 1.0, right.x, std);\n"
+    "    a += wy(pl.x - 2.0, pl.y - 1.0, right.y, std);\n"
+    "    a += wy(pl.x - 2.0, pl.y, right.z, std);\n"
+    "    a += wy(pl.x - 1.0, pl.y, right.w, std);\n"
+    "    float fy = a.y / a.x;\n"
+    "    float mx = max(max(left.y, left.z), max(right.x, right.w)), mn = min(min(left.y, left.z), min(right.x, right.w));\n"
+    "    fy = clamp((1.0 + sharp) * fy, mn, mx);\n"
+    "    float d = clamp(fy - cw, -23.0 / 255.0, 23.0 / 255.0);\n"
+    "    color = clamp(color + d, 0.0, 1.0);\n"
+    "  }\n"
+    "  gl_FragColor = vec4(color, 1.0);\n"
+    "}\n";
+
+/* Integer scaling: nearest neighbour when the output is a whole multiple of the source (50% render scale = 2x2 pixels), otherwise a sharp bilinear (the
+ * blend is only one output pixel wide at each source pixel edge). */
+static const char *FS_INT =
+    "#extension GL_OES_EGL_image_external : require\n"
+    "precision highp float;\n"
+    "uniform samplerExternalOES tex; uniform vec2 src; uniform float sharp; varying vec2 uv;\n"
+    "uniform vec2 scl;\n"
+    "void main() {\n"
+    "  vec2 pos = uv * src, px = floor(pos), f = pos - px;\n"
+    "  vec2 r = floor(scl + 0.5);\n"
+    "  vec2 s = max(scl, vec2(1.0));\n"
+    "  vec2 g = clamp((f - 0.5) * s + 0.5, 0.0, 1.0);\n"
+    "  if (abs(scl.x - r.x) < 0.01) g.x = 0.5;\n"
+    "  if (abs(scl.y - r.y) < 0.01) g.y = 0.5;\n"
+    "  gl_FragColor = vec4(texture2D(tex, (px + g) / src).rgb, 1.0);\n"
     "}\n";
 
 /* NVIDIA Image Scaling (NIS, MIT): a 6-tap polyphase scaler on luma blended with four directional filters (0, 45, 90, 135 degrees, weighted by an edge
@@ -365,6 +428,8 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->cas_prog = program(FS_CAS);
         if (!s->up_prog || !s->cas_prog) { if (d) closedir(d); return -1; }
         s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
+        s->sgsr_prog = program(FS_SGSR);
+        s->int_prog = program(FS_INT);
         if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
@@ -525,17 +590,19 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    if (s->mode == 1 && s->nis_prog) {  /* NIS: one pass, straight into the output dmabuf */
+    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->int_prog : 0;
+    if (one) {  /* NIS, SGSR 1, integer scaling: one pass, straight into the output dmabuf */
         glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
         glViewport(0, 0, ow, oh);
-        glUseProgram(s->nis_prog);
+        glUseProgram(one);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex);
-        glUniform1i(glGetUniformLocation(s->nis_prog, "tex"), 0);
-        glUniform2f(glGetUniformLocation(s->nis_prog, "src"), (float)s->in[buf].w, (float)s->in[buf].h);
-        glUniform1f(glGetUniformLocation(s->nis_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
-        glUniform4fv(glGetUniformLocation(s->nis_prog, "cs"), 128, nis_coef_scale);
-        glUniform4fv(glGetUniformLocation(s->nis_prog, "cu"), 128, nis_coef_usm);
+        glUniform1i(glGetUniformLocation(one, "tex"), 0);
+        glUniform2f(glGetUniformLocation(one, "src"), (float)s->in[buf].w, (float)s->in[buf].h);
+        glUniform1f(glGetUniformLocation(one, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
+        glUniform2f(glGetUniformLocation(one, "scl"), (float)ow / (float)s->in[buf].w, (float)oh / (float)s->in[buf].h);
+        glUniform4fv(glGetUniformLocation(one, "cs"), 128, nis_coef_scale);
+        glUniform4fv(glGetUniformLocation(one, "cu"), 128, nis_coef_usm);
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();

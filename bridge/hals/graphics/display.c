@@ -314,7 +314,9 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     /* apklayer patch: the render filter (`apklayer settings` render-filter sharp, cli/run.cpp): a flags word after the damage; a shell that does not know
      * it (len 80) ignores it, one that does resamples a buffer that is not the window's pixels with the upscale pass (bridge/shell/sharpen.c) */
     { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && !strcmp(e, "sharp") ? 1 : 0;
-        if (e && !strcmp(e, "nis")) filter = 3;
+        if (e && !strcmp(e, "nis")) filter = 3;  /* bit 0: on; bits 1-2: 0 FSR 1, 1 NIS, 2 SGSR 1, 3 integer scaling */
+        if (e && !strcmp(e, "sgsr")) filter = 5;
+        if (e && !strcmp(e, "integer")) filter = 7;
     } m[20] = filter; }
     m[0] = WINDOW_ID;
     m[1] = slot;

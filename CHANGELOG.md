@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-22 render filter: SGSR 1, integer scaling, no CPU spin
+- `render-filter` `sgsr` (Snapdragon GSR 1, one pass) and `integer` (nearest at whole multiples, sharp bilinear between); in the manager next to RSR and NIS. The flags word carries the mode in bits 1-2.
+- The pass waits for the GPU on a native fence fd in poll() instead of glFinish (which spun a CPU core on NVIDIA).
+
 ## 2026-11-22: render filter: sharper picture at a render scale other than the window's
 
 - **NIS strength (owner: "can you fix the text more with NIS", a picture of bold text with a bright rim):** render-filter now also takes (`nis-soft`, `nis-strong` were added and removed again: only `nis` at 0.4 stays) (was 0.5, which put a bright rim on bold text at 2.9x). 
