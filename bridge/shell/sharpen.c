@@ -8,7 +8,9 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <gbm.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +41,9 @@ struct sharpen {
     PFNEGLCREATEIMAGEKHRPROC create_image;
     PFNEGLDESTROYIMAGEKHRPROC destroy_image;
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC image_target;
+    PFNEGLCREATESYNCKHRPROC create_sync;      /* native fences: wait for the GPU asleep in poll(), glFinish spins a CPU core on NVIDIA */
+    PFNEGLDESTROYSYNCKHRPROC destroy_sync;
+    PFNEGLDUPNATIVEFENCEFDANDROIDPROC dup_fence;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
     GLuint up_prog, cas_prog, nis_prog, mid_tex, mid_fbo, vbo;
     int mode;  /* 0: FSR 1, 1: NIS */
@@ -292,6 +297,11 @@ static int device_open(struct sharpen *s, const char *node)
     s->destroy_image = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
     s->image_target = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
     if (!s->create_image || !s->destroy_image || !s->image_target) { s->ctx = EGL_NO_CONTEXT; goto fail_term; }
+    if (strstr(ext, "EGL_KHR_fence_sync") && strstr(ext, "EGL_ANDROID_native_fence_sync")) {
+        s->create_sync = (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
+        s->destroy_sync = (PFNEGLDESTROYSYNCKHRPROC)eglGetProcAddress("eglDestroySyncKHR");
+        s->dup_fence = (PFNEGLDUPNATIVEFENCEFDANDROIDPROC)eglGetProcAddress("eglDupNativeFenceFDANDROID");
+    }
     return 1;
 fail_term:
     eglTerminate(dpy);
@@ -447,6 +457,27 @@ static int slot_make(struct sharpen *s, struct slot *o, int w, int h)
     return -1;
 }
 
+/* The GPU work is done when this returns; the thread sleeps meanwhile (a native fence fd in poll) where the driver has them. */
+static void gpu_wait(struct sharpen *s)
+{
+    if (s->create_sync && s->destroy_sync && s->dup_fence) {
+        EGLSyncKHR sy = s->create_sync(s->dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, NULL);
+        if (sy != EGL_NO_SYNC_KHR) {
+            glFlush();
+            int fd = s->dup_fence(s->dpy, sy);
+            s->destroy_sync(s->dpy, sy);
+            if (fd >= 0) {
+                struct pollfd pf = { fd, POLLIN, 0 };
+                int r;
+                do r = poll(&pf, 1, 1000); while (r < 0 && errno == EINTR);
+                close(fd);
+                if (r > 0) return;
+            }
+        }
+    }
+    glFinish();
+}
+
 static void draw(void)
 {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -508,7 +539,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();
-        glFinish();
+        gpu_wait(s);
         o->busy = 1;
         s->last = k;
         *slot = k;
@@ -535,7 +566,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glUniform2f(glGetUniformLocation(s->cas_prog, "px"), 1.0f / (float)ow, 1.0f / (float)oh);
     glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
     draw();
-    glFinish();  /* the compositor reads the dmabuf next: no explicit sync here */
+    gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
     s->last = k;
     *slot = k;
