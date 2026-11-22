@@ -72,27 +72,28 @@ static const char *FS_A4K_FIN =
     "}\n";
 
 /* Edge-directed anti-aliasing of the finished picture (the owner: PGR at 50% render scale has jagged lines and shimmer, the game's own picture has no AA). Written for
- * this shell (no code borrowed; the idea is the family of FXAA / morphological filters): the 3x3 luma gives the edge direction (Sobel); where the local contrast is
- * high the pixel is blurred ALONG the edge with five bilinear taps (weights 3 2 2 1 1) and never across it, so stair steps are smoothed and strokes keep their
+ * this shell (no code borrowed; the idea is the family of FXAA / morphological filters): the three colour channels give the edge direction (a structure tensor of Sobel gradients) and the largest colour step to a neighbour its strength (3D scenes: low contrast, hue-only edges); where there is an edge the pixel is blurred ALONG the edge with five bilinear taps (weights 3 2 2 1 1) and never across it, so stair steps are smoothed and strokes keep their
  * crispness; low-contrast areas are left alone. `sharp` is the strength and `longk` (0..1) blends in the longer run: both grow with the upscale ratio (sharpen.c aa_pass: the lower the render scale, the heavier). Reads a plain 2D texture (the upscaled picture), draws into the output. */
 static const char *FS_AA =
     "precision highp float;\n"
     "uniform sampler2D tex; uniform vec2 px; uniform float sharp; uniform float longk; varying vec2 uv;\n"
-    "float L(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }\n"
     "vec3 T(vec2 o) { return texture2D(tex, uv + o * px).rgb; }\n"
+    "float D(vec3 a, vec3 b) { vec3 d = abs(a - b); return max(d.r, max(d.g, d.b)); }\n"
     "void main() {\n"
     "  vec3 c = T(vec2(0.0)), n = T(vec2(0.0, -1.0)), s = T(vec2(0.0, 1.0)), e = T(vec2(1.0, 0.0)), w = T(vec2(-1.0, 0.0));\n"
-    "  float lc = L(c), ln = L(n), ls = L(s), le = L(e), lw = L(w);\n"
-    "  float lnw = L(T(vec2(-1.0, -1.0))), lne = L(T(vec2(1.0, -1.0))), lsw = L(T(vec2(-1.0, 1.0))), lse = L(T(vec2(1.0, 1.0)));\n"
-    "  float gx = (lne + 2.0 * le + lse) - (lnw + 2.0 * lw + lsw), gy = (lsw + 2.0 * ls + lse) - (lnw + 2.0 * ln + lne);\n"
-    "  float rng = max(lc, max(max(ln, ls), max(le, lw))) - min(lc, min(min(ln, ls), min(le, lw)));\n"
-    "  float mag = length(vec2(gx, gy));\n"
-    "  if (rng < 0.05 || mag < 0.0001) { gl_FragColor = vec4(c, 1.0); return; }\n"
-    "  vec2 t = vec2(-gy, gx) / mag;  /* along the edge */\n"
+    "  vec3 nw = T(vec2(-1.0, -1.0)), ne = T(vec2(1.0, -1.0)), sw = T(vec2(-1.0, 1.0)), se = T(vec2(1.0, 1.0));\n"
+    "  /* how strong an edge is: the largest COLOUR step to a neighbour (a 3D scene's edges are often low in contrast or differ in hue only) */\n"
+    "  float rng = max(max(D(c, n), D(c, s)), max(D(c, e), D(c, w)));\n"
+    "  /* its direction: the structure of all three channels (gradient outer products summed), the edge runs along the weaker axis */\n"
+    "  vec3 gx = (ne + 2.0 * e + se) - (nw + 2.0 * w + sw), gy = (sw + 2.0 * s + se) - (nw + 2.0 * n + ne);\n"
+    "  float jxx = dot(gx, gx), jyy = dot(gy, gy), jxy = dot(gx, gy);\n"
+    "  if (rng < 0.015 || jxx + jyy < 0.0001) { gl_FragColor = vec4(c, 1.0); return; }\n"
+    "  float th = 0.5 * atan(2.0 * jxy, jxx - jyy);  /* the gradient's angle */\n"
+    "  vec2 t = vec2(-sin(th), cos(th));              /* along the edge */\n"
     "  vec3 blur = (c * 3.0 + (T(t) + T(-t)) * 2.0 + T(t * 2.0) + T(-t * 2.0)) / 9.0;\n"
     "  vec3 blurL = (c * 3.0 + (T(t) + T(-t)) * 2.0 + (T(t * 2.0) + T(-t * 2.0)) * 2.0 + (T(t * 3.0) + T(-t * 3.0)) * 1.5 + T(t * 4.0) + T(-t * 4.0)) / 16.0;  /* a longer run, for the longer steps of a bigger upscale */\n"
     "  blur = mix(blur, blurL, longk);\n"
-    "  gl_FragColor = vec4(mix(c, blur, smoothstep(0.05, 0.25, rng) * sharp), 1.0);\n"
+    "  gl_FragColor = vec4(mix(c, blur, smoothstep(0.015, 0.08, rng) * sharp), 1.0);\n"
     "}\n";
 
 /* "Calm" (opt-in, for noisy foliage and grass at a low render scale; written for this shell): (1) temporal: where the picture has not changed since the last frame

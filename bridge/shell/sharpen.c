@@ -671,7 +671,7 @@ static void post_tex(GLuint prog, int unit, const char *name, GLuint tex)
     glActiveTexture(GL_TEXTURE0);
 }
 
-static void aa_draw(struct sharpen *s, GLuint src, GLuint out_fbo, int w, int h, float ratio)
+static void aa_draw(struct sharpen *s, GLuint src, GLuint out_fbo, int w, int h, float ratio, float scale)
 {
     int lvl = s->aa_req ? s->aa_req : s->aa_env;
     /* the lower the render scale (the bigger the ratio), the heavier: stairs are `ratio` pixels long, so the strength and the length of the run follow it */
@@ -680,7 +680,7 @@ static void aa_draw(struct sharpen *s, GLuint src, GLuint out_fbo, int w, int h,
     else { str = 0.25f + 0.35f * (r - 1.0f); longk = 0.7f * (r - 1.4f) / 1.6f; }
     post_tex(s->aa_prog, 0, "tex", src);
     glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
-    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), clampf(str, 0.0f, 1.0f));
+    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), clampf(str * scale, 0.0f, 1.0f));
     glUniform1f(glGetUniformLocation(s->aa_prog, "longk"), clampf(longk, 0.0f, 1.0f));
     post_draw(s, s->aa_prog, out_fbo, w, h);
 }
@@ -690,8 +690,15 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
     GLuint cur = s->t0.tex;
     if (calm && !(rt_ensure(&s->t1, w, h) && rt_ensure(&s->hist[0], w, h) && rt_ensure(&s->hist[1], w, h))) calm = 0;
     if (aa) {
-        aa_draw(s, cur, calm ? s->t1.fbo : out_fbo, w, h, ratio);
-        if (calm) cur = s->t1.tex;
+        /* the high level at a bigger upscale smooths twice (t0 -> t1 -> output, or back into t0 for the calm pass): long stair steps get a longer effective run */
+        int twice = (s->aa_req ? s->aa_req : s->aa_env) == 3 && ratio >= 1.5f && rt_ensure(&s->t1, w, h);
+        if (twice) {
+            aa_draw(s, cur, s->t1.fbo, w, h, ratio, 1.0f);
+            aa_draw(s, s->t1.tex, calm ? s->t0.fbo : out_fbo, w, h, ratio, 0.5f);  /* the second pass at half strength: text and strokes keep their crispness */
+        } else {
+            aa_draw(s, cur, calm ? s->t1.fbo : out_fbo, w, h, ratio, 1.0f);
+            if (calm) cur = s->t1.tex;
+        }
     }
     if (!calm) {
         if (!aa) { post_tex(s->blit_prog, 0, "tex", cur); post_draw(s, s->blit_prog, out_fbo, w, h); }
