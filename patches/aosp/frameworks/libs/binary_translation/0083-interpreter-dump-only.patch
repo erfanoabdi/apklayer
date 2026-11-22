@@ -1,5 +1,5 @@
 From: apklayer <apklayer@localhost>
-Subject: [PATCH] apklayer patch: dump-only register dump (BERBERIS_TRACE_DUMP_ONLY), interpreter and translated tiers
+Subject: [PATCH] apklayer patch: interpreter dump-only mode (BERBERIS_TRACE_DUMP_ONLY)
 
 With BERBERIS_TRACE_DUMP_ONLY=1 (prop berberis.trace_dump_only), no BERBERIS_TRACE_BB, and BERBERIS_TRACE_DUMP=<hex offsets>, the interpreter prints x0..x30 and sp at each listed pc as one text line on stderr (50 per pc), recording nothing else: fast enough to reach PGR's download stall. Off by default. Module libberberis_arm64.
 ---
