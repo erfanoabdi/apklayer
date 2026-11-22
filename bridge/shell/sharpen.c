@@ -15,8 +15,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "sharpen_nis.h"
+
 #define BUFS 8
-#define SLOTS 3
+#define SLOTS 5
 #define DRM_FORMAT_XRGB8888 0x34325258u
 
 struct slot {
@@ -38,7 +40,8 @@ struct sharpen {
     PFNEGLDESTROYIMAGEKHRPROC destroy_image;
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC image_target;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, mid_tex, mid_fbo, vbo;
+    GLuint up_prog, cas_prog, nis_prog, mid_tex, mid_fbo, vbo;
+    int mode;  /* 0: FSR 1, 1: NIS */
     int mid_w, mid_h;
     struct slot out[SLOTS];
     int last;
@@ -138,9 +141,90 @@ static const char *FS_CAS =
     "  vec3 hitMin = min(mn4, e) / max(4.0 * mx4, 0.0001);\n"
     "  vec3 hitMax = (1.0 - max(mx4, e)) / min(4.0 * mn4 - 4.0, -0.0001);\n"
     "  vec3 lobeV = max(-hitMin, hitMax);\n"
-    "  float lobe = max(-0.22, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp));  /* no noise attenuation (FSR's optional denoise): it softens text */\n"
+    "  float lobe = max(-0.1875, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp)) * nz;\n"
     "  gl_FragColor = vec4(clamp((lobe * (b + d + h + f) + e) / (4.0 * lobe + 1.0), 0.0, 1.0), 1.0);\n"
     "}\n";
+
+/* NVIDIA Image Scaling (NIS, MIT): a 6-tap polyphase scaler on luma blended with four directional filters (0, 45, 90, 135 degrees, weighted by an edge
+ * map) and an adaptive unsharp mask; chroma comes from one bilinear tap. This is NVScaler of NIS_Scaler.h written as a fragment shader (no shared memory:
+ * every pixel reads its own 6x6 luma). NVIDIA specifies 1x to 2x upscaling; the coefficient banks are in sharpen_nis.h. One pass, no RCAS. */
+static const char *FS_NIS =
+    "#extension GL_OES_EGL_image_external : require\n"
+    "precision highp float;\n"
+    "uniform samplerExternalOES tex; uniform vec2 src; uniform float sharp; uniform vec4 cs[128]; uniform vec4 cu[128]; varying vec2 uv;\n"
+    "float p[36];\n"
+    "#define W(r, c) p[(r) * 6 + (c)]\n"
+    "float Y(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }\n"
+    "vec4 edgeMap(float a, float b, float c, float d, float e, float f, float g, float h, float i) {\n"
+    "  float g0 = abs(a + b + c - g - h - i), g45 = abs(d + a + b - h - i - f), g90 = abs(a + d + g - c - f - i), g135 = abs(d + g + h - b - c - f);\n"
+    "  float m09 = max(g0, g90), n09 = min(g0, g90), m45 = max(g45, g135), n45 = min(g45, g135);\n"
+    "  if (m09 + m45 == 0.0) return vec4(0.0);\n"
+    "  float e09 = min(m09 / (m09 + m45), 1.0), e45 = 1.0 - e09;\n"
+    "  bool c09 = (m09 > n09 * 2.201171875) && (m09 > 0.0625) && (m09 > n45);\n"
+    "  bool c45 = (m45 > n45 * 2.201171875) && (m45 > 0.0625) && (m45 > n09);\n"
+    "  bool is0 = m09 == g0, is45 = m45 == g45;\n"
+    "  float f09 = (c09 && c45) ? e09 : 1.0, f45 = (c09 && c45) ? e45 : 1.0;\n"
+    "  return vec4((c09 && is0) ? f09 : 0.0, (c09 && !is0) ? f09 : 0.0, (c45 && is45) ? f45 : 0.0, (c45 && !is45) ? f45 : 0.0);\n"
+    "}\n"
+    "#define EDGE(r, c) edgeMap(W(r, c), W(r, (c) + 1), W(r, (c) + 2), W((r) + 1, c), W((r) + 1, (c) + 1), W((r) + 1, (c) + 2), W((r) + 2, c), W((r) + 2, (c) + 1), W((r) + 2, (c) + 2))\n"
+    "float lti(float p0, float p1, float p2, float p3, float p4, float p5, int ph) {\n"
+    "  bool sel = ph <= 32;\n"
+    "  float s0 = sel ? p0 : p3, aMin = min(min(p1, p2), s0), aMax = max(max(p1, p2), s0);\n"
+    "  s0 = sel ? p2 : p5;\n"
+    "  float bMin = min(min(p3, p4), s0), bMax = max(max(p3, p4), s0), ac = aMax - aMin, bc = bMax - bMin;\n"
+    "  float ratio = max(ac, bc) / (min(ac, bc) + 0.00392157);\n"
+    "  return 1.0 - clamp((ratio - 2.0) * 0.125, 0.0, 1.0);\n"
+    "}\n"
+    "float poly6(float p0, float p1, float p2, float p3, float p4, float p5, int ph) {\n"
+    "  vec4 a = cs[ph * 2], b = cs[ph * 2 + 1], ua = cu[ph * 2], ub = cu[ph * 2 + 1];\n"
+    "  vec4 q = vec4(p0, p1, p2, p3);\n"
+    "  float y = dot(a, q) + b.x * p4 + b.y * p5, yu = dot(ua, q) + ub.x * p4 + ub.y * p5;\n"
+    "  float sl = sharp - 0.5, k = sl >= 0.0 ? 1.25 : 1.0, kMax = sl >= 0.0 ? 1.25 : 1.75;\n"
+    "  float strMin = max(0.0, 0.4 + sl * k * 1.2), strMax = 1.6 + sl * kMax * 1.8, limMin = max(0.1, 0.14 + sl * k * 0.32), limMax = 0.5 + sl * k * 0.6;\n"
+    "  float ys = 1.0 - clamp((y - 0.45) * (1.0 / 0.45), 0.0, 1.0);\n"
+    "  yu *= ys * (strMax - strMin) + strMin;\n"
+    "  float lim = (ys * (limMax - limMin) + limMin) * y;\n"
+    "  yu = min(lim, max(-lim, yu));\n"
+    "  return y + yu * lti(p0, p1, p2, p3, p4, p5, ph);\n"
+    "}\n"
+    "int phase(float f) { return int(min(f * 64.0, 63.0)); }\n"
+    "void main() {\n"
+    "  vec2 pos = uv * src - 0.5, fl = floor(pos), fr = pos - fl;\n"
+    "  int fxi = phase(fr.x), fyi = phase(fr.y);\n"
+    "  for (int i = 0; i < 6; i++)\n"
+    "    for (int j = 0; j < 6; j++) p[i * 6 + j] = Y(texture2D(tex, (fl + vec2(float(j) - 2.0, float(i) - 2.0) + 0.5) / src).rgb);\n"
+    "  vec4 e00 = EDGE(1, 1), e01 = EDGE(1, 2), e10 = EDGE(2, 1), e11 = EDGE(2, 2);\n"
+    "  vec4 w = mix(mix(e00, e01, fr.x), mix(e10, e11, fr.x), fr.y);\n"
+    "  float base = 1.0 - w.x - w.y - w.z - w.w;\n"
+    "  vec4 yA = cs[fyi * 2], yB = cs[fyi * 2 + 1], xA = cs[fxi * 2], xB = cs[fxi * 2 + 1];\n"
+    "#define COLV(j) (p[j] * yA.x + p[6 + (j)] * yA.y + p[12 + (j)] * yA.z + p[18 + (j)] * yA.w + p[24 + (j)] * yB.x + p[30 + (j)] * yB.y)\n"
+    "  float opY = (COLV(0) * xA.x + COLV(1) * xA.y + COLV(2) * xA.z + COLV(3) * xA.w + COLV(4) * xB.x + COLV(5) * xB.y) * base;\n"
+    "  if (w.x > 0.0)  /* 0 degrees */\n"
+    "    opY += poly6(mix(W(0, 2), W(0, 3), fr.x), mix(W(1, 2), W(1, 3), fr.x), mix(W(2, 2), W(2, 3), fr.x), mix(W(3, 2), W(3, 3), fr.x), mix(W(4, 2), W(4, 3), fr.x), mix(W(5, 2), W(5, 3), fr.x), fyi) * w.x;\n"
+    "  if (w.y > 0.0)  /* 90 degrees */\n"
+    "    opY += poly6(mix(W(2, 0), W(3, 0), fr.y), mix(W(2, 1), W(3, 1), fr.y), mix(W(2, 2), W(3, 2), fr.y), mix(W(2, 3), W(3, 3), fr.y), mix(W(2, 4), W(3, 4), fr.y), mix(W(2, 5), W(3, 5), fr.y), fxi) * w.y;\n"
+    "  if (w.z > 0.0) {  /* 45 degrees */\n"
+    "    float pb = 0.5 + 0.5 * (fr.x - fr.y);\n"
+    "    float t1 = mix(W(2, 1), W(1, 2), pb), t3 = mix(W(3, 2), W(2, 3), pb), t5 = mix(W(4, 3), W(3, 4), pb);\n"
+    "    float d = pb - 0.5, ad = abs(d); bool up = d >= 0.0;\n"
+    "    float t0 = mix(W(1, 1), up ? W(0, 2) : W(2, 0), ad), t2 = mix(W(2, 2), up ? W(1, 3) : W(3, 1), ad), t4 = mix(W(3, 3), up ? W(2, 4) : W(4, 2), ad), t6 = mix(W(4, 4), up ? W(3, 5) : W(5, 3), ad);\n"
+    "    float pp = fr.x + fr.y;\n"
+    "    if (pp >= 1.0) opY += poly6(t1, t2, t3, t4, t5, t6, phase(pp - 1.0)) * w.z;\n"
+    "    else opY += poly6(t0, t1, t2, t3, t4, t5, phase(pp)) * w.z;\n"
+    "  }\n"
+    "  if (w.w > 0.0) {  /* 135 degrees */\n"
+    "    float pb = 0.5 * (fr.x + fr.y);\n"
+    "    float t1 = mix(W(3, 1), W(4, 2), pb), t3 = mix(W(2, 2), W(3, 3), pb), t5 = mix(W(1, 3), W(2, 4), pb);\n"
+    "    float d = pb - 0.5, ad = abs(d); bool up = d >= 0.0;\n"
+    "    float t0 = mix(W(4, 1), up ? W(5, 2) : W(3, 0), ad), t2 = mix(W(3, 2), up ? W(4, 3) : W(2, 1), ad), t4 = mix(W(2, 3), up ? W(3, 4) : W(1, 2), ad), t6 = mix(W(1, 4), up ? W(2, 5) : W(0, 3), ad);\n"
+    "    float pp = 1.0 + (fr.x - fr.y);\n"
+    "    if (pp >= 1.0) opY += poly6(t1, t2, t3, t4, t5, t6, phase(pp - 1.0)) * w.w;\n"
+    "    else opY += poly6(t0, t1, t2, t3, t4, t5, phase(pp)) * w.w;\n"
+    "  }\n"
+    "  vec3 op = texture2D(tex, uv).rgb;\n"
+    "  gl_FragColor = vec4(clamp(op + (opY - Y(op)), 0.0, 1.0), 1.0);\n"
+    "}\n";
+
 
 static GLuint compile(GLenum type, const char *src)
 {
@@ -270,6 +354,8 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->up_prog = program(FS_UP);
         s->cas_prog = program(FS_CAS);
         if (!s->up_prog || !s->cas_prog) { if (d) closedir(d); return -1; }
+        s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
+        if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
@@ -367,6 +453,8 @@ static void draw(void)
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
+void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
+
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
     static int said_in, said_busy;
@@ -406,6 +494,26 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
+    if (s->mode == 1 && s->nis_prog) {  /* NIS: one pass, straight into the output dmabuf */
+        glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
+        glViewport(0, 0, ow, oh);
+        glUseProgram(s->nis_prog);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex);
+        glUniform1i(glGetUniformLocation(s->nis_prog, "tex"), 0);
+        glUniform2f(glGetUniformLocation(s->nis_prog, "src"), (float)s->in[buf].w, (float)s->in[buf].h);
+        glUniform1f(glGetUniformLocation(s->nis_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
+        glUniform4fv(glGetUniformLocation(s->nis_prog, "cs"), 128, nis_coef_scale);
+        glUniform4fv(glGetUniformLocation(s->nis_prog, "cu"), 128, nis_coef_usm);
+        glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        draw();
+        glFinish();
+        o->busy = 1;
+        s->last = k;
+        *slot = k;
+        return 0;
+    }
     /* pass 1: the app's buffer, resampled to the output size */
     glBindFramebuffer(GL_FRAMEBUFFER, s->mid_fbo);
     glViewport(0, 0, ow, oh);

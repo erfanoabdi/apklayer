@@ -106,3 +106,5 @@ Not blocking but open: collect NOTICE/legal files for everything shipped (AOSP l
 - Gamepad key layouts (`runtime/host/resources/keylayout/*.kl`): AOSP `frameworks/base/data/keyboards` (Generic, Xbox 360/One, DualShock 4, DualSense, Switch Pro), local LineageOS commit `ff3bb041547924ac1a7504e4b3bd3ea18169ca2f`; Apache 2.0, headers retained, unmodified. Read by `HostGamepad.java`.
 
 - FSR 1 EASU/RCAS (`bridge/shell/sharpen.c`): AMD FidelityFX Super Resolution 1 (ffx_fsr1.h, MIT), rewritten for GLES2 without gather.
+
+- NIS (`bridge/shell/sharpen.c`, `sharpen_nis.h`): NVIDIA Image Scaling NIS_Scaler.h / NIS_Config.h (MIT, Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES), NVScaler as a GLES2 fragment shader and its coefficient banks.

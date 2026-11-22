@@ -14,7 +14,7 @@
 #ifdef HAVE_SHARPEN
 #include "sharpen.h"
 
-#define OUT_SLOTS 3
+#define OUT_SLOTS 5
 #define DRM_FORMAT_XRGB8888 0x34325258u
 enum { S_NONE, S_PREPARING, S_READY, S_OFF };
 
@@ -171,7 +171,8 @@ int sharpen_win_show(struct window *w, int buf)
         give_back(w, sw->pending, "replaced before it was drawn");
         sw->pending = -1;
     }
-    int rc = sharpen_render(sw->s, buf, ow, oh, 1.0f, &slot, &fresh);
+    sharpen_set_mode(sw->s, w->filter == 2);  /* 2: NIS */
+    int rc = sharpen_render(sw->s, buf, ow, oh, w->filter == 2 ? 0.5f : 0.65f, &slot, &fresh);
     if (rc == -2) { sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;
