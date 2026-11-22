@@ -20,6 +20,11 @@
 - This PC: the NVIDIA Vulkan device stopped loading in this session (vulkaninfo lists only llvmpipe; nvidia-smi sees the RTX 5060 Ti, ICD json present).
 - Cleaned: mp100 ~/apklayer-endfield, ~/apklayer-astcprobe, ~/apklayer-vkfix; the probe build dir here.
 
+## 2026-11-22: PGR download stall, run 8: interpret-only branch trace is too slow to reach the stall
+
+- Probe: BERBERIS_MODE=interpret-only, BERBERIS_TRACE_BB, BERBERIS_TRACE_MODULE=libil2cpp.so, BERBERIS_TRACE_DUMP=0x4282854 (the not-owner branch of the monitor check) on mp100 (login screen only). The game stayed on a black window, no lock error in about 3 minutes, trace 1.8 GB (about 1 GB/min, 9 threads). Stopped; trace and helper files removed. Result: a full branch trace of libil2cpp cannot be used to reach the stall.
+- Next: a dump-only mode in patch 0051 (registers at TRACE_DUMP pcs without recording branches; needs the LineageOS tree on the Mac, unreachable at this time), then run PGR in lite mode and read owner (x8) vs current thread id (x0) at 0x4282854.
+
 ## 2026-11-22: PGR download stall, run 7: the exact check that throws "Object has not been locked by this thread"
 
 - Dumped libil2cpp.so's decrypted rodata (60 MB) and text (100 MB) from the live process on mp100 (login screen only, user's OK; dump gzipped, pulled over Tailscale, remote copy deleted). Found the one code reference to the message by ADRP+ADD on its string (rva 0x1a90a23): rva 0x428287c, in a helper at rva 0x4282834 (file offset = rva - 0x4000).
