@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SH = ROOT / 'bridge/shell'
 SAMPLERS = {'tex': 0, 'g': 1, 'n': 2, 'dir': 3}
-ORDER = ['FS_UP', 'FS_CAS', 'FS_NIS', 'FS_SGSR', 'FS_LANCZOS', 'FS_A4K_C1', 'FS_A4K_C2', 'FS_A4K_C3', 'FS_A4K_C4', 'FS_A4K_D2S', 'FS_A4K_FIN']
+ORDER = ['FS_UP', 'FS_CAS', 'FS_NIS', 'FS_SGSR', 'FS_LANCZOS', 'FS_A4K_C1', 'FS_A4K_C2', 'FS_A4K_C3', 'FS_A4K_C4', 'FS_A4K_D2S', 'FS_A4K_FIN', 'FS_DOWN']
 VS = """#version 450
 layout(location = 0) out vec2 uv;
 void main() { vec2 p = vec2(float((gl_VertexIndex << 1) & 2), float(gl_VertexIndex & 2)) * 2.0 - 1.0; uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }
@@ -27,13 +27,14 @@ def unescape(lit):
 
 def literals(body, macros):
     out = ''
-    for m in re.finditer(r'"((?:[^"\\]|\\.)*)"|([A-Z0-9_]+)', body):
-        out += unescape(m.group(1)) if m.group(1) is not None else macros[m.group(2)]
+    for m in re.finditer(r'/\*.*?\*/|//[^\n]*|"((?:[^"\\]|\\.)*)"|([A-Z0-9_]+)', body, re.S):  # C comments between the literals are skipped
+        if m.group(1) is not None: out += unescape(m.group(1))
+        elif m.group(2) is not None: out += macros[m.group(2)]
     return out
 
 
 def sources():
-    text = ''.join((SH / f).read_text() for f in ('sharpen.c', 'sharpen_more.h', 'sharpen_a4k_cnn.h'))
+    text = ''.join((SH / f).read_text() for f in ('sharpen.c', 'sharpen_more.h', 'sharpen_a4k_cnn.h', 'sharpen_down.h'))
     macros = {m.group(1): unescape(m.group(2)) for m in re.finditer(r'#define (\w+) "((?:[^"\\]|\\.)*)"\s*\n', text)}
     macros['A4K_HEAD'] = macros.get('A4K_HEAD', '')
     res = {}
