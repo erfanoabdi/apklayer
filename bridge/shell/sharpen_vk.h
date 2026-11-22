@@ -54,7 +54,7 @@ struct svk {
     struct svk_in in[SVK_BUFS];
     struct svk_slot out[SVK_SLOTS];
     struct svk_img mid, f16[3], ph[3];  /* ph: the intermediate pictures of the multi-phase upscale */
-    int stages;                         /* APKLAYER_SHARPEN_STAGES, 1..4, default 2: phases of the NIS / SGSR 1 / Lanczos upscale */
+    int stages;                         /* APKLAYER_SHARPEN_STAGES, 1..4, default 1: phases of the NIS / SGSR 1 / Lanczos upscale */
     uint64_t accept[64];
     int accept_n, last;
     uint64_t tick;  /* the render count: the output slot used least recently is drawn into next */
