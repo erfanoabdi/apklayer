@@ -237,7 +237,7 @@ static void dekker(int variant) {
 typedef struct node { struct node* next; atomic_int owned; } node;
 static node nodes[STACK_NODES];
 static __attribute__((aligned(16))) volatile uint64_t stack_head[2];  /* [0] pointer, [1] tag */
-static atomic_long stack_double_owned[2], stack_ops[2];
+static atomic_long stack_double_owned[4], stack_ops[4];  /* [2], [3]: the untagged LL/SC stack, without and with a delay between its load and store */
 static int stack_variant;
 
 static int cas128(volatile uint64_t* addr, uint64_t old_lo, uint64_t old_hi, uint64_t new_lo, uint64_t new_hi) {
@@ -290,6 +290,59 @@ static void tagged_stack(int variant) {
     for (int i = 0; i < STACK_THREADS; i++) pthread_join(t[i], NULL);
 }
 
+/* An UNTAGGED 64-bit LL/SC stack (a single-word head, the pop reads the next pointer between LDAXR and STLXR): the shape of a hand-written free list. On
+ * arm64 any store to the head by another thread, even of the same value, makes the STLXR fail, so a node popped, reused and pushed back by others cannot
+ * be lost to ABA. A translator that models LDXR/STXR as a compare-and-swap of the value lets the stale STLXR succeed: a node owned by two threads. */
+#define LLSC_NODES 12
+static node llsc_nodes[LLSC_NODES];
+static __attribute__((aligned(64))) volatile uint64_t llsc_head;
+static int llsc_delay;
+
+static node* llsc_pop(void) {
+    node* h; node* nx; uint32_t fail;
+    for (;;) {
+        if (llsc_delay)
+            __asm__ volatile("1: ldaxr %0, [%3]\n cbz %0, 2f\n ldr %1, [%0]\n"
+                             " nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n nop\n"
+                             " stlxr %w2, %1, [%3]\n cbnz %w2, 1b\n 2:\n"
+                             : "=&r"(h), "=&r"(nx), "=&r"(fail) : "r"(&llsc_head) : "memory");
+        else
+            __asm__ volatile("1: ldaxr %0, [%3]\n cbz %0, 2f\n ldr %1, [%0]\n stlxr %w2, %1, [%3]\n cbnz %w2, 1b\n 2:\n"
+                             : "=&r"(h), "=&r"(nx), "=&r"(fail) : "r"(&llsc_head) : "memory");
+        if (h) return h;
+        sched_yield();
+    }
+}
+static void llsc_push(node* n) {
+    uint64_t seen, fail;
+    for (;;) {
+        uint64_t h = llsc_head;
+        n->next = (node*)h;
+        __asm__ volatile("ldaxr %0, [%2]\n cmp %0, %3\n b.ne 1f\n stlxr %w1, %4, [%2]\n b 2f\n 1: clrex\n mov %w1, #1\n 2:\n"
+                         : "=&r"(seen), "=&r"(fail) : "r"(&llsc_head), "r"(h), "r"((uint64_t)n) : "memory", "cc");
+        if (fail == 0) return;
+    }
+}
+static void* llsc_thread(void* arg) {
+    (void)arg;
+    for (int i = 0; i < STACK_OPS; i++) {
+        node* n = llsc_pop();
+        if (atomic_exchange(&n->owned, 1) != 0) atomic_fetch_add(&stack_double_owned[2 + llsc_delay], 1);
+        atomic_store(&n->owned, 0);
+        llsc_push(n);
+        atomic_fetch_add(&stack_ops[2 + llsc_delay], 1);
+    }
+    return NULL;
+}
+static void llsc_stack(int delay) {
+    llsc_delay = delay;
+    for (int i = 0; i < LLSC_NODES; i++) { llsc_nodes[i].next = i + 1 < LLSC_NODES ? &llsc_nodes[i + 1] : NULL; atomic_store(&llsc_nodes[i].owned, 0); }
+    llsc_head = (uint64_t)&llsc_nodes[0];
+    pthread_t t[STACK_THREADS];
+    for (int i = 0; i < STACK_THREADS; i++) pthread_create(&t[i], NULL, llsc_thread, NULL);
+    for (int i = 0; i < STACK_THREADS; i++) pthread_join(t[i], NULL);
+}
+
 static void* signaller(void* arg) {
     (void)arg;
     struct timespec ms = {0, 1000000};
@@ -320,6 +373,8 @@ JNIEXPORT jstring JNICALL Java_hello_arm64_Main_lockStress(JNIEnv* env, jclass c
     dekker(1);
     tagged_stack(0);
     tagged_stack(1);
+    llsc_stack(0);
+    llsc_stack(1);
     pthread_t g[GUEST_THREADS], s, rd[IO_PAIRS], wr[IO_PAIRS];
     static int pairs[IO_PAIRS][2];
     for (int i = 0; i < GUEST_THREADS; i++) pthread_create(&g[i], NULL, guest_thread, NULL);
@@ -338,19 +393,20 @@ JNIEXPORT jstring JNICALL Java_hello_arm64_Main_lockStress(JNIEnv* env, jclass c
     for (int i = 0; i < IO_PAIRS; i++) { shutdown(pairs[i][0], SHUT_RDWR); pthread_join(rd[i], NULL); pthread_join(wr[i], NULL); close(pairs[i][0]); close(pairs[i][1]); }
     pthread_join(s, NULL);
     pthread_join(sp_thread, NULL);
-    char out[1300];
+    char out[1800];
     long bad = atomic_load(&not_owner[0]) + atomic_load(&not_owner[1]) + atomic_load(&both_inside[0]) + atomic_load(&both_inside[1]) +
                atomic_load(&id_changed) + atomic_load(&handler_mismatch) + atomic_load(&seq_errors) + atomic_load(&ret_errors) + atomic_load(&live_errors) +
                atomic_load(&local_outside[0]) + atomic_load(&local_outside[1]) + atomic_load(&handler_outside) + atomic_load(&sp_outside) + atomic_load(&regs_missed) + dekker_both_zero[0] + dekker_both_zero[1] +
-               atomic_load(&stack_double_owned[0]) + atomic_load(&stack_double_owned[1]);
+               atomic_load(&stack_double_owned[0]) + atomic_load(&stack_double_owned[1]) + atomic_load(&stack_double_owned[2]) + atomic_load(&stack_double_owned[3]);
     snprintf(out, sizeof out,
              "%s threads=%d rounds=%ld not_owner self=%ld tid=%ld both_inside self=%ld tid=%ld id_changed=%ld handler_mismatch=%ld handled=%ld"
-             " io_bytes=%ld seq_errors=%ld ret_errors=%ld live_errors=%ld stack: local_outside guest=%ld java=%ld handler_outside=%ld sp_outside=%ld regs found=%ld missed=%ld dekker both_zero dmb=%ld stlr_ldar=%ld of %d stack128 double_owned ldxp=%ld casp=%ld ops=%ld/%ld",
+             " io_bytes=%ld seq_errors=%ld ret_errors=%ld live_errors=%ld stack: local_outside guest=%ld java=%ld handler_outside=%ld sp_outside=%ld regs found=%ld missed=%ld dekker both_zero dmb=%ld stlr_ldar=%ld of %d stack128 double_owned ldxp=%ld casp=%ld ops=%ld/%ld llsc64 double_owned plain=%ld delay=%ld ops=%ld/%ld",
              bad == 0 ? "PASS" : "FAIL", atomic_load(&nthreads), atomic_load(&rounds), atomic_load(&not_owner[0]), atomic_load(&not_owner[1]),
              atomic_load(&both_inside[0]), atomic_load(&both_inside[1]), atomic_load(&id_changed), atomic_load(&handler_mismatch), atomic_load(&handled),
              atomic_load(&io_bytes), atomic_load(&seq_errors), atomic_load(&ret_errors), atomic_load(&live_errors),
              atomic_load(&local_outside[0]), atomic_load(&local_outside[1]), atomic_load(&handler_outside), atomic_load(&sp_outside), atomic_load(&regs_found), atomic_load(&regs_missed), dekker_both_zero[0], dekker_both_zero[1], DEKKER_ROUNDS,
-             atomic_load(&stack_double_owned[0]), atomic_load(&stack_double_owned[1]), atomic_load(&stack_ops[0]), atomic_load(&stack_ops[1]));
+             atomic_load(&stack_double_owned[0]), atomic_load(&stack_double_owned[1]), atomic_load(&stack_ops[0]), atomic_load(&stack_ops[1]),
+             atomic_load(&stack_double_owned[2]), atomic_load(&stack_double_owned[3]), atomic_load(&stack_ops[2]), atomic_load(&stack_ops[3]));
     return (*env)->NewStringUTF(env, out);
 }
 

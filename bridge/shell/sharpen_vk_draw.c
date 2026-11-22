@@ -9,7 +9,7 @@
 
 /* the shaders' push-constant block (tools/gen/sharpen-spv.py): vec2 src, scl, px, d; float sharp, down */
 struct pc { float src[2], scl[2], px[2], d[2], sharp, down; };
-enum { P_UP, P_CAS, P_NIS, P_SGSR, P_LANCZOS, P_PRE, P_Y, P_X, P_DIR, P_APPLY };
+enum { P_UP, P_CAS, P_NIS, P_SGSR, P_LANCZOS, P_PRE, P_Y, P_X, P_DIR, P_APPLY, P_DOWN };
 
 static VkRenderPass make_rp(struct svk *s, VkFormat fmt, VkImageLayout final)
 {
@@ -180,8 +180,9 @@ static void wait_done(struct svk *s, VkFence f)
 int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, struct svk_slot *o)
 {
     struct svk_in *in = &s->in[buf];
+    if (in->w > ow || in->h > oh) mode = 5;  /* a larger source (render scale above 100): the area downscale, whatever the mode (as the GLES path) */
     if (mode == 4 && !(in->w < ow && in->h < oh)) mode = 0;  /* Anime4K needs a smaller source (as the GLES path): FSR 1 */
-    if (mode < 0 || mode > 4) mode = 0;
+    if (mode < 0 || mode > 5) mode = 0;
     if (mode == 0 && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
     if (mode == 4) for (int i = 0; i < 3; i++) if (target(s, &s->f16[i], VK_FORMAT_R16G16B16A16_SFLOAT, s->rp_f16, ow, oh) < 0) return -1;
     struct pc pc = { { (float)in->w, (float)in->h }, { (float)ow / (float)in->w, (float)oh / (float)in->h }, { 1.0f / (float)ow, 1.0f / (float)oh },
@@ -205,9 +206,9 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
         pass(s, P_CAS, s->rp_out, o->i.fb, ow, oh, b, &pc);
         break;
     }
-    case 1: case 2: case 3: {  /* NIS, SGSR 1, Lanczos: one pass */
+    case 1: case 2: case 3: case 5: {  /* NIS, SGSR 1, Lanczos, the downscale: one pass */
         VkImageView a[4] = { ext, none, none, none };
-        pass(s, mode == 1 ? P_NIS : mode == 2 ? P_SGSR : P_LANCZOS, s->rp_out, o->i.fb, ow, oh, a, &pc);
+        pass(s, mode == 1 ? P_NIS : mode == 2 ? P_SGSR : mode == 3 ? P_LANCZOS : P_DOWN, s->rp_out, o->i.fb, ow, oh, a, &pc);
         break;
     }
     default: {  /* Anime4K: gradients, sobel norm, gradients of the norm, direction, apply (T0 T1 T0 T2) */

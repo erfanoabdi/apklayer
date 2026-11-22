@@ -1,0 +1,208 @@
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] apklayer patch: dump-only register dump (BERBERIS_TRACE_DUMP_ONLY), interpreter and translated tiers
+
+In both tiers: with BERBERIS_TRACE_DUMP_ONLY=1 (prop berberis.trace_dump_only), no BERBERIS_TRACE_BB, and BERBERIS_TRACE_DUMP=<hex offsets>, the interpreter prints x0..x30 and sp at each listed pc as one text line on stderr (50 per pc), recording nothing else: fast enough to reach PGR's download stall. Off by default. Module libberberis_arm64.
+---
+--- a/cpu_emulation/interpreter/arm64/interpreter-main.cc
++++ b/cpu_emulation/interpreter/arm64/interpreter-main.cc
+@@ -54,6 +54,7 @@
+   bool all = false;
+   uint64_t dump[8] = {};
+   int ndump = 0;
++  bool dump_only = false;  // BERBERIS_TRACE_DUMP_ONLY=1 (no BERBERIS_TRACE_BB): registers at the listed pcs as text on stderr, no branch trace
+ };
+ const BbCfg& Cfg() {
+   static const BbCfg cfg = [] {
+@@ -62,9 +63,11 @@
+     static ConfigStr mod("BERBERIS_TRACE_MODULE", "berberis.trace_module");
+     static ConfigStr all("BERBERIS_TRACE_ALL", "berberis.trace_all");
+     static ConfigStr dmp("BERBERIS_TRACE_DUMP", "berberis.trace_dump");
++    static ConfigStr dmo("BERBERIS_TRACE_DUMP_ONLY", "berberis.trace_dump_only");
+     c.dir = dir.get();
+     if (mod.get()) c.module = mod.get();
+     c.all = all.get() && all.get()[0] == '1';
++    c.dump_only = dmo.get() && dmo.get()[0] == '1';
+     if (dmp.get()) {
+       const char* q = dmp.get();
+       while (*q && c.ndump < 8) {
+@@ -117,7 +120,7 @@
+   fclose(f);
+   if (!hi) return;
+   bool changed = n != g_nrng || memcmp(r, g_rng, n * sizeof(Rng)) != 0;
+-  if (changed) {
++  if (changed && Cfg().dir) {
+     char path[256];
+     snprintf(path, sizeof path, "%s/maps-%d.txt", Cfg().dir, getpid());
+     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+@@ -287,6 +290,26 @@
+   Flush(t);
+   t.after_svc = true;
+ }
++// BERBERIS_TRACE_DUMP_ONLY: before an insn, the registers at a listed pc as one text line on stderr (at most 50 per pc), nothing else recorded:
++// fast enough to reach a late event (PGR's download stall). Offsets as BERBERIS_TRACE_DUMP.
++void BbDumpOnly(ThreadState* state, uint64_t pc) {
++  const BbCfg& c = Cfg();
++  BbThread& t = t_bb;
++  if (!g_hi) {
++    if ((++t.any & 0xffff) == 1) FindRange();
++    return;
++  }
++  if (pc >= g_lo)
++    for (int i = 0; i < c.ndump; i++)
++      if (pc == g_lo + c.dump[i] && g_ndump[i]++ < 50) {
++        char line[1200];
++        int n = snprintf(line, sizeof line, "[bbdump] tid=%ld pc=%#lx +%#lx", long(syscall(SYS_gettid)), (unsigned long)pc, (unsigned long)c.dump[i]);
++        for (int k = 0; k < 31 && n < int(sizeof line) - 40; k++) n += snprintf(line + n, sizeof line - n, " x%d=%#lx", k, (unsigned long)state->cpu.x[k]);
++        n += snprintf(line + n, sizeof line - n, " sp=%#lx\n", (unsigned long)state->cpu.sp);
++        (void)!write(2, line, n);
++      }
++  if ((++t.any & 0xffffff) == 0) FindRange();
++}
+ // Before an insn at pc: dump registers at a listed pc.
+ void BbDumpRegs(ThreadState* state, uint64_t pc);
+ void BbDump(ThreadState* state, uint64_t pc) {
+@@ -342,6 +365,7 @@
+   SemanticsPlayer sem_player(&interpreter);
+   Decoder decoder(&sem_player);
+   static const bool trace_on = Cfg().dir != nullptr;
++  static const bool dump_only = !trace_on && Cfg().dump_only && Cfg().ndump > 0;
+ 
+   for (int i = 0; i < max_insns; i++) {
+     GuestAddr pc = state->cpu.insn_addr;
+@@ -351,6 +375,7 @@
+       break;
+     }
+ 
++    if (dump_only) BbDumpOnly(state, pc);
+     if (trace_on) {
+       BbSvc(state, pc);
+       if (Cfg().ndump) BbDump(state, pc);
+--- a/runtime/arm64/translator_x86_64.cc
++++ b/runtime/arm64/translator_x86_64.cc
+@@ -16,6 +16,7 @@
+ 
+ #include "translator.h"
+ 
++#include "dump_hook.h"  // apklayer patch (0083)
+ #include "gate_trace.h"  // apklayer patch (0071)
+ 
+ #include <atomic>
+@@ -370,7 +371,7 @@
+     return;
+   }
+ 
+-  if (gate_trace::IsHookPc(pc)) {  // apklayer patch (0071): see gate_trace.h
++  if (gate_trace::IsHookPc(pc) || dump_hook::IsHookPc(pc)) {  // apklayer patch (0071, 0083): see gate_trace.h, dump_hook.h
+     cache->SetTranslatedAndUnlock(pc, entry, first_insn_size, kInterpreted, {kEntryInterpret, 0});
+     return;
+   }
+@@ -472,6 +473,11 @@
+     InterpretBatch(state, 1, TranslationCache::GetInstance());
+     return;
+   }
++  if (dump_hook::IsHooked(state->cpu.insn_addr)) {  // apklayer patch (0083)
++    dump_hook::Log(state, state->cpu.insn_addr);
++    InterpretBatch(state, 1, TranslationCache::GetInstance());
++    return;
++  }
+   InterpretBatch(state, 500, TranslationCache::GetInstance());
+   // post-SVC diagnostics
+   if (should_log && state->cpu.x[0] != pre_x0) {
+--- /dev/null
++++ b/runtime/arm64/dump_hook.h
+@@ -0,0 +1,95 @@
++// apklayer patch (0083): register dump at chosen guest pcs inside the translated (lite) tiers. Off unless BERBERIS_TRACE_DUMP_ONLY=1 and
++// BERBERIS_TRACE_DUMP=<hex offsets, comma separated> (props berberis.trace_dump_only, berberis.trace_dump); the offsets are from the lowest mapping of
++// BERBERIS_TRACE_MODULE (default libanogs.so). Like gate_trace.h, a pc is installed as a one-insn interpreted entry when a region at it is translated (so it
++// must be a region start: a branch target or a function entry); berberis_HandleInterpret then writes one text line to stderr (x0..x30, sp; 200 per pc)
++// and interprets the insn. Everything else keeps running translated.
++#ifndef BERBERIS_RUNTIME_ARM64_DUMP_HOOK_H_
++#define BERBERIS_RUNTIME_ARM64_DUMP_HOOK_H_
++
++#include <sys/syscall.h>
++#include <unistd.h>
++
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <mutex>
++
++#include "berberis/base/config_globals.h"
++#include "berberis/guest_state/guest_state.h"
++
++namespace berberis::dump_hook {
++
++struct Cfg {
++  uint64_t off[8] = {};
++  int n = 0;
++  const char* module = "libanogs.so";
++};
++inline const Cfg& C() {
++  static const Cfg c = [] {
++    Cfg r;
++    static ConfigStr only("BERBERIS_TRACE_DUMP_ONLY", "berberis.trace_dump_only");
++    static ConfigStr list("BERBERIS_TRACE_DUMP", "berberis.trace_dump");
++    static ConfigStr mod("BERBERIS_TRACE_MODULE", "berberis.trace_module");
++    if (mod.get()) r.module = mod.get();
++    if (only.get() && only.get()[0] == '1' && list.get()) {
++      const char* q = list.get();
++      while (*q && r.n < 8) {
++        r.off[r.n++] = strtoull(q, nullptr, 16);
++        q = strchr(q, ',');
++        if (!q) break;
++        q++;
++      }
++    }
++    return r;
++  }();
++  return c;
++}
++inline std::mutex& Mu() { static std::mutex m; return m; }
++inline uint64_t g_hooks[8];  // pcs found (written under Mu, read racily: monotone)
++inline int g_nhooks = 0;
++inline int g_count[8];
++
++// A region at pc is about to be translated: is pc the module's base + a listed offset?
++inline bool IsHookPc(uint64_t pc) {
++  const Cfg& c = C();
++  if (!c.n) return false;
++  for (int i = 0; i < g_nhooks; i++) if (g_hooks[i] == pc) return true;
++  bool low = false;
++  for (int i = 0; i < c.n; i++) low |= (c.off[i] & 0xfff) == (pc & 0xfff);
++  if (!low) return false;
++  FILE* f = fopen("/proc/self/maps", "r");
++  if (!f) return false;
++  char line[1024];
++  uint64_t lo = ~0ULL;
++  while (fgets(line, sizeof line, f)) {
++    if (!strstr(line, c.module)) continue;
++    uint64_t a = strtoull(line, nullptr, 16);
++    if (a < lo) lo = a;
++  }
++  fclose(f);
++  if (lo == ~0ULL) return false;
++  std::lock_guard<std::mutex> l(Mu());
++  for (int i = 0; i < c.n; i++)
++    if (pc == lo + c.off[i] && g_nhooks < 8) { g_hooks[g_nhooks++] = pc; return true; }
++  return false;
++}
++inline int Index(uint64_t pc) {
++  for (int i = 0; i < g_nhooks; i++) if (g_hooks[i] == pc) return i;
++  return -1;
++}
++inline bool IsHooked(uint64_t pc) { return C().n && Index(pc) >= 0; }
++
++inline void Log(ThreadState* s, uint64_t pc) {
++  int i = Index(pc);
++  if (i < 0 || __atomic_add_fetch(&g_count[i], 1, __ATOMIC_RELAXED) > 200) return;
++  char line[1200];
++  int n = snprintf(line, sizeof line, "[bbdump] tid=%ld pc=%#lx", long(syscall(SYS_gettid)), (unsigned long)pc);
++  for (int k = 0; k < 31 && n < int(sizeof line) - 40; k++) n += snprintf(line + n, sizeof line - n, " x%d=%#lx", k, (unsigned long)s->cpu.x[k]);
++  n += snprintf(line + n, sizeof line - n, " sp=%#lx\n", (unsigned long)s->cpu.sp);
++  (void)!write(2, line, n);
++}
++
++}  // namespace berberis::dump_hook
++
++#endif  // BERBERIS_RUNTIME_ARM64_DUMP_HOOK_H_
