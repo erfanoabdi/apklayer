@@ -26,7 +26,7 @@
 #endif
 
 #define BUFS 8
-#define SLOTS 5
+#define SLOTS 8
 #define DRM_FORMAT_XRGB8888 0x34325258u
 
 struct slot {

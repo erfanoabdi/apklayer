@@ -9,7 +9,7 @@
 #include "sharpen.h"
 
 #define SVK_BUFS 8
-#define SVK_SLOTS 5
+#define SVK_SLOTS 8  /* the output ring: the same number as OUT_SLOTS in sharpen_win.c and SLOTS in sharpen.c */
 #define SVK_PIPES 12
 
 #define SVK_INSTANCE_FNS(X) X(vkDestroyInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) X(vkGetPhysicalDeviceQueueFamilyProperties) \

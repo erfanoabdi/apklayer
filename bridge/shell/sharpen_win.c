@@ -14,7 +14,7 @@
 #ifdef HAVE_SHARPEN
 #include "sharpen.h"
 
-#define OUT_SLOTS 5
+#define OUT_SLOTS 8
 #define DRM_FORMAT_XRGB8888 0x34325258u
 enum { S_NONE, S_PREPARING, S_READY, S_OFF };
 
