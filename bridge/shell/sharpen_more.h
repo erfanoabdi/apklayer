@@ -1,4 +1,4 @@
-/* Lanczos 3 and Anime4K's shaders (the render filter's modes 5 and 6; sharpen.c). */
+/* Lanczos 3 and Anime4K's shaders (the render filter's modes 3 and 4; sharpen.c). */
 
 /* Lanczos 3: the windowed sinc over 6x6 texel-centre fetches, weights normalised; one pass. Below the source size it just samples. */
 static const char *FS_LANCZOS =

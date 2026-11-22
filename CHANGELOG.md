@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 render filter: Vulkan backend; LS1-like and Integer removed
+- `bridge/shell/sharpen_vk.c`, `sharpen_vk_draw.c`: the five filters (FSR 1, NIS, SGSR 1, Lanczos 3, Anime4K) also run on Vulkan: libvulkan loaded at run time, app dmabufs imported as sampled images (VK_EXT_image_drm_format_modifier, explicit plane layouts), output ring exported as dmabufs (a modifier of the compositor's list, else LINEAR), completion by the fence's sync fd in poll(). The shaders are the GLES ones converted by `tools/gen/sharpen-spv.py` (glslang) into the committed `sharpen_vk_spv.h`; Anime4K's intermediates are RGBA16F there (no 8-bit packing). `sharpen.c` tries GLES first and takes Vulkan where no EGL device imports the buffers; `APKLAYER_SHARPEN_BACKEND=vulkan|gles` forces one. The build needs only the Vulkan headers (system, else the prebuilts' gfxstream copy).
+- Measured on the RTX 5060 Ti (`SHARPEN_LOOPS=300`, 960x540 to 1920x1080, ms per frame GLES / Vulkan): FSR 1 0.169 / 0.149, NIS 0.274 / 0.256, SGSR 0.082 / 0.086, Lanczos 0.274 / 0.281, Anime4K 0.162 / 0.201. Pictures equal (`tests/vm/sharpen.py`: FSR 1, NIS, SGSR, Lanczos give the same edge strength and PSNR on both). No speed or quality gain on this GPU: the gain is where EGL cannot import (phones, Venus).
+- Removed `ls1` and `integer` (the owner's choice); modes are now 0 FSR 1, 1 NIS, 2 SGSR 1, 3 Lanczos, 4 Anime4K.
+
 ## 2026-11-22 render filter: Lanczos and Anime4K
 - New `render-filter lanczos` (Lanczos 3, one pass, 36 fetches) and `anime4k` (manager: Lanczos, Anime4K): Anime4K v3.2 "Upscale Original x2" (bloc97, MIT) ported to GLES2 as five passes into RGBA8 textures (signed gradients packed v*0.5+0.5), `bridge/shell/sharpen_a4k.h`, shaders in `sharpen_more.h`. It thins and smooths lines (anime/line art), so `tests/vm/sharpen.py`'s text edge-strength check (x1.15) does not apply: SHARPEN_MODE=6 gives x1.05 and a visibly smoother circle outline; Lanczos x1.31, +0.39 dB. Used only when the source is smaller than the output in both directions, else FSR 1.
 
@@ -63,6 +68,7 @@
   docs/PLAN.md.
 - This PC: the NVIDIA Vulkan device stopped loading in this session (vulkaninfo lists only llvmpipe; nvidia-smi sees the RTX 5060 Ti, ICD json present).
 - Cleaned: mp100 ~/apklayer-endfield, ~/apklayer-astcprobe, ~/apklayer-vkfix; the probe build dir here.
+- Second build, same command (interpret-only reached only a black window after 10 minutes on mp100, too slow): `runtime/arm64/dump_hook.h` does the same dump inside the translated tiers, with gate_trace's mechanism (a listed pc is installed as a one-insn interpreted entry when a region starts there; berberis_HandleInterpret prints x0..x30 and sp, 200 per pc); everything else stays translated. Needs the pc to be a region start (a branch target).
 
 ## 2026-11-22: PGR download stall, run 9: patching the monitor check in memory disturbs the translator (option abandoned)
 

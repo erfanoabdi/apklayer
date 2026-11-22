@@ -45,8 +45,21 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
     sharpen_deps = [egl_dep, gbm_dep, gles_dep]
     sharpen_args = ['-DHAVE_SHARPEN']
   endif
+  # the Vulkan backend of the render filter (sharpen_vk.c): the Vulkan headers (libvulkan itself is loaded at run time), from the system or the prebuilts
+  vk_inc = []
+  vk_dep = dependency('vulkan', required: false)
+  if vk_dep.found()
+    vk_inc = [vk_dep.partial_dependency(includes: true, compile_args: true)]
+  elif prebuilts != '' and fs.exists(prebuilts / 'common/gfxstream/third_party/vulkan/include/vulkan/vulkan.h')
+    vk_inc = [declare_dependency(include_directories: include_directories(prebuilts / 'common/gfxstream/third_party/vulkan/include', is_system: true))]
+  endif
+  if sharpen_src.length() > 0 and vk_inc.length() > 0
+    sharpen_src += ['sharpen_vk.c', 'sharpen_vk_draw.c']
+    sharpen_deps += vk_inc + [meson.get_compiler('c').find_library('dl', required: false)]
+    sharpen_args += ['-DHAVE_SHARPEN_VK']
+  endif
   if sharpen_src.length() > 0  # the pass alone, for tests/vm/sharpen.py (not installed)
-    executable('sharpen-test', ['../../tests/hals/sharpen-test.c', 'sharpen.c'], dependencies: sharpen_deps)
+    executable('sharpen-test', ['../../tests/hals/sharpen-test.c', sharpen_src], dependencies: sharpen_deps, c_args: sharpen_args)
   endif
   executable('apklayer-shell',
     ['main.c', 'client.c', 'window.c', 'geometry.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'navbar.c', 'mobile.c', 'appinfo.c', 'dmabuf.c', 'dmabuf_shm.c', 'feedback.c', 'splash.c', 'vsync.c', 'testinput.c', 'activation.c', 'decoration.c', 'wlegl.c', 'wlshell.c', 'maliit.c', 'tablet.c', 'gamepad.c', 'sharpen_win.c', sharpen_src, generated],

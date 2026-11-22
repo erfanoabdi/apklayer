@@ -18,8 +18,10 @@
 #include <unistd.h>
 
 #include "sharpen_nis.h"
-#include "sharpen_ls1.h"
 #include "sharpen_more.h"
+#ifdef HAVE_SHARPEN_VK
+#include "sharpen_vk.h"
+#endif
 
 #define BUFS 8
 #define SLOTS 5
@@ -47,10 +49,13 @@ struct sharpen {
     PFNEGLDESTROYSYNCKHRPROC destroy_sync;
     PFNEGLDUPNATIVEFENCEFDANDROIDPROC dup_fence;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, int_prog, ls1_prog, lanczos_prog, mid_tex, mid_fbo, vbo;
-    int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: integer, 4: LS1-like, 5: Lanczos 3, 6: Anime4K */
+    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, lanczos_prog, mid_tex, mid_fbo, vbo;
+    int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: Lanczos 3, 4: Anime4K */
     int mid_w, mid_h;
     struct a4k *a4k;
+#ifdef HAVE_SHARPEN_VK
+    struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
+#endif
     struct slot out[SLOTS];
     int last;
     uint64_t accept[64];
@@ -199,23 +204,6 @@ static const char *FS_SGSR =
     "  gl_FragColor = vec4(color, 1.0);\n"
     "}\n";
 
-/* Integer scaling: nearest neighbour when the output is a whole multiple of the source (50% render scale = 2x2 pixels), otherwise a sharp bilinear (the
- * blend is only one output pixel wide at each source pixel edge). */
-static const char *FS_INT =
-    "#extension GL_OES_EGL_image_external : require\n"
-    "precision highp float;\n"
-    "uniform samplerExternalOES tex; uniform vec2 src; uniform float sharp; varying vec2 uv;\n"
-    "uniform vec2 scl;\n"
-    "void main() {\n"
-    "  vec2 pos = uv * src, px = floor(pos), f = pos - px;\n"
-    "  vec2 r = floor(scl + 0.5);\n"
-    "  vec2 s = max(scl, vec2(1.0));\n"
-    "  vec2 g = clamp((f - 0.5) * s + 0.5, 0.0, 1.0);\n"
-    "  if (abs(scl.x - r.x) < 0.01) g.x = 0.5;\n"
-    "  if (abs(scl.y - r.y) < 0.01) g.y = 0.5;\n"
-    "  gl_FragColor = vec4(texture2D(tex, (px + g) / src).rgb, 1.0);\n"
-    "}\n";
-
 /* NVIDIA Image Scaling (NIS, MIT): a 6-tap polyphase scaler on luma blended with four directional filters (0, 45, 90, 135 degrees, weighted by an edge
  * map) and an adaptive unsharp mask; chroma comes from one bilinear tap. This is NVScaler of NIS_Scaler.h written as a fragment shader (no shared memory:
  * every pixel reads its own 6x6 luma). NVIDIA specifies 1x to 2x upscaling; the coefficient banks are in sharpen_nis.h. One pass, no RCAS. */
@@ -339,6 +327,23 @@ struct sharpen *sharpen_open(void)
     return s;
 }
 
+#ifdef HAVE_SHARPEN_VK
+#define VK_OR(call) if (s && s->vk) return call
+#define SHARPEN_HAS_VK(s) ((s)->vk != NULL)
+#else
+#define VK_OR(call)
+#define SHARPEN_HAS_VK(s) 0
+#endif
+
+#ifdef HAVE_SHARPEN_VK
+static int vk_start(struct sharpen *s, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod)
+{
+    if (svk_prepare(&s->vk, fourcc, w, h, n, fds, strides, offsets, mod) < 0) { s->vk = NULL; return -1; }
+    svk_accept(s->vk, s->accept, s->accept_n);
+    return 0;
+}
+#endif
+
 static const EGLint kCtx[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
 /* the device's context, made current; 0 on failure */
@@ -412,6 +417,12 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
 {
     if (!s) return -1;
     if (s->ready) return 0;
+#ifdef HAVE_SHARPEN_VK
+    if (s->vk) return 0;
+    const char *backend = getenv("APKLAYER_SHARPEN_BACKEND");  /* gles, vulkan; else GLES first and Vulkan where no GLES device takes the buffers */
+    int only_gl = backend && !strcmp(backend, "gles"), only_vk = backend && !strcmp(backend, "vulkan");
+    if (only_vk) return vk_start(s, fourcc, w, h, n, fds, strides, offsets, mod);
+#endif
     DIR *d = opendir("/dev/dri");
     struct dirent *e;
     while (d && (e = readdir(d)) && !s->ready) {
@@ -432,8 +443,6 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         if (!s->up_prog || !s->cas_prog) { if (d) closedir(d); return -1; }
         s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
         s->sgsr_prog = program(FS_SGSR);
-        s->int_prog = program(FS_INT);
-        s->ls1_prog = program(FS_LS1);
         s->lanczos_prog = program(FS_LANCZOS);
         if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
@@ -446,13 +455,17 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         fprintf(stderr, "[sharpen] using %s\n", path);
     }
     if (d) closedir(d);
+#ifdef HAVE_SHARPEN_VK
+    if (!s->ready && !only_gl) return vk_start(s, fourcc, w, h, n, fds, strides, offsets, mod);
+#endif
     return s->ready ? 0 : -1;
 }
 
 int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod)
 {
     if (!s || buf < 0 || buf >= BUFS || n < 1) return -1;
-    if (!s->ready && sharpen_prepare(s, fourcc, w, h, n, fds, strides, offsets, mod) < 0) return -1;
+    if (!s->ready && !SHARPEN_HAS_VK(s) && sharpen_prepare(s, fourcc, w, h, n, fds, strides, offsets, mod) < 0) return -1;
+    VK_OR(svk_import(s->vk, buf, fourcc, w, h, n, fds, strides, offsets, mod));
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
     sharpen_forget(s, buf);
     EGLImage image = make_image(s, fourcc, w, h, n, fds, strides, offsets, mod);
@@ -465,6 +478,9 @@ int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, in
 
 void sharpen_forget(struct sharpen *s, int buf)
 {
+#ifdef HAVE_SHARPEN_VK
+    if (s && s->vk) { svk_forget(s->vk, buf); return; }
+#endif
     if (!s || !s->ready || buf < 0 || buf >= BUFS || !s->in[buf].image) return;
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
     glDeleteTextures(1, &s->in[buf].tex);
@@ -561,6 +577,13 @@ void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
     static int said_in, said_busy;
+#ifdef HAVE_SHARPEN_VK
+    if (s && s->vk) {
+        int rc = svk_render(s->vk, s->mode, buf, ow, oh, sharpness, slot, fresh);
+        if (rc == -2 && !said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SVK_SLOTS);
+        return rc;
+    }
+#endif
     if (!s || !s->ready || buf < 0 || buf >= BUFS || !s->in[buf].image || ow <= 0 || oh <= 0) {
         if (!said_in++) fprintf(stderr, "[sharpen] nothing to draw: buffer %d %s\n", buf, s && buf >= 0 && buf < BUFS && s->in[buf].image ? "ok" : "not imported");
         return -1;
@@ -597,7 +620,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    if (s->mode == 6 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, ow, oh)) {  /* Anime4K: five passes, the last into the output dmabuf */
+    if (s->mode == 4 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, ow, oh)) {  /* Anime4K: five passes, the last into the output dmabuf */
         a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, o->fbo, s->vbo);
         gpu_wait(s);
         o->busy = 1;
@@ -605,8 +628,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         *slot = k;
         return 0;
     }
-    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->int_prog : s->mode == 4 ? s->ls1_prog : s->mode == 5 ? s->lanczos_prog : 0;
-    if (one) {  /* NIS, SGSR 1, integer scaling, LS1-like: one pass, straight into the output dmabuf */
+    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->lanczos_prog : 0;
+    if (one) {  /* NIS, SGSR 1, Lanczos: one pass, straight into the output dmabuf */
         glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
         glViewport(0, 0, ow, oh);
         glUseProgram(one);
@@ -657,6 +680,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
 
 int sharpen_slot_info(struct sharpen *s, int slot, struct sharpen_out *out)
 {
+    VK_OR(svk_slot_info(s->vk, slot, out));
     if (!s || slot < 0 || slot >= SLOTS || !s->out[slot].bo) return -1;
     struct slot *o = &s->out[slot];
     out->fd = dup(o->fd);
@@ -667,11 +691,15 @@ int sharpen_slot_info(struct sharpen *s, int slot, struct sharpen_out *out)
 
 void sharpen_slot_release(struct sharpen *s, int slot)
 {
+#ifdef HAVE_SHARPEN_VK
+    if (s && s->vk) { svk_slot_release(s->vk, slot); return; }
+#endif
     if (s && slot >= 0 && slot < SLOTS) s->out[slot].busy = 0;
 }
 
 int sharpen_readback(struct sharpen *s, int slot, void *rgba)
 {
+    VK_OR(svk_readback(s->vk, slot, rgba));
     if (!s || !s->ready || slot < 0 || slot >= SLOTS || !s->out[slot].fbo) return -1;
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
     glBindFramebuffer(GL_FRAMEBUFFER, s->out[slot].fbo);
@@ -682,6 +710,9 @@ int sharpen_readback(struct sharpen *s, int slot, void *rgba)
 void sharpen_close(struct sharpen *s)
 {
     if (!s) return;
+#ifdef HAVE_SHARPEN_VK
+    svk_close(s->vk);
+#endif
     free(s->a4k);  /* its GL objects go with the context */
     if (s->ready) {
         eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);

@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <gbm.h>
 #include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -58,6 +59,15 @@ int main(int argc, char **argv)
     int slot, fresh;
     if (getenv("SHARPEN_MODE")) sharpen_set_mode(s, atoi(getenv("SHARPEN_MODE")));
     if (sharpen_render(s, 0, ow, oh, sharp, &slot, &fresh) < 0) { fprintf(stderr, "render failed\n"); return 5; }
+    if (getenv("SHARPEN_LOOPS")) {  /* timing: that many more frames, each waited for (ms per frame on stderr) */
+        int n = atoi(getenv("SHARPEN_LOOPS"));
+        struct timespec t0, t1;
+        sharpen_slot_release(s, slot);
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        for (int i = 0; i < n; i++) { int sl, fr; if (sharpen_render(s, 0, ow, oh, sharp, &sl, &fr) < 0) { fprintf(stderr, "render failed\n"); return 5; } sharpen_slot_release(s, sl); }
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        fprintf(stderr, "timing: %.3f ms per frame (%d frames)\n", ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / n, n);
+    }
     uint8_t *out = malloc((size_t)ow * oh * 4);
     if (sharpen_readback(s, slot, out) < 0) { fprintf(stderr, "readback failed\n"); return 6; }
     struct sharpen_out info;
