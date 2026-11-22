@@ -1,0 +1,168 @@
+--- a/proxy_loader/proxy_loader.cc
++++ b/proxy_loader/proxy_loader.cc
+@@ -18,6 +18,8 @@
+ 
+ #include <dlfcn.h>
+ 
++#include <atomic>
++#include <cstdint>
+ #include <map>
+ #include <mutex>
+ #include <string>
+@@ -26,6 +28,7 @@
+ #include "berberis/base/forever_alloc.h"
+ #include "berberis/base/tracing.h"
+ #include "berberis/proxy_loader/proxy_library_builder.h"
++#include "berberis/runtime_primitives/translation_cache.h"  // apklayer patch (0085)
+ 
+ namespace berberis {
+ 
+@@ -60,22 +63,79 @@
+ 
+ }  // namespace
+ 
++namespace {
++
++// apklayer patch (0085): the proxy libraries and the intercepted symbols are kept so a dropped wrapper can be made again.
++std::mutex* ProxyMutex() {
++  static auto* g_mutex = NewForever<std::mutex>();
++  return g_mutex;
++}
++
++using ProxyLibraries = std::map<std::string, ProxyLibraryBuilder>;
++ProxyLibraries* GetProxyLibraries() {
++  static auto* g_libraries = NewForever<ProxyLibraries>();
++  return g_libraries;
++}
++
++struct InterceptedSymbol {
++  std::string library_name;
++  std::string name;
++  uint32_t first_word;  // the first instruction of the stub when it was intercepted: it still being there means it is still the stub
++};
++
++std::map<GuestAddr, InterceptedSymbol>* GetInterceptedSymbols() {
++  static auto* g_symbols = NewForever<std::map<GuestAddr, InterceptedSymbol>>();
++  return g_symbols;
++}
++
++}  // namespace
++
+ void InterceptGuestSymbol(GuestAddr addr,
+                           const char* library_name,
+                           const char* name,
+                           const char* proxy_prefix) {
+-  static auto* g_mutex = NewForever<std::mutex>();
+-  std::lock_guard<std::mutex> guard(*g_mutex);
+-
+-  using Libraries = std::map<std::string, ProxyLibraryBuilder>;
+-  static auto* g_libraries = NewForever<Libraries>();
++  std::lock_guard<std::mutex> guard(*ProxyMutex());
+ 
+-  auto res = g_libraries->insert({library_name, {}});
++  auto res = GetProxyLibraries()->insert({library_name, {}});
+   if (res.second && !LoadProxyLibrary(&res.first->second, library_name, proxy_prefix)) {
+     FATAL("Unable to load library \"%s\" (upon using symbol \"%s\")", library_name, name);
+   }
+ 
+   res.first->second.InterceptSymbol(addr, name);
++
++  // A function got a wrapper entry in the cache (a variable does not): remember it.
++  if (TranslationCache::GetInstance()->GetHostCodePtr(addr)->load() != kEntryNotTranslated) {
++    (*GetInterceptedSymbols())[addr] = {library_name, name, *ToHostAddr<const uint32_t>(addr)};
++  }
++}
++
++bool RestoreInterceptedGuestSymbol(GuestAddr pc) {
++  std::lock_guard<std::mutex> guard(*ProxyMutex());
++
++  auto* symbols = GetInterceptedSymbols();
++  auto it = symbols->find(pc);
++  if (it == symbols->end()) {
++    return false;
++  }
++  if (*ToHostAddr<const uint32_t>(pc) != it->second.first_word) {
++    return false;  // the code at this address changed: it is not the stub any more
++  }
++  auto lib = GetProxyLibraries()->find(it->second.library_name);
++  if (lib == GetProxyLibraries()->end()) {
++    return false;
++  }
++  lib->second.InterceptSymbol(pc, it->second.name.c_str());
++  if (TranslationCache::GetInstance()->GetHostCodePtr(pc)->load() == kEntryNotTranslated) {
++    return false;
++  }
++  static std::atomic<int> g_logged{0};
++  if (g_logged.fetch_add(1, std::memory_order_relaxed) < 20) {
++    TRACE_AND_ALOGD("berberis: wrapped '%s' of '%s' again at 0x%lx (its cache entry had been invalidated)",
++                    it->second.name.c_str(),
++                    it->second.library_name.c_str(),
++                    static_cast<unsigned long>(pc));
++  }
++  return true;
+ }
+ 
+ }  // namespace berberis
+--- a/proxy_loader/include/berberis/proxy_loader/proxy_loader.h
++++ b/proxy_loader/include/berberis/proxy_loader/proxy_loader.h
+@@ -26,6 +26,10 @@
+                           const char* name,
+                           const char* proxy_prefix);
+ 
++// apklayer patch (0085): a stub function (an intercepted symbol of a proxy library) whose wrapper entry was dropped from the translation cache (an invalidated range:
++// IC IVAU or a protection change over its page) is wrapped again when the guest reaches it, if the code there is still the stub. Returns true if it did.
++bool RestoreInterceptedGuestSymbol(GuestAddr pc);
++
+ }  // namespace berberis
+ 
+ #endif  // BERBERIS_PROXY_LOADER_H_
+--- a/runtime/arm64/translator_x86_64.cc
++++ b/runtime/arm64/translator_x86_64.cc
+@@ -444,8 +444,16 @@
+ 
+ // ATTENTION: This symbol gets called directly, without PLT. To keep text
+ // sharable we should prevent preemption of this symbol, so do not export it!
++// apklayer patch (0085): defined in the proxy loader (linked into the same library); weak so a build without it still links.
++bool RestoreInterceptedGuestSymbol(GuestAddr pc) __attribute__((weak));
++
+ extern "C" __attribute__((used, __visibility__("hidden"))) void berberis_HandleNotTranslated(
+     ThreadState* state) {
++  // apklayer patch (0085): the cache entry of a proxy library's stub function (slCreateEngine, ...) can be dropped by an invalidated range (IC IVAU or a protection
++  // change over its page, e.g. an anti-cheat library): the raw stub would then run (a call through null). Wrap it again instead.
++  if (RestoreInterceptedGuestSymbol != nullptr && RestoreInterceptedGuestSymbol(state->cpu.insn_addr)) {
++    return;
++  }
+   TranslateRegion(state->cpu.insn_addr);
+ }
+ 
+@@ -506,7 +514,17 @@
+   if (ArePendingSignalsPresent(*state)) {
+     return AsHostCode(kEntryExitGeneratedCode);
+   }
+-  return AsHostCode(TranslationCache::GetInstance()->GetHostCodePtr(state->cpu.insn_addr)->load());
++  auto code = TranslationCache::GetInstance()->GetHostCodePtr(state->cpu.insn_addr)->load();
++  if (code == 0) {
++    // apklayer patch (0085): a zero entry was jumped to (PGR 2026-11-22: host_pc=0 at the guest pc of slCreateEngine): treat it as not translated.
++    static std::atomic<int> g_logged{0};
++    if (g_logged.fetch_add(1, std::memory_order_relaxed) < 20) {
++      TRACE_AND_ALOGD("berberis: zero dispatch entry at guest pc=0x%lx: treated as not translated",
++                      static_cast<unsigned long>(state->cpu.insn_addr));
++    }
++    code = kEntryNotTranslated;
++  }
++  return AsHostCode(code);
+ }
+ 
+ extern "C" __attribute__((used, __visibility__("hidden"))) void
+--- a/runtime/execute_guest.cc
++++ b/runtime/execute_guest.cc
+@@ -50,6 +50,9 @@
+     }
+ 
+     auto code = cache->GetHostCodePtr(pc)->load();
++    if (code == 0) {
++      code = kEntryNotTranslated;  // apklayer patch (0085): never run a zero entry
++    }
+     if (code == kEntryStop) {
+       break;
+     }
