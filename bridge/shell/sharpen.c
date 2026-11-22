@@ -14,6 +14,7 @@
 #include <gbm.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -56,6 +57,10 @@ struct sharpen {
     int mid_w, mid_h;
     uint64_t tick;
     struct a4k *a4k;
+    struct { GLuint tex, fbo; int w, h; } ph[3];  /* the intermediate pictures of the multi-phase upscale */
+    GLuint nis2d, sgsr2d, lanczos2d;   /* the one-pass shaders reading a GL_TEXTURE_2D (the intermediate) instead of the app's external image */
+    int stages_req;                    /* the window's render-phases, 0: stages */
+    int stages;                        /* phases of the NIS / SGSR 1 / Lanczos upscale (APKLAYER_SHARPEN_STAGES, 1..4; default 2) */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
 #endif
@@ -342,10 +347,23 @@ static GLuint program(const char *fs)
     return p;
 }
 
+/* the same shader reading a plain 2D texture: the external-image extension line is dropped and the sampler type changed */
+static GLuint program_2d(const char *fs)
+{
+    static const char ext[] = "#extension GL_OES_EGL_image_external : require\n";
+    char *t = strdup(fs), *q;
+    if (!t) return 0;
+    if ((q = strstr(t, ext))) memmove(q, q + sizeof ext - 1, strlen(q + sizeof ext - 1) + 1);
+    while ((q = strstr(t, "samplerExternalOES"))) { memcpy(q, "sampler2D", 9); memmove(q + 9, q + 18, strlen(q + 18) + 1); }
+    GLuint g = program(t);
+    free(t);
+    return g;
+}
+
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 
@@ -467,6 +485,9 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
         s->sgsr_prog = program(FS_SGSR);
         s->lanczos_prog = program(FS_LANCZOS);
+        s->nis2d = program_2d(FS_NIS);
+        s->sgsr2d = program_2d(FS_SGSR);
+        s->lanczos2d = program_2d(FS_LANCZOS);
         s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is averaged by the mode's own shader */
         if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
@@ -593,13 +614,63 @@ static void draw(void)
 
 #include "sharpen_a4k.h"
 
+/* The multi-phase upscale (NIS, SGSR 1, Lanczos): N equal-ratio phases, each the mode's own shader; the first reads the app's buffer, the next ones the
+ * previous phase's RGBA8 picture (LINEAR), only the last sharpens (the others run at sharpness 0), the last draws into the output dmabuf. Measured: for these
+ * filters every phase costs a little quality (the intermediate is re-rounded to 8 bits and softened), it is the owner's choice. 0: done. */
+static int phases(struct sharpen *s, int buf, GLuint pext, GLuint p2d, int ow, int oh, float sharp, GLuint out_fbo, int n)
+{
+    int iw = s->in[buf].w, ih = s->in[buf].h, pw = iw, phh = ih;
+    for (int k = 1; k <= n; k++) {
+        int mw = k == n ? ow : (int)(iw * pow((double)ow / iw, (double)k / n) + 0.5), mh = k == n ? oh : (int)(ih * pow((double)oh / ih, (double)k / n) + 0.5);
+        GLuint fbo = out_fbo;
+        if (k < n) {
+            if (s->ph[k - 1].w != mw || s->ph[k - 1].h != mh) {
+                if (s->ph[k - 1].fbo) glDeleteFramebuffers(1, &s->ph[k - 1].fbo);
+                if (s->ph[k - 1].tex) glDeleteTextures(1, &s->ph[k - 1].tex);
+                glGenTextures(1, &s->ph[k - 1].tex);
+                glBindTexture(GL_TEXTURE_2D, s->ph[k - 1].tex);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mw, mh, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glGenFramebuffers(1, &s->ph[k - 1].fbo);
+                glBindFramebuffer(GL_FRAMEBUFFER, s->ph[k - 1].fbo);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s->ph[k - 1].tex, 0);
+                if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { s->ph[k - 1].w = s->ph[k - 1].h = 0; return -1; }
+                s->ph[k - 1].w = mw; s->ph[k - 1].h = mh;
+            }
+            fbo = s->ph[k - 1].fbo;
+        }
+        GLuint prog = k == 1 ? pext : p2d;
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glViewport(0, 0, mw, mh);
+        glUseProgram(prog);
+        glActiveTexture(GL_TEXTURE0);
+        if (k == 1) glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex); else glBindTexture(GL_TEXTURE_2D, s->ph[k - 2].tex);
+        glUniform1i(glGetUniformLocation(prog, "tex"), 0);
+        glUniform2f(glGetUniformLocation(prog, "src"), (float)pw, (float)phh);
+        glUniform1f(glGetUniformLocation(prog, "sharp"), k == n ? (sharp < 0 ? 0 : sharp > 1 ? 1 : sharp) : 0.0f);
+        glUniform2f(glGetUniformLocation(prog, "scl"), (float)mw / (float)pw, (float)mh / (float)phh);
+        glUniform4fv(glGetUniformLocation(prog, "cs"), 128, nis_coef_scale);
+        glUniform4fv(glGetUniformLocation(prog, "cu"), 128, nis_coef_usm);
+        glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        draw();
+        pw = mw; phh = mh;
+    }
+    return 0;
+}
+
 void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
+void sharpen_set_stages(struct sharpen *s, int n) { if (s) s->stages_req = n >= 1 && n <= 4 ? n : 0; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
     static int said_in, said_busy;
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) {
+        s->vk->stages = s->stages_req ? s->stages_req : s->stages;
         int rc = svk_render(s->vk, s->mode, buf, ow, oh, sharpness, slot, fresh);
         if (rc == -2 && !said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SVK_SLOTS);
         return rc;
@@ -652,6 +723,18 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     }
     GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->lanczos_prog : 0;
     if (s->down_prog && (s->in[buf].w > ow || s->in[buf].h > oh)) one = s->down_prog;  /* render scale above 100: every mode shrinks the larger picture with the Lanczos 2 area filter */
+    int st = s->stages_req ? s->stages_req : s->stages;
+    if (one && one != s->down_prog && st > 1 && ow > s->in[buf].w * 1.05 && oh > s->in[buf].h * 1.05) {  /* an upscale: the phases */
+        GLuint p2d = s->mode == 1 ? s->nis2d : s->mode == 2 ? s->sgsr2d : s->lanczos2d;
+        if (p2d && phases(s, buf, one, p2d, ow, oh, sharpness, o->fbo, st) == 0) {
+            gpu_wait(s);
+            o->busy = 1;
+            o->used = ++s->tick;
+            s->last = k;
+            *slot = k;
+            return 0;
+        }
+    }
     if (one) {  /* NIS, SGSR 1, Lanczos, the downscale: one pass, straight into the output dmabuf */
         glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
         glViewport(0, 0, ow, oh);

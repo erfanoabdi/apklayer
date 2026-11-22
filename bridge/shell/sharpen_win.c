@@ -208,6 +208,7 @@ int sharpen_win_show(struct window *w, int buf)
     /* auto (the implicit filter of a render scale other than 100): SGSR 1 for a ratio window/frame below 1.2, NIS above (benchmark of all modes
      * at ratios 1.1..4 on text, line art and smooth images: NIS is ahead of FSR 1 by 0.7-1 dB / 0.5-0.8 SSIM points from 1.25 up, SGSR 1 at 1.1) */
     if (mode == 5) mode = (long)ow * 10 < (long)sw->w[buf] * 12 ? 2 : 1;
+    sharpen_set_stages(sw->s, w->phases);
     sharpen_set_mode(sw->s, mode);
     int rc = sharpen_render(sw->s, buf, ow, oh, mode == 1 ? 0.3f : mode == 2 ? 1.0f : 0.55f, &slot, &fresh);  /* NIS 0.3, SGSR 1.0, else (FSR 1, Lanczos) 0.55 */  /* NIS 0.3, SGSR 1.0, else (FSR 1, Lanczos) 0.55 */
     if (rc == -2) { if (sw->pending != buf) sw->pending_ms = now_ms(); sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */

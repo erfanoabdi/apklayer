@@ -1,5 +1,6 @@
 /* The render filter's Vulkan passes: render passes, pipelines (one per shader of sharpen_vk_spv.h), and one command buffer per frame (sharpen_vk.h). */
 #include <errno.h>
+#include <math.h>
 #include <poll.h>
 #include <stdio.h>
 #include <string.h>
@@ -188,6 +189,13 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
         for (int i = 0; i < 3; i++) if (target(s, &s->f16[i], VK_FORMAT_R16G16B16A16_SFLOAT, s->rp_f16, in->w, in->h) < 0) return -1;
         if (target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, 2 * in->w, 2 * in->h) < 0) return -1;
     }
+    int nph = (mode >= 1 && mode <= 3 && s->stages > 1 && ow > in->w * 1.05 && oh > in->h * 1.05) ? s->stages : 1;  /* the phases of an upscale (as the GLES path) */
+    int msz[4][2];
+    for (int k = 1; k <= nph; k++) {
+        msz[k - 1][0] = k == nph ? ow : (int)(in->w * pow((double)ow / in->w, (double)k / nph) + 0.5);
+        msz[k - 1][1] = k == nph ? oh : (int)(in->h * pow((double)oh / in->h, (double)k / nph) + 0.5);
+        if (k < nph && target(s, &s->ph[k - 1], VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, msz[k - 1][0], msz[k - 1][1]) < 0) return -1;
+    }
     struct pc pc = { { (float)in->w, (float)in->h }, { (float)ow / (float)in->w, (float)oh / (float)in->h }, { 1.0f / (float)ow, 1.0f / (float)oh },
         { 1.0f / (float)in->w, 1.0f / (float)in->h }, sharp < 0 ? 0 : sharp > 1 ? 1 : sharp, in->w > ow ? (float)in->w / (float)ow : 0.0f };
     s->vkResetDescriptorPool(s->dev, s->pool, 0);
@@ -210,8 +218,18 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
         break;
     }
     case 1: case 2: case 3: case 5: {  /* NIS, SGSR 1, Lanczos, the downscale: one pass */
-        VkImageView a[4] = { ext, none, none, none };
-        pass(s, mode == 1 ? P_NIS : mode == 2 ? P_SGSR : mode == 3 ? P_LANCZOS : P_DOWN, s->rp_out, o->i.fb, ow, oh, a, &pc);
+        int pipe = mode == 1 ? P_NIS : mode == 2 ? P_SGSR : mode == 3 ? P_LANCZOS : P_DOWN;
+        VkImageView prev = ext;
+        int pw = in->w, phh = in->h;
+        for (int k = 1; k <= nph; k++) {  /* one phase when nph is 1 */
+            int mw = msz[k - 1][0], mh = msz[k - 1][1];
+            struct pc q = pc;
+            if (nph > 1) q = (struct pc){ { (float)pw, (float)phh }, { (float)mw / (float)pw, (float)mh / (float)phh }, { 1.0f / (float)mw, 1.0f / (float)mh }, { 1.0f / (float)pw, 1.0f / (float)phh }, k == nph ? pc.sharp : 0.0f, 0.0f };
+            VkImageView a[4] = { prev, none, none, none };
+            if (k < nph) pass(s, pipe, s->rp_mid, s->ph[k - 1].fb, mw, mh, a, &q); else pass(s, pipe, s->rp_out, o->i.fb, ow, oh, a, &q);
+            if (k < nph) prev = s->ph[k - 1].view;
+            pw = mw; phh = mh;
+        }
         break;
     }
     default: {  /* Anime4K CNN: four conv layers (T0 T1 T2 T0), depth-to-space into the 2x `mid`, Lanczos 3 into the output */

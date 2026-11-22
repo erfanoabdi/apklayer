@@ -35,6 +35,8 @@ void sharpen_forget(struct sharpen *s, int buf);
 
 /* 0: FSR 1 (EASU + RCAS), 1: NVIDIA Image Scaling (one pass; the sharpness is NIS's 0..1 slider), 2: Snapdragon GSR 1 (one pass), 3: Lanczos 3, 4: Anime4K (five passes). Takes effect with the next sharpen_render. */
 void sharpen_set_mode(struct sharpen *s, int mode);
+/* Phases of the NIS / SGSR 1 / Lanczos upscale: 1..4, 0 the default (APKLAYER_SHARPEN_STAGES, else 2). Takes effect with the next sharpen_render. */
+void sharpen_set_stages(struct sharpen *s, int n);
 
 /* Draws buffer `buf` into output slot `*slot` (0..2, the first one not in use) of out_w x out_h; sharpness 0..1 (0.5: CAS default). Returns 0 and the
  * slot, with *fresh set when the slot's dmabuf is new (the caller makes its wl_buffer from sharpen_slot_info), -1 when nothing could be drawn, -2 when all output buffers are held (draw it again after a sharpen_slot_release). */

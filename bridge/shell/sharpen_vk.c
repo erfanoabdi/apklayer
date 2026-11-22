@@ -244,6 +244,7 @@ static void device_destroy(struct svk *s)
         for (int i = 0; i < SVK_BUFS; i++) svk_forget(s, i);
         for (int i = 0; i < SVK_SLOTS; i++) slot_free(s, &s->out[i]);
         svk_img_free(s, &s->mid);
+        for (int i = 0; i < 3; i++) svk_img_free(s, &s->ph[i]);
         for (int i = 0; i < 3; i++) svk_img_free(s, &s->f16[i]);
         svk_pipelines_free(s);
         if (s->cp) s->vkDestroyCommandPool(s->dev, s->cp, NULL);
@@ -325,6 +326,7 @@ int svk_prepare(struct svk **out, uint32_t fourcc, int w, int h, int n, const in
     struct svk *s = calloc(1, sizeof *s);
     if (!s) return -1;
     for (int i = 0; i < SVK_SLOTS; i++) s->out[i].fd = -1;
+    { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; }
     s->lib = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
     if (!s->lib) goto fail;
     s->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(s->lib, "vkGetInstanceProcAddr");
