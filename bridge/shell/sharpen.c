@@ -33,6 +33,7 @@ struct slot {
     EGLImage image;
     GLuint tex, fbo;
     int fd, w, h, busy;
+    uint64_t used;  /* the render count of its last use (the least recently used free slot is drawn into next) */
     uint32_t stride;
     uint64_t modifier;
 };
@@ -53,6 +54,7 @@ struct sharpen {
     GLuint up_prog, cas_prog, nis_prog, sgsr_prog, lanczos_prog, down_prog, mid_tex, mid_fbo, vbo;
     int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: Lanczos 3, 4: Anime4K */
     int mid_w, mid_h;
+    uint64_t tick;
     struct a4k *a4k;
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
@@ -604,7 +606,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     }
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
     int k = -1;
-    for (int i = 0; i < SLOTS; i++) if (!s->out[i].busy) { k = i; break; }
+    for (int i = 0; i < SLOTS; i++) if (!s->out[i].busy && (k < 0 || s->out[i].used < s->out[k].used)) k = i;  /* not the slot just released: the compositor may still read it */
     if (k < 0) {  /* the compositor holds all three: show the app's own buffer this once */
         if (!said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SLOTS);
         return -2;
@@ -638,6 +640,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, o->fbo, s->vbo);
         gpu_wait(s);
         o->busy = 1;
+        o->used = ++s->tick;
         s->last = k;
         *slot = k;
         return 0;
@@ -661,6 +664,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         draw();
         gpu_wait(s);
         o->busy = 1;
+        o->used = ++s->tick;
         s->last = k;
         *slot = k;
         return 0;
@@ -688,6 +692,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     draw();
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
+        o->used = ++s->tick;
     s->last = k;
     *slot = k;
     return 0;
