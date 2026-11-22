@@ -76,6 +76,11 @@ void window_send_configure(struct window *w)
     int rs = w->client->render_scale > 0 ? w->client->render_scale : 100;
     int s0 = window_scale(w), s = rs != 100 ? (s0 * rs + 50) / 100 : s0;
     if (s < 1) s = 1;
+    if (rs != 100 && !w->viewport && s % 100) {  /* no wp_viewporter (an old Mir, Lipstick's wl_shell): only a whole multiple of the logical size is shown at its size */
+        static int said;
+        if (!said++) fprintf(stderr, "[shell] render scale %d%% ignored: the compositor has no wp_viewporter and the buffer would not be a whole multiple of the window\n", rs);
+        rs = 100; s = s0;
+    }
     int nav = !w->turn ? (window_nav(w) * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
     int aw, ah, ime = w->turn ? 0 : w->ime_px, opw, oph, os;
     window_output(w, &opw, &oph, &os);  /* shortcut: turned, the keyboard is beside the content and gets no inset */
