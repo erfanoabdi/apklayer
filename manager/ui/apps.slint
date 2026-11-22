@@ -1,6 +1,6 @@
 // Apps: the M3 list-detail layout. Side by side when the window is expanded (>= 840 dp), else the list, and the detail over it with a back button.
 import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, FilledButton, TonalButton, OutlineButton,
-         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch, FilterChip } from "@material";
+         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch, FilterChip, Slider } from "@material";
 import { Backend, AppIcons, AppEntry } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 import { AddonsSection } from "addons.slint";
@@ -111,20 +111,19 @@ component AppDetail {
                     MaterialText { text: "The app renders at this share of the window's pixels (windowed or fullscreen) and is shown over the whole window (the screen's shape is kept): below 100% is faster, above 100% is sharper. Needs a compositor with wp_viewporter (GNOME, KDE and most others). Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     MaterialText { text: Backend.app-resolution-text; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface; wrap: word-wrap; }
                     HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default", value: "" }, { label: "45%", value: "45" }, { label: "50%", value: "50" }, { label: "55%", value: "55" }, { label: "60%", value: "60" }, { label: "65%", value: "65" }, { label: "70%", value: "70" }] : HorizontalLayout {
-                            if Backend.app-render-scale-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-scale-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-scale." + root.app.package, choice.value); } }
+                        spacing: MaterialStyleMetrics.spacing_16;
+                        alignment: stretch;
+                        scale-slider := Slider {
+                            minimum: 25;
+                            maximum: 200;
+                            value: Backend.app-render-scale-pct;
+                            enabled: !Backend.busy;
+                            horizontal-stretch: 1;
+                            value_changed(v) => { Backend.preview-render-scale(Math.round(v / 5) * 5); }
+                            released(v) => { Backend.set-setting("render-scale." + root.app.package, "\{Math.round(v / 5) * 5}"); }
                         }
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "75%", value: "75" }, { label: "80%", value: "80" }, { label: "85%", value: "85" }, { label: "90%", value: "90" }, { label: "100%", value: "100" }, { label: "125%", value: "125" }, { label: "150%", value: "150" }, { label: "200%", value: "200" }] : HorizontalLayout {
-                            if Backend.app-render-scale-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-scale-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-scale." + root.app.package, choice.value); } }
-                        }
+                        MaterialText { text: "\{Math.round(scale-slider.value / 5) * 5}%"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; vertical-alignment: center; min-width: 56px; horizontal-alignment: right; }
+                        TonalButton { text: "Default"; enabled: !Backend.busy; clicked => { Backend.set-setting("render-scale." + root.app.package, ""); } }
                     }
                 }
             }
@@ -133,11 +132,11 @@ component AppDetail {
                     padding: MaterialStyleMetrics.padding_16;
                     spacing: MaterialStyleMetrics.spacing_8;
                     MaterialText { text: "Sharper picture at a lower render scale"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
-                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. FSR is AMD's FSR 1 (smooth edges at any scale); NIS is NVIDIA's Image Scaling (crisper text, made for up to twice the size). Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. RSR is AMD's Radeon Super Resolution, which is FSR 1 (smooth edges at any scale; the shell runs the same algorithm itself on any GPU); NIS is NVIDIA's Image Scaling (crisper text, made for up to twice the size). Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Off", value: "" }, { label: "FSR", value: "sharp" }, { label: "NIS soft", value: "nis-soft" }, { label: "NIS", value: "nis" }, { label: "NIS strong", value: "nis-strong" }] : HorizontalLayout {
+                        for choice in [{ label: "Off", value: "" }, { label: "RSR", value: "sharp" }, { label: "NIS soft", value: "nis-soft" }, { label: "NIS", value: "nis" }, { label: "NIS strong", value: "nis-strong" }] : HorizontalLayout {
                             if Backend.app-render-filter-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
                         }

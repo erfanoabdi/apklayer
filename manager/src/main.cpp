@@ -298,9 +298,10 @@ private:
     }
 
     // the render scale card: the window's pixels at the app's last start and what a fullscreen game renders at with the scale chosen
-    void showResolution() {
+    void showResolution(int preview = -1) {
         auto [w, h] = windowPx_[current_];
-        int pct = appScales_[current_].empty() ? 100 : std::atoi(appScales_[current_].c_str());
+        int pct = preview > 0 ? preview : appScales_[current_].empty() ? 100 : std::atoi(appScales_[current_].c_str());
+        if (preview <= 0) ui_->global<Backend>().set_app_render_scale_pct(pct);
         std::string text;
         if (w <= 0 || h <= 0) text = "Start the app once to see its resolution here.";
         else {
@@ -556,6 +557,7 @@ private:
         });
         b.on_set_prop([this](slint::SharedString k, slint::SharedString v) { action("Saving", {"prop", "set", std::string(k), std::string(v)}); });
         b.on_unset_prop([this](slint::SharedString k) { action("Saving", {"prop", "unset", std::string(k)}); });
+        b.on_preview_render_scale([this](int pct) { showResolution(pct); });
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
             if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
             if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = std::string(v); ui_->global<Backend>().set_app_render_filter_setting(v); }
