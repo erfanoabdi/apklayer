@@ -170,7 +170,7 @@ int sharpen_win_show(struct window *w, int buf)
         give_back(w, sw->pending, "replaced before it was drawn");
         sw->pending = -1;
     }
-    int rc = sharpen_render(sw->s, buf, ow, oh, 0.6f, &slot, &fresh);
+    int rc = sharpen_render(sw->s, buf, ow, oh, 1.0f, &slot, &fresh);
     if (rc == -2) { sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;

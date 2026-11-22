@@ -56,7 +56,8 @@ static const char *FS_UP =
     "vec3 T(vec2 p) { return texture2D(tex, p).rgb; }\n"
     "void main() {\n"
     "  vec2 pos = uv * src, c = floor(pos - 0.5) + 0.5, f = pos - c, f2 = f * f, f3 = f2 * f;\n"
-    "  vec2 w0 = -0.5 * f3 + f2 - 0.5 * f, w1 = 1.5 * f3 - 2.5 * f2 + 1.0, w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f, w3 = 0.5 * f3 - 0.5 * f2;\n"
+    "  float C = 0.85; /* a keener cubic than Catmull-Rom (0.5): crisper edges, a little ringing */\n"
+    "  vec2 w0 = -C * f3 + 2.0 * C * f2 - C * f, w1 = (2.0 - C) * f3 + (C - 3.0) * f2 + 1.0, w2 = (C - 2.0) * f3 + (3.0 - 2.0 * C) * f2 + C * f, w3 = C * f3 - C * f2;\n"
     "  vec2 w12 = w1 + w2, t12 = (c + w2 / w12) / src, t0 = (c - 1.0) / src, t3 = (c + 2.0) / src;\n"
     "  vec3 r = (T(vec2(t0.x, t0.y)) * w0.x + T(vec2(t12.x, t0.y)) * w12.x + T(vec2(t3.x, t0.y)) * w3.x) * w0.y\n"
     "         + (T(vec2(t0.x, t12.y)) * w0.x + T(vec2(t12.x, t12.y)) * w12.x + T(vec2(t3.x, t12.y)) * w3.x) * w12.y\n"
@@ -77,7 +78,7 @@ static const char *FS_CAS =
     "  vec3 f = texture2D(tex, uv + vec2(px.x, 0.0)).rgb, h = texture2D(tex, uv + vec2(0.0, px.y)).rgb;\n"
     "  vec3 mn = min(min(min(d, e), min(f, b)), h), mx = max(max(max(d, e), max(f, b)), h);\n"
     "  vec3 amp = sqrt(clamp(min(mn, 1.0 - mx) / max(mx, vec3(0.0001)), 0.0, 1.0));\n"
-    "  float peak = -1.0 / mix(8.0, 5.0, sharp);\n"
+    "  float peak = -1.0 / mix(8.0, 4.4, sharp);\n"
     "  vec3 w = amp * peak;\n"
     "  gl_FragColor = vec4(clamp((b * w + d * w + f * w + h * w + e) / (1.0 + 4.0 * w), 0.0, 1.0), 1.0);\n"
     "}\n";
