@@ -164,7 +164,9 @@ int svk_render(struct svk *s, int mode, int buf, int ow, int oh, float sharp, in
 {
     if (buf < 0 || buf >= SVK_BUFS || !s->in[buf].used) return -1;
     int k = -1;
-    for (int i = 0; i < SVK_SLOTS; i++) if (!s->out[i].busy) { k = i; break; }
+    /* the free slot that was used longest ago, not the one just released: the compositor's GPU may still be reading a buffer it has just released (the dmabuf carries no
+     * implicit fence of its reads for a Vulkan write on every driver), so it is given as much time as the ring allows */
+    for (int i = 0; i < SVK_SLOTS; i++) if (!s->out[i].busy && (k < 0 || s->out[i].used < s->out[k].used)) k = i;
     if (k < 0) return -2;
     struct svk_slot *o = &s->out[k];
     *fresh = 0;
@@ -174,6 +176,7 @@ int svk_render(struct svk *s, int mode, int buf, int ow, int oh, float sharp, in
     }
     if (svk_record(s, mode, buf, ow, oh, sharp, o) < 0) return -1;
     o->busy = 1;
+    o->used = ++s->tick;
     s->last = k;
     *slot = k;
     return 0;

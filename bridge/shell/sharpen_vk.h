@@ -10,7 +10,7 @@
 
 #define SVK_BUFS 8
 #define SVK_SLOTS 5
-#define SVK_PIPES 10
+#define SVK_PIPES 11
 
 #define SVK_INSTANCE_FNS(X) X(vkDestroyInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) X(vkGetPhysicalDeviceQueueFamilyProperties) \
     X(vkGetPhysicalDeviceMemoryProperties) X(vkEnumerateDeviceExtensionProperties) X(vkGetPhysicalDeviceFormatProperties2) X(vkCreateDevice) X(vkGetDeviceProcAddr)
@@ -26,7 +26,7 @@
 
 struct svk_img { VkImage img; VkDeviceMemory mem; VkImageView view; VkFramebuffer fb; int w, h; };
 struct svk_in { struct svk_img i; int w, h, used, seen; };
-struct svk_slot { struct svk_img i; int fd, busy; uint32_t stride, offset; uint64_t modifier; };
+struct svk_slot { struct svk_img i; int fd, busy; uint32_t stride, offset; uint64_t modifier; uint64_t used; };
 
 struct svk {
     void *lib;
@@ -55,6 +55,7 @@ struct svk {
     struct svk_img mid, f16[3];
     uint64_t accept[64];
     int accept_n, last;
+    uint64_t tick;  /* the render count: the output slot used least recently is drawn into next */
 };
 
 int svk_prepare(struct svk **out, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod);
