@@ -40,7 +40,8 @@ struct sharpen {
     PFNEGLDESTROYIMAGEKHRPROC destroy_image;
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC image_target;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, nis_prog, mid_tex, mid_fbo, vbo;
+    GLuint up_prog, cas_prog, nis_prog, nis2_prog, mid_tex, mid_fbo, mid2_tex, mid2_fbo, vbo;
+    int mid2_w, mid2_h;
     int mode;  /* 0: FSR 1, 1: NIS */
     int mid_w, mid_h;
     struct slot out[SLOTS];
@@ -356,6 +357,17 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         if (!s->up_prog || !s->cas_prog) { if (d) closedir(d); return -1; }
         s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
         if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
+        else {  /* the same shader reading a 2D texture: the second step of a scale above 2x */
+            const char *ext = "#extension GL_OES_EGL_image_external : require\n";
+            size_t n = strlen(FS_NIS) + 32;
+            char *src2 = calloc(1, n), *at;
+            if (src2) {
+                strcpy(src2, FS_NIS + strlen(ext));
+                if ((at = strstr(src2, "samplerExternalOES"))) { memmove(at + 9, at + 18, strlen(at + 18) + 1); memcpy(at, "sampler2D", 9); }
+                s->nis2_prog = program(src2);
+                free(src2);
+            }
+        }
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
@@ -453,6 +465,8 @@ static void draw(void)
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
+static int isqrt_l(long v) { long r = 1; while (r * r <= v) r++; return (int)(r - 1); }
+
 void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
@@ -494,20 +508,59 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    if (s->mode == 1 && s->nis_prog) {  /* NIS: one pass, straight into the output dmabuf */
-        glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
-        glViewport(0, 0, ow, oh);
+    if (s->mode == 1 && s->nis_prog) {  /* NIS straight into the output dmabuf; above 2x (what NVIDIA specifies) in two steps of the square root each */
+        int iw = s->in[buf].w, ih = s->in[buf].h;
+        GLuint first_target = o->fbo;
+        int fw = ow, fh = oh;
+        float first_sharp = sharpness;
+        int two = s->nis2_prog && (ow > 2 * iw || oh > 2 * ih);
+        if (two) {
+            int mw = isqrt_l((long)iw * ow), mh = isqrt_l((long)ih * oh);
+            if (s->mid2_w != mw || s->mid2_h != mh) {
+                if (s->mid2_fbo) glDeleteFramebuffers(1, &s->mid2_fbo);
+                if (s->mid2_tex) glDeleteTextures(1, &s->mid2_tex);
+                glGenTextures(1, &s->mid2_tex);
+                glBindTexture(GL_TEXTURE_2D, s->mid2_tex);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mw, mh, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glGenFramebuffers(1, &s->mid2_fbo);
+                glBindFramebuffer(GL_FRAMEBUFFER, s->mid2_fbo);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s->mid2_tex, 0);
+                s->mid2_w = mw; s->mid2_h = mh;
+            }
+            first_target = s->mid2_fbo; fw = mw; fh = mh;
+            first_sharp = sharpness * 0.5f;  /* the first step only builds the edges: the second one sharpens */
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, first_target);
+        glViewport(0, 0, fw, fh);
         glUseProgram(s->nis_prog);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex);
         glUniform1i(glGetUniformLocation(s->nis_prog, "tex"), 0);
-        glUniform2f(glGetUniformLocation(s->nis_prog, "src"), (float)s->in[buf].w, (float)s->in[buf].h);
-        glUniform1f(glGetUniformLocation(s->nis_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
+        glUniform2f(glGetUniformLocation(s->nis_prog, "src"), (float)iw, (float)ih);
+        glUniform1f(glGetUniformLocation(s->nis_prog, "sharp"), first_sharp < 0 ? 0 : first_sharp > 1 ? 1 : first_sharp);
         glUniform4fv(glGetUniformLocation(s->nis_prog, "cs"), 128, nis_coef_scale);
         glUniform4fv(glGetUniformLocation(s->nis_prog, "cu"), 128, nis_coef_usm);
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();
+        if (two) {
+            glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
+            glViewport(0, 0, ow, oh);
+            glUseProgram(s->nis2_prog);
+            glBindTexture(GL_TEXTURE_2D, s->mid2_tex);
+            glUniform1i(glGetUniformLocation(s->nis2_prog, "tex"), 0);
+            glUniform2f(glGetUniformLocation(s->nis2_prog, "src"), (float)s->mid2_w, (float)s->mid2_h);
+            glUniform1f(glGetUniformLocation(s->nis2_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
+            glUniform4fv(glGetUniformLocation(s->nis2_prog, "cs"), 128, nis_coef_scale);
+            glUniform4fv(glGetUniformLocation(s->nis2_prog, "cu"), 128, nis_coef_usm);
+            glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
+            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+            draw();
+        }
         glFinish();
         o->busy = 1;
         s->last = k;
