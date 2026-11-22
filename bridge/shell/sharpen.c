@@ -292,6 +292,8 @@ static const char *FS_NIS =
     "    if (pp >= 1.0) opY += poly6(t1, t2, t3, t4, t5, t6, phase(pp - 1.0)) * w.w;\n"
     "    else opY += poly6(t0, t1, t2, t3, t4, t5, phase(pp)) * w.w;\n"
     "  }\n"
+    "  float lo = min(min(W(2, 2), W(2, 3)), min(W(3, 2), W(3, 3))), hi = max(max(W(2, 2), W(2, 3)), max(W(3, 2), W(3, 3)));\n"
+    "  opY = clamp(opY, lo - 0.3 * (hi - lo), hi + 0.3 * (hi - lo));  /* apklayer: keep the result near the 2x2 source range (halos) */\n"
     "  vec3 op = texture2D(tex, uv).rgb;\n"
     "  gl_FragColor = vec4(clamp(op + (opY - Y(op)), 0.0, 1.0), 1.0);\n"
     "}\n";
