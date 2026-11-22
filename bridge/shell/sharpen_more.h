@@ -74,10 +74,10 @@ static const char *FS_A4K_FIN =
 /* Edge-directed anti-aliasing of the finished picture (the owner: PGR at 50% render scale has jagged lines and shimmer, the game's own picture has no AA). Written for
  * this shell (no code borrowed; the idea is the family of FXAA / morphological filters): the 3x3 luma gives the edge direction (Sobel); where the local contrast is
  * high the pixel is blurred ALONG the edge with five bilinear taps (weights 3 2 2 1 1) and never across it, so stair steps are smoothed and strokes keep their
- * crispness; low-contrast areas are left alone. `sharp` is the strength. Reads a plain 2D texture (the upscaled picture), draws into the output. */
+ * crispness; low-contrast areas are left alone. `sharp` is the strength and `longk` (0..1) blends in the longer run: both grow with the upscale ratio (sharpen.c aa_pass: the lower the render scale, the heavier). Reads a plain 2D texture (the upscaled picture), draws into the output. */
 static const char *FS_AA =
     "precision highp float;\n"
-    "uniform sampler2D tex; uniform vec2 px; uniform float sharp; varying vec2 uv;\n"
+    "uniform sampler2D tex; uniform vec2 px; uniform float sharp; uniform float longk; varying vec2 uv;\n"
     "float L(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }\n"
     "vec3 T(vec2 o) { return texture2D(tex, uv + o * px).rgb; }\n"
     "void main() {\n"
@@ -90,6 +90,7 @@ static const char *FS_AA =
     "  if (rng < 0.05 || mag < 0.0001) { gl_FragColor = vec4(c, 1.0); return; }\n"
     "  vec2 t = vec2(-gy, gx) / mag;  /* along the edge */\n"
     "  vec3 blur = (c * 3.0 + (T(t) + T(-t)) * 2.0 + T(t * 2.0) + T(-t * 2.0)) / 9.0;\n"
-    "  if (sharp > 0.9) blur = (c * 3.0 + (T(t) + T(-t)) * 2.0 + (T(t * 2.0) + T(-t * 2.0)) * 2.0 + (T(t * 3.0) + T(-t * 3.0)) * 1.5 + T(t * 4.0) + T(-t * 4.0)) / 16.0;  /* high: a longer run, for the longer steps of a bigger upscale */\n"
+    "  vec3 blurL = (c * 3.0 + (T(t) + T(-t)) * 2.0 + (T(t * 2.0) + T(-t * 2.0)) * 2.0 + (T(t * 3.0) + T(-t * 3.0)) * 1.5 + T(t * 4.0) + T(-t * 4.0)) / 16.0;  /* a longer run, for the longer steps of a bigger upscale */\n"
+    "  blur = mix(blur, blurL, longk);\n"
     "  gl_FragColor = vec4(mix(c, blur, smoothstep(0.05, 0.25, rng) * sharp), 1.0);\n"
     "}\n";

@@ -641,9 +641,15 @@ static GLuint aa_target(struct sharpen *s, int w, int h)
     return s->aa_fbo;
 }
 
-static void aa_pass(struct sharpen *s, GLuint out_fbo, int w, int h)
+static void aa_pass(struct sharpen *s, GLuint out_fbo, int w, int h, float ratio)
 {
     int lvl = s->aa_req ? s->aa_req : s->aa_env;
+    /* the lower the render scale (the bigger the ratio), the heavier: stairs are `ratio` pixels long, so the strength and the length of the run follow it */
+    float r = ratio < 1.0f ? 1.0f : ratio > 4.0f ? 4.0f : ratio, str, longk;
+    if (lvl == 3) { str = 0.4f + 0.5f * (r - 1.0f); longk = (r - 1.2f) / 1.0f; }
+    else { str = 0.25f + 0.35f * (r - 1.0f); longk = 0.7f * (r - 1.4f) / 1.6f; }
+    str = str < 0.0f ? 0.0f : str > 1.0f ? 1.0f : str;
+    longk = longk < 0.0f ? 0.0f : longk > 1.0f ? 1.0f : longk;
     glBindFramebuffer(GL_FRAMEBUFFER, out_fbo);
     glViewport(0, 0, w, h);
     glUseProgram(s->aa_prog);
@@ -651,7 +657,8 @@ static void aa_pass(struct sharpen *s, GLuint out_fbo, int w, int h)
     glBindTexture(GL_TEXTURE_2D, s->aa_tex);
     glUniform1i(glGetUniformLocation(s->aa_prog, "tex"), 0);
     glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
-    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), lvl == 3 ? 1.0f : 0.6f);
+    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), str);
+    glUniform1f(glGetUniformLocation(s->aa_prog, "longk"), longk);
     glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
@@ -762,7 +769,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     if (aa && !dst) { aa = 0; dst = o->fbo; }
     if (s->mode == 4 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, s->in[buf].w, s->in[buf].h)) {  /* Anime4K CNN: six passes, the last into the output dmabuf */
         a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, dst, s->vbo);
-        if (aa) aa_pass(s, o->fbo, ow, oh);
+        if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
         gpu_wait(s);
         o->busy = 1;
         o->used = ++s->tick;
@@ -776,7 +783,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     if (one && one != s->down_prog && st > 1 && ow > s->in[buf].w * 1.05 && oh > s->in[buf].h * 1.05) {  /* an upscale: the phases */
         GLuint p2d = s->mode == 1 ? s->nis2d : s->mode == 2 ? s->sgsr2d : s->lanczos2d;
         if (p2d && phases(s, buf, one, p2d, ow, oh, sharpness, dst, st) == 0) {
-            if (aa) aa_pass(s, o->fbo, ow, oh);
+            if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
             gpu_wait(s);
             o->busy = 1;
             o->used = ++s->tick;
@@ -800,7 +807,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();
-        if (aa) aa_pass(s, o->fbo, ow, oh);
+        if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
         gpu_wait(s);
         o->busy = 1;
         o->used = ++s->tick;
@@ -829,7 +836,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glUniform2f(glGetUniformLocation(s->cas_prog, "px"), 1.0f / (float)ow, 1.0f / (float)oh);
     glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
     draw();
-    if (aa) aa_pass(s, o->fbo, ow, oh);
+    if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
         o->used = ++s->tick;
