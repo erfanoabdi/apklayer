@@ -310,7 +310,10 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
 {
     if (slot < 0 || slot >= SLOTS) return -EINVAL;
     if (d->headless) return 0; /* no consumer takes ownership of an invisible primary's buffers */
-    int32_t m[20] = { 0 };
+    int32_t m[21] = { 0 };
+    /* apklayer patch: the render filter (`apklayer settings` render-filter sharp, cli/run.cpp): a flags word after the damage; a shell that does not know
+     * it (len 80) ignores it, one that does resamples a buffer that is not the window's pixels with the upscale pass (bridge/shell/sharpen.c) */
+    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && !strcmp(e, "sharp"); } m[20] = filter; }
     m[0] = WINDOW_ID;
     m[1] = slot;
     m[2] = (int32_t)buf->fourcc;

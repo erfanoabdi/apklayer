@@ -19,12 +19,23 @@ static void add_linear(uint32_t fmt)
     if (dmabuf_linear_n < DMABUF_LINEAR_MAX) dmabuf_linear[dmabuf_linear_n++] = fmt;
 }
 
+/* the modifiers the compositor takes for XRGB8888 (sharpen_win.c allocates its output with one of them, never one it was not told about) */
+uint64_t dmabuf_xrgb_mods[DMABUF_MODS_MAX];
+int dmabuf_xrgb_n;
+static void add_xrgb(uint32_t fmt, uint64_t mod)
+{
+    if (fmt != 0x34325258u) return;  /* DRM_FORMAT_XRGB8888 */
+    for (int i = 0; i < dmabuf_xrgb_n; i++) if (dmabuf_xrgb_mods[i] == mod) return;
+    if (dmabuf_xrgb_n < DMABUF_MODS_MAX) dmabuf_xrgb_mods[dmabuf_xrgb_n++] = mod;
+}
+
 /* before v4 */
 static void dmabuf_format(void *d, struct zwp_linux_dmabuf_v1 *m, uint32_t fmt) { (void)d; (void)m; (void)fmt; }
 static void dmabuf_modifier(void *d, struct zwp_linux_dmabuf_v1 *m, uint32_t fmt, uint32_t hi, uint32_t lo)
 {
     (void)d; (void)m;
     if (hi == 0 && lo == 0) add_linear(fmt);  /* DRM_FORMAT_MOD_LINEAR is accepted for this format */
+    add_xrgb(fmt, ((uint64_t)hi << 32) | lo);
 }
 static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = { dmabuf_format, dmabuf_modifier };
 
@@ -62,7 +73,10 @@ static void fb_tranche_formats(void *d, struct zwp_linux_dmabuf_feedback_v1 *f, 
     (void)d; (void)f;
     const uint16_t *idx;
     wl_array_for_each(idx, indices)
-        if (table && *idx < table_n && table[*idx].modifier == 0) add_linear(table[*idx].format);
+        if (table && *idx < table_n) {
+            if (table[*idx].modifier == 0) add_linear(table[*idx].format);
+            add_xrgb(table[*idx].format, table[*idx].modifier);
+        }
 }
 static void fb_tranche_flags(void *d, struct zwp_linux_dmabuf_feedback_v1 *f, uint32_t flags) { (void)d; (void)f; (void)flags; }
 static const struct zwp_linux_dmabuf_feedback_v1_listener feedback_listener = {

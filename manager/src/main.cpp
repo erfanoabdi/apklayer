@@ -183,6 +183,9 @@ public:
         appScales_.clear();  // render-scale.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-scale.", 0) == 0) appScales_[field(r, 0).substr(13)] = field(r, 1);
         b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
+        appFilters_.clear();  // render-filter.<package>
+        for (const auto& r : s.settings) if (field(r, 0).rfind("render-filter.", 0) == 0) appFilters_[field(r, 0).substr(14)] = field(r, 1);
+        b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
         b.set_status(info(s.status));
         auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
         gpuIds_.clear();
@@ -230,6 +233,7 @@ public:
 
     std::map<std::string, std::string> appModes_;
     std::map<std::string, std::string> appScales_;  // render-scale.<package>
+    std::map<std::string, std::string> appFilters_;  // render-filter.<package>
     std::map<std::string, std::pair<int, int>> windowPx_;  // the app's window pixels at its last start (`app <package> resolution`)
     std::function<void()> applied;  // the screenshot mode's event: a refresh begun after the scripted input reached the window
     std::function<void()> previewed;  // and --wait-preview's: the install dialog's preview is shown (or failed)
@@ -479,6 +483,7 @@ private:
             b.set_has_current_app(true);
             b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
             b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
+            b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
             showDetail({});
             later([cli = cli_, p = current_] { return loadDetail(cli, p); }, [this, p = current_](const Detail& d) {
                 if (p != current_) return;
@@ -553,6 +558,7 @@ private:
         b.on_unset_prop([this](slint::SharedString k) { action("Saving", {"prop", "unset", std::string(k)}); });
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
             if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
+            if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = std::string(v); ui_->global<Backend>().set_app_render_filter_setting(v); }
             if (std::string(k).rfind("render-scale.", 0) == 0) { appScales_[std::string(k).substr(13)] = std::string(v); ui_->global<Backend>().set_app_render_scale_setting(v); showResolution(); }
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
             else action("Saving", {"settings", "set", std::string(k), std::string(v)});

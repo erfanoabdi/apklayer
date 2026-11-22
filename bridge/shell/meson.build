@@ -33,9 +33,24 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
       input: xml,
       command: [scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
   endforeach
+  # the render filter (sharpen.c): EGL, GBM and GLES; without them the shell builds without it
+  egl_dep = dependency('egl', required: false)
+  gbm_dep = dependency('gbm', required: false)
+  gles_dep = dependency('glesv2', required: false)
+  sharpen_src = []
+  sharpen_deps = []
+  sharpen_args = []
+  if egl_dep.found() and gbm_dep.found() and gles_dep.found()
+    sharpen_src = ['sharpen.c']
+    sharpen_deps = [egl_dep, gbm_dep, gles_dep]
+    sharpen_args = ['-DHAVE_SHARPEN']
+  endif
+  if sharpen_src.length() > 0  # the pass alone, for tests/vm/sharpen.py (not installed)
+    executable('sharpen-test', ['../../tests/hals/sharpen-test.c', 'sharpen.c'], dependencies: sharpen_deps)
+  endif
   executable('apklayer-shell',
-    ['main.c', 'client.c', 'window.c', 'geometry.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'navbar.c', 'mobile.c', 'appinfo.c', 'dmabuf.c', 'dmabuf_shm.c', 'feedback.c', 'splash.c', 'vsync.c', 'testinput.c', 'activation.c', 'decoration.c', 'wlegl.c', 'wlshell.c', 'maliit.c', 'tablet.c', 'gamepad.c', generated],
-    dependencies: [cairo_dep, gio_shell_dep, wl_client_dep, wl_cursor_dep, xkb_dep, meson.get_compiler('c').find_library('m')],  # hypot (splash.c): glibc 2.39 (Ubuntu 24.04) does not pull libm in by itself
-    c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration'],
+    ['main.c', 'client.c', 'window.c', 'geometry.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'navbar.c', 'mobile.c', 'appinfo.c', 'dmabuf.c', 'dmabuf_shm.c', 'feedback.c', 'splash.c', 'vsync.c', 'testinput.c', 'activation.c', 'decoration.c', 'wlegl.c', 'wlshell.c', 'maliit.c', 'tablet.c', 'gamepad.c', 'sharpen_win.c', sharpen_src, generated],
+    dependencies: [cairo_dep, gio_shell_dep, wl_client_dep, wl_cursor_dep, xkb_dep, sharpen_deps, meson.get_compiler('c').find_library('m')],  # hypot (splash.c): glibc 2.39 (Ubuntu 24.04) does not pull libm in by itself
+    c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration', sharpen_args],
     install: true, install_dir: pkg_lib / 'bridge/shell')
 endif

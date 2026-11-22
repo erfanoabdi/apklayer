@@ -17,6 +17,7 @@ static const struct wl_buffer_listener dbuf_listener = { dbuf_release };
 
 void window_dmabuf_destroy(struct window *w)
 {
+    sharpen_win_destroy(w);
     dshm_destroy(w);
     for (int i = 0; i < DBUF_MAX; i++) {
         if (w->dbufs[i]) wl_buffer_destroy(w->dbufs[i]);
@@ -57,6 +58,7 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
         w->dbufs[buf] = zwp_linux_buffer_params_v1_create_immed(p, m[3], m[4], (uint32_t)m[2], 0);
         zwp_linux_buffer_params_v1_destroy(p);
         wl_buffer_add_listener(w->dbufs[buf], &dbuf_listener, w);
+        sharpen_win_import(w, buf, m, fds, nfds);  /* the render filter's own import of the same buffer (it may fail: the buffer is shown as it is) */
     }
     if (!w->dbufs[buf] && !(w->dshm && !dmabuf_mgr)) return;
 pending:
@@ -73,6 +75,7 @@ pending:
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage)
 {
     if (!dmabuf_mgr) { dshm_show(w, buf, damage); return; }
+    if (sharpen_win_show(w, buf)) return;
     w->framed = 1;
     wl_surface_attach(w->surface, w->dbufs[buf], 0, 0);
     surface_damage(w->surface, damage[0], damage[1], damage[2], damage[3]);

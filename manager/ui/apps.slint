@@ -120,6 +120,22 @@ component AppDetail {
                     }
                 }
             }
+            OutlinedCard {
+                VerticalLayout {
+                    padding: MaterialStyleMetrics.padding_16;
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    MaterialText { text: "Sharper picture at a lower render scale"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
+                    MaterialText { text: "When the app renders at another size than its window, the shell resamples it (bicubic) and sharpens the edges instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: MaterialStyleMetrics.spacing_8;
+                        for choice in [{ label: "Off", value: "" }, { label: "Sharp", value: "sharp" }] : HorizontalLayout {
+                            if Backend.app-render-filter-setting == choice.value : FilledButton { text: choice.label; }
+                            if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
+                        }
+                    }
+                }
+            }
             if Backend.app-config.length > 0 : Heading { text: "Settings of this app"; }
             if Backend.app-config.length > 0 : MaterialText { text: "A change applies at the app's next cold start: stop the app (or it restarts on its own) for it to take effect."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
             if Backend.app-config.length > 0 : OutlinedCard {

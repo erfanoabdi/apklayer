@@ -15,7 +15,7 @@
  *                  3 FRAME          {i32 id, i32 buf, i32 x, i32 y, i32 w, i32 h}  (damage rect)
  *                  4 WINDOW_DESTROY {i32 id}
  *                  6 TEXT_INPUT     {i32 id, i32 enabled}: a text field gained/lost focus (IME on/off)
- *                  8 DMABUF_FRAME   {i32 id, buf(0..7), fourcc, w, h, nplanes, mod_lo, mod_hi, stride[4], offset[4], damage x,y,w,h}
+ *                  8 DMABUF_FRAME   {i32 id, buf(0..7), fourcc, w, h, nplanes, mod_lo, mod_hi, stride[4], offset[4], damage x,y,w,h[, flags: bit 0 the render filter]}
  *                                   + nplanes dmabuf fds as SCM_RIGHTS. First use of `buf` creates the buffer from the fds (the
  *                                   shell keeps it); nplanes = 0 shows the buffer already created. The window is created with
  *                                   WINDOW_CREATE and an EMPTY shm path (a dmabuf-only window). Zero copy: the compositor gets the
@@ -208,6 +208,8 @@ struct window {
     struct dshm *dshm;          /* dmabuf frames copied into wl_shm buffers: a compositor without linux-dmabuf (dmabuf_shm.c) */
     int pending_buf;            /* frame received before the first configure */
     int32_t pending_damage[4];
+    struct swin *sharp;         /* the upscale pass of this window (sharpen_win.c), NULL until a frame asks for it */
+    int filter;                 /* the app wants the render filter (DMABUF_FRAME flags word, bit 0) */
     int pending_dbuf;           /* dmabuf frame received before the first configure (committing a buffer earlier is an xdg-shell error) */
     int32_t pending_ddamage[4];
     char title[64];
@@ -310,6 +312,9 @@ void client_display_refresh(struct client *c, int mhz);
 #define DMABUF_LINEAR_MAX 64
 extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (feedback.c) */
 extern int dmabuf_linear_n;
+#define DMABUF_MODS_MAX 64
+extern uint64_t dmabuf_xrgb_mods[DMABUF_MODS_MAX]; /* the modifiers it takes for XRGB8888 (feedback.c) */
+extern int dmabuf_xrgb_n;
 void dmabuf_bind(struct wl_registry *r, uint32_t name, uint32_t ver);  /* feedback.c */
 int print_compositor_gpu(void);  /* feedback.c: the compositor's main device (--compositor-gpu) */
 void window_request_size(struct window *w, int lw, int lh);
@@ -332,6 +337,10 @@ static inline void surface_damage(struct wl_surface *s, int32_t x, int32_t y, in
 void wlegl_bind(struct wl_registry *r, uint32_t name, uint32_t ver);  /* wlegl.c: libhybris's android_wlegl (Halium compositors) */
 void window_gralloc_frame(struct window *w, const int32_t *m, uint32_t len, const int *fds, int nfds);  /* wlegl.c */
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
+void sharpen_win_import(struct window *w, int buf, const int32_t *m, const int *fds, int nfds);  /* sharpen_win.c */
+int sharpen_win_show(struct window *w, int buf);
+void sharpen_win_forget(struct window *w, int buf);
+void sharpen_win_destroy(struct window *w);
 int dshm_import(struct window *w, const int32_t *m, int fd);  /* dmabuf_shm.c */
 void dshm_show(struct window *w, int buf, const int32_t *damage);
 void dshm_destroy(struct window *w);

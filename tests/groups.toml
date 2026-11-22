@@ -365,6 +365,9 @@ run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py -
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/render-scale.py"]
 
+[sharpen]  # the render filter's upscale and sharpening pass alone (EGL, dma-buf import; no compositor)
+run = ["python3 -u tests/vm/sharpen.py"]
+
 [decoration]
 # server-side title bars under sway (headless, its own socket) when sway is on the VM, else under the desktop's own compositor if it has xdg-decoration (KDE)
 needs = ["com.android.test.uibench"]
