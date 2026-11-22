@@ -618,7 +618,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    if (s->mode == 4 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, ow, oh)) {  /* Anime4K: five passes, the last into the output dmabuf */
+    if (s->mode == 4 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, s->in[buf].w, s->in[buf].h)) {  /* Anime4K CNN: six passes, the last into the output dmabuf */
         a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, o->fbo, s->vbo);
         gpu_wait(s);
         o->busy = 1;

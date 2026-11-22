@@ -9,7 +9,7 @@
 
 /* the shaders' push-constant block (tools/gen/sharpen-spv.py): vec2 src, scl, px, d; float sharp, down */
 struct pc { float src[2], scl[2], px[2], d[2], sharp, down; };
-enum { P_UP, P_CAS, P_NIS, P_SGSR, P_LANCZOS, P_PRE, P_Y, P_X, P_DIR, P_APPLY };
+enum { P_UP, P_CAS, P_NIS, P_SGSR, P_LANCZOS, P_C1, P_C2, P_C3, P_C4, P_D2S, P_FIN };
 
 static VkRenderPass make_rp(struct svk *s, VkFormat fmt, VkImageLayout final)
 {
@@ -94,7 +94,7 @@ int svk_pipelines(struct svk *s)
             { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = s->fs[i], .pName = "main" } };
         VkGraphicsPipelineCreateInfo gi = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = st, .pVertexInputState = &vi, .pInputAssemblyState = &ia,
             .pViewportState = &vp, .pRasterizationState = &rs, .pMultisampleState = &ms, .pColorBlendState = &cb, .pDynamicState = &ds, .layout = s->pl,
-            .renderPass = i >= P_PRE && i <= P_DIR ? s->rp_f16 : s->rp_mid };  /* rp_mid and rp_out are compatible: the same pipelines draw into either */
+            .renderPass = i >= P_C1 && i <= P_C4 ? s->rp_f16 : s->rp_mid };  /* rp_mid and rp_out are compatible: the same pipelines draw into either */
         if (s->vkCreateGraphicsPipelines(s->dev, VK_NULL_HANDLE, 1, &gi, NULL, &s->pipe[i]) != VK_SUCCESS) { s->pipe[i] = VK_NULL_HANDLE; goto fail; }
     }
     return 0;
@@ -181,7 +181,10 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
     if (mode == 4 && !(in->w < ow && in->h < oh)) mode = 0;  /* Anime4K needs a smaller source (as the GLES path): FSR 1 */
     if (mode < 0 || mode > 4) mode = 0;
     if (mode == 0 && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
-    if (mode == 4) for (int i = 0; i < 3; i++) if (target(s, &s->f16[i], VK_FORMAT_R16G16B16A16_SFLOAT, s->rp_f16, ow, oh) < 0) return -1;
+    if (mode == 4) {  /* the CNN's three half-float layers at the source's size, the 2x picture (RGBA8) in `mid` */
+        for (int i = 0; i < 3; i++) if (target(s, &s->f16[i], VK_FORMAT_R16G16B16A16_SFLOAT, s->rp_f16, in->w, in->h) < 0) return -1;
+        if (target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, 2 * in->w, 2 * in->h) < 0) return -1;
+    }
     struct pc pc = { { (float)in->w, (float)in->h }, { (float)ow / (float)in->w, (float)oh / (float)in->h }, { 1.0f / (float)ow, 1.0f / (float)oh },
         { 1.0f / (float)in->w, 1.0f / (float)in->h }, sharp < 0 ? 0 : sharp > 1 ? 1 : sharp, in->w > ow ? (float)in->w / (float)ow : 0.0f };
     s->vkResetDescriptorPool(s->dev, s->pool, 0);
@@ -208,14 +211,17 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
         pass(s, mode == 1 ? P_NIS : mode == 2 ? P_SGSR : P_LANCZOS, s->rp_out, o->i.fb, ow, oh, a, &pc);
         break;
     }
-    default: {  /* Anime4K: gradients, sobel norm, gradients of the norm, direction, apply (T0 T1 T0 T2) */
+    default: {  /* Anime4K CNN: four conv layers (T0 T1 T2 T0), depth-to-space into the 2x `mid`, Lanczos 3 into the output */
         VkImageView t0 = s->f16[0].view, t1 = s->f16[1].view, t2 = s->f16[2].view;
-        VkImageView a[4] = { ext, none, none, none }, b[4] = { none, t0, none, none }, c[4] = { none, none, t1, none }, d[4] = { none, t0, t1, none }, e[4] = { ext, none, t1, t2 };
-        pass(s, P_PRE, s->rp_f16, s->f16[0].fb, ow, oh, a, &pc);
-        pass(s, P_Y, s->rp_f16, s->f16[1].fb, ow, oh, b, &pc);
-        pass(s, P_X, s->rp_f16, s->f16[0].fb, ow, oh, c, &pc);
-        pass(s, P_DIR, s->rp_f16, s->f16[2].fb, ow, oh, d, &pc);
-        pass(s, P_APPLY, s->rp_out, o->i.fb, ow, oh, e, &pc);
+        VkImageView a[4] = { ext, none, none, none }, b[4] = { none, t0, none, none }, c[4] = { none, none, t1, none }, d[4] = { none, none, none, t2 }, e[4] = { ext, t0, none, none }, f[4] = { none, s->mid.view, none, none };
+        struct pc p2 = pc;  /* the last pass samples the 2x picture */
+        p2.src[0] = 2.0f * (float)in->w; p2.src[1] = 2.0f * (float)in->h;
+        pass(s, P_C1, s->rp_f16, s->f16[0].fb, in->w, in->h, a, &pc);
+        pass(s, P_C2, s->rp_f16, s->f16[1].fb, in->w, in->h, b, &pc);
+        pass(s, P_C3, s->rp_f16, s->f16[2].fb, in->w, in->h, c, &pc);
+        pass(s, P_C4, s->rp_f16, s->f16[0].fb, in->w, in->h, d, &pc);
+        pass(s, P_D2S, s->rp_mid, s->mid.fb, 2 * in->w, 2 * in->h, e, &pc);
+        pass(s, P_FIN, s->rp_out, o->i.fb, ow, oh, f, &p2);
     }
     }
     if (s->has_foreign) {  /* the output goes back to the outside (the compositor) */
