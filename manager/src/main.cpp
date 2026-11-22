@@ -189,6 +189,9 @@ public:
         appPhases_.clear();  // render-phases.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-phases.", 0) == 0) appPhases_[field(r, 0).substr(14)] = field(r, 1);
         b.set_app_render_phases_setting(slint::SharedString(appPhases_[current_]));
+        appAa_.clear();  // render-aa.<package>
+        for (const auto& r : s.settings) if (field(r, 0).rfind("render-aa.", 0) == 0) appAa_[field(r, 0).substr(10)] = field(r, 1);
+        b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
         b.set_status(info(s.status));
         auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
         gpuIds_.clear();
@@ -238,6 +241,7 @@ public:
     std::map<std::string, std::string> appScales_;  // render-scale.<package>
     std::map<std::string, std::string> appFilters_;  // render-filter.<package>
     std::map<std::string, std::string> appPhases_;   // render-phases.<package>
+    std::map<std::string, std::string> appAa_;       // render-aa.<package>
     std::map<std::string, std::pair<int, int>> windowPx_;  // the app's window pixels at its last start (`app <package> resolution`)
     std::function<void()> applied;  // the screenshot mode's event: a refresh begun after the scripted input reached the window
     std::function<void()> previewed;  // and --wait-preview's: the install dialog's preview is shown (or failed)
@@ -490,6 +494,7 @@ private:
             b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
             b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
             b.set_app_render_phases_setting(slint::SharedString(appPhases_[current_]));
+            b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
             showDetail({});
             later([cli = cli_, p = current_] { return loadDetail(cli, p); }, [this, p = current_](const Detail& d) {
                 if (p != current_) return;
@@ -566,6 +571,7 @@ private:
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
             if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
             if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = std::string(v); ui_->global<Backend>().set_app_render_filter_setting(v); }
+            if (std::string(k).rfind("render-aa.", 0) == 0) { appAa_[std::string(k).substr(10)] = std::string(v); ui_->global<Backend>().set_app_render_aa_setting(v); }
             if (std::string(k).rfind("render-phases.", 0) == 0) { appPhases_[std::string(k).substr(14)] = std::string(v); ui_->global<Backend>().set_app_render_phases_setting(v); }
             if (std::string(k).rfind("render-scale.", 0) == 0) { appScales_[std::string(k).substr(13)] = std::string(v); ui_->global<Backend>().set_app_render_scale_setting(v); showResolution(); }
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});

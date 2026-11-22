@@ -321,6 +321,8 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
         if (e && !strcmp(e, "auto")) filter = 11;  /* 5: the shell picks the mode by the ratio window/frame (sharpen_win.c) */
         const char *ph = getenv("APKLAYER_RENDER_PHASES");  /* bits 4-6: the phases of the NIS/SGSR/Lanczos upscale (1..4, 0: the shell's default) */
         if (ph && atoi(ph) >= 1 && atoi(ph) <= 4) filter |= atoi(ph) << 4;
+        const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: the anti-aliasing after an upscale: 1 off, 2 low, 3 high (0: the shell's default, low) */
+        if (aa) filter |= (!strcmp(aa, "off") ? 1 : !strcmp(aa, "low") ? 2 : !strcmp(aa, "high") ? 3 : 0) << 7;
     } m[20] = filter; }
     m[0] = WINDOW_ID;
     m[1] = slot;

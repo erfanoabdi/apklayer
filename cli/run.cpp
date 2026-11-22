@@ -248,7 +248,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 else if (line.compare(0, eq, "window-mode." + package) == 0) specific = line.substr(eq + 1);
             }
             if (!specific.empty() || !general.empty()) ne.env["APKLAYER_WINDOW_MODE"] = nj.env["APKLAYER_WINDOW_MODE"] = specific.empty() ? general : specific;
-            std::string scale, scaleOwn, filter, filterOwn, phases, phasesOwn;  // render-filter (sharp|off, the app's own render-filter.<package> first): the shell's upscale pass  // the render scale (render-scale, the app's own render-scale.<package> first): a fullscreen game's share of the window's pixels
+            std::string scale, scaleOwn, filter, filterOwn, phases, phasesOwn, aaS, aaOwn;  // render-filter (sharp|off, the app's own render-filter.<package> first): the shell's upscale pass  // the render scale (render-scale, the app's own render-scale.<package> first): a fullscreen game's share of the window's pixels
             for (const std::string& line : split(readFile(join(inst.root, "settings")).value_or(""), '\n')) {  // the navigation bar on desktop windows (navbar auto|on|off)
                 if (line.compare(0, 7, "navbar=") == 0) ne.env["APKLAYER_NAVBAR"] = nj.env["APKLAYER_NAVBAR"] = line.substr(7);
                 if (line.compare(0, 13, "render-scale=") == 0) scale = line.substr(13);
@@ -257,11 +257,14 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 else if (line.compare(0, 15 + package.size(), "render-filter." + package + "=") == 0) filterOwn = line.substr(15 + package.size());
                 if (line.compare(0, 14, "render-phases=") == 0) phases = line.substr(14);  // phases of the NIS/SGSR/Lanczos upscale (1..4; the shell defaults to 2)
                 else if (line.compare(0, 15 + package.size(), "render-phases." + package + "=") == 0) phasesOwn = line.substr(15 + package.size());
+                if (line.compare(0, 10, "render-aa=") == 0) aaS = line.substr(10);  // anti-aliasing after an upscale (off|low|high; the shell defaults to low)
+                else if (line.compare(0, 11 + package.size(), "render-aa." + package + "=") == 0) aaOwn = line.substr(11 + package.size());
             }
             if (!scaleOwn.empty() || !scale.empty()) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = scaleOwn.empty() ? scale : scaleOwn;
             std::string chosen = filterOwn.empty() ? filter : filterOwn, usedScale = scaleOwn.empty() ? scale : scaleOwn;
             if (chosen.empty() && !usedScale.empty() && usedScale != "100") chosen = "auto";  // a render scale other than 100 and no render-filter: the shell picks SGSR 1 or NIS by the ratio (sharpen_win.c) (the compositor's bilinear is soft); an explicit `off` stays off
             if (!phasesOwn.empty() || !phases.empty()) ne.env["APKLAYER_RENDER_PHASES"] = nj.env["APKLAYER_RENDER_PHASES"] = phasesOwn.empty() ? phases : phasesOwn;
+            if (!aaOwn.empty() || !aaS.empty()) ne.env["APKLAYER_RENDER_AA"] = nj.env["APKLAYER_RENDER_AA"] = aaOwn.empty() ? aaS : aaOwn;
             if (!chosen.empty()) ne.env["APKLAYER_RENDER_FILTER"] = nj.env["APKLAYER_RENDER_FILTER"] = chosen;
         }
         Spawn sink;

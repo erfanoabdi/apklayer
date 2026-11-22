@@ -57,6 +57,8 @@ struct sharpen {
     int mid_w, mid_h;
     uint64_t tick;
     struct a4k *a4k;
+    GLuint aa_prog, aa_tex, aa_fbo;   /* the anti-aliasing pass (FS_AA) and its input picture at the output size */
+    int aa_w, aa_h, aa_req, aa_env;   /* aa_req: the window's render-aa (0 default, 1 off, 2 low, 3 high); aa_env: the default (APKLAYER_SHARPEN_AA off|low|high, else low) */
     struct { GLuint tex, fbo; int w, h; } ph[3];  /* the intermediate pictures of the multi-phase upscale */
     GLuint nis2d, sgsr2d, lanczos2d;   /* the one-pass shaders reading a GL_TEXTURE_2D (the intermediate) instead of the app's external image */
     int stages_req;                    /* the window's render-phases, 0: stages */
@@ -363,7 +365,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "high") ? 3 : 2; } s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 
@@ -484,6 +486,7 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
         s->sgsr_prog = program(FS_SGSR);
         s->lanczos_prog = program(FS_LANCZOS);
+        s->aa_prog = program(FS_AA);
         s->nis2d = program_2d(FS_NIS);
         s->sgsr2d = program_2d(FS_SGSR);
         s->lanczos2d = program_2d(FS_LANCZOS);
@@ -616,6 +619,45 @@ static void draw(void)
 
 #include "sharpen_a4k.h"
 
+/* The anti-aliasing post pass: the filter draws into aa_tex (output size, LINEAR) and this pass smooths its stair steps into the output dmabuf. */
+static GLuint aa_target(struct sharpen *s, int w, int h)
+{
+    if (s->aa_w != w || s->aa_h != h) {
+        if (s->aa_fbo) glDeleteFramebuffers(1, &s->aa_fbo);
+        if (s->aa_tex) glDeleteTextures(1, &s->aa_tex);
+        glGenTextures(1, &s->aa_tex);
+        glBindTexture(GL_TEXTURE_2D, s->aa_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenFramebuffers(1, &s->aa_fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, s->aa_fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s->aa_tex, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { s->aa_w = s->aa_h = 0; return 0; }
+        s->aa_w = w; s->aa_h = h;
+    }
+    return s->aa_fbo;
+}
+
+static void aa_pass(struct sharpen *s, GLuint out_fbo, int w, int h)
+{
+    int lvl = s->aa_req ? s->aa_req : s->aa_env;
+    glBindFramebuffer(GL_FRAMEBUFFER, out_fbo);
+    glViewport(0, 0, w, h);
+    glUseProgram(s->aa_prog);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, s->aa_tex);
+    glUniform1i(glGetUniformLocation(s->aa_prog, "tex"), 0);
+    glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
+    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), lvl == 3 ? 1.0f : 0.6f);
+    glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    draw();
+}
+
 /* The multi-phase upscale (NIS, SGSR 1, Lanczos): N equal-ratio phases, each the mode's own shader; the first reads the app's buffer, the next ones the
  * previous phase's RGBA8 picture (LINEAR), only the last sharpens (the others run at sharpness 0), the last draws into the output dmabuf. Measured: for these
  * filters every phase costs a little quality (the intermediate is re-rounded to 8 bits and softened), it is the owner's choice. 0: done. */
@@ -665,6 +707,7 @@ static int phases(struct sharpen *s, int buf, GLuint pext, GLuint p2d, int ow, i
 }
 
 void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
+void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n >= 1 && n <= 3 ? n : 0; }
 void sharpen_set_stages(struct sharpen *s, int n) { if (s) s->stages_req = n >= 1 && n <= 4 ? n : 0; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
@@ -714,8 +757,12 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
+    int aa = s->aa_prog && (s->aa_req ? s->aa_req : s->aa_env) > 1 && ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: the filter draws into aa_tex, the AA pass into the output */
+    GLuint dst = aa ? aa_target(s, ow, oh) : o->fbo;
+    if (aa && !dst) { aa = 0; dst = o->fbo; }
     if (s->mode == 4 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, s->in[buf].w, s->in[buf].h)) {  /* Anime4K CNN: six passes, the last into the output dmabuf */
-        a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, o->fbo, s->vbo);
+        a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, dst, s->vbo);
+        if (aa) aa_pass(s, o->fbo, ow, oh);
         gpu_wait(s);
         o->busy = 1;
         o->used = ++s->tick;
@@ -728,7 +775,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     int st = s->stages_req ? s->stages_req : s->stages;
     if (one && one != s->down_prog && st > 1 && ow > s->in[buf].w * 1.05 && oh > s->in[buf].h * 1.05) {  /* an upscale: the phases */
         GLuint p2d = s->mode == 1 ? s->nis2d : s->mode == 2 ? s->sgsr2d : s->lanczos2d;
-        if (p2d && phases(s, buf, one, p2d, ow, oh, sharpness, o->fbo, st) == 0) {
+        if (p2d && phases(s, buf, one, p2d, ow, oh, sharpness, dst, st) == 0) {
+            if (aa) aa_pass(s, o->fbo, ow, oh);
             gpu_wait(s);
             o->busy = 1;
             o->used = ++s->tick;
@@ -738,7 +786,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         }
     }
     if (one) {  /* NIS, SGSR 1, Lanczos, the downscale: one pass, straight into the output dmabuf */
-        glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, dst);
         glViewport(0, 0, ow, oh);
         glUseProgram(one);
         glActiveTexture(GL_TEXTURE0);
@@ -752,6 +800,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();
+        if (aa) aa_pass(s, o->fbo, ow, oh);
         gpu_wait(s);
         o->busy = 1;
         o->used = ++s->tick;
@@ -772,7 +821,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     /* pass 2: sharpened into the output dmabuf */
-    glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, dst);
     glViewport(0, 0, ow, oh);
     glUseProgram(s->cas_prog);
     glBindTexture(GL_TEXTURE_2D, s->mid_tex);
@@ -780,6 +829,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glUniform2f(glGetUniformLocation(s->cas_prog, "px"), 1.0f / (float)ow, 1.0f / (float)oh);
     glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
     draw();
+    if (aa) aa_pass(s, o->fbo, ow, oh);
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
         o->used = ++s->tick;
