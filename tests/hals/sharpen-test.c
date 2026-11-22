@@ -48,7 +48,12 @@ int main(int argc, char **argv)
     stride = gbm_bo_get_stride(bo);
     uint32_t off = gbm_bo_get_offset(bo, 0);
     struct sharpen *s = sharpen_open();
-    if (argc > 8) { uint64_t mod = strtoull(argv[8], NULL, 16); sharpen_accept(s, &mod, 1); }
+    if (argc > 8) {  /* the accepted modifiers: hex, comma separated */
+        uint64_t mods[64];
+        int n = 0;
+        for (char *tok = strtok(argv[8], ","); tok && n < 64; tok = strtok(NULL, ",")) mods[n++] = strtoull(tok, NULL, 16);
+        sharpen_accept(s, mods, n);
+    }
     if (sharpen_import(s, 0, 0x34325258u, w, h, 1, &dfd, &stride, &off, gbm_bo_get_modifier(bo)) < 0) { fprintf(stderr, "import failed\n"); return 4; }
     int slot, fresh;
     if (sharpen_render(s, 0, ow, oh, sharp, &slot, &fresh) < 0) { fprintf(stderr, "render failed\n"); return 5; }

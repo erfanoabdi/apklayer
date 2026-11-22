@@ -210,6 +210,7 @@ struct window {
     int32_t pending_damage[4];
     struct swin *sharp;         /* the upscale pass of this window (sharpen_win.c), NULL until a frame asks for it */
     int filter;                 /* the app wants the render filter (DMABUF_FRAME flags word, bit 0) */
+    int plain_buf;              /* the app buffer on screen as it is (dmabuf.c), -1: none: the filter shows it again once the pass is ready */
     int pending_dbuf;           /* dmabuf frame received before the first configure (committing a buffer earlier is an xdg-shell error) */
     int32_t pending_ddamage[4];
     char title[64];
@@ -321,6 +322,7 @@ void window_request_size(struct window *w, int lw, int lh);
 void window_attach_input(struct client *c, int own_id, const char *title);  /* window.c */
 void window_drop_proxy(struct client *c);  /* window.c */
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
+void window_dmabuf_attach(struct window *w, int buf, const int32_t *damage);  /* dmabuf.c: without the render filter */
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
 void wlshell_create(struct window *w, const char *label, const char *app_id);  /* wlshell.c */
 void wlshell_first_configure(struct window *w);
@@ -339,6 +341,9 @@ void window_gralloc_frame(struct window *w, const int32_t *m, uint32_t len, cons
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
 void sharpen_win_import(struct window *w, int buf, const int32_t *m, const int *fds, int nfds);  /* sharpen_win.c */
 int sharpen_win_show(struct window *w, int buf);
+void sharpen_win_new_frame(struct window *w, int buf);
+void sharpen_win_poll(void);     /* the main loop: a helper may have prepared the pass */
+int sharpen_win_timeout(void);   /* ms the poll may wait while one prepares, -1 */
 void sharpen_win_forget(struct window *w, int buf);
 void sharpen_win_destroy(struct window *w);
 int dshm_import(struct window *w, const int32_t *m, int fd);  /* dmabuf_shm.c */

@@ -11,7 +11,10 @@ static void dbuf_release(void *data, struct wl_buffer *b)
 {
     struct window *w = data;
     for (int i = 0; i < DBUF_MAX; i++)
-        if (w->dbufs[i] == b) send_msg(w->client, MSG_DMABUF_RELEASE, (int32_t[]){ w->id, i }, 2);
+        if (w->dbufs[i] == b) {
+            if (w->plain_buf == i) w->plain_buf = -1;  /* no longer on screen as it is */
+            send_msg(w->client, MSG_DMABUF_RELEASE, (int32_t[]){ w->id, i }, 2);
+        }
 }
 static const struct wl_buffer_listener dbuf_listener = { dbuf_release };
 
@@ -37,6 +40,7 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
                 buf, m[3], m[4], nfds, (uint32_t)m[7], (uint32_t)m[6]);
     }
     if (buf < 0 || buf >= DBUF_MAX) return;
+    sharpen_win_new_frame(w, buf);  /* the render filter gives back the buffers it has drawn */
     if (nfds > 0) {
         if (!dmabuf_mgr) {  /* dmabuf_shm.c: the frames are copied */
             if (dshm_import(w, m, fds[0]) < 0) return;
@@ -76,7 +80,14 @@ void window_dmabuf_show(struct window *w, int buf, const int32_t *damage)
 {
     if (!dmabuf_mgr) { dshm_show(w, buf, damage); return; }
     if (sharpen_win_show(w, buf)) return;
+    window_dmabuf_attach(w, buf, damage);
+}
+
+/* the app's own buffer, as it is */
+void window_dmabuf_attach(struct window *w, int buf, const int32_t *damage)
+{
     w->framed = 1;
+    w->plain_buf = buf;
     wl_surface_attach(w->surface, w->dbufs[buf], 0, 0);
     surface_damage(w->surface, damage[0], damage[1], damage[2], damage[3]);
     wl_surface_commit(w->surface);

@@ -13,6 +13,8 @@ static struct wl_surface *source;
 static void done(void *data, struct wl_callback *cb, uint32_t ms)
 {
     (void)data;
+    static int dbg = -1; if (dbg < 0) dbg = getenv("APKLAYER_VSYNC_DEBUG") != NULL;
+    if (dbg) fprintf(stderr, "[shell] vsync done (%d requests)\n", __builtin_popcountll(request_slots));
     wl_callback_destroy(cb);
     callback = NULL;
     source = NULL;
@@ -75,6 +77,8 @@ void vsync_source_changed(void)
 
 void client_vsync_request(struct client *c, int id)
 {
+    static int dbg = -1; if (dbg < 0) dbg = getenv("APKLAYER_VSYNC_DEBUG") != NULL;
+    if (dbg) fprintf(stderr, "[shell] vsync request (id %d)\n", id);
     uint64_t free_slots = ~request_slots & (UINT64_MAX >> (64 - MAX_WINDOWS));
     if (!free_slots) return;
     for (uint64_t slots = request_slots; slots; slots &= slots - 1) {

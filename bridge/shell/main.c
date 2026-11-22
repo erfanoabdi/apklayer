@@ -98,6 +98,7 @@ int main(int argc, char **argv)
             who[n] = &clients[i];
             pfd[n++] = (struct pollfd){ .fd = clients[i].fd, .events = POLLIN };
         }
+        { int st = sharpen_win_timeout(); if (st >= 0 && (timeout < 0 || st < timeout)) timeout = st; }  /* the render filter's helper */
         if (repeat_key >= 0) {
             long long wait = repeat_next_ms - now_ms();
             if (timeout < 0 || wait < timeout) timeout = wait > 0 ? (int)wait : 0;
@@ -110,6 +111,7 @@ int main(int argc, char **argv)
             wl_display_cancel_read(display);
         }
         wl_display_dispatch_pending(display);
+        sharpen_win_poll();
         clipboard_dispatch(pfd + 2);
         maliit_dispatch(pfd + 2 + CLIPBOARD_FDS);
         gamepad_dispatch(pfd + 2 + CLIPBOARD_FDS + MALIIT_FDS);

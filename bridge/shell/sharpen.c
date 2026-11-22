@@ -186,38 +186,47 @@ static void bind_external(struct sharpen *s, GLuint tex, EGLImage image)
     s->image_target(GL_TEXTURE_EXTERNAL_OES, (GLeglImageOES)image);
 }
 
+/* The slow part (device probe with a sample buffer, context, shaders), callable from a helper thread; the context is left unbound, the next call
+ * on any thread binds it. */
+int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod)
+{
+    if (!s) return -1;
+    if (s->ready) return 0;
+    DIR *d = opendir("/dev/dri");
+    struct dirent *e;
+    while (d && (e = readdir(d)) && !s->ready) {
+        if (strncmp(e->d_name, "renderD", 7)) continue;
+        char path[300];
+        snprintf(path, sizeof path, "/dev/dri/%s", e->d_name);
+        if (!device_open(s, path)) continue;
+        EGLImage probe = make_image(s, fourcc, w, h, n, fds, strides, offsets, mod);
+        if (probe == EGL_NO_IMAGE_KHR) {  /* another GPU's buffer: next node */
+            eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            eglDestroyContext(s->dpy, s->ctx); eglTerminate(s->dpy); gbm_device_destroy(s->gbm); close(s->drm_fd);
+            s->drm_fd = -1; s->gbm = NULL; s->dpy = EGL_NO_DISPLAY;
+            continue;
+        }
+        s->destroy_image(s->dpy, probe);
+        s->up_prog = program(FS_UP);
+        s->cas_prog = program(FS_CAS);
+        if (!s->up_prog || !s->cas_prog) { if (d) closedir(d); return -1; }
+        static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
+        glGenBuffers(1, &s->vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof tri, tri, GL_STATIC_DRAW);
+        glFinish();
+        eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);  /* unbound: the thread that renders binds it */
+        s->ready = 1;
+        fprintf(stderr, "[sharpen] using %s\n", path);
+    }
+    if (d) closedir(d);
+    return s->ready ? 0 : -1;
+}
+
 int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod)
 {
     if (!s || buf < 0 || buf >= BUFS || n < 1) return -1;
-    if (!s->ready) {  /* the first render node that takes this buffer */
-        DIR *d = opendir("/dev/dri");
-        struct dirent *e;
-        while (d && (e = readdir(d)) && !s->ready) {
-            if (strncmp(e->d_name, "renderD", 7)) continue;
-            char path[300];
-            snprintf(path, sizeof path, "/dev/dri/%s", e->d_name);
-            if (!device_open(s, path)) continue;
-            EGLImage probe = make_image(s, fourcc, w, h, n, fds, strides, offsets, mod);
-            if (probe == EGL_NO_IMAGE_KHR) {  /* another GPU's buffer: next node */
-                eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-                eglDestroyContext(s->dpy, s->ctx); eglTerminate(s->dpy); gbm_device_destroy(s->gbm); close(s->drm_fd);
-                s->drm_fd = -1; s->gbm = NULL; s->dpy = EGL_NO_DISPLAY;
-                continue;
-            }
-            s->destroy_image(s->dpy, probe);
-            s->up_prog = program(FS_UP);
-            s->cas_prog = program(FS_CAS);
-            if (!s->up_prog || !s->cas_prog) return -1;
-            static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
-            glGenBuffers(1, &s->vbo);
-            glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
-            glBufferData(GL_ARRAY_BUFFER, sizeof tri, tri, GL_STATIC_DRAW);
-            s->ready = 1;
-            fprintf(stderr, "[sharpen] using %s\n", path);
-        }
-        if (d) closedir(d);
-        if (!s->ready) return -1;
-    }
+    if (!s->ready && sharpen_prepare(s, fourcc, w, h, n, fds, strides, offsets, mod) < 0) return -1;
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
     sharpen_forget(s, buf);
     EGLImage image = make_image(s, fourcc, w, h, n, fds, strides, offsets, mod);
@@ -300,15 +309,22 @@ static void draw(void)
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
-    if (!s || !s->ready || buf < 0 || buf >= BUFS || !s->in[buf].image || ow <= 0 || oh <= 0) return -1;
+    static int said_in, said_busy;
+    if (!s || !s->ready || buf < 0 || buf >= BUFS || !s->in[buf].image || ow <= 0 || oh <= 0) {
+        if (!said_in++) fprintf(stderr, "[sharpen] nothing to draw: buffer %d %s\n", buf, s && buf >= 0 && buf < BUFS && s->in[buf].image ? "ok" : "not imported");
+        return -1;
+    }
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
     int k = -1;
     for (int i = 0; i < SLOTS; i++) if (!s->out[i].busy) { k = i; break; }
-    if (k < 0) return -1;  /* the compositor holds all three: show the app's own buffer this once */
+    if (k < 0) {  /* the compositor holds all three: show the app's own buffer this once */
+        if (!said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SLOTS);
+        return -2;
+    }
     struct slot *o = &s->out[k];
     *fresh = 0;
     if (!o->bo || o->w != ow || o->h != oh) {
-        if (slot_make(s, o, ow, oh) < 0) { slot_free(s, o); return -1; }
+        if (slot_make(s, o, ow, oh) < 0) { slot_free(s, o); fprintf(stderr, "[sharpen] no output buffer %dx%d (%d modifiers offered, gl error 0x%x)\n", ow, oh, s->accept_n, glGetError()); return -1; }
         *fresh = 1;
     }
     if (s->mid_w != ow || s->mid_h != oh) {  /* the intermediate (upscaled, unsharpened) picture */

@@ -49,6 +49,11 @@ static void fb_done(void *d, struct zwp_linux_dmabuf_feedback_v1 *f)
     (void)d; (void)f;
     if (getenv("APKLAYER_RUNTIME_DEBUG"))
         fprintf(stderr, "[shell] dmabuf feedback: main device %u:%u, %d formats with LINEAR\n", major(dmabuf_main_device), minor(dmabuf_main_device), dmabuf_linear_n);
+    if (getenv("APKLAYER_RUNTIME_DEBUG")) {
+        fprintf(stderr, "[shell] dmabuf feedback: XRGB8888 modifiers (%d):", dmabuf_xrgb_n);
+        for (int i = 0; i < dmabuf_xrgb_n; i++) fprintf(stderr, " 0x%llx", (unsigned long long)dmabuf_xrgb_mods[i]);
+        fprintf(stderr, "\n");
+    }
 }
 static void fb_table(void *d, struct zwp_linux_dmabuf_feedback_v1 *f, int32_t fd, uint32_t size)
 {

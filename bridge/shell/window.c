@@ -144,6 +144,7 @@ void window_create(struct client *c, int id, int width, int height, const char *
     if (!w) return;
     memset(w, 0, sizeof *w);
     w->client = c; w->id = id; w->scale = 100;
+    w->plain_buf = -1;
     w->navbar_pref = c->navbar_pref;
     w->surface = wl_compositor_create_surface(compositor);
     if (window_buffers(w, width, height, path) < 0) {
