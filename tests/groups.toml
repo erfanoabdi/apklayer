@@ -351,7 +351,7 @@ run = ["python3 -u tests/vm/dialog-resize.py"]
 
 [window-output]  # an app sees its window's output (two virtual monitors of a headless GNOME Shell), an output change reaches it at once
 apps = ["hello-input"]
-run = ["python3 -u tests/vm/window-output.py"]
+run = ["python3 -u tests/vm/window-output.py", "python3 -u tests/vm/window-output.py --scale 50"]  # the second: with a render scale of 50%
 
 [window-geometry]
 needs = ["com.android.test.uibench"]

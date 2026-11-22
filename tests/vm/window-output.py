@@ -20,6 +20,9 @@ import instance  # noqa: E402
 
 PKG = 'hello.input'
 SMALL, LARGE = (600, 800), (800, 1280)  # the two monitors' sizes, the shorter side first
+# --scale <percent>: the app's render scale (settings render-scale, bridge/shell/geometry.c): it sees every screen at that share, and each output change still reaches it
+PCT = int(sys.argv[sys.argv.index('--scale') + 1]) if '--scale' in sys.argv else 100
+if PCT != 100: SMALL, LARGE = (tuple(round(n * PCT / 100) for n in SMALL), tuple(round(n * PCT / 100) for n in LARGE))
 if not shutil.which('gnome-shell'): sys.exit('FAIL gnome-shell is not installed')
 run_dir = Path(tempfile.mkdtemp(prefix='apklayer-gs-', dir=instance.SESSION))  # beside the desktop's socket: the stack's processes see the session dir
 os.chmod(run_dir, 0o700)
@@ -28,7 +31,7 @@ for k in ('DISPLAY', 'WAYLAND_DISPLAY'): ENV.pop(k, None)
 bus = subprocess.run(['dbus-daemon', '--session', '--fork', '--print-address=1', '--print-pid=1'], env=ENV, capture_output=True, text=True, check=True).stdout.split()
 ENV['DBUS_SESSION_BUS_ADDRESS'] = bus[0]  # the shell's own session bus: Mutter's DisplayConfig is on it
 TICK_MS = 500
-APP_ENV = dict(instance.ENV, APKLAYER_DEBUG_INPUT='1', WAYLAND_DISPLAY=str(run_dir / 'wayland-gs'), APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600',
+APP_ENV = dict(instance.ENV, APKLAYER_DEBUG_INPUT='1', **({'APKLAYER_RENDER_SCALE': str(PCT)} if PCT != 100 else {}), WAYLAND_DISPLAY=str(run_dir / 'wayland-gs'), APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600',
                APKLAYER_JOPTS='-Dhello.display=1 -Dapklayer.runms=60000 -Dapklayer.script=' + '+'.join('%d:hover:%d,0' % (i * TICK_MS, i) for i in range(1, 120)))
 seen = []
 
