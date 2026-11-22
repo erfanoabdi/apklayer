@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-22 GLES is the default render-filter backend again
+- PGR flickered with the Vulkan backend as the default and did not with `APKLAYER_SHARPEN_BACKEND=gles` (the owner's A/B test, KWin on an NVIDIA RTX): `sharpen_prepare` tries GLES first and takes Vulkan only where no EGL device imports the buffers; `APKLAYER_SHARPEN_BACKEND=vulkan` forces it. Cause not found: five code reviews, Vulkan validation layers with synchronisation validation, a compositor-free pixel comparison and a CPU-rewrite stress test were all clean, so the difference is on the compositor side (how KWin reads a Vulkan-exported dmabuf: the dmabuf carries no fence of its own, and the NVIDIA driver may place a Vulkan write differently from an EGL one). Open: find it with a real KWin window (docs/PLAN.md).
+- Note: `tests/vm/sharpen.py` ran the older `b/bridge/shell/sharpen-test` for several hours of today's work (it globs `*/bridge/shell/sharpen-test`); the filters were measured with fresh builds through evalfilter, but its PASS lines were not from the latest code.
+
 ## 2026-11-22 output ring of 8 slots (owner's request); agent worktrees removed
 - The render filter's output ring is 8 dmabufs (was 5) in the GLES, Vulkan and window code (`SLOTS`, `SVK_SLOTS`, `OUT_SLOTS`; about 20 MB more GPU memory per slot at 3440x1440): with the least-recently-used choice a slot is rewritten 7 frames after its release, more margin for a compositor that releases a buffer before its GPU has finished reading it (a PGR flicker suspect, unproven; the reviews found no bug). The 16 agent worktrees, their branches and the render-scale agent's stash were removed.
 

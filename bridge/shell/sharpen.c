@@ -459,10 +459,9 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
     if (s->ready) return 0;
 #ifdef HAVE_SHARPEN_VK
     if (s->vk) return 0;
-    const char *backend = getenv("APKLAYER_SHARPEN_BACKEND");  /* vulkan, gles; else Vulkan first and GLES where no Vulkan device takes the buffers */
+    const char *backend = getenv("APKLAYER_SHARPEN_BACKEND");  /* gles, vulkan; else GLES first and Vulkan where no EGL device takes the buffers (Vulkan flickered in PGR on KWin/NVIDIA, the owner's test 2026-11-22: GLES does not) */
     int only_gl = backend && !strcmp(backend, "gles"), only_vk = backend && !strcmp(backend, "vulkan");
-    if (!only_gl && vk_start(s, fourcc, w, h, n, fds, strides, offsets, mod) == 0) return 0;
-    if (only_vk) return -1;
+    if (only_vk) return vk_start(s, fourcc, w, h, n, fds, strides, offsets, mod);
 #endif
     DIR *d = opendir("/dev/dri");
     struct dirent *e;
@@ -500,6 +499,9 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         fprintf(stderr, "[sharpen] using %s\n", path);
     }
     if (d) closedir(d);
+#ifdef HAVE_SHARPEN_VK
+    if (!s->ready && !only_gl) return vk_start(s, fourcc, w, h, n, fds, strides, offsets, mod);
+#endif
     return s->ready ? 0 : -1;
 }
 
