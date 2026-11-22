@@ -83,13 +83,23 @@ static const char *FS_A4K_DIR =
 static const char *FS_A4K_APPLY =
     "#extension GL_OES_EGL_image_external : require\n" A4K_HEAD
     "uniform samplerExternalOES tex; uniform sampler2D n; uniform sampler2D dir;\n"
+    /* apklayer patch: the base is a bicubic a=-0.75 (16 texel-centre fetches, clamped to the 2x2 neighbourhood's range) instead of bilinear; the line push (half a source texel, half strength) blends with it */
+    "vec4 w4(float t) { float t2 = t * t, t3 = t2 * t; return vec4((-0.75) * t3 - 2.0 * (-0.75) * t2 + (-0.75) * t, ((-0.75) + 2.0) * t3 - ((-0.75) + 3.0) * t2 + 1.0, -((-0.75) + 2.0) * t3 + (2.0 * (-0.75) + 3.0) * t2 - (-0.75) * t, -(-0.75) * t3 + (-0.75) * t2); }\n"
     "void main() {\n"
-    "  vec4 c0 = texture2D(tex, uv);\n"
+    "  vec2 src = 1.0 / d, pos = uv * src - 0.5, ip = floor(pos), f = pos - ip;\n"
+    "  vec4 wx = w4(f.x), wy = w4(f.y);\n"
+    "  vec3 sum = vec3(0.0), lo = vec3(1.0), hi = vec3(0.0);\n"
+    "  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {\n"
+    "    vec3 s = texture2D(tex, (ip + vec2(float(i) - 1.0, float(j) - 1.0) + 0.5) * d).rgb;\n"
+    "    sum += s * (wx[i] * wy[j]);\n"
+    "    if (i == 1 || i == 2) if (j == 1 || j == 2) { lo = min(lo, s); hi = max(hi, s); }\n"
+    "  }\n"
+    "  vec3 c0 = clamp(sum, lo, hi);\n"
     "  float dv = texture2D(n, uv).y;\n"
     "  vec2 dc = (texture2D(dir, uv).xy - 0.5) * 2.0;\n"
-    "  if (dv < 0.1 || abs(dc.x) + abs(dc.y) <= 0.02) { gl_FragColor = vec4(c0.rgb, 1.0); return; }\n"
-    "  vec4 xv = texture2D(tex, uv + vec2(d.x * -sign(dc.x), 0.0)), yv = texture2D(tex, uv + vec2(0.0, d.y * -sign(dc.y)));\n"
+    "  if (dv < 0.1 || abs(dc.x) + abs(dc.y) <= 0.02) { gl_FragColor = vec4(c0, 1.0); return; }\n"
+    "  vec3 xv = texture2D(tex, uv + vec2(d.x * 0.5 * -sign(dc.x), 0.0)).rgb, yv = texture2D(tex, uv + vec2(0.0, d.y * 0.5 * -sign(dc.y))).rgb;\n"
     "  float r = abs(dc.x) / (abs(dc.x) + abs(dc.y));\n"
-    "  vec4 avg = r * xv + (1.0 - r) * yv;\n"
-    "  gl_FragColor = vec4((avg * dv + c0 * (1.0 - dv)).rgb, 1.0);\n"
+    "  vec3 avg = r * xv + (1.0 - r) * yv;\n"
+    "  gl_FragColor = vec4(avg * dv * 0.5 + c0 * (1.0 - dv * 0.5), 1.0);\n"
     "}\n";
