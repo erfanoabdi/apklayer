@@ -11,6 +11,14 @@ int window_scale(const struct window *w)
     return w->pref_scale > 0 ? w->pref_scale : s;
 }
 
+/* The physical size of lw x lh logical pixels, as the compositor computes it (wp_fractional_scale_v1: round(size * scale / 120), from the 120ths it sent;
+ * the percent in window_scale is rounded and would be a pixel off at sizes like 1721 x 719 and scales like 117%): a buffer of this size is shown 1:1. */
+void window_output_px(const struct window *w, int lw, int lh, int *ow, int *oh)
+{
+    if (w->pref_scale120 > 0) { *ow = (int)(((long)lw * w->pref_scale120 + 60) / 120); *oh = (int)(((long)lh * w->pref_scale120 + 60) / 120); }
+    else { int s = window_scale(w); *ow = (lw * s + 50) / 100; *oh = (lh * s + 50) / 100; }
+}
+
 /* The logical content size for an app asking for lw x lh: that shape, the whole window at most 85% of the work area; grow: exactly that
  * (an orientation turn fills the screen as the first portrait window does, which the display's default shape makes larger than the box). */
 static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, int *fh)
@@ -207,11 +215,14 @@ static const struct wl_surface_listener surf_listener = { surf_enter, surf_leave
 /* The compositor prefers another scale for the window (pref: percent, 0 = follow the outputs): the bars redraw, the app re-renders. */
 void window_scale_changed(struct window *w, int pref)
 {
-    if (pref) w->pref_scale = pref;
+    if (pref) {
+        w->pref_scale = pref;
+        if (w->pref_scale120 && (w->pref_scale120 * 100 + 60) / 120 != pref) w->pref_scale120 = 0;  /* a test's own scale */
+    }
     window_display_changed(w);  /* mobile.c: the density and the navigation bar's height follow the scale */
 }
 static void preferred_scale(void *d, struct wp_fractional_scale_v1 *f, uint32_t s)
-{ (void)f; window_scale_changed(d, (int)((s * 100 + 60) / 120)); }  /* s: 120ths */
+{ (void)f; ((struct window *)d)->pref_scale120 = (int)s; window_scale_changed(d, (int)((s * 100 + 60) / 120)); }  /* s: 120ths */
 static const struct wp_fractional_scale_v1_listener fscale_listener = { preferred_scale };
 
 void window_geometry_init(struct window *w)
