@@ -20,6 +20,13 @@
 - This PC: the NVIDIA Vulkan device stopped loading in this session (vulkaninfo lists only llvmpipe; nvidia-smi sees the RTX 5060 Ti, ICD json present).
 - Cleaned: mp100 ~/apklayer-endfield, ~/apklayer-astcprobe, ~/apklayer-vkfix; the probe build dir here.
 
+## 2026-11-22: PGR download stall, run 9: patching the monitor check in memory disturbs the translator (option abandoned)
+
+- Found: `apklayer clear-data` clears only internal data; PGR's 42 GB of downloaded resources live in the instance's shared storage (`~/.local/share/apklayer/0/storage/emulated/0/Android/data/<pkg>/files`), so the game loaded without a download. Removed (owner's order, 2026-11-22), the download starts again.
+- Probe: wrote `udf` over the not-owner branch (libil2cpp rva 0x4282854, file offset 0x427e854, bytes 68420091 -> 42420000) in the running lite-mode game through /proc/<pid>/mem, with berberis.log_faults=1. The code is decrypted a few seconds after the mapping appears (the first try skipped its write because it still saw ciphertext). Result: Unity stopped at its start, no fault logged, two `mmap(size=4194304, prot=R|X) failed: ENOMEM`; the control run (same env, no patch) downloaded 219 MB in 49 s with no ENOMEM. So writing guest code pages from outside breaks the translator's page tracking; not a way to probe.
+- Next stays: a dump-only mode in patch 0051 (needs the Mac tree), then read owner (x8) vs current thread id (x0) at rva 0x4282854.
+- Cleaned: mp100 probe dirs and the partial download (about 220 MB); instance stopped.
+
 ## 2026-11-22: PGR download stall, run 8: interpret-only branch trace is too slow to reach the stall
 
 - Probe: BERBERIS_MODE=interpret-only, BERBERIS_TRACE_BB, BERBERIS_TRACE_MODULE=libil2cpp.so, BERBERIS_TRACE_DUMP=0x4282854 (the not-owner branch of the monitor check) on mp100 (login screen only). The game stayed on a black window, no lock error in about 3 minutes, trace 1.8 GB (about 1 GB/min, 9 threads). Stopped; trace and helper files removed. Result: a full branch trace of libil2cpp cannot be used to reach the stall.
