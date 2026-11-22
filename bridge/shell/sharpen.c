@@ -139,7 +139,7 @@ static const char *FS_UP =
     "  gl_FragColor = vec4(clamp(pix, 0.0, 1.0), 1.0);\n"
     "}\n";
 
-/* RCAS: sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos); `sharp` 0..1 is
+/* RCAS (AMD FidelityFX FSR 1, MIT; apklayer patch: `fl` fades the lobe in low-contrast areas where RCAS only amplifies texture/noise): sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos); `sharp` 0..1 is
  * FSR's sharpness in stops (1: the strongest, 0: two stops weaker) */
 static const char *FS_CAS =
     "precision highp float;\n"
@@ -152,12 +152,13 @@ static const char *FS_CAS =
     "  float nz = 0.25 * (bL + dL + fL + hL) - eL;\n"
     "  float rng = max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL);\n"
     "  nz = clamp(abs(nz) / max(rng, 0.00001), 0.0, 1.0);\n"
+    "  float fl = mix(0.1, 1.0, smoothstep(0.04, 0.25, rng));\n"
     "  nz = -0.5 * nz + 1.0;\n"
     "  vec3 mn4 = min(min(b, d), min(f, h)), mx4 = max(max(b, d), max(f, h));\n"
     "  vec3 hitMin = min(mn4, e) / max(4.0 * mx4, 0.0001);\n"
     "  vec3 hitMax = (1.0 - max(mx4, e)) / min(4.0 * mn4 - 4.0, -0.0001);\n"
     "  vec3 lobeV = max(-hitMin, hitMax);\n"
-    "  float lobe = max(-0.1875, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp)) * nz;\n"
+    "  float lobe = max(-0.1875, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp)) * nz * fl;\n"
     "  gl_FragColor = vec4(clamp((lobe * (b + d + h + f) + e) / (4.0 * lobe + 1.0), 0.0, 1.0), 1.0);\n"
     "}\n";
 
