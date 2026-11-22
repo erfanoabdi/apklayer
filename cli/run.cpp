@@ -258,7 +258,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
             }
             if (!scaleOwn.empty() || !scale.empty()) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = scaleOwn.empty() ? scale : scaleOwn;
             std::string chosen = filterOwn.empty() ? filter : filterOwn, usedScale = scaleOwn.empty() ? scale : scaleOwn;
-            if (chosen.empty() && !usedScale.empty() && usedScale != "100") chosen = "sharp";  // a render scale other than 100 and no render-filter: FSR 1 stretches it (the compositor's bilinear is soft); an explicit `off` stays off
+            if (chosen.empty() && !usedScale.empty() && usedScale != "100") chosen = "auto";  // a render scale other than 100 and no render-filter: the shell picks SGSR 1 or NIS by the ratio (sharpen_win.c) (the compositor's bilinear is soft); an explicit `off` stays off
             if (!chosen.empty()) ne.env["APKLAYER_RENDER_FILTER"] = nj.env["APKLAYER_RENDER_FILTER"] = chosen;
         }
         Spawn sink;

@@ -318,6 +318,7 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
         if (e && !strcmp(e, "sgsr")) filter = 5;
         if (e && !strcmp(e, "lanczos")) filter = 7;
         if (e && !strcmp(e, "anime4k")) filter = 9;
+        if (e && !strcmp(e, "auto")) filter = 11;  /* 5: the shell picks the mode by the ratio window/frame (sharpen_win.c) */
     } m[20] = filter; }
     m[0] = WINDOW_ID;
     m[1] = slot;
