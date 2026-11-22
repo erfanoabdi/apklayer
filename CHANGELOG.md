@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 render filter: no frame pile-up while the pass starts
+- AIDA64 froze with SGSR at 50%: while the helper started the pass, the app's burst of frames was shown as they were, the compositor held them, and the display sink reached seven acquired buffers ("max acquired buffer count reached: 7 (max 6)"); the app then waited for a free buffer for good. Now only the newest frame waits during the start (older ones go back at once) and it is drawn through the pass when ready.
+
 ## 2026-11-22 render filter: SGSR 1, integer scaling, no CPU spin
 - `render-filter` `sgsr` (Snapdragon GSR 1, one pass) and `integer` (nearest at whole multiples, sharp bilinear between); in the manager next to RSR and NIS. The flags word carries the mode in bits 1-2.
 - The pass waits for the GPU on a native fence fd in poll() instead of glFinish (which spun a CPU core on NVIDIA).

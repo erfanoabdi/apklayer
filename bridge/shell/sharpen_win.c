@@ -131,17 +131,29 @@ void sharpen_win_poll(void)
         if (sw->thread_rc < 0) {
             fprintf(stderr, "[shell] %s: render filter off: no GPU takes the app's buffers\n", w->title);
             sw->state = S_OFF;
+            if (sw->pending >= 0 && w->configured) { static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX }; int b = sw->pending; sw->pending = -1; window_dmabuf_attach(w, b, whole); }
             continue;
         }
         sw->state = S_READY;
         int ok = 0;
         for (int b = 0; b < DBUF_MAX; b++) if (sw->kept[b].valid && import_kept(sw, b) == 0) ok++;
         if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[shell] %s: render filter ready: %d buffers imported\n", w->title, ok);
-        if (ok && w->plain_buf >= 0 && w->configured) {  /* the picture on screen is the app's own buffer: it goes through the pass now */
+        if (ok && sw->pending >= 0 && w->configured) {  /* the newest frame that waited for the pass */
+            static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
+            int b = sw->pending;
+            sw->pending = -1;
+            window_dmabuf_show(w, b, whole);
+        } else if (ok && w->plain_buf >= 0 && w->configured) {  /* the picture on screen is the app's own buffer: it goes through the pass now */
             static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
             sw->keep = 1;
             window_dmabuf_show(w, w->plain_buf, whole);
             sw->keep = 0;
+        }
+        if (sw->pending >= 0 && w->configured) {  /* no buffer could be imported: the waiting frame is shown as it is */
+            static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
+            int b = sw->pending;
+            sw->pending = -1;
+            window_dmabuf_attach(w, b, whole);
         }
     }
 }
@@ -158,6 +170,17 @@ int sharpen_win_timeout(void)
 int sharpen_win_show(struct window *w, int buf)
 {
     struct swin *sw = w->sharp;
+    if (w->filter && sw && sw->state == S_PREPARING && !w->turn && w->plain_buf >= 0 && buf >= 0 && buf < DBUF_MAX && sw->kept[buf].valid) {
+        /* the helper is still starting the pass and the window already shows something: only the newest frame waits (the others go back at once), so the
+         * compositor never holds a pile of the app's buffers (the sink wedges at seven acquired). It is drawn through the pass when that is ready. */
+        int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h : w->h, scale = window_scale(w);
+        int ow = (lw * scale + 50) / 100, oh = (lh * scale + 50) / 100;
+        if (ow > 0 && oh > 0 && !(sw->kept[buf].w == ow && sw->kept[buf].h == oh)) {
+            if (sw->pending >= 0 && sw->pending != buf) give_back(w, sw->pending, "replaced while the pass starts");
+            sw->pending = buf;
+            return 1;
+        }
+    }
     if (!w->filter || !sw || sw->state != S_READY || w->turn || buf < 0 || buf >= DBUF_MAX || sw->w[buf] <= 0) {
         if (w->filter && sw && sw->state == S_READY && !sw->said_skip++)
             fprintf(stderr, "[shell] %s: render filter skipped: %s\n", w->title, w->turn ? "turned window" : "buffer not imported");
