@@ -113,7 +113,7 @@ component AppDetail {
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default", value: "" }, { label: "25%", value: "25" }, { label: "35%", value: "35" }, { label: "50%", value: "50" }, { label: "75%", value: "75" }, { label: "100%", value: "100" }, { label: "125%", value: "125" }, { label: "150%", value: "150" }, { label: "200%", value: "200" }] : HorizontalLayout {
+                        for choice in [{ label: "Default", value: "" }, { label: "35%", value: "35" }, { label: "50%", value: "50" }, { label: "75%", value: "75" }, { label: "100%", value: "100" }, { label: "125%", value: "125" }, { label: "150%", value: "150" }, { label: "200%", value: "200" }] : HorizontalLayout {
                             if Backend.app-render-scale-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-scale-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-scale." + root.app.package, choice.value); } }
                         }
