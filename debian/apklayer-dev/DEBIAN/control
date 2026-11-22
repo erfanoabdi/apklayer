@@ -1,0 +1,16 @@
+Package: apklayer-dev
+Source: apklayer
+Version: 0.5.6+local20261122.git82e013e3-1~noble1
+Architecture: amd64
+Maintainer: Erfan Abdi <erfangplus@gmail.com>
+Installed-Size: 31
+Depends: apklayer (= 0.5.6+local20261122.git82e013e3-1~noble1)
+Section: libdevel
+Priority: optional
+Homepage: https://github.com/erfanoabdi/apklayer
+Description: apklayer hardware plugin API (headers and pkg-config file)
+ Headers and apklayer-plugin.pc for building apklayer hardware plugins out of
+ tree: sensors, GNSS, vibrator and camera backends, libraries
+ libapklayer-<domain>-<backend>.so installed into the pkg-config variable
+ plugindir (/usr/lib/<multiarch>/apklayer/plugins), where apklayer finds
+ them. Guide: docs/PLUGINS.md in the apklayer sources.

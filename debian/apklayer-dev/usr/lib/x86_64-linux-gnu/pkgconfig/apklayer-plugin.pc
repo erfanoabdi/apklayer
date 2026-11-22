@@ -1,0 +1,10 @@
+prefix=/usr
+includedir=${prefix}/include
+libdir=${prefix}/lib/x86_64-linux-gnu
+
+plugindir=${libdir}/apklayer/plugins
+
+Name: apklayer-plugin
+Description: apklayer hardware plugin API (sensors, GNSS, vibrator, camera)
+Version: 0.5.6+local20261122.git82e013e3-1~noble1
+Cflags: -I${includedir}

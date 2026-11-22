@@ -14,6 +14,11 @@
 
 #include "gpu_decompression_pipeline.h"
 
+#include <cstdlib>
+#include <cstring>
+
+#include "../../../../../HostEnvironment.h"
+
 #include "gfxstream/common/logging.h"
 #include "vulkan/vk_format_utils.h"
 #include "vulkan/emulated_textures/shaders/decompression_shaders.h"
@@ -28,7 +33,17 @@ namespace {
 // Which GPU decoder we use for ASTC textures.
 // Note: we currently only enable ASTC decompression for native vulkan apps, and we try CPU
 // decompression first, before falling back to GPU decompression.
-static AstcDecoder activeAstcDecoder = AstcDecoder::NewRgb;
+// apklayer patch: APKLAYER_VULKAN_ASTC_DECODER=old selects the per-block decoder (kShaderAstc) instead of the per-pixel one that is the default (a diagnostic
+// for Endfield's scrambled tiles on AMD RADV, CHANGELOG 2026-11-22).
+static AstcDecoder initialAstcDecoder() {
+#ifdef __ANDROID__
+    const char* e = apklayer::hostGetenv("APKLAYER_VULKAN_ASTC_DECODER");
+#else
+    const char* e = std::getenv("APKLAYER_VULKAN_ASTC_DECODER");
+#endif
+    return e && !strcmp(e, "old") ? AstcDecoder::Old : AstcDecoder::NewRgb;
+}
+static AstcDecoder activeAstcDecoder = initialAstcDecoder();
 
 struct ShaderGroup {
     ShaderData shader1D;

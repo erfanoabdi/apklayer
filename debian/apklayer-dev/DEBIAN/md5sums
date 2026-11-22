@@ -1,0 +1,8 @@
+ea628df3335cdaa4156827a3ffe33158  usr/include/apklayer/camera.h
+c8f051620d4a0a506131ccda7a9438de  usr/include/apklayer/gnss.h
+e9527a966e1cf14e620ec9db57f74a97  usr/include/apklayer/plugin.h
+80c64233434f208b1e4dd9ec86365bc0  usr/include/apklayer/sensors.h
+b13f29d18159804a956027f1bec09317  usr/include/apklayer/vibrator.h
+011af862fac70e3ba5d9150e3b3a9953  usr/lib/x86_64-linux-gnu/pkgconfig/apklayer-plugin.pc
+d7cbfb84d0ceb91153f3c63dfadf8f91  usr/share/doc/apklayer-dev/changelog.Debian.gz
+5706b56eb25088febd25f51923cbcabf  usr/share/doc/apklayer-dev/copyright
