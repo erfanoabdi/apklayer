@@ -172,7 +172,7 @@ int sharpen_win_show(struct window *w, int buf)
         sw->pending = -1;
     }
     sharpen_set_mode(sw->s, w->filter == 2);  /* 2: NIS */
-    int rc = sharpen_render(sw->s, buf, ow, oh, w->filter == 2 ? (w->filter_pct > 0 ? (float)(w->filter_pct - 1) / 100.0f : 0.4f) : 0.65f, &slot, &fresh);
+    int rc = sharpen_render(sw->s, buf, ow, oh, w->filter == 2 ? 0.4f : 0.65f, &slot, &fresh);
     if (rc == -2) { sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;

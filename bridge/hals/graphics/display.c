@@ -314,7 +314,7 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     /* apklayer patch: the render filter (`apklayer settings` render-filter sharp, cli/run.cpp): a flags word after the damage; a shell that does not know
      * it (len 80) ignores it, one that does resamples a buffer that is not the window's pixels with the upscale pass (bridge/shell/sharpen.c) */
     { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && !strcmp(e, "sharp") ? 1 : 0;
-        if (e && !strncmp(e, "nis", 3)) filter = 3 | ((!strcmp(e, "nis-soft") ? 26 : !strcmp(e, "nis-strong") ? 61 : 41) << 8);  /* bits 8..15: the NIS sharpness in percent + 1 */
+        if (e && !strcmp(e, "nis")) filter = 3;
     } m[20] = filter; }
     m[0] = WINDOW_ID;
     m[1] = slot;

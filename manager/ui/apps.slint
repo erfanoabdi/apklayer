@@ -1,8 +1,8 @@
 // Apps: the M3 list-detail layout. Side by side when the window is expanded (>= 840 dp), else the list, and the detail over it with a back button.
 import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, FilledButton, TonalButton, OutlineButton,
-         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch, FilterChip, Slider } from "@material";
+         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch, FilterChip } from "@material";
 import { Backend, AppIcons, AppEntry } from "backend.slint";
-import { Row, Tag, Heading } from "widgets.slint";
+import { Row, Tag, Heading, DragSlider } from "widgets.slint";
 import { AddonsSection } from "addons.slint";
 import { ConfigRows } from "settings.slint";
 
@@ -113,16 +113,17 @@ component AppDetail {
                     HorizontalLayout {
                         spacing: MaterialStyleMetrics.spacing_16;
                         alignment: stretch;
-                        scale-slider := Slider {
+                        scale-slider := DragSlider {
                             minimum: 25;
                             maximum: 200;
-                            value: Backend.app-render-scale-pct;
+                            step: 5;
+                            value <=> Backend.app-render-scale-pct;
                             enabled: !Backend.busy;
                             horizontal-stretch: 1;
-                            value_changed(v) => { Backend.preview-render-scale(Math.round(v / 5) * 5); }
-                            released(v) => { Backend.set-setting("render-scale." + root.app.package, "\{Math.round(v / 5) * 5}"); }
+                            edited(v) => { Backend.preview-render-scale(Math.round(v)); }
+                            released(v) => { Backend.set-setting("render-scale." + root.app.package, "\{Math.round(v)}"); }
                         }
-                        MaterialText { text: "\{Math.round(scale-slider.value / 5) * 5}%"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; vertical-alignment: center; min-width: 56px; horizontal-alignment: right; }
+                        MaterialText { text: "\{Math.round(scale-slider.value)}%"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; vertical-alignment: center; min-width: 56px; horizontal-alignment: right; }
                         TonalButton { text: "Default"; enabled: !Backend.busy; clicked => { Backend.set-setting("render-scale." + root.app.package, ""); } }
                     }
                 }
@@ -136,7 +137,7 @@ component AppDetail {
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Off", value: "" }, { label: "RSR", value: "sharp" }, { label: "NIS soft", value: "nis-soft" }, { label: "NIS", value: "nis" }, { label: "NIS strong", value: "nis-strong" }] : HorizontalLayout {
+                        for choice in [{ label: "Off", value: "" }, { label: "RSR", value: "sharp" }, { label: "NIS", value: "nis" }] : HorizontalLayout {
                             if Backend.app-render-filter-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
                         }

@@ -99,3 +99,61 @@ export component Heading inherits MaterialText {
     style: MaterialTypography.title_small;
     color: MaterialPalette.primary;
 }
+
+// A slider that follows the pointer: pressing anywhere on it sets the value, and holding the button drags it (the Material one moves only by its thumb).
+// `step` rounds the value; `edited` fires while it moves, `released` when the button goes up.
+export component DragSlider {
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <float> step: 1;
+    in property <bool> enabled: true;
+    in-out property <float> value;
+    callback edited(float);
+    callback released(float);
+    min-height: 40px;
+    property <length> thumb-size: 24px;
+    property <length> usable: max(1px, root.width - root.thumb-size);
+    function at(x: length) -> float {
+        clamp(Math.round((root.minimum + (x - root.thumb-size / 2) / root.usable * (root.maximum - root.minimum)) / root.step) * root.step, root.minimum, root.maximum)
+    }
+    track := Rectangle {
+        y: (root.height - self.height) / 2;
+        height: 8px;
+        background: MaterialPalette.surface_container_highest;
+        border-radius: self.height / 2;
+        Rectangle {
+            width: thumb.x + root.thumb-size / 2;
+            background: root.enabled ? MaterialPalette.primary : MaterialPalette.outline;
+            border-radius: parent.border-radius;
+        }
+    }
+    thumb := Rectangle {
+        width: root.thumb-size;
+        height: root.thumb-size;
+        x: root.usable * (root.value - root.minimum) / (root.maximum - root.minimum);
+        y: (root.height - self.height) / 2;
+        border-radius: self.width / 2;
+        background: root.enabled ? MaterialPalette.primary : MaterialPalette.outline;
+        border-width: touch.pressed ? 4px : 0px;
+        border-color: MaterialPalette.primary_container;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                root.value = root.at(self.mouse-x);
+                root.edited(root.value);
+            }
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                root.released(root.value);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.value = root.at(self.mouse-x);
+                root.edited(root.value);
+            }
+        }
+    }
+}

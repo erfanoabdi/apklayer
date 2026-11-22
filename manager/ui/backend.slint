@@ -124,7 +124,7 @@ export global Backend {
     in property <string> app-resolution-text;  // the selected app's window pixels and the fullscreen render resolution at its scale
     in property <string> app-render-filter-setting;  // the selected app's render filter (render-filter.<package>): "" off, "sharp" the shell resamples and sharpens its picture
     in property <string> app-render-scale-setting;  // the selected app's render scale (render-scale.<package>, percent): "" full size; a fullscreen game renders at that share of the window
-    in property <int> app-render-scale-pct: 100;  // the render scale as a number for the slider
+    in-out property <float> app-render-scale-pct: 100;  // the render scale as a number for the slider
     callback preview-render-scale(int);  // the slider moves: the resolution text follows without saving
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
     in property <[ConfigEntry]> config;         // the Settings page
