@@ -91,8 +91,15 @@ static void reply(struct apklayer_display *d, uint32_t type, uint32_t len, const
     } else if (type == MSG_CONFIGURE && len >= 16) {
         void (*fn)(void *, int32_t, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
         int32_t turn = len >= 44 ? body[10] : 0;  /* the shell's turn (bridge/shell/geometry.c want_turn) */
-        if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3], turn);
-        else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], body[3]); atomic_store(&d->pending_cfg[3], turn); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
+        /* apklayer patch: the app's render scale (`apklayer settings` render-scale, cli/run.cpp): the display the app renders into is that share of
+         * the window's pixels; the shell shows the buffer over the whole window (its viewport). Here, per launch, not in the shell: the shell is shared
+         * by the instances and outlives an upgrade, so an app restart is enough for a changed setting. The Java host scales its side (AppHost). */
+        static int render_pct;
+        if (!render_pct) { const char *e = getenv("APKLAYER_RENDER_SCALE"); int v = e ? atoi(e) : 100; render_pct = v >= 25 && v <= 200 ? v : 100; }
+        int32_t scale = render_pct == 100 ? body[3] : (int32_t)(((int64_t)body[3] * render_pct + 50) / 100);
+        if (scale < 1) scale = 1;
+        if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], scale, turn);
+        else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], scale); atomic_store(&d->pending_cfg[3], turn); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
     } else if (type == MSG_NAVBAR_PIXELS && len >= 12) {
         void (*fn)(void *, int, int32_t, int32_t) = atomic_load(&d->navbar_fn);
         if (fn) { fn(atomic_load(&d->navbar_user), mfd, body[1], body[2]); mfd = -1; }  /* the callback owns the fd */
@@ -213,12 +220,6 @@ static struct apklayer_display *display_open(const char *name, uint32_t width, u
         if (!mode) mode = "auto";
         int32_t wm[3] = { WINDOW_ID, !strcmp(mode, "mobile") ? 2 : !strcmp(mode, "desktop") ? 1 : 0, nb && !strcmp(nb, "on") ? 1 : nb && !strcmp(nb, "off") ? 2 : 0 };
         send_msg(d, 15 /* MSG_WINDOW_MODE */, wm, sizeof wm, NULL, 0);
-    }
-    /* apklayer patch: the app's render scale (`apklayer settings` render-scale, cli/run.cpp): the shell lowers the display a fullscreen game renders into */
-    const char *rscale = getenv("APKLAYER_RENDER_SCALE");
-    if (rscale && *rscale) {
-        int32_t rs[2] = { WINDOW_ID, atoi(rscale) };
-        send_msg(d, 20 /* MSG_RENDER_SCALE */, rs, sizeof rs, NULL, 0);
     }
     char create[12 + 2 + 64];
     int32_t hdr[3] = { WINDOW_ID, (int32_t)width, (int32_t)height };

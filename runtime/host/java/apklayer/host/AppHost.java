@@ -482,7 +482,29 @@ public final class AppHost implements Runnable {
      * screen capture comes out at the pixel size w x scale and the shell client rebuffers the window to match (ShellClient.present).
      * navPx: the shell's navigation bar over the window's bottom (mobile style), the display's navigation bar inset.
      */
+    /** The app's render scale (`apklayer settings` render-scale, 25..200 percent; cli/run.cpp puts it in the launch's environment): the app's display is that
+     *  share of the window's pixels with the density scaled alike (the dp size and layout stay); the shell shows it over the whole window. */
+    private static final int RENDER_SCALE = renderScale();
+
+    private static int renderScale() {
+        try {
+            int v = Integer.parseInt(System.getenv("APKLAYER_RENDER_SCALE"));
+            return v >= 25 && v <= 200 ? v : 100;
+        } catch (RuntimeException e) {
+            return 100;
+        }
+    }
+
+    private static int scaled(int value) {
+        return RENDER_SCALE == 100 ? value : (int) (((long) value * RENDER_SCALE + 50) / 100);
+    }
+
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
+        if (RENDER_SCALE != 100) {
+            scalePct = Math.max(1, scaled(scalePct));
+            if (dpi > 0) dpi = Math.max(1, scaled(dpi));
+            navPx = scaled(navPx);
+        }
         if (dpi <= 0) dpi = 160 * scalePct / 100;
         int pw = w * scalePct / 100, ph = h * scalePct / 100;
         int wdp = dp(pw, dpi), hdp = dp(ph, dpi);
@@ -503,7 +525,8 @@ public final class AppHost implements Runnable {
         HostCameraShadows.windowShape(h > w);
         // the screen (WindowConfiguration max bounds: Display.getRealSize, WindowManager.getMaximumWindowMetrics, ViewConfiguration's drawing
         // cache limit) is the output, turned like the window as a phone's display turns with it; the window stays the app's bounds
-        int longer = Math.max(Math.max(outputPxW, outputPxH), Math.max(pw, ph)), shorter = Math.max(Math.min(outputPxW, outputPxH), Math.min(pw, ph));
+        int outW = scaled(outputPxW), outH = scaled(outputPxH);  // the screen at the render scale too
+        int longer = Math.max(Math.max(outW, outH), Math.max(pw, ph)), shorter = Math.max(Math.min(outW, outH), Math.min(pw, ph));
         HostConfiguration.setScreen(outputPxW > 0 && outputPxH > 0 ? (pw >= ph ? new android.graphics.Rect(0, 0, longer, shorter) : new android.graphics.Rect(0, 0, shorter, longer)) : null);
         String qualifiers = "w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi";
         // as a rotation on Android: activities that do not handle orientation|screenSize relaunch, so they take their -land/-port layouts

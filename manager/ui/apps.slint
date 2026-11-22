@@ -108,7 +108,7 @@ component AppDetail {
                     padding: MaterialStyleMetrics.padding_16;
                     spacing: MaterialStyleMetrics.spacing_8;
                     MaterialText { text: "Render scale of this app"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
-                    MaterialText { text: "The app renders at this share of the window's pixels (windowed or fullscreen) and is shown over the whole window (the screen's shape is kept): below 100% is faster, above 100% is sharper. Needs a compositor with wp_viewporter (GNOME, KDE and most others); where it is missing only whole multiples work. Takes effect at the app's next start."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "The app renders at this share of the window's pixels (windowed or fullscreen) and is shown over the whole window (the screen's shape is kept): below 100% is faster, above 100% is sharper. Needs a compositor with wp_viewporter (GNOME, KDE and most others). Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     MaterialText { text: Backend.app-resolution-text; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;

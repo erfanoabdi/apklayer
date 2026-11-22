@@ -205,12 +205,12 @@ int propCommand(const Layout& l, const Instance& inst, const std::vector<std::st
 int appCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     static const std::map<std::string, std::string> modes = {{"lite", "lite-translate-or-interpret"}, {"interpret", "interpret-only"}};
     if (args.size() == 2 && args[1] == "resolution") {  // `app <package> resolution`: "window\tWxH" the window's pixels at the app's last configure (the shell's log), nothing before it ran
-        static const std::regex configure(R"(configure content \d+x\d+ @\d+% \((\d+)x(\d+) px\)(?:, render scale \d+% of (\d+)x(\d+) px)?, title bar)");
+        static const std::regex configure(R"(configure content \d+x\d+ @\d+% \((\d+)x(\d+) px\), title bar)");
         std::string found;
         for (const std::string& line : split(readFile(join(inst.logs(), "shell.log")).value_or(""), '\n')) {
             std::smatch m;
             if (line.find(" " + args[0] + ": configure content") == std::string::npos || !std::regex_search(line, m, configure)) continue;
-            found = m[3].matched ? m[3].str() + "x" + m[4].str() : m[1].str() + "x" + m[2].str();
+            found = m[1].str() + "x" + m[2].str();
         }
         if (!found.empty()) printf("window\t%s\n", found.c_str());
         return 0;

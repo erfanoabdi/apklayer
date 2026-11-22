@@ -71,36 +71,21 @@ void window_to_app(const struct window *w, int *x, int *y)
  * window's, with the turn it composes the app at. */
 void window_send_configure(struct window *w)
 {
-    /* apklayer patch: the app's render scale (`apklayer settings` render-scale), windowed or fullscreen: the app's pixels are that share of the
-     * window's (the same logical size and dp, a smaller or, above 100, a larger display: the window's viewport scales its buffer), also in the screen size it reads */
-    int rs = w->client->render_scale > 0 ? w->client->render_scale : 100;
-    int s0 = window_scale(w), s = rs != 100 ? (s0 * rs + 50) / 100 : s0;
-    if (s < 1) s = 1;
-    if (rs != 100 && !w->viewport && s % 100) {  /* no wp_viewporter (an old Mir, Lipstick's wl_shell): only a whole multiple of the logical size is shown at its size */
-        static int said;
-        if (!said++) fprintf(stderr, "[shell] render scale %d%% ignored: the compositor has no wp_viewporter and the buffer would not be a whole multiple of the window\n", rs);
-        rs = 100; s = s0;
-    }
-    int nav = !w->turn ? (window_nav(w) * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
+    int s = window_scale(w), nav = !w->turn ? (window_nav(w) * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
     int aw, ah, ime = w->turn ? 0 : w->ime_px, opw, oph, os;
     window_output(w, &opw, &oph, &os);  /* shortcut: turned, the keyboard is beside the content and gets no inset */
     window_app_size(w, &aw, &ah);
-    w->told_scale = s0;
+    w->told_scale = s;
     w->told_dpi = w->dpi;
-    int dpi = rs != 100 ? (w->dpi * rs + 50) / 100 : w->dpi;  /* the density follows the render scale: the same dp size and layout at fewer (or more) pixels */
-    if (dpi < 1) dpi = 1;
     w->told_nav = window_nav(w);
     w->told_px_w = opw; w->told_px_h = oph;
-    if (rs != 100) { opw = opw * rs / 100; oph = oph * rs / 100; }
     /* the output's pixels: the app's screen (Display.getRealSize, WindowManager.getMaximumWindowMetrics), not its window */
-    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, dpi, nav, w->mobile, opw, oph, ime }, 10);
+    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, w->dpi, nav, w->mobile, opw, oph, ime }, 10);
     if (w->proxy)
-        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw + (w->nav.remote ? turned_nav(w) : 0) : ah, s, dpi, nav, w->mobile, opw, oph, ime, w->turn }, 11);
-    char rsnote[64] = "";  /* what the manager shows (`apklayer app <package> resolution`): the window's own pixels */
-    if (rs != 100) snprintf(rsnote, sizeof rsnote, ", render scale %d%% of %dx%d px", rs, aw * s0 / 100, ah * s0 / 100);
-    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px)%s, title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px%s\n",
-            w->client->pkg, aw, ah, s, aw * s / 100, ah * s / 100, rsnote, W_BAR(w), (W_BAR(w) * s + 99) / 100,
-            w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", dpi, w->nav_h, nav, ime,
+        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw + (w->nav.remote ? turned_nav(w) : 0) : ah, s, w->dpi, nav, w->mobile, opw, oph, ime, w->turn }, 11);
+    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px%s\n",
+            w->client->pkg, aw, ah, s, aw * s / 100, ah * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
+            w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav, ime,
             w->turn == 90 ? ", turned 90" : w->turn == 270 ? ", turned 270" : "");
 }
 
