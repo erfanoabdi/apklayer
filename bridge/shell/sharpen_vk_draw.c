@@ -35,6 +35,8 @@ void svk_pipelines_free(struct svk *s)
         if (s->fs[i]) s->vkDestroyShaderModule(s->dev, s->fs[i], NULL);
         s->pipe[i] = VK_NULL_HANDLE; s->fs[i] = VK_NULL_HANDLE;
     }
+    if (s->fence) s->vkDestroyFence(s->dev, s->fence, NULL);
+    s->fence = VK_NULL_HANDLE;
     if (s->vs) s->vkDestroyShaderModule(s->dev, s->vs, NULL);
     if (s->pool) s->vkDestroyDescriptorPool(s->dev, s->pool, NULL);
     if (s->pl) s->vkDestroyPipelineLayout(s->dev, s->pl, NULL);
@@ -231,13 +233,14 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
         s->vkCmdPipelineBarrier(s->cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1, &br);
     }
     if (s->vkEndCommandBuffer(s->cb) != VK_SUCCESS) return -1;
-    VkExportFenceCreateInfo ex = { .sType = VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO, .handleTypes = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT };
-    VkFenceCreateInfo fi = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .pNext = s->vkGetFenceFdKHR ? &ex : NULL };
-    VkFence f = VK_NULL_HANDLE;
-    if (s->vkCreateFence(s->dev, &fi, NULL, &f) != VK_SUCCESS) { f = VK_NULL_HANDLE; s->vkGetFenceFdKHR = NULL; fi.pNext = NULL; if (s->vkCreateFence(s->dev, &fi, NULL, &f) != VK_SUCCESS) return -1; }
+    if (!s->fence) {
+        VkExportFenceCreateInfo ex = { .sType = VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO, .handleTypes = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT };
+        VkFenceCreateInfo fi = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .pNext = s->vkGetFenceFdKHR ? &ex : NULL };
+        if (s->vkCreateFence(s->dev, &fi, NULL, &s->fence) != VK_SUCCESS) { s->fence = VK_NULL_HANDLE; s->vkGetFenceFdKHR = NULL; fi.pNext = NULL; if (s->vkCreateFence(s->dev, &fi, NULL, &s->fence) != VK_SUCCESS) { s->fence = VK_NULL_HANDLE; return -1; } }
+    }
     VkSubmitInfo si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &s->cb };
-    if (s->vkQueueSubmit(s->q, 1, &si, f) != VK_SUCCESS) { s->vkDestroyFence(s->dev, f, NULL); return -1; }
-    wait_done(s, f);
-    s->vkDestroyFence(s->dev, f, NULL);
+    if (s->vkQueueSubmit(s->q, 1, &si, s->fence) != VK_SUCCESS) return -1;
+    wait_done(s, s->fence);
+    s->vkResetFences(s->dev, 1, &s->fence);  /* (exporting the sync fd already reset it; harmless then) */
     return 0;
 }

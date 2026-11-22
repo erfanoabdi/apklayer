@@ -21,7 +21,7 @@
     X(vkAllocateDescriptorSets) X(vkUpdateDescriptorSets) X(vkCreateCommandPool) X(vkDestroyCommandPool) X(vkAllocateCommandBuffers) X(vkBeginCommandBuffer) \
     X(vkEndCommandBuffer) X(vkResetCommandBuffer) X(vkCmdBeginRenderPass) X(vkCmdEndRenderPass) X(vkCmdBindPipeline) X(vkCmdBindDescriptorSets) X(vkCmdPushConstants) \
     X(vkCmdSetViewport) X(vkCmdSetScissor) X(vkCmdDraw) X(vkCmdPipelineBarrier) X(vkCmdCopyImageToBuffer) X(vkQueueSubmit) X(vkQueueWaitIdle) X(vkCreateFence) \
-    X(vkDestroyFence) X(vkCreateBuffer) X(vkDestroyBuffer) X(vkBindBufferMemory) X(vkGetBufferMemoryRequirements) X(vkMapMemory) X(vkUnmapMemory) \
+    X(vkDestroyFence) X(vkResetFences) X(vkCreateBuffer) X(vkDestroyBuffer) X(vkBindBufferMemory) X(vkGetBufferMemoryRequirements) X(vkMapMemory) X(vkUnmapMemory) \
     X(vkGetMemoryFdKHR) X(vkGetMemoryFdPropertiesKHR) X(vkGetImageDrmFormatModifierPropertiesEXT) X(vkGetImageSubresourceLayout) X(vkGetFenceFdKHR)
 
 struct svk_img { VkImage img; VkDeviceMemory mem; VkImageView view; VkFramebuffer fb; int w, h; };
@@ -50,6 +50,7 @@ struct svk {
     VkPipeline pipe[SVK_PIPES];
     VkCommandPool cp;
     VkCommandBuffer cb;
+    VkFence fence;  /* one for all frames (exportable as a sync fd where the driver allows), reset after each wait */
     struct svk_in in[SVK_BUFS];
     struct svk_slot out[SVK_SLOTS];
     struct svk_img mid, f16[3];
