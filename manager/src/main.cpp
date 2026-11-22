@@ -41,7 +41,7 @@ const char* const kTwoGearMode = "two-gear";
 
 // What the selected app's detail shows besides the list's row: `info` and `permissions` (whose failure, an install older than the list, is a note there)
 struct Detail {
-    Rows info, permissions, config;  // config: the app's own settings (`config list --app`)
+    Rows info, permissions, config, resolution;  // config: the app's own settings (`config list --app`); resolution: its window's pixels at its last start
     std::string error, permissionsNote;
 };
 
@@ -63,6 +63,7 @@ Detail loadDetail(const Cli& cli, const std::string& pkg) {
     d.info = rows(cli, {"info", pkg}, d.error);
     d.permissions = rows(cli, {"permissions", pkg}, d.permissionsNote);
     d.config = rows(cli, {"config", "list", "--app", pkg}, d.error);
+    d.resolution = rows(cli, {"app", pkg, "resolution"}, d.error);
     return d;
 }
 
@@ -179,6 +180,9 @@ public:
         appModes_.clear();  // the apps' own overrides: window-mode.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("window-mode.", 0) == 0) appModes_[field(r, 0).substr(12)] = field(r, 1);
         b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
+        appScales_.clear();  // render-scale.<package>
+        for (const auto& r : s.settings) if (field(r, 0).rfind("render-scale.", 0) == 0) appScales_[field(r, 0).substr(13)] = field(r, 1);
+        b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
         b.set_status(info(s.status));
         auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
         gpuIds_.clear();
@@ -225,6 +229,8 @@ public:
     }
 
     std::map<std::string, std::string> appModes_;
+    std::map<std::string, std::string> appScales_;  // render-scale.<package>
+    std::map<std::string, std::pair<int, int>> windowPx_;  // the app's window pixels at its last start (`app <package> resolution`)
     std::function<void()> applied;  // the screenshot mode's event: a refresh begun after the scripted input reached the window
     std::function<void()> previewed;  // and --wait-preview's: the install dialog's preview is shown (or failed)
     bool previewDone = false;
@@ -281,6 +287,24 @@ private:
         b.set_permissions_note(slint::SharedString(d.permissionsNote));
         b.set_app_permissions(permissions(d.permissions));
         b.set_app_config(manager::configModel(d.config));
+        windowPx_[current_] = {0, 0};
+        for (const auto& r : d.resolution)
+            if (field(r, 0) == "window") std::sscanf(field(r, 1).c_str(), "%dx%d", &windowPx_[current_].first, &windowPx_[current_].second);
+        showResolution();
+    }
+
+    // the render scale card: the window's pixels at the app's last start and what a fullscreen game renders at with the scale chosen
+    void showResolution() {
+        auto [w, h] = windowPx_[current_];
+        int pct = appScales_[current_].empty() ? 100 : std::atoi(appScales_[current_].c_str());
+        std::string text;
+        if (w <= 0 || h <= 0) text = "Start the app once to see its resolution here.";
+        else {
+            int rw = (int)(((long)w * pct + 50) / 100), rh = (int)(((long)h * pct + 50) / 100);
+            text = "Window " + std::to_string(w) + " x " + std::to_string(h) + " px. The app renders at " + std::to_string(rw) + " x " + std::to_string(rh) + " px" +
+                   (pct == 100 ? " (full size)." : pct < 100 ? " (" + std::to_string(pct) + "%, scaled up to the window)." : " (" + std::to_string(pct) + "%, scaled down to the window).");
+        }
+        ui_->global<Backend>().set_app_resolution_text(slint::SharedString(text));
     }
 
     // `apklayer permissions` rows (permission, level, granted): the runtime ones first, each with a title ("ACCESS_FINE_LOCATION" -> "Access fine location")
@@ -454,6 +478,7 @@ private:
                 if (auto e = b.get_apps()->row_data(i); e && e->package == pkg) b.set_current_app(*e);
             b.set_has_current_app(true);
             b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
+            b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
             showDetail({});
             later([cli = cli_, p = current_] { return loadDetail(cli, p); }, [this, p = current_](const Detail& d) {
                 if (p != current_) return;
@@ -528,6 +553,7 @@ private:
         b.on_unset_prop([this](slint::SharedString k) { action("Saving", {"prop", "unset", std::string(k)}); });
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
             if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
+            if (std::string(k).rfind("render-scale.", 0) == 0) { appScales_[std::string(k).substr(13)] = std::string(v); ui_->global<Backend>().set_app_render_scale_setting(v); showResolution(); }
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
             else action("Saving", {"settings", "set", std::string(k), std::string(v)});
         });

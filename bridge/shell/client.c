@@ -157,11 +157,11 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         if (w && (w->mode != v[1] || pref_changed)) window_set_mode(w, v[1]);
         break;
     }
-    case MSG_RENDER_SCALE: {  /* a game's render scale: applies while it is fullscreen (geometry.c window_send_configure) */
-        if (len < 8 || v[1] < 10 || v[1] > 100) return;
+    case MSG_RENDER_SCALE: {  /* an app's render scale: windowed or fullscreen (geometry.c window_send_configure) */
+        if (len < 8 || v[1] < 25 || v[1] > 200) return;
         c->render_scale = v[1] == 100 ? 0 : v[1];
         struct window *w = window_find_input(c, v[0]);
-        if (w && w->configured && w->want_fullscreen) window_send_configure(w);
+        if (w && w->configured) window_send_configure(w);
         break;
     }
     case MSG_NAVBAR: {

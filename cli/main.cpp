@@ -69,7 +69,7 @@ int usage() {
           "                         manager's Settings page; list rows: key kind default value choices title help per-app own\n"
           "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24,\n"
-          "                         window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 10..100); all live in a running instance but render-scale (a fullscreen game renders at that percent of the window, from its next start)\n"
+          "                         window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 25..200); all live in a running instance but render-scale (an app renders at that percent of its window, from its next start)\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
           "  logs [<package> [--previous]]  the app's log of its last launch (its output and android.util.Log; --previous: the launch before);\n"
           "                         without a package: the instance's log files\n"

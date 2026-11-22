@@ -106,7 +106,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_DECOR_DARK 13    /* app -> shell: {own window id, 1 light | 2 dark}: the instance's colour scheme (its host settings), for the title bar */
 #define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*[, NB_*]} (mobile.c) */
 #define MSG_NAVBAR 16        /* app -> shell: {own window id, visible}: the app's navigation bar visibility (immersive mode) */
-#define MSG_RENDER_SCALE 20  /* app -> shell: {own window id, percent 10..100}: the app's render scale (`apklayer settings` render-scale): while the app is fullscreen it is told a screen of that share of the window's pixels (geometry.c) */
+#define MSG_RENDER_SCALE 20  /* app -> shell: {own window id, percent 25..200}: the app's render scale (`apklayer settings` render-scale): the app is told a screen of that share of the window's pixels (geometry.c) */
 #define MSG_FULLSCREEN 18    /* app -> shell: {own window id, on}: the app went fullscreen or left it (mobile.c) */
 #define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
@@ -147,7 +147,7 @@ struct client {
     int dark;                  /* MSG_DECOR_DARK: 0 not said (the bar keeps the desktop's), 1 light, 2 dark */
     int window_mode;           /* MSG_WINDOW_MODE before its window exists: WM_* + 1 of the windows it creates or takes over, 0 = not said */
     int navbar_pref;           /* MSG_WINDOW_MODE: the instance's navbar setting for a desktop window (NB_*) */
-    int render_scale;          /* MSG_RENDER_SCALE: percent (10..99) of the window's pixels a fullscreen app renders at, 0 = full */
+    int render_scale;          /* MSG_RENDER_SCALE: percent (25..200, not 100) of the window's pixels an app renders at, 0 = full */
 };
 struct window {
     struct client *client;

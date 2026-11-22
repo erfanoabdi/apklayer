@@ -204,7 +204,18 @@ int propCommand(const Layout& l, const Instance& inst, const std::vector<std::st
 // `app <package> translation-mode [default|lite|interpret]`: berberis.mode.<package> (binary_translation 0008), the same override as `prop set`
 int appCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     static const std::map<std::string, std::string> modes = {{"lite", "lite-translate-or-interpret"}, {"interpret", "interpret-only"}};
-    if (args.size() < 2 || args.size() > 3 || args[1] != "translation-mode") die("app <package> translation-mode [default|lite|interpret]");
+    if (args.size() == 2 && args[1] == "resolution") {  // `app <package> resolution`: "window\tWxH" the window's pixels at the app's last configure (the shell's log), nothing before it ran
+        static const std::regex configure(R"(configure content \d+x\d+ @\d+% \((\d+)x(\d+) px\)(?:, render scale \d+% of (\d+)x(\d+) px)?, title bar)");
+        std::string found;
+        for (const std::string& line : split(readFile(join(inst.logs(), "shell.log")).value_or(""), '\n')) {
+            std::smatch m;
+            if (line.find(" " + args[0] + ": configure content") == std::string::npos || !std::regex_search(line, m, configure)) continue;
+            found = m[3].matched ? m[3].str() + "x" + m[4].str() : m[1].str() + "x" + m[2].str();
+        }
+        if (!found.empty()) printf("window\t%s\n", found.c_str());
+        return 0;
+    }
+    if (args.size() < 2 || args.size() > 3 || args[1] != "translation-mode") die("app <package> translation-mode [default|lite|interpret] | app <package> resolution");
     const std::string& pkg = args[0];
     if (pkg.size() > 49) die("a package name of at most 49 characters (the translator's property name limit)");  // "berberis.mode." + 49 = 63 bytes
     std::string info = join(appDir(l, pkg), "info.properties");
@@ -231,7 +242,7 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
         {"animations", std::regex("on|off")}, {"font-scale", std::regex("[0-3](\\.[0-9]+)?")}, {"locale", std::regex("[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*")},
         {"timezone", std::regex("[A-Za-z0-9_+/-]+")}, {"time-format", std::regex("12|24")},
         {"window-mode", std::regex("auto|mobile|desktop")}, {"navbar", std::regex("auto|on|off")},
-        {"render-scale", std::regex("(100|[1-9][0-9])")}};  // percent, 10..100 (the shell, MSG_RENDER_SCALE)
+        {"render-scale", std::regex("(200|1[0-9][0-9]|[3-9][0-9]|2[5-9])")}};  // percent, 25..200 (the shell, MSG_RENDER_SCALE); above 100 renders larger than the window and shrinks it
     auto own = propLines(file);
     if (args.empty() || (args[0] == "list" && args.size() == 1)) {
         for (const auto& [k, v] : own) printf("%s\t%s\n", clean(k).c_str(), clean(v).c_str());
@@ -240,7 +251,7 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
     const std::string& action = args[0];
     if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !(keys.count(args[1]) || args[1].rfind("window-mode.", 0) == 0 || args[1].rfind("render-scale.", 0) == 0))
         die("settings [list] | set KEY VALUE | unset KEY; keys: night yes|no, accent #rrggbb, contrast high|normal, animations on|off, "
-            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 10..100");
+            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 25..200");
     const std::string keyName = args[1].rfind("window-mode.", 0) == 0 ? "window-mode" : args[1].rfind("render-scale.", 0) == 0 ? "render-scale" : args[1];
     if (action == "set" && !std::regex_match(args[2], keys.at(keyName))) die("not a value for " + args[1] + ": " + args[2]);
     std::string text;

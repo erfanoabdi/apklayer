@@ -121,6 +121,8 @@ export global Backend {
     in property <string> window-mode-setting;  // the instance's window style (`apklayer settings`): "" automatic (mobile on a phone or in a mobile shell), "mobile", "desktop"
     in property <string> navbar-setting;  // the navigation bar on desktop windows (`apklayer settings` navbar): "" automatic (where the compositor draws the title bar), "on", "off"
     in property <string> app-window-mode-setting;  // the selected app's window style override (window-mode.<package>): "" follows the instance, "mobile", "desktop"
+    in property <string> app-resolution-text;  // the selected app's window pixels and the fullscreen render resolution at its scale
+    in property <string> app-render-scale-setting;  // the selected app's render scale (render-scale.<package>, percent): "" full size; a fullscreen game renders at that share of the window
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
     in property <[ConfigEntry]> config;         // the Settings page
     in property <[ConfigEntry]> app-config;     // the selected app's own (those a setting can be given per app)
