@@ -138,7 +138,7 @@ static const char *FS_CAS =
     "  vec3 hitMin = min(mn4, e) / max(4.0 * mx4, 0.0001);\n"
     "  vec3 hitMax = (1.0 - max(mx4, e)) / min(4.0 * mn4 - 4.0, -0.0001);\n"
     "  vec3 lobeV = max(-hitMin, hitMax);\n"
-    "  float lobe = max(-0.1875, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp)) * nz;\n"
+    "  float lobe = max(-0.22, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp));  /* no noise attenuation (FSR's optional denoise): it softens text */\n"
     "  gl_FragColor = vec4(clamp((lobe * (b + d + h + f) + e) / (4.0 * lobe + 1.0), 0.0, 1.0), 1.0);\n"
     "}\n";
 
