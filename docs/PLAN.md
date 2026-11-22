@@ -76,3 +76,5 @@ Only what is still to do; done items are deleted. Only the lead edits this file.
 - Lipstick: swipe-away delete intent and action buttons (`x-nemo-remote-action-*`) are not driven by phone-test; group/summary stacking and a foreground-service entry need a human look at the events view.
 - The phones carry old host classes until the next click/RPM: rerun `phone-test.sh sfos notify` and `ut notify` after installing 0.5.x.
 - Render filter on Vulkan (2026-11-22): needs a human check in a real window (`APKLAYER_SHARPEN_BACKEND=vulkan`, any filter): the sharpen test passes on the RTX, nothing has shown a Vulkan-exported frame in the compositor yet; the X23 and Venus paths are untested. sharpen.c still needs EGL/GBM/GLES headers to build (the backend is a run-time fallback, not Vulkan-only).
+- Render filters after the six-agent round (2026-11-22): needs a human check in real windows: text and line art at render scale 67%, 133% and 150% (the new Lanczos 2 area downscale and the implicit FSR 1 when render-scale is not 100; KWin's own stretch was assumed bilinear, not checked), Anime4K on real anime frames, and the Vulkan backend (see above).
+

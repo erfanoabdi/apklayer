@@ -10,7 +10,7 @@
 
 #define SVK_BUFS 8
 #define SVK_SLOTS 5
-#define SVK_PIPES 10
+#define SVK_PIPES 11
 
 #define SVK_INSTANCE_FNS(X) X(vkDestroyInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) X(vkGetPhysicalDeviceQueueFamilyProperties) \
     X(vkGetPhysicalDeviceMemoryProperties) X(vkEnumerateDeviceExtensionProperties) X(vkGetPhysicalDeviceFormatProperties2) X(vkCreateDevice) X(vkGetDeviceProcAddr)

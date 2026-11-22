@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-22 render filters improved by six agents; sharper render scale; Vulkan parity
+- Measured with `evalfilter.py` (PSNR/SSIM/edge strength/halos on text, line art and smooth images at 1280x720, 854x480 and 640x360 outputs, ratios 2 and 1.5; each agent reported before/after): SGSR 1: Catmull-Rom base and a clamp to the four nearest texels, better PSNR/SSIM in all 18 rows; NIS: luma clamp (halos 2-3% -> 0.1-1.1%) and default sharpness 0.3 (the port matches NVIDIA's reference); FSR 1: sharper EASU lobe (0.25-0.10) and default sharpness 0.55 (the port matches AMD's reference); Lanczos: anti-ringing clamp, sharpness-driven unsharp, exact area downscale; Anime4K: clamped bicubic base and a gentler push (line art +1.5..3 dB, still below FSR on PSNR).
+- Render scale: `FS_DOWN` (`sharpen_down.h`), a Lanczos 2 area filter, is used by every mode when the app renders larger than the window (scale above 100): text PSNR 27.3 -> 35.3 dB at 1280x720 and ratio 2 (edge strength 0.7 -> 1.0 of the reference). A render scale other than 100 with no `render-filter` set now implies FSR 1 (`render-filter off` still means off; cli/run.cpp).
+- Vulkan: `FS_DOWN` and the changed shaders regenerated into `sharpen_vk_spv.h` (the generator now skips C comments between literals); `svk_record` takes the downscale pass for a larger source, as the GLES path. GLES and Vulkan outputs agree (modes 0-3 within 0.1 dB, the downscale bit-identical). Timing, 960x540 to 1920x1080, ms per frame GLES / Vulkan: FSR 1 0.173 / 0.166, NIS 0.291 / 0.257, SGSR 0.126 / 0.147, Lanczos 0.303 / 0.343, Anime4K 0.239 / 0.291; downscale 1920x1080 to 1280x720: 0.214 / 0.282.
+- Needs a human check (docs/PLAN.md): the look in real windows at 67%/133%/150%, and that the compositor stretches bilinear when no filter is on.
+
 ## 2026-11-22: Endfield tiles on mp100: the scrambled picture is the decoded emulated image (user's OK, instance default beside the PGR test)
 
 - Two runs of Endfield on wesley-mp100 (instance default, `nice -n 10`, about 45 s each, stopped with `apklayer stop <pkg>`), `APKLAYER_VULKAN_TEXTURE_TRACE=1` and `=nodecode`, screenshots of the app's own picture (3440x1440).
