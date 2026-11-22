@@ -9,15 +9,7 @@
  #include <map>
  #include <mutex>
  #include <string>
-@@ -26,6 +28,7 @@
- #include "berberis/base/forever_alloc.h"
- #include "berberis/base/tracing.h"
- #include "berberis/proxy_loader/proxy_library_builder.h"
-+#include "berberis/runtime_primitives/translation_cache.h"  // apklayer patch (0085)
- 
- namespace berberis {
- 
-@@ -60,22 +63,79 @@
+@@ -60,22 +62,76 @@
  
  }  // namespace
  
@@ -65,10 +57,9 @@
      FATAL("Unable to load library \"%s\" (upon using symbol \"%s\")", library_name, name);
    }
  
-   res.first->second.InterceptSymbol(addr, name);
-+
-+  // A function got a wrapper entry in the cache (a variable does not): remember it.
-+  if (TranslationCache::GetInstance()->GetHostCodePtr(addr)->load() != kEntryNotTranslated) {
+-  res.first->second.InterceptSymbol(addr, name);
++  // A function got a wrapper (a variable did not): remember it.
++  if (res.first->second.InterceptSymbol(addr, name)) {
 +    (*GetInterceptedSymbols())[addr] = {library_name, name, *ToHostAddr<const uint32_t>(addr)};
 +  }
 +}
@@ -88,8 +79,7 @@
 +  if (lib == GetProxyLibraries()->end()) {
 +    return false;
 +  }
-+  lib->second.InterceptSymbol(pc, it->second.name.c_str());
-+  if (TranslationCache::GetInstance()->GetHostCodePtr(pc)->load() == kEntryNotTranslated) {
++  if (!lib->second.InterceptSymbol(pc, it->second.name.c_str())) {
 +    return false;
 +  }
 +  static std::atomic<int> g_logged{0};
@@ -103,6 +93,67 @@
  }
  
  }  // namespace berberis
+--- a/proxy_loader/proxy_library_builder.cc
++++ b/proxy_loader/proxy_library_builder.cc
+@@ -322,7 +322,8 @@
+ #endif  // NATIVE_BRIDGE_GUEST_ARCH_ARM64
+ // endregion
+ 
+-void ProxyLibraryBuilder::InterceptSymbol(GuestAddr guest_addr, const char* name) {
++// apklayer patch (0085): returns true when a function wrapper was made for the address (false: a variable or an unknown symbol).
++bool ProxyLibraryBuilder::InterceptSymbol(GuestAddr guest_addr, const char* name) {
+   CHECK(guest_addr);
+ 
+   // TODO(b/287342829): functions_ are sorted, use binary search!
+@@ -359,7 +360,7 @@
+             extra_thunk = NamedBadThunk(library_name_, name);
+           }
+           MakeTrampolineCallable(guest_addr, false, extra->marshal_and_call, extra_thunk, name);
+-          return;
++          return true;
+         }
+ #endif  // NATIVE_BRIDGE_GUEST_ARCH_ARM64
+         // endregion
+@@ -391,14 +392,14 @@
+               chain != nullptr) {
+             MakeTrampolineCallable(
+                 guest_addr, false, override_entry->marshal_and_call, chain, name);
+-            return;
++            return true;
+           }
+         }
+ #endif  // NATIVE_BRIDGE_GUEST_ARCH_ARM64
+         // endregion
+         MakeTrampolineCallable(guest_addr, false, function.marshal_and_call, thunk, name);
+       }
+-      return;
++      return true;
+     }
+   }
+ 
+@@ -424,7 +425,7 @@
+     } else {
+       MakeTrampolineCallable(guest_addr, false, extra->marshal_and_call, thunk, name);
+     }
+-    return;
++    return true;
+   }
+ #endif  // NATIVE_BRIDGE_GUEST_ARCH_ARM64
+   // endregion
+@@ -455,11 +456,12 @@
+ #endif
+         // endregion
+       }
+-      return;
++      return false;  // a variable, not a function: no wrapper
+     }
+   }
+ 
+   TRACE("proxy library \"%s\": symbol \"%s\" not found", library_name_, name);
++  return false;
+ }
+ 
+ void ProxyLibraryBuilder::Build(const char* library_name,
 --- a/proxy_loader/include/berberis/proxy_loader/proxy_loader.h
 +++ b/proxy_loader/include/berberis/proxy_loader/proxy_loader.h
 @@ -26,6 +26,10 @@
@@ -116,6 +167,18 @@
  }  // namespace berberis
  
  #endif  // BERBERIS_PROXY_LOADER_H_
+--- a/proxy_loader/include/berberis/proxy_loader/proxy_library_builder.h
++++ b/proxy_loader/include/berberis/proxy_loader/proxy_library_builder.h
+@@ -70,7 +70,8 @@
+              size_t size_data_symbols,
+              const KnownVariable* variables);
+ 
+-  void InterceptSymbol(GuestAddr guest_addr, const char* name);
++  // apklayer patch (0085): true if a function wrapper was made (false: a variable or an unknown symbol).
++  bool InterceptSymbol(GuestAddr guest_addr, const char* name);
+ 
+   // region digitalis
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
 --- a/runtime/arm64/translator_x86_64.cc
 +++ b/runtime/arm64/translator_x86_64.cc
 @@ -444,8 +444,16 @@
