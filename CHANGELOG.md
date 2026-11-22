@@ -20,6 +20,14 @@
 - This PC: the NVIDIA Vulkan device stopped loading in this session (vulkaninfo lists only llvmpipe; nvidia-smi sees the RTX 5060 Ti, ICD json present).
 - Cleaned: mp100 ~/apklayer-endfield, ~/apklayer-astcprobe, ~/apklayer-vkfix; the probe build dir here.
 
+## 2026-11-22: PGR download stall, run 6: the two free sites read from the decrypted library (user's OK, mp100, instance default, login screen only)
+
+- Dumped 0x500 bytes around libil2cpp.so +0x4216f9c and +0x42764b0 from the running game's memory (`/proc/<pid>/mem` via sudo; ACE did not react; no account logged in), saved as `tests/data/pgr-il2cpp/fn_*.bin`. The library is decrypted in the process (valid arm64).
+- +0x4216f9c: end of a reflection-style function that grows a `std::vector<void*>` of 8-byte entries (locals at sp+0x70..0x98); the free is the call through `0x9d4d830` on the vector buffer at sp+0x90.
+- +0x42764b0: the tail of a function that copies an int16 array into an int32 array and calls `0x9d4daa0` (a free-like thunk) before `return 0`; its sibling path ends in `0x9d4d8d0` (errno) and `-3` (an error return, resembling a getaddrinfo/socket helper).
+- Both are plain malloc/free wrappers, so the double free is the owner's: one object freed by two threads, which fits broken mutual exclusion in IL2CPP's own locking (not yet decoded). Next: disassemble il2cpp_monitor_enter/exit (`Monitor` icalls) from the same live process and compare with what berberis runs.
+- Cleaned: mp100 `~/apklayer-pgrdump`; PGR instance data cleared at the owner's request (`apklayer clear-data`; the 1.4 GB app directory, the APK and libs, stays); the instance default was stopped and restarted by the runs.
+
 ## 2026-11-21: PGR download stall, run 5: IL2CPP frees one block from two threads back to back; 128-bit CAS sound
 
 - Run 5 on wesley-mp100 (BERBERIS_LOG_FREES=1 in the launch's environment, PGR's /proc/<pid>/maps copied from outside): 6.3 GB, then 10 lock errors at
