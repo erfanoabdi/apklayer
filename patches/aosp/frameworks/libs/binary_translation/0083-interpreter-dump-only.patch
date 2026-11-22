@@ -1,0 +1,79 @@
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] apklayer patch: interpreter dump-only mode (BERBERIS_TRACE_DUMP_ONLY)
+
+With BERBERIS_TRACE_DUMP_ONLY=1 (prop berberis.trace_dump_only), no BERBERIS_TRACE_BB, and BERBERIS_TRACE_DUMP=<hex offsets>, the interpreter prints x0..x30 and sp at each listed pc as one text line on stderr (50 per pc), recording nothing else: fast enough to reach PGR's download stall. Off by default. Module libberberis_arm64.
+---
+--- a/cpu_emulation/interpreter/arm64/interpreter-main.cc
++++ b/cpu_emulation/interpreter/arm64/interpreter-main.cc
+@@ -54,6 +54,7 @@
+   bool all = false;
+   uint64_t dump[8] = {};
+   int ndump = 0;
++  bool dump_only = false;  // BERBERIS_TRACE_DUMP_ONLY=1 (no BERBERIS_TRACE_BB): registers at the listed pcs as text on stderr, no branch trace
+ };
+ const BbCfg& Cfg() {
+   static const BbCfg cfg = [] {
+@@ -62,9 +63,11 @@
+     static ConfigStr mod("BERBERIS_TRACE_MODULE", "berberis.trace_module");
+     static ConfigStr all("BERBERIS_TRACE_ALL", "berberis.trace_all");
+     static ConfigStr dmp("BERBERIS_TRACE_DUMP", "berberis.trace_dump");
++    static ConfigStr dmo("BERBERIS_TRACE_DUMP_ONLY", "berberis.trace_dump_only");
+     c.dir = dir.get();
+     if (mod.get()) c.module = mod.get();
+     c.all = all.get() && all.get()[0] == '1';
++    c.dump_only = dmo.get() && dmo.get()[0] == '1';
+     if (dmp.get()) {
+       const char* q = dmp.get();
+       while (*q && c.ndump < 8) {
+@@ -117,7 +120,7 @@
+   fclose(f);
+   if (!hi) return;
+   bool changed = n != g_nrng || memcmp(r, g_rng, n * sizeof(Rng)) != 0;
+-  if (changed) {
++  if (changed && Cfg().dir) {
+     char path[256];
+     snprintf(path, sizeof path, "%s/maps-%d.txt", Cfg().dir, getpid());
+     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+@@ -287,6 +290,26 @@
+   Flush(t);
+   t.after_svc = true;
+ }
++// BERBERIS_TRACE_DUMP_ONLY: before an insn, the registers at a listed pc as one text line on stderr (at most 50 per pc), nothing else recorded:
++// fast enough to reach a late event (PGR's download stall). Offsets as BERBERIS_TRACE_DUMP.
++void BbDumpOnly(ThreadState* state, uint64_t pc) {
++  const BbCfg& c = Cfg();
++  BbThread& t = t_bb;
++  if (!g_hi) {
++    if ((++t.any & 0xffff) == 1) FindRange();
++    return;
++  }
++  if (pc >= g_lo)
++    for (int i = 0; i < c.ndump; i++)
++      if (pc == g_lo + c.dump[i] && g_ndump[i]++ < 50) {
++        char line[1200];
++        int n = snprintf(line, sizeof line, "[bbdump] tid=%ld pc=%#lx +%#lx", long(syscall(SYS_gettid)), (unsigned long)pc, (unsigned long)c.dump[i]);
++        for (int k = 0; k < 31 && n < int(sizeof line) - 40; k++) n += snprintf(line + n, sizeof line - n, " x%d=%#lx", k, (unsigned long)state->cpu.x[k]);
++        n += snprintf(line + n, sizeof line - n, " sp=%#lx\n", (unsigned long)state->cpu.sp);
++        (void)!write(2, line, n);
++      }
++  if ((++t.any & 0xffffff) == 0) FindRange();
++}
+ // Before an insn at pc: dump registers at a listed pc.
+ void BbDumpRegs(ThreadState* state, uint64_t pc);
+ void BbDump(ThreadState* state, uint64_t pc) {
+@@ -342,6 +365,7 @@
+   SemanticsPlayer sem_player(&interpreter);
+   Decoder decoder(&sem_player);
+   static const bool trace_on = Cfg().dir != nullptr;
++  static const bool dump_only = !trace_on && Cfg().dump_only && Cfg().ndump > 0;
+ 
+   for (int i = 0; i < max_insns; i++) {
+     GuestAddr pc = state->cpu.insn_addr;
+@@ -351,6 +375,7 @@
+       break;
+     }
+ 
++    if (dump_only) BbDumpOnly(state, pc);
+     if (trace_on) {
+       BbSvc(state, pc);
+       if (Cfg().ndump) BbDump(state, pc);
