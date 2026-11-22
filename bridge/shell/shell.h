@@ -151,6 +151,7 @@ struct window {
     struct client *client;
     int id, w, h, configured;   /* w,h: pixels of the shown buffer */
     int scale;                  /* percent: buffer pixels per logical pixel of what is shown (input mapping), set by window_layout */
+    int pref_scale120;          /* the same in 120ths as the compositor sent it (0 = unknown): the buffer the compositor expects is round(logical * this / 120) */
     int pref_scale;             /* percent: the compositor's preferred scale for this surface (wp_fractional_scale_v1), 0 = output_scale */
     int told_scale;             /* scale last announced to the app */
     int cfg_w, cfg_h;           /* logical content size (window geometry less the title bar) the app was told, 0 = not yet */
@@ -293,6 +294,7 @@ void window_layout(struct window *w);  /* geometry.c */
 void window_set_dark(struct window *w, int dark);  /* the title bar's colour scheme */
 /* geometry.c: configures, scale, the app's CONFIGURE */
 int window_scale(const struct window *w);  /* the scale the window is drawn at (percent) */
+void window_output_px(const struct window *w, int lw, int lh, int *ow, int *oh);  /* the physical pixels of lw x lh logical (what the compositor maps 1:1) */
 void window_scale_changed(struct window *w, int pref);  /* the compositor prefers another scale (pref percent, 0 = output_scale) */
 void window_send_configure(struct window *w);
 void window_app_size(const struct window *w, int *aw, int *ah);  /* the app's logical content size (turned: the window's swapped) */

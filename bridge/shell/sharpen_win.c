@@ -183,8 +183,8 @@ int sharpen_win_show(struct window *w, int buf)
     if (w->filter && sw && sw->state == S_PREPARING && !w->turn && w->plain_buf >= 0 && buf >= 0 && buf < DBUF_MAX && sw->kept[buf].valid) {
         /* the helper is still starting the pass and the window already shows something: only the newest frame waits (the others go back at once), so the
          * compositor never holds a pile of the app's buffers (the sink wedges at seven acquired). It is drawn through the pass when that is ready. */
-        int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h : w->h, scale = window_scale(w);
-        int ow = (lw * scale + 50) / 100, oh = (lh * scale + 50) / 100;
+        int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h : w->h, ow, oh;
+        window_output_px(w, lw, lh, &ow, &oh);
         if (ow > 0 && oh > 0 && !(sw->kept[buf].w == ow && sw->kept[buf].h == oh)) {
             if (sw->pending >= 0 && sw->pending != buf) give_back(w, sw->pending, "replaced while the pass starts");
             sw->pending = buf;
@@ -196,8 +196,8 @@ int sharpen_win_show(struct window *w, int buf)
             fprintf(stderr, "[shell] %s: render filter skipped: %s\n", w->title, w->turn ? "turned window" : "buffer not imported");
         return 0;
     }
-    int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h : w->h, scale = window_scale(w);
-    int ow = (lw * scale + 50) / 100, oh = (lh * scale + 50) / 100;
+    int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h : w->h, ow, oh;
+    window_output_px(w, lw, lh, &ow, &oh);
     if (ow <= 0 || oh <= 0 || (sw->w[buf] == ow && sw->h[buf] == oh)) return 0;  /* the window's own pixels: nothing to resample */
     int slot = -1, fresh = 0;
     if (sw->pending >= 0 && sw->pending != buf) {  /* a newer frame replaces the waiting one */
