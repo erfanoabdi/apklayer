@@ -184,11 +184,13 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
     if (in->w > ow || in->h > oh) mode = 5;  /* a larger source (render scale above 100): the area downscale, whatever the mode (as the GLES path) */
     if (mode == 4 && !(in->w < ow && in->h < oh)) mode = 0;  /* Anime4K needs a smaller source (as the GLES path): FSR 1 */
     if (mode < 0 || mode > 5) mode = 0;
-    if (mode == 0 && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
-    if (mode == 4) {  /* the CNN's three half-float layers at the source's size, the 2x picture (RGBA8) in `mid` */
-        for (int i = 0; i < 3; i++) if (target(s, &s->f16[i], VK_FORMAT_R16G16B16A16_SFLOAT, s->rp_f16, in->w, in->h) < 0) return -1;
-        if (target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, 2 * in->w, 2 * in->h) < 0) return -1;
+    if (mode == 4) {  /* the CNN's three half-float layers at the source's size, the 2x picture (RGBA8) in `mid`; FSR 1 when the GPU cannot make them */
+        int ok = 1;
+        for (int i = 0; i < 3 && ok; i++) if (target(s, &s->f16[i], VK_FORMAT_R16G16B16A16_SFLOAT, s->rp_f16, in->w, in->h) < 0) ok = 0;
+        if (ok && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, 2 * in->w, 2 * in->h) < 0) ok = 0;
+        if (!ok) mode = 0;
     }
+    if (mode == 0 && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
     int nph = (mode >= 1 && mode <= 3 && s->stages > 1 && ow > in->w * 1.05 && oh > in->h * 1.05) ? s->stages : 1;  /* the phases of an upscale (as the GLES path) */
     int msz[4][2];
     for (int k = 1; k <= nph; k++) {

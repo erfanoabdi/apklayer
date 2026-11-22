@@ -180,6 +180,10 @@ int sharpen_win_timeout(void)
 int sharpen_win_show(struct window *w, int buf)
 {
     struct swin *sw = w->sharp;
+    if (sw && sw->pending >= 0 && sw->pending != buf) {  /* a newer frame arrived: the waiting one must not be drawn over it later, whichever way the new one is shown (review finding) */
+        give_back(w, sw->pending, "replaced by a newer frame");
+        sw->pending = -1;
+    }
     if (w->filter && sw && sw->state == S_PREPARING && !w->turn && w->plain_buf >= 0 && buf >= 0 && buf < DBUF_MAX && sw->kept[buf].valid) {
         /* the helper is still starting the pass and the window already shows something: only the newest frame waits (the others go back at once), so the
          * compositor never holds a pile of the app's buffers (the sink wedges at seven acquired). It is drawn through the pass when that is ready. */

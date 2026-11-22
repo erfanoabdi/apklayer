@@ -33,7 +33,7 @@ int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, in
                    const uint32_t *offsets, uint64_t modifier);
 void sharpen_forget(struct sharpen *s, int buf);
 
-/* 0: FSR 1 (EASU + RCAS), 1: NVIDIA Image Scaling (one pass; the sharpness is NIS's 0..1 slider), 2: Snapdragon GSR 1 (one pass), 3: Lanczos 3, 4: Anime4K (five passes). Takes effect with the next sharpen_render. */
+/* 0: FSR 1 (EASU + RCAS), 1: NVIDIA Image Scaling (one pass; the sharpness is NIS's 0..1 slider), 2: Snapdragon GSR 1 (one pass), 3: Lanczos 3, 4: Anime4K (the CNN: six passes), 5: auto (chosen per frame by sharpen_win.c, never reaches here). Takes effect with the next sharpen_render. */
 void sharpen_set_mode(struct sharpen *s, int mode);
 /* Phases of the NIS / SGSR 1 / Lanczos upscale: 1..4, 0 the default (APKLAYER_SHARPEN_STAGES, else 2). Takes effect with the next sharpen_render. */
 void sharpen_set_stages(struct sharpen *s, int n);
