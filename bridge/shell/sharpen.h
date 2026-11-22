@@ -37,7 +37,7 @@ void sharpen_forget(struct sharpen *s, int buf);
 void sharpen_set_mode(struct sharpen *s, int mode);
 /* Phases of the NIS / SGSR 1 / Lanczos upscale: 1..4, 0 the default (APKLAYER_SHARPEN_STAGES, else 2). Takes effect with the next sharpen_render. */
 void sharpen_set_stages(struct sharpen *s, int n);
-/* The anti-aliasing pass after an upscale (GLES backend): 0 the default (APKLAYER_SHARPEN_AA off|low|high, else low), 1 off, 2 low, 3 high. */
+/* The anti-aliasing pass after an upscale (GLES backend): 0 the default (APKLAYER_SHARPEN_AA off|low|high, else high), 1 off, 2 low, 3 high. */
 void sharpen_set_aa(struct sharpen *s, int n);
 
 /* Draws buffer `buf` into output slot `*slot` (0..7, the least recently used free one) of out_w x out_h; sharpness 0..1 (0.5: CAS default). Returns 0 and the

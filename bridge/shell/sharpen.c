@@ -58,7 +58,7 @@ struct sharpen {
     uint64_t tick;
     struct a4k *a4k;
     GLuint aa_prog, aa_tex, aa_fbo;   /* the anti-aliasing pass (FS_AA) and its input picture at the output size */
-    int aa_w, aa_h, aa_req, aa_env;   /* aa_req: the window's render-aa (0 default, 1 off, 2 low, 3 high); aa_env: the default (APKLAYER_SHARPEN_AA off|low|high, else low) */
+    int aa_w, aa_h, aa_req, aa_env;   /* aa_req: the window's render-aa (0 default, 1 off, 2 low, 3 high); aa_env: the default (APKLAYER_SHARPEN_AA off|low|high, else high) */
     struct { GLuint tex, fbo; int w, h; } ph[3];  /* the intermediate pictures of the multi-phase upscale */
     GLuint nis2d, sgsr2d, lanczos2d;   /* the one-pass shaders reading a GL_TEXTURE_2D (the intermediate) instead of the app's external image */
     int stages_req;                    /* the window's render-phases, 0: stages */
@@ -365,7 +365,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "high") ? 3 : 2; } s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "low") ? 2 : 3; } s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 

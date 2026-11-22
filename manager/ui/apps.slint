@@ -151,11 +151,11 @@ component AppDetail {
                             if Backend.app-render-phases-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-phases." + root.app.package, choice.value); } }
                         }
                     }
-                    MaterialText { text: "Anti-aliasing after an upscale: smooths the stair steps of jagged lines along their edges (a render scale below 100% shows them); text stays crisp. Low is the default."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "Anti-aliasing after an upscale: smooths the stair steps of jagged lines along their edges (a render scale below 100% shows them); text stays crisp. High is the default (the lower the render scale, the heavier it gets)."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default (low)", value: "" }, { label: "Off", value: "off" }, { label: "Low", value: "low" }, { label: "High", value: "high" }] : HorizontalLayout {
+                        for choice in [{ label: "Default (high)", value: "" }, { label: "Off", value: "off" }, { label: "Low", value: "low" }, { label: "High", value: "high" }] : HorizontalLayout {
                             if Backend.app-render-aa-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
                         }
