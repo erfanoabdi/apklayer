@@ -15,6 +15,8 @@ public class ShadowHostAppOpsManager extends ShadowAppOpsManager {
     @Implementation
     protected void checkPackage(int uid, String packageName) {
         if (android.os.Process.isIsolated(uid) && HubClient.connected() && packageName != null && packageName.equals(HubClient.current().isolatedOwner(uid))) return;
+        // a process naming its own package is that package's (an installed Play Store failed the uid comparison after its reinstall and ended in Application.onCreate)
+        if (packageName != null && packageName.equals(System.getProperty("apklayer.package"))) return;
         super.checkPackage(uid, packageName);
     }
 }

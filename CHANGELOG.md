@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 Play Store ended in Application.onCreate after a GApps reinstall
+- AppOpsManager.checkPackage threw "Package com.android.vending belongs to 10041" (a provider call in Application.onCreate: Settings.Secure.getString) and the process exited with 1, about every 6 s. A process naming its own package (-Dapklayer.package) is now accepted. The cause of the differing uids after the reinstall is not found.
+
 ## 2026-11-22 render filter: no frame pile-up while the pass starts
 - AIDA64 froze with SGSR at 50%: while the helper started the pass, the app's burst of frames was shown as they were, the compositor held them, and the display sink reached seven acquired buffers ("max acquired buffer count reached: 7 (max 6)"); the app then waited for a free buffer for good. Now only the newest frame waits during the start (older ones go back at once) and it is drawn through the pass when ready.
 
