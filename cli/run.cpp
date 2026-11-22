@@ -257,7 +257,9 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 else if (line.compare(0, 15 + package.size(), "render-filter." + package + "=") == 0) filterOwn = line.substr(15 + package.size());
             }
             if (!scaleOwn.empty() || !scale.empty()) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = scaleOwn.empty() ? scale : scaleOwn;
-            if (!filterOwn.empty() || !filter.empty()) ne.env["APKLAYER_RENDER_FILTER"] = nj.env["APKLAYER_RENDER_FILTER"] = filterOwn.empty() ? filter : filterOwn;
+            std::string chosen = filterOwn.empty() ? filter : filterOwn, usedScale = scaleOwn.empty() ? scale : scaleOwn;
+            if (chosen.empty() && !usedScale.empty() && usedScale != "100") chosen = "sharp";  // a render scale other than 100 and no render-filter: FSR 1 stretches it (the compositor's bilinear is soft); an explicit `off` stays off
+            if (!chosen.empty()) ne.env["APKLAYER_RENDER_FILTER"] = nj.env["APKLAYER_RENDER_FILTER"] = chosen;
         }
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};

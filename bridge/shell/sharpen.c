@@ -19,6 +19,7 @@
 
 #include "sharpen_nis.h"
 #include "sharpen_more.h"
+#include "sharpen_down.h"
 #ifdef HAVE_SHARPEN_VK
 #include "sharpen_vk.h"
 #endif
@@ -49,7 +50,7 @@ struct sharpen {
     PFNEGLDESTROYSYNCKHRPROC destroy_sync;
     PFNEGLDUPNATIVEFENCEFDANDROIDPROC dup_fence;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, lanczos_prog, mid_tex, mid_fbo, vbo;
+    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, lanczos_prog, down_prog, mid_tex, mid_fbo, vbo;
     int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: Lanczos 3, 4: Anime4K */
     int mid_w, mid_h;
     struct a4k *a4k;
@@ -459,6 +460,7 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
         s->sgsr_prog = program(FS_SGSR);
         s->lanczos_prog = program(FS_LANCZOS);
+        s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is averaged by the mode's own shader */
         if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
@@ -641,7 +643,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         return 0;
     }
     GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->lanczos_prog : 0;
-    if (one) {  /* NIS, SGSR 1, Lanczos: one pass, straight into the output dmabuf */
+    if (s->down_prog && (s->in[buf].w > ow || s->in[buf].h > oh)) one = s->down_prog;  /* render scale above 100: every mode shrinks the larger picture with the Lanczos 2 area filter */
+    if (one) {  /* NIS, SGSR 1, Lanczos, the downscale: one pass, straight into the output dmabuf */
         glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
         glViewport(0, 0, ow, oh);
         glUseProgram(one);
