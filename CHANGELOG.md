@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-22: Endfield tiles: size and memory layout ruled out (tests/vm/astc-size-probe.py)
+
+- The probe (tests/hals/vulkan-astc-probe.cpp, built on the Mac from the tree's vulkan-headers with g++) on mp100's Renoir with constant-colour (void-extent) 4x4 ASTC blocks whose colour depends on the block position (no encoder needed): 64x64, 256x256, 512x512, 1024x1024, 1920x1080, 2048x1024, 1920x1088 all decode exactly (0 texels off). So the image size, the emulated image's memory layout (output image + block image in one allocation) and the copy -> barrier -> decode path are fine on this GPU.
+- What is left: the block CONTENT (modes the game's encoder uses that the shaders mishandle; the probe's astcenc-medium images at 61x45 pass) or the game's own use (the sampled view, many images in one command buffer, descriptor state around the decode). The tree's CPU decode path is a stub (astc_texture.h), so there is no in-tree reference decoder; the next step needs the game's blocks: a HAL switch that copies the first uploads' blocks into a file (a HAL-owned buffer copy at the upload, read after the submit), then astcenc/astcraw on them.
+- Cleaned: mp100 ~/apklayer-astcsize, Mac ~/apklayer-astc-test.
+
 ## 2026-11-22: Endfield tiles: not the translator, not the decoder variant, deterministic
 
 - mp100 (instance default, `nice -n 10`, one launch each, screenshot after 60-75 s, Endfield stopped after each): (1) with the exclusive-monitor translator (patch 0084): still the scrambled picture, so the load-exclusive ABA is not its cause; (2) `APKLAYER_VULKAN_ASTC_DECODER=old` (new switch, log shows `ASTC decoder: Old`): still scrambled, a different pattern (black dashes); the per-pixel shader alone is not the cause; (3) `BERBERIS_MODE=lite-translate-or-interpret` (no heavy tier; valid names are interpret-only, lite-translate-or-interpret, two-gear; `lite` is rejected): the same picture as the default, pixel for pixel.
