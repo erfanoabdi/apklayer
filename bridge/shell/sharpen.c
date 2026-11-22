@@ -1,5 +1,5 @@
-/* The upscale pass: see sharpen.h. EGL on the first render node that imports the app's dmabuf, two GLES2 passes: a Catmull-Rom bicubic resample (9
- * bilinear taps) into an intermediate texture, then contrast adaptive sharpening into one of three exportable dmabufs. */
+/* The upscale pass: see sharpen.h. EGL on the first render node that imports the app's dmabuf, two GLES2 passes: FSR 1's EASU upscale into an
+ * intermediate texture, then its RCAS sharpening into one of three exportable dmabufs. */
 #define _GNU_SOURCE
 #include "sharpen.h"
 
@@ -48,38 +48,98 @@ struct sharpen {
 
 static const char *VS = "attribute vec2 p; varying vec2 uv; void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }";
 
-/* the Catmull-Rom weights folded into bilinear fetches (9 taps instead of 16) */
+/* AMD FidelityFX Super Resolution 1 (MIT): EASU, an edge adaptive upscale (12 taps, a Lanczos-like kernel stretched along the edge it finds), then RCAS,
+ * a sharpening that limits itself so it cannot ring. Written for GLES2 (no gather: the taps are fetched at texel centres) after AMD's ffx_fsr1.h.
+ * A source larger than the output (render scale above 100) is averaged down instead. */
 static const char *FS_UP =
     "#extension GL_OES_EGL_image_external : require\n"
     "precision highp float;\n"
     "uniform samplerExternalOES tex; uniform vec2 src; uniform float down; varying vec2 uv;\n"
-    "vec3 T(vec2 p) { return texture2D(tex, p).rgb; }\n"
+    "vec3 T(vec2 q) { return texture2D(tex, (q + 0.5) / src).rgb; }\n"
+    "float L(vec3 c) { return c.g + 0.5 * (c.r + c.b); }\n"
+    "void setf(inout vec2 dir, inout float len, vec2 pp, float w, float a, float b, float c, float d, float e) {\n"
+    "  float dc = d - c, cb = c - b, lenX = 1.0 / max(max(abs(dc), abs(cb)), 0.00001), dirX = d - b;\n"
+    "  dir.x += dirX * w;\n"
+    "  lenX = clamp(abs(dirX) * lenX, 0.0, 1.0); lenX *= lenX; len += lenX * w;\n"
+    "  float ec = e - c, ca = c - a, lenY = 1.0 / max(max(abs(ec), abs(ca)), 0.00001), dirY = e - a;\n"
+    "  dir.y += dirY * w;\n"
+    "  lenY = clamp(abs(dirY) * lenY, 0.0, 1.0); lenY *= lenY; len += lenY * w;\n"
+    "}\n"
+    "void tap(inout vec3 aC, inout float aW, vec2 off, vec2 dir, vec2 len, float lob, float clp, vec3 c) {\n"
+    "  vec2 v = vec2(off.x * dir.x + off.y * dir.y, -off.x * dir.y + off.y * dir.x) * len;\n"
+    "  float d2 = min(dot(v, v), clp);\n"
+    "  float wB = 0.4 * d2 - 1.0, wA = lob * d2 - 1.0;\n"
+    "  wB *= wB; wA *= wA;\n"
+    "  wB = 1.5625 * wB - 0.5625;\n"
+    "  float w = wB * wA;\n"
+    "  aC += c * w; aW += w;\n"
+    "}\n"
     "void main() {\n"
-    "  vec2 pos = uv * src, c = floor(pos - 0.5) + 0.5, f = pos - c, f2 = f * f, f3 = f2 * f;\n"
-    "  vec2 w0 = -0.5 * f3 + f2 - 0.5 * f, w1 = 1.5 * f3 - 2.5 * f2 + 1.0, w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f, w3 = 0.5 * f3 - 0.5 * f2;\n"
-    "  vec2 w12 = w1 + w2, t12 = (c + w2 / w12) / src, t0 = (c - 1.0) / src, t3 = (c + 2.0) / src;\n"
-    "  vec3 r = (T(vec2(t0.x, t0.y)) * w0.x + T(vec2(t12.x, t0.y)) * w12.x + T(vec2(t3.x, t0.y)) * w3.x) * w0.y\n"
-    "         + (T(vec2(t0.x, t12.y)) * w0.x + T(vec2(t12.x, t12.y)) * w12.x + T(vec2(t3.x, t12.y)) * w3.x) * w12.y\n"
-    "         + (T(vec2(t0.x, t3.y)) * w0.x + T(vec2(t12.x, t3.y)) * w12.x + T(vec2(t3.x, t3.y)) * w3.x) * w3.y;\n"
     "  if (down > 0.5) {  /* a larger source than the output: the four taps around the pixel average it */\n"
     "    vec2 h = 0.5 / src * down;\n"
-    "    r = 0.25 * (T(uv + vec2(-h.x, -h.y)) + T(uv + vec2(h.x, -h.y)) + T(uv + vec2(-h.x, h.y)) + T(uv + vec2(h.x, h.y)));\n"
+    "    vec3 r = 0.25 * (texture2D(tex, uv + vec2(-h.x, -h.y)).rgb + texture2D(tex, uv + vec2(h.x, -h.y)).rgb + texture2D(tex, uv + vec2(-h.x, h.y)).rgb + texture2D(tex, uv + vec2(h.x, h.y)).rgb);\n"
+    "    gl_FragColor = vec4(r, 1.0); return;\n"
     "  }\n"
-    "  gl_FragColor = vec4(clamp(r, 0.0, 1.0), 1.0);\n"
+    "  vec2 pos = uv * src - 0.5, fp = floor(pos), pp = pos - fp;\n"
+    "  /*   b c        f g j k are the four texels round the sample\n"
+    "     e f g h\n"
+    "     i j k l\n"
+    "       n o   */\n"
+    "  vec3 b = T(fp + vec2(0.0, -1.0)), c = T(fp + vec2(1.0, -1.0)), e = T(fp + vec2(-1.0, 0.0)), f = T(fp), g = T(fp + vec2(1.0, 0.0)), h = T(fp + vec2(2.0, 0.0));\n"
+    "  vec3 i = T(fp + vec2(-1.0, 1.0)), j = T(fp + vec2(0.0, 1.0)), k = T(fp + vec2(1.0, 1.0)), l = T(fp + vec2(2.0, 1.0)), n = T(fp + vec2(0.0, 2.0)), o = T(fp + vec2(1.0, 2.0));\n"
+    "  float bL = L(b), cL = L(c), eL = L(e), fL = L(f), gL = L(g), hL = L(h), iL = L(i), jL = L(j), kL = L(k), lL = L(l), nL = L(n), oL = L(o);\n"
+    "  vec2 dir = vec2(0.0); float len = 0.0;\n"
+    "  setf(dir, len, pp, (1.0 - pp.x) * (1.0 - pp.y), bL, eL, fL, gL, jL);\n"
+    "  setf(dir, len, pp, pp.x * (1.0 - pp.y), cL, fL, gL, hL, kL);\n"
+    "  setf(dir, len, pp, (1.0 - pp.x) * pp.y, fL, iL, jL, kL, nL);\n"
+    "  setf(dir, len, pp, pp.x * pp.y, gL, jL, kL, lL, oL);\n"
+    "  float dirR = dot(dir, dir);\n"
+    "  bool zro = dirR < (1.0 / 32768.0);\n"
+    "  dirR = zro ? 1.0 : inversesqrt(dirR);\n"
+    "  dir.x = zro ? 1.0 : dir.x;\n"
+    "  dir *= dirR;\n"
+    "  len = len * 0.5; len *= len;\n"
+    "  float stretch = dot(dir, dir) / max(abs(dir.x), abs(dir.y));\n"
+    "  vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 - 0.5 * len);\n"
+    "  float lob = 0.5 + ((0.25 - 0.04) - 0.5) * len, clp = 1.0 / lob;\n"
+    "  vec3 aC = vec3(0.0); float aW = 0.0;\n"
+    "  tap(aC, aW, vec2(0.0, -1.0) - pp, dir, len2, lob, clp, b);\n"
+    "  tap(aC, aW, vec2(1.0, -1.0) - pp, dir, len2, lob, clp, c);\n"
+    "  tap(aC, aW, vec2(-1.0, 0.0) - pp, dir, len2, lob, clp, e);\n"
+    "  tap(aC, aW, vec2(0.0, 0.0) - pp, dir, len2, lob, clp, f);\n"
+    "  tap(aC, aW, vec2(1.0, 0.0) - pp, dir, len2, lob, clp, g);\n"
+    "  tap(aC, aW, vec2(2.0, 0.0) - pp, dir, len2, lob, clp, h);\n"
+    "  tap(aC, aW, vec2(-1.0, 1.0) - pp, dir, len2, lob, clp, i);\n"
+    "  tap(aC, aW, vec2(0.0, 1.0) - pp, dir, len2, lob, clp, j);\n"
+    "  tap(aC, aW, vec2(1.0, 1.0) - pp, dir, len2, lob, clp, k);\n"
+    "  tap(aC, aW, vec2(2.0, 1.0) - pp, dir, len2, lob, clp, l);\n"
+    "  tap(aC, aW, vec2(0.0, 2.0) - pp, dir, len2, lob, clp, n);\n"
+    "  tap(aC, aW, vec2(1.0, 2.0) - pp, dir, len2, lob, clp, o);\n"
+    "  vec3 pix = aC / aW;  /* ringing: not beyond the four nearest texels */\n"
+    "  pix = clamp(pix, min(min(f, g), min(j, k)), max(max(f, g), max(j, k)));\n"
+    "  gl_FragColor = vec4(clamp(pix, 0.0, 1.0), 1.0);\n"
     "}\n";
 
-/* contrast adaptive sharpening (AMD FidelityFX CAS, the plain form): the more headroom a pixel has, the more it is sharpened */
+/* RCAS: sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos); `sharp` 0..1 is
+ * FSR's sharpness in stops (1: the strongest, 0: two stops weaker) */
 static const char *FS_CAS =
     "precision highp float;\n"
     "uniform sampler2D tex; uniform vec2 px; uniform float sharp; varying vec2 uv;\n"
+    "float L(vec3 c) { return c.g + 0.5 * (c.r + c.b); }\n"
     "void main() {\n"
     "  vec3 b = texture2D(tex, uv + vec2(0.0, -px.y)).rgb, d = texture2D(tex, uv + vec2(-px.x, 0.0)).rgb, e = texture2D(tex, uv).rgb;\n"
     "  vec3 f = texture2D(tex, uv + vec2(px.x, 0.0)).rgb, h = texture2D(tex, uv + vec2(0.0, px.y)).rgb;\n"
-    "  vec3 mn = min(min(min(d, e), min(f, b)), h), mx = max(max(max(d, e), max(f, b)), h);\n"
-    "  vec3 amp = sqrt(clamp(min(mn, 1.0 - mx) / max(mx, vec3(0.0001)), 0.0, 1.0));\n"
-    "  float peak = -1.0 / mix(8.0, 5.0, sharp);\n"
-    "  vec3 w = amp * peak;\n"
-    "  gl_FragColor = vec4(clamp((b * w + d * w + f * w + h * w + e) / (1.0 + 4.0 * w), 0.0, 1.0), 1.0);\n"
+    "  float bL = L(b), dL = L(d), eL = L(e), fL = L(f), hL = L(h);\n"
+    "  float nz = 0.25 * (bL + dL + fL + hL) - eL;\n"
+    "  float rng = max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL);\n"
+    "  nz = clamp(abs(nz) / max(rng, 0.00001), 0.0, 1.0);\n"
+    "  nz = -0.5 * nz + 1.0;\n"
+    "  vec3 mn4 = min(min(b, d), min(f, h)), mx4 = max(max(b, d), max(f, h));\n"
+    "  vec3 hitMin = min(mn4, e) / max(4.0 * mx4, 0.0001);\n"
+    "  vec3 hitMax = (1.0 - max(mx4, e)) / min(4.0 * mn4 - 4.0, -0.0001);\n"
+    "  vec3 lobeV = max(-hitMin, hitMax);\n"
+    "  float lobe = max(-0.1875, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp)) * nz;\n"
+    "  gl_FragColor = vec4(clamp((lobe * (b + d + h + f) + e) / (4.0 * lobe + 1.0), 0.0, 1.0), 1.0);\n"
     "}\n";
 
 static GLuint compile(GLenum type, const char *src)

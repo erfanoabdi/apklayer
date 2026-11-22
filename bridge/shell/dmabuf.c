@@ -86,6 +86,7 @@ void window_dmabuf_show(struct window *w, int buf, const int32_t *damage)
 /* the app's own buffer, as it is */
 void window_dmabuf_attach(struct window *w, int buf, const int32_t *damage)
 {
+    if (buf < 0 || buf >= DBUF_MAX || !w->dbufs[buf]) return;  /* a stale index (a waiting frame of a buffer the app replaced): attaching NULL would unmap the window */
     w->framed = 1;
     w->plain_buf = buf;
     wl_surface_attach(w->surface, w->dbufs[buf], 0, 0);

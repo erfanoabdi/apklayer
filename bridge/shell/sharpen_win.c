@@ -100,6 +100,7 @@ void sharpen_win_import(struct window *w, int buf, const int32_t *m, const int *
         sharpen_accept(sw->s, dmabuf_xrgb_mods, dmabuf_xrgb_n);
     }
     if (sw->state == S_OFF) return;
+    if (sw->pending == buf) sw->pending = -1;  /* the app made a new buffer of this index (a resize): the waiting frame is gone */
     struct kept *k = &sw->kept[buf];
     kept_close(k);
     k->valid = 1; k->n = nfds > 4 ? 4 : nfds; k->w = m[3]; k->h = m[4]; k->fourcc = (uint32_t)m[2];
@@ -170,7 +171,7 @@ int sharpen_win_show(struct window *w, int buf)
         give_back(w, sw->pending, "replaced before it was drawn");
         sw->pending = -1;
     }
-    int rc = sharpen_render(sw->s, buf, ow, oh, 0.6f, &slot, &fresh);
+    int rc = sharpen_render(sw->s, buf, ow, oh, 0.9f, &slot, &fresh);
     if (rc == -2) { sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;
@@ -212,6 +213,7 @@ void sharpen_win_forget(struct window *w, int buf)
 {
     struct swin *sw = w->sharp;
     if (!sw || buf < 0 || buf >= DBUF_MAX) return;
+    if (sw->pending == buf) sw->pending = -1;
     kept_close(&sw->kept[buf]);
     if (sw->state == S_READY) { sharpen_forget(sw->s, buf); sw->w[buf] = sw->h[buf] = 0; }
 }
