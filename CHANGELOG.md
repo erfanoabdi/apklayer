@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22 render filter: LS1-like
+- New `render-filter ls1` (manager: LS1): an own one-pass upscaler in the spirit of Lossless Scaling's LS1, which is closed source, so this is NOT that algorithm (`bridge/shell/sharpen_ls1.h`): Catmull-Rom bicubic, de-ringing against the four nearest texels, local-contrast sharpen. Filter flags word now uses bits 1-3 (mode 5 = LS1-like). `tests/vm/sharpen.py` with `SHARPEN_MODE=4` on the RTX 5060 Ti: edge strength x1.40 (FSR 1 x1.30), +0.67 dB PSNR vs bilinear.
+
+## 2026-11-22: PGR download stall, run 10: dump-only mode (patch 0083), build log
+
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24 via `ssh erfanabdi@100.85.219.120`): `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64` (existing module). Why: run 8 and 9 left no way to read the owner and thread id at the monitor check (libil2cpp rva 0x4282854): the branch trace is too slow to reach the stall and patching guest code breaks the translator. `BERBERIS_TRACE_DUMP_ONLY=1` with `BERBERIS_TRACE_DUMP=<offsets>` (interpret-only) prints x0..x30 and sp as one text line on stderr per hit (50 per pc), no trace files.
+
 ## 2026-11-22 render filter watchdog: a frame never waits more than 100 ms
 - PGR froze with the upscale on after "all 5 output buffers are held by the compositor": the newest frame waited for a release that may come late or never. Now a frame waiting over 100 ms for an output buffer is shown as the app's own (unfiltered) one (`sharpen_win_poll`), so the app keeps getting its buffers back; the main loop polls every 25 ms while one waits.
 

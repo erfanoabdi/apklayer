@@ -242,7 +242,7 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
         {"animations", std::regex("on|off")}, {"font-scale", std::regex("[0-3](\\.[0-9]+)?")}, {"locale", std::regex("[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*")},
         {"timezone", std::regex("[A-Za-z0-9_+/-]+")}, {"time-format", std::regex("12|24")},
         {"window-mode", std::regex("auto|mobile|desktop")}, {"navbar", std::regex("auto|on|off")},
-        {"render-scale", std::regex("(200|1[0-9][0-9]|[3-9][0-9]|2[5-9])")}, {"render-filter", std::regex("sharp|nis|sgsr|integer|off")}};  // percent, 25..200 (the shell, MSG_RENDER_SCALE); above 100 renders larger than the window and shrinks it
+        {"render-scale", std::regex("(200|1[0-9][0-9]|[3-9][0-9]|2[5-9])")}, {"render-filter", std::regex("sharp|nis|sgsr|integer|ls1|off")}};  // percent, 25..200 (the shell, MSG_RENDER_SCALE); above 100 renders larger than the window and shrinks it
     auto own = propLines(file);
     if (args.empty() || (args[0] == "list" && args.size() == 1)) {
         for (const auto& [k, v] : own) printf("%s\t%s\n", clean(k).c_str(), clean(v).c_str());
@@ -251,7 +251,7 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
     const std::string& action = args[0];
     if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !(keys.count(args[1]) || args[1].rfind("window-mode.", 0) == 0 || args[1].rfind("render-scale.", 0) == 0 || args[1].rfind("render-filter.", 0) == 0))
         die("settings [list] | set KEY VALUE | unset KEY; keys: night yes|no, accent #rrggbb, contrast high|normal, animations on|off, "
-            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 25..200, render-filter[.<package>] sharp|nis|sgsr|integer|off");
+            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 25..200, render-filter[.<package>] sharp|nis|sgsr|integer|ls1|off");
     const std::string keyName = args[1].rfind("window-mode.", 0) == 0 ? "window-mode" : args[1].rfind("render-scale.", 0) == 0 ? "render-scale" : args[1].rfind("render-filter.", 0) == 0 ? "render-filter" : args[1];
     if (action == "set" && !std::regex_match(args[2], keys.at(keyName))) die("not a value for " + args[1] + ": " + args[2]);
     std::string text;

@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include "sharpen_nis.h"
+#include "sharpen_ls1.h"
 
 #define BUFS 8
 #define SLOTS 5
@@ -45,8 +46,8 @@ struct sharpen {
     PFNEGLDESTROYSYNCKHRPROC destroy_sync;
     PFNEGLDUPNATIVEFENCEFDANDROIDPROC dup_fence;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, int_prog, mid_tex, mid_fbo, vbo;
-    int mode;  /* 0: FSR 1, 1: NIS */
+    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, int_prog, ls1_prog, mid_tex, mid_fbo, vbo;
+    int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: integer, 4: LS1-like */
     int mid_w, mid_h;
     struct slot out[SLOTS];
     int last;
@@ -430,6 +431,7 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
         s->sgsr_prog = program(FS_SGSR);
         s->int_prog = program(FS_INT);
+        s->ls1_prog = program(FS_LS1);
         if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
@@ -590,8 +592,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->int_prog : 0;
-    if (one) {  /* NIS, SGSR 1, integer scaling: one pass, straight into the output dmabuf */
+    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->int_prog : s->mode == 4 ? s->ls1_prog : 0;
+    if (one) {  /* NIS, SGSR 1, integer scaling, LS1-like: one pass, straight into the output dmabuf */
         glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
         glViewport(0, 0, ow, oh);
         glUseProgram(one);
