@@ -109,3 +109,4 @@ Not blocking but open: collect NOTICE/legal files for everything shipped (AOSP l
 
 - NIS (`bridge/shell/sharpen.c`, `sharpen_nis.h`): NVIDIA Image Scaling NIS_Scaler.h / NIS_Config.h (MIT, Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES), NVScaler as a GLES2 fragment shader and its coefficient banks.
 - Snapdragon Game Super Resolution 1 (Qualcomm Innovation Center, BSD-3-Clause, github.com/SnapdragonStudios/snapdragon-gsr): `bridge/shell/sharpen.c` FS_SGSR is its sgsr1_shader_mobile.frag written as GLES2 (textureGather as four fetches). SGSR 2 needs motion vectors and depth and is not used.
+- Anime4K v3.2 Upscale Original x2 (bloc97, MIT, github.com/bloc97/Anime4K): `bridge/shell/sharpen_more.h` FS_A4K_* are its glsl/Upscale/Anime4K_Upscale_Original_x2.glsl hooks as GLES2 (signed gradients packed into RGBA8), run by `sharpen_a4k.h`.

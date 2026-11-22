@@ -19,6 +19,7 @@
 
 #include "sharpen_nis.h"
 #include "sharpen_ls1.h"
+#include "sharpen_more.h"
 
 #define BUFS 8
 #define SLOTS 5
@@ -46,9 +47,10 @@ struct sharpen {
     PFNEGLDESTROYSYNCKHRPROC destroy_sync;
     PFNEGLDUPNATIVEFENCEFDANDROIDPROC dup_fence;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, int_prog, ls1_prog, mid_tex, mid_fbo, vbo;
-    int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: integer, 4: LS1-like */
+    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, int_prog, ls1_prog, lanczos_prog, mid_tex, mid_fbo, vbo;
+    int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: integer, 4: LS1-like, 5: Lanczos 3, 6: Anime4K */
     int mid_w, mid_h;
+    struct a4k *a4k;
     struct slot out[SLOTS];
     int last;
     uint64_t accept[64];
@@ -432,6 +434,7 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->sgsr_prog = program(FS_SGSR);
         s->int_prog = program(FS_INT);
         s->ls1_prog = program(FS_LS1);
+        s->lanczos_prog = program(FS_LANCZOS);
         if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
@@ -551,6 +554,8 @@ static void draw(void)
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
+#include "sharpen_a4k.h"
+
 void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
@@ -592,7 +597,15 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->int_prog : s->mode == 4 ? s->ls1_prog : 0;
+    if (s->mode == 6 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, ow, oh)) {  /* Anime4K: five passes, the last into the output dmabuf */
+        a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, o->fbo, s->vbo);
+        gpu_wait(s);
+        o->busy = 1;
+        s->last = k;
+        *slot = k;
+        return 0;
+    }
+    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->int_prog : s->mode == 4 ? s->ls1_prog : s->mode == 5 ? s->lanczos_prog : 0;
     if (one) {  /* NIS, SGSR 1, integer scaling, LS1-like: one pass, straight into the output dmabuf */
         glBindFramebuffer(GL_FRAMEBUFFER, o->fbo);
         glViewport(0, 0, ow, oh);
@@ -669,6 +682,7 @@ int sharpen_readback(struct sharpen *s, int slot, void *rgba)
 void sharpen_close(struct sharpen *s)
 {
     if (!s) return;
+    free(s->a4k);  /* its GL objects go with the context */
     if (s->ready) {
         eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
         for (int i = 0; i < BUFS; i++) sharpen_forget(s, i);

@@ -120,7 +120,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         struct window *w = len >= 80 ? window_find(c, v[0]) : NULL;
         int nplanes = len >= 80 ? v[5] : 0;
         if (nplanes < 0 || nplanes > 4 || nplanes > c->nfds) nplanes = 0;
-        if (w) { w->filter = len >= 84 && (v[20] & 1) ? 1 + ((v[20] >> 1) & 7) : 0;  /* 1: FSR 1, 2: NIS, 3: SGSR 1, 4: integer scaling, 5: LS1-like */ window_dmabuf_frame(w, v, c->fds, nplanes); }
+        if (w) { w->filter = len >= 84 && (v[20] & 1) ? 1 + ((v[20] >> 1) & 7) : 0;  /* 1: FSR 1, 2: NIS, 3: SGSR 1, 4: integer scaling, 5: LS1-like, 6: Lanczos 3, 7: Anime4K */ window_dmabuf_frame(w, v, c->fds, nplanes); }
         for (int i = 0; i < nplanes; i++) close(c->fds[i]); /* the shell kept its own dup, if it needed one */
         memmove(c->fds, c->fds + nplanes, (size_t)(c->nfds - nplanes) * sizeof(int));
         c->nfds -= nplanes;

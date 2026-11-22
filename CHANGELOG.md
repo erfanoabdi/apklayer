@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 render filter: Lanczos and Anime4K
+- New `render-filter lanczos` (Lanczos 3, one pass, 36 fetches) and `anime4k` (manager: Lanczos, Anime4K): Anime4K v3.2 "Upscale Original x2" (bloc97, MIT) ported to GLES2 as five passes into RGBA8 textures (signed gradients packed v*0.5+0.5), `bridge/shell/sharpen_a4k.h`, shaders in `sharpen_more.h`. It thins and smooths lines (anime/line art), so `tests/vm/sharpen.py`'s text edge-strength check (x1.15) does not apply: SHARPEN_MODE=6 gives x1.05 and a visibly smoother circle outline; Lanczos x1.31, +0.39 dB. Used only when the source is smaller than the output in both directions, else FSR 1.
+
 ## 2026-11-22 render filter: LS1-like
 - New `render-filter ls1` (manager: LS1): an own one-pass upscaler in the spirit of Lossless Scaling's LS1, which is closed source, so this is NOT that algorithm (`bridge/shell/sharpen_ls1.h`): Catmull-Rom bicubic, de-ringing against the four nearest texels, local-contrast sharpen. Filter flags word now uses bits 1-3 (mode 5 = LS1-like). `tests/vm/sharpen.py` with `SHARPEN_MODE=4` on the RTX 5060 Ti: edge strength x1.40 (FSR 1 x1.30), +0.67 dB PSNR vs bilinear.
 
