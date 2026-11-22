@@ -209,7 +209,7 @@ struct window {
     int pending_buf;            /* frame received before the first configure */
     int32_t pending_damage[4];
     struct swin *sharp;         /* the upscale pass of this window (sharpen_win.c), NULL until a frame asks for it */
-    int filter;                 /* the app wants the render filter (DMABUF_FRAME flags word, bit 0) */
+    int filter, filter_pct;                 /* the app wants the render filter (DMABUF_FRAME flags word, bit 0; filter_pct: the NIS sharpness, percent + 1, 0 unset) */
     int plain_buf;              /* the app buffer on screen as it is (dmabuf.c), -1: none: the filter shows it again once the pass is ready */
     int pending_dbuf;           /* dmabuf frame received before the first configure (committing a buffer earlier is an xdg-shell error) */
     int32_t pending_ddamage[4];
