@@ -214,8 +214,15 @@ int sharpen_win_show(struct window *w, int buf)
     if (mode == 5) mode = (long)ow * 10 < (long)sw->w[buf] * 12 ? 2 : 1;
     sharpen_set_stages(sw->s, w->phases);
     sharpen_set_aa(sw->s, w->aa);
+    sharpen_set_calm(sw->s, w->calm);
     sharpen_set_mode(sw->s, mode);
-    int rc = sharpen_render(sw->s, buf, ow, oh, mode == 1 ? 0.3f : mode == 2 ? 1.0f : 0.55f, &slot, &fresh);  /* NIS 0.3, SGSR 1.0, else (FSR 1, Lanczos) 0.55 */  /* NIS 0.3, SGSR 1.0, else (FSR 1, Lanczos) 0.55 */
+    /* the sharpness: the mode's own default (NIS 0.3, SGSR 1.0, else FSR 1 / Lanczos 0.55) times the app's render-sharpness (off 0, low 0.5, medium 1, high 1.5) times a
+     * factor that grows with the upscale ratio (0.8 + 0.25 (ratio - 1), 0.8..1.6): the lower the render scale, the sharper; capped at 1 (SGSR 1: 2) */
+    static const float lvl[5] = { 1.0f, 0.0f, 0.5f, 1.0f, 1.5f };
+    float ratio = (float)ow / (float)(sw->w[buf] > 0 ? sw->w[buf] : ow), rf = 0.8f + 0.25f * (ratio - 1.0f), base = mode == 1 ? 0.3f : mode == 2 ? 1.0f : 0.55f;
+    rf = rf < 0.8f ? 0.8f : rf > 1.6f ? 1.6f : rf;
+    float sh = base * lvl[w->sharpl >= 0 && w->sharpl <= 4 ? w->sharpl : 0] * rf, cap = mode == 2 ? 2.0f : 1.0f;
+    int rc = sharpen_render(sw->s, buf, ow, oh, sh > cap ? cap : sh, &slot, &fresh);
     if (rc == -2) { if (sw->pending != buf) sw->pending_ms = now_ms(); sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;

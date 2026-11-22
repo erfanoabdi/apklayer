@@ -122,6 +122,8 @@ export global Backend {
     in property <string> navbar-setting;  // the navigation bar on desktop windows (`apklayer settings` navbar): "" automatic (where the compositor draws the title bar), "on", "off"
     in property <string> app-window-mode-setting;  // the selected app's window style override (window-mode.<package>): "" follows the instance, "mobile", "desktop"
     in property <string> app-resolution-text;  // the selected app's window pixels and the fullscreen render resolution at its scale
+    in property <string> app-render-calm-setting;  // the selected app's calm pass for foliage noise (render-calm.<package>): "" the default (off), "off", "low", "high"
+    in property <string> app-render-sharpness-setting;  // the selected app's sharpness (render-sharpness.<package>): "" medium, "off", "low", "medium", "high"
     in property <string> app-render-aa-setting;  // the selected app's anti-aliasing after an upscale (render-aa.<package>): "" the default (high), "off", "low", "high"
     in property <string> app-render-phases-setting;  // the selected app's phases of the NIS/SGSR/Lanczos upscale (render-phases.<package>): "" the default (2), "1".."4"
     in property <string> app-render-filter-setting;  // the selected app's render filter (render-filter.<package>): "" off, "sharp" the shell resamples and sharpens its picture

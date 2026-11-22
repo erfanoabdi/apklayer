@@ -39,6 +39,8 @@ void sharpen_set_mode(struct sharpen *s, int mode);
 void sharpen_set_stages(struct sharpen *s, int n);
 /* The anti-aliasing pass after an upscale (GLES backend): 0 the default (APKLAYER_SHARPEN_AA off|low|high, else high), 1 off, 2 low, 3 high. */
 void sharpen_set_aa(struct sharpen *s, int n);
+/* The calm pass after an upscale (GLES backend; temporal + spatial noise reduction for foliage and grass, heavier the bigger the ratio): 0 the default (APKLAYER_SHARPEN_CALM off|low|high, else off), 1 off, 2 low, 3 high. */
+void sharpen_set_calm(struct sharpen *s, int n);
 
 /* Draws buffer `buf` into output slot `*slot` (0..7, the least recently used free one) of out_w x out_h; sharpness 0..1 (0.5: CAS default). Returns 0 and the
  * slot, with *fresh set when the slot's dmabuf is new (the caller makes its wl_buffer from sharpen_slot_info), -1 when nothing could be drawn, -2 when all output buffers are held (draw it again after a sharpen_slot_release). */

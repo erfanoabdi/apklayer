@@ -39,6 +39,8 @@ struct slot {
     uint64_t modifier;
 };
 
+struct rt { GLuint tex, fbo; int w, h; };  /* an output-sized RGBA8 render target (LINEAR) */
+
 struct sharpen {
     int drm_fd;
     struct gbm_device *gbm;
@@ -57,8 +59,10 @@ struct sharpen {
     int mid_w, mid_h;
     uint64_t tick;
     struct a4k *a4k;
-    GLuint aa_prog, aa_tex, aa_fbo;   /* the anti-aliasing pass (FS_AA) and its input picture at the output size */
-    int aa_w, aa_h, aa_req, aa_env;   /* aa_req: the window's render-aa (0 default, 1 off, 2 low, 3 high); aa_env: the default (APKLAYER_SHARPEN_AA off|low|high, else high) */
+    GLuint aa_prog, calm_prog, blit_prog;         /* the post passes: anti-aliasing (FS_AA), calm (FS_CALM) and a copy */
+    struct rt t0, t1, hist[2];                    /* the filter's output (t0), the anti-aliased picture (t1) and the last two calmed outputs */
+    int hist_cur, hist_ok, hist_w, hist_h;        /* hist[hist_cur] is the previous output; hist_ok: it holds a frame of this size */
+    int aa_req, aa_env, calm_req, calm_env;       /* the window's render-aa / render-calm (0 default, 1 off, 2 low, 3 high); the defaults (APKLAYER_SHARPEN_AA off|low|high, else high; APKLAYER_SHARPEN_CALM, else off) */
     struct { GLuint tex, fbo; int w, h; } ph[3];  /* the intermediate pictures of the multi-phase upscale */
     GLuint nis2d, sgsr2d, lanczos2d;   /* the one-pass shaders reading a GL_TEXTURE_2D (the intermediate) instead of the app's external image */
     int stages_req;                    /* the window's render-phases, 0: stages */
@@ -365,7 +369,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "low") ? 2 : 3; } s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "low") ? 2 : 3; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; } s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 
@@ -487,6 +491,8 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->sgsr_prog = program(FS_SGSR);
         s->lanczos_prog = program(FS_LANCZOS);
         s->aa_prog = program(FS_AA);
+        s->calm_prog = program(FS_CALM);
+        s->blit_prog = program(FS_BLIT);
         s->nis2d = program_2d(FS_NIS);
         s->sgsr2d = program_2d(FS_SGSR);
         s->lanczos2d = program_2d(FS_LANCZOS);
@@ -619,50 +625,95 @@ static void draw(void)
 
 #include "sharpen_a4k.h"
 
-/* The anti-aliasing post pass: the filter draws into aa_tex (output size, LINEAR) and this pass smooths its stair steps into the output dmabuf. */
-static GLuint aa_target(struct sharpen *s, int w, int h)
+/* The post passes after an upscale (GLES backend): the filter draws into t0 (output size, LINEAR); then the anti-aliasing pass (t0 -> t1, or into the output) and the
+ * calm pass (reads the picture and the previous output, writes hist[], copied into the output). Both grow with the upscale ratio: the lower the render scale, the heavier. */
+static GLuint rt_ensure(struct rt *r, int w, int h)
 {
-    if (s->aa_w != w || s->aa_h != h) {
-        if (s->aa_fbo) glDeleteFramebuffers(1, &s->aa_fbo);
-        if (s->aa_tex) glDeleteTextures(1, &s->aa_tex);
-        glGenTextures(1, &s->aa_tex);
-        glBindTexture(GL_TEXTURE_2D, s->aa_tex);
+    if (r->w != w || r->h != h) {
+        if (r->fbo) glDeleteFramebuffers(1, &r->fbo);
+        if (r->tex) glDeleteTextures(1, &r->tex);
+        r->fbo = r->tex = 0;
+        glGenTextures(1, &r->tex);
+        glBindTexture(GL_TEXTURE_2D, r->tex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glGenFramebuffers(1, &s->aa_fbo);
-        glBindFramebuffer(GL_FRAMEBUFFER, s->aa_fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s->aa_tex, 0);
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { s->aa_w = s->aa_h = 0; return 0; }
-        s->aa_w = w; s->aa_h = h;
+        glGenFramebuffers(1, &r->fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, r->fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, r->tex, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { r->w = r->h = 0; return 0; }
+        r->w = w; r->h = h;
     }
-    return s->aa_fbo;
+    return r->fbo;
 }
 
-static void aa_pass(struct sharpen *s, GLuint out_fbo, int w, int h, float ratio)
+static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+static void post_draw(struct sharpen *s, GLuint prog, GLuint fbo, int w, int h)
 {
-    int lvl = s->aa_req ? s->aa_req : s->aa_env;
-    /* the lower the render scale (the bigger the ratio), the heavier: stairs are `ratio` pixels long, so the strength and the length of the run follow it */
-    float r = ratio < 1.0f ? 1.0f : ratio > 4.0f ? 4.0f : ratio, str, longk;
-    if (lvl == 3) { str = 0.4f + 0.5f * (r - 1.0f); longk = (r - 1.2f) / 1.0f; }
-    else { str = 0.25f + 0.35f * (r - 1.0f); longk = 0.7f * (r - 1.4f) / 1.6f; }
-    str = str < 0.0f ? 0.0f : str > 1.0f ? 1.0f : str;
-    longk = longk < 0.0f ? 0.0f : longk > 1.0f ? 1.0f : longk;
-    glBindFramebuffer(GL_FRAMEBUFFER, out_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, w, h);
-    glUseProgram(s->aa_prog);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, s->aa_tex);
-    glUniform1i(glGetUniformLocation(s->aa_prog, "tex"), 0);
-    glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
-    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), str);
-    glUniform1f(glGetUniformLocation(s->aa_prog, "longk"), longk);
+    glUseProgram(prog);
     glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     draw();
+}
+
+static void post_tex(GLuint prog, int unit, const char *name, GLuint tex)
+{
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glUseProgram(prog);
+    glUniform1i(glGetUniformLocation(prog, name), unit);
+    glActiveTexture(GL_TEXTURE0);
+}
+
+static void aa_draw(struct sharpen *s, GLuint src, GLuint out_fbo, int w, int h, float ratio)
+{
+    int lvl = s->aa_req ? s->aa_req : s->aa_env;
+    /* the lower the render scale (the bigger the ratio), the heavier: stairs are `ratio` pixels long, so the strength and the length of the run follow it */
+    float r = clampf(ratio, 1.0f, 4.0f), str, longk;
+    if (lvl == 3) { str = 0.4f + 0.5f * (r - 1.0f); longk = (r - 1.2f) / 1.0f; }
+    else { str = 0.25f + 0.35f * (r - 1.0f); longk = 0.7f * (r - 1.4f) / 1.6f; }
+    post_tex(s->aa_prog, 0, "tex", src);
+    glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
+    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), clampf(str, 0.0f, 1.0f));
+    glUniform1f(glGetUniformLocation(s->aa_prog, "longk"), clampf(longk, 0.0f, 1.0f));
+    post_draw(s, s->aa_prog, out_fbo, w, h);
+}
+
+static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float ratio, int aa, int calm)
+{
+    GLuint cur = s->t0.tex;
+    if (calm && !(rt_ensure(&s->t1, w, h) && rt_ensure(&s->hist[0], w, h) && rt_ensure(&s->hist[1], w, h))) calm = 0;
+    if (aa) {
+        aa_draw(s, cur, calm ? s->t1.fbo : out_fbo, w, h, ratio);
+        if (calm) cur = s->t1.tex;
+    }
+    if (!calm) {
+        if (!aa) { post_tex(s->blit_prog, 0, "tex", cur); post_draw(s, s->blit_prog, out_fbo, w, h); }
+        return;
+    }
+    int lvl = s->calm_req ? s->calm_req : s->calm_env;
+    float r = clampf(ratio, 1.0f, 4.0f), tstr, sstr;
+    if (lvl == 3) { tstr = 0.45f + 0.2f * (r - 1.0f); sstr = 0.3f + 0.2f * (r - 1.0f); }
+    else { tstr = 0.3f + 0.12f * (r - 1.0f); sstr = 0.15f + 0.1f * (r - 1.0f); }
+    if (s->hist_w != w || s->hist_h != h) { s->hist_ok = 0; s->hist_w = w; s->hist_h = h; }
+    int hp = s->hist_cur, np = hp ^ 1;
+    post_tex(s->calm_prog, 0, "cur", cur);
+    post_tex(s->calm_prog, 1, "hist", s->hist[hp].tex);
+    glUniform2f(glGetUniformLocation(s->calm_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
+    glUniform1f(glGetUniformLocation(s->calm_prog, "tstr"), clampf(tstr, 0.0f, 0.85f));  /* never freeze a pixel: a quarter of every new frame always comes through */
+    glUniform1f(glGetUniformLocation(s->calm_prog, "sstr"), clampf(sstr, 0.0f, 0.8f));
+    glUniform1f(glGetUniformLocation(s->calm_prog, "use"), s->hist_ok ? 1.0f : 0.0f);
+    post_draw(s, s->calm_prog, s->hist[np].fbo, w, h);
+    post_tex(s->blit_prog, 0, "tex", s->hist[np].tex);
+    post_draw(s, s->blit_prog, out_fbo, w, h);
+    s->hist_cur = np;
+    s->hist_ok = 1;
 }
 
 /* The multi-phase upscale (NIS, SGSR 1, Lanczos): N equal-ratio phases, each the mode's own shader; the first reads the app's buffer, the next ones the
@@ -701,7 +752,7 @@ static int phases(struct sharpen *s, int buf, GLuint pext, GLuint p2d, int ow, i
         if (k == 1) glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex); else glBindTexture(GL_TEXTURE_2D, s->ph[k - 2].tex);
         glUniform1i(glGetUniformLocation(prog, "tex"), 0);
         glUniform2f(glGetUniformLocation(prog, "src"), (float)pw, (float)phh);
-        glUniform1f(glGetUniformLocation(prog, "sharp"), k == n ? (sharp < 0 ? 0 : sharp > 1 ? 1 : sharp) : 0.0f);
+        glUniform1f(glGetUniformLocation(prog, "sharp"), k == n ? (sharp < 0 ? 0 : sharp > 2 ? 2 : sharp) : 0.0f);
         glUniform2f(glGetUniformLocation(prog, "scl"), (float)mw / (float)pw, (float)mh / (float)phh);
         glUniform4fv(glGetUniformLocation(prog, "cs"), 128, nis_coef_scale);
         glUniform4fv(glGetUniformLocation(prog, "cu"), 128, nis_coef_usm);
@@ -715,6 +766,7 @@ static int phases(struct sharpen *s, int buf, GLuint pext, GLuint p2d, int ow, i
 
 void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
 void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n >= 1 && n <= 3 ? n : 0; }
+void sharpen_set_calm(struct sharpen *s, int n) { if (s) s->calm_req = n >= 1 && n <= 3 ? n : 0; }
 void sharpen_set_stages(struct sharpen *s, int n) { if (s) s->stages_req = n >= 1 && n <= 4 ? n : 0; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
@@ -764,12 +816,14 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    int aa = s->aa_prog && (s->aa_req ? s->aa_req : s->aa_env) > 1 && ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: the filter draws into aa_tex, the AA pass into the output */
-    GLuint dst = aa ? aa_target(s, ow, oh) : o->fbo;
-    if (aa && !dst) { aa = 0; dst = o->fbo; }
+    int up = ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: the filter draws into t0, the post passes (anti-aliasing, calm) into the output */
+    int aa = s->aa_prog && up && (s->aa_req ? s->aa_req : s->aa_env) > 1;
+    int calm = s->calm_prog && s->blit_prog && up && (s->calm_req ? s->calm_req : s->calm_env) > 1;
+    GLuint dst = (aa || calm) ? rt_ensure(&s->t0, ow, oh) : o->fbo;
+    if ((aa || calm) && !dst) { aa = calm = 0; dst = o->fbo; }
     if (s->mode == 4 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, s->in[buf].w, s->in[buf].h)) {  /* Anime4K CNN: six passes, the last into the output dmabuf */
         a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, dst, s->vbo);
-        if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
+        if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
         gpu_wait(s);
         o->busy = 1;
         o->used = ++s->tick;
@@ -783,7 +837,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     if (one && one != s->down_prog && st > 1 && ow > s->in[buf].w * 1.05 && oh > s->in[buf].h * 1.05) {  /* an upscale: the phases */
         GLuint p2d = s->mode == 1 ? s->nis2d : s->mode == 2 ? s->sgsr2d : s->lanczos2d;
         if (p2d && phases(s, buf, one, p2d, ow, oh, sharpness, dst, st) == 0) {
-            if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
+            if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
             gpu_wait(s);
             o->busy = 1;
             o->used = ++s->tick;
@@ -800,14 +854,14 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex);
         glUniform1i(glGetUniformLocation(one, "tex"), 0);
         glUniform2f(glGetUniformLocation(one, "src"), (float)s->in[buf].w, (float)s->in[buf].h);
-        glUniform1f(glGetUniformLocation(one, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
+        glUniform1f(glGetUniformLocation(one, "sharp"), sharpness < 0 ? 0 : sharpness > 2 ? 2 : sharpness);
         glUniform2f(glGetUniformLocation(one, "scl"), (float)ow / (float)s->in[buf].w, (float)oh / (float)s->in[buf].h);
         glUniform4fv(glGetUniformLocation(one, "cs"), 128, nis_coef_scale);
         glUniform4fv(glGetUniformLocation(one, "cu"), 128, nis_coef_usm);
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();
-        if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
+        if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
         gpu_wait(s);
         o->busy = 1;
         o->used = ++s->tick;
@@ -834,9 +888,9 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glBindTexture(GL_TEXTURE_2D, s->mid_tex);
     glUniform1i(glGetUniformLocation(s->cas_prog, "tex"), 0);
     glUniform2f(glGetUniformLocation(s->cas_prog, "px"), 1.0f / (float)ow, 1.0f / (float)oh);
-    glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
+    glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 2 ? 2 : sharpness);
     draw();
-    if (aa) aa_pass(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w);
+    if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
         o->used = ++s->tick;

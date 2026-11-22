@@ -323,6 +323,10 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
         if (ph && atoi(ph) >= 1 && atoi(ph) <= 4) filter |= atoi(ph) << 4;
         const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: the anti-aliasing after an upscale: 1 off, 2 low, 3 high (0: the shell's default, high) */
         if (aa) filter |= (!strcmp(aa, "off") ? 1 : !strcmp(aa, "low") ? 2 : !strcmp(aa, "high") ? 3 : 0) << 7;
+        const char *cm = getenv("APKLAYER_RENDER_CALM");  /* bits 9-10: the calm pass (foliage noise): 1 off, 2 low, 3 high (0: the shell's default, off) */
+        if (cm) filter |= (!strcmp(cm, "off") ? 1 : !strcmp(cm, "low") ? 2 : !strcmp(cm, "high") ? 3 : 0) << 9;
+        const char *sh = getenv("APKLAYER_RENDER_SHARPNESS");  /* bits 11-13: 1 off, 2 low, 3 medium, 4 high (0: medium) */
+        if (sh) filter |= (!strcmp(sh, "off") ? 1 : !strcmp(sh, "low") ? 2 : !strcmp(sh, "medium") ? 3 : !strcmp(sh, "high") ? 4 : 0) << 11;
     } m[20] = filter; }
     m[0] = WINDOW_ID;
     m[1] = slot;
