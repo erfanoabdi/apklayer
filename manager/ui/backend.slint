@@ -122,7 +122,7 @@ export global Backend {
     in property <string> navbar-setting;  // the navigation bar on desktop windows (`apklayer settings` navbar): "" automatic (where the compositor draws the title bar), "on", "off"
     in property <string> app-window-mode-setting;  // the selected app's window style override (window-mode.<package>): "" follows the instance, "mobile", "desktop"
     in property <string> app-resolution-text;  // the selected app's window pixels and the fullscreen render resolution at its scale
-    in property <string> app-render-phases-setting;  // the selected app's phases of the NIS/SGSR/Lanczos upscale (render-phases.<package>): "" the default (1), "1".."4"
+    in property <string> app-render-phases-setting;  // the selected app's phases of the NIS/SGSR/Lanczos upscale (render-phases.<package>): "" the default (2), "1".."4"
     in property <string> app-render-filter-setting;  // the selected app's render filter (render-filter.<package>): "" off, "sharp" the shell resamples and sharpens its picture
     in property <string> app-render-scale-setting;  // the selected app's render scale (render-scale.<package>, percent): "" full size; a fullscreen game renders at that share of the window
     in-out property <float> app-render-scale-pct: 100;  // the render scale as a number for the slider

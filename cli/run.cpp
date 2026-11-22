@@ -255,7 +255,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 else if (line.compare(0, 14 + package.size(), "render-scale." + package + "=") == 0) scaleOwn = line.substr(14 + package.size());
                 if (line.compare(0, 14, "render-filter=") == 0) filter = line.substr(14);
                 else if (line.compare(0, 15 + package.size(), "render-filter." + package + "=") == 0) filterOwn = line.substr(15 + package.size());
-                if (line.compare(0, 14, "render-phases=") == 0) phases = line.substr(14);  // phases of the NIS/SGSR/Lanczos upscale (1..4; the shell defaults to 1)
+                if (line.compare(0, 14, "render-phases=") == 0) phases = line.substr(14);  // phases of the NIS/SGSR/Lanczos upscale (1..4; the shell defaults to 2)
                 else if (line.compare(0, 15 + package.size(), "render-phases." + package + "=") == 0) phasesOwn = line.substr(15 + package.size());
             }
             if (!scaleOwn.empty() || !scale.empty()) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = scaleOwn.empty() ? scale : scaleOwn;

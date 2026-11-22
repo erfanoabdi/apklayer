@@ -142,11 +142,11 @@ component AppDetail {
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
                         }
                     }
-                    MaterialText { text: "Phases of the NIS, SGSR and Lanczos upscale: each phase enlarges part of the way, only the last sharpens. More phases is not sharper: every extra phase softens a little, so the default is 1 (off)."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "Phases of the NIS, SGSR and Lanczos upscale: each phase enlarges part of the way, only the last sharpens. More phases is not always sharper (every extra phase softens a little), the default is 2."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default (1)", value: "" }, { label: "1", value: "1" }, { label: "2", value: "2" }, { label: "3", value: "3" }, { label: "4", value: "4" }] : HorizontalLayout {
+                        for choice in [{ label: "Default (2)", value: "" }, { label: "1", value: "1" }, { label: "2", value: "2" }, { label: "3", value: "3" }, { label: "4", value: "4" }] : HorizontalLayout {
                             if Backend.app-render-phases-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-phases-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-phases." + root.app.package, choice.value); } }
                         }

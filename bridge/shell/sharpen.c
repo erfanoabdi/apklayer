@@ -60,7 +60,7 @@ struct sharpen {
     struct { GLuint tex, fbo; int w, h; } ph[3];  /* the intermediate pictures of the multi-phase upscale */
     GLuint nis2d, sgsr2d, lanczos2d;   /* the one-pass shaders reading a GL_TEXTURE_2D (the intermediate) instead of the app's external image */
     int stages_req;                    /* the window's render-phases, 0: stages */
-    int stages;                        /* phases of the NIS / SGSR 1 / Lanczos upscale (APKLAYER_SHARPEN_STAGES, 1..4; default 1: every extra phase costs a little quality) */
+    int stages;                        /* phases of the NIS / SGSR 1 / Lanczos upscale (APKLAYER_SHARPEN_STAGES, 1..4; default 2) */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
 #endif
@@ -363,7 +363,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 1; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 

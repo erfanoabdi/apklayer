@@ -326,7 +326,7 @@ int svk_prepare(struct svk **out, uint32_t fourcc, int w, int h, int n, const in
     struct svk *s = calloc(1, sizeof *s);
     if (!s) return -1;
     for (int i = 0; i < SVK_SLOTS; i++) s->out[i].fd = -1;
-    { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 1; }
+    { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; }
     s->lib = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
     if (!s->lib) goto fail;
     s->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(s->lib, "vkGetInstanceProcAddr");
