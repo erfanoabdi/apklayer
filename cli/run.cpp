@@ -268,6 +268,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         vdisplay = spawn(sink);
         window = {"-Dapklayer.layerstack=" + std::to_string(self), "-Dapklayer.displaywindow=" + title};
         if (!appShell.empty()) window.push_back("-Dapklayer.shell=" + appShell);
+        if (nj.env.count("APKLAYER_RENDER_SCALE")) window.push_back("-Dapklayer.renderscale=" + nj.env["APKLAYER_RENDER_SCALE"]);  // the host's scale per launch (a spare JVM's environment predates it)
     }
     std::vector<std::string> late = launchOptions(window, own);
     std::string record = join(inst.stateDir, "run." + std::to_string(self));

@@ -484,11 +484,17 @@ public final class AppHost implements Runnable {
      */
     /** The app's render scale (`apklayer settings` render-scale, 25..200 percent; cli/run.cpp puts it in the launch's environment): the app's display is that
      *  share of the window's pixels with the density scaled alike (the dp size and layout stay); the shell shows it over the whole window. */
-    private static final int RENDER_SCALE = renderScale();
+    private static int renderScalePct = 0;  // read at the first resize of a launch: a spare JVM is up before the launch that carries the setting
 
     private static int renderScale() {
+        if (renderScalePct != 0) return renderScalePct;
+        return renderScalePct = readRenderScale();
+    }
+
+    private static int readRenderScale() {
         try {
-            int v = Integer.parseInt(System.getenv("APKLAYER_RENDER_SCALE"));
+            String p = System.getProperty("apklayer.renderscale");  // the launch's own option (a spare's environment is older than the launch)
+            int v = Integer.parseInt(p != null ? p : System.getenv("APKLAYER_RENDER_SCALE"));
             return v >= 25 && v <= 200 ? v : 100;
         } catch (RuntimeException e) {
             return 100;
@@ -496,11 +502,12 @@ public final class AppHost implements Runnable {
     }
 
     private static int scaled(int value) {
-        return RENDER_SCALE == 100 ? value : (int) (((long) value * RENDER_SCALE + 50) / 100);
+        int r = renderScale();
+        return r == 100 ? value : (int) (((long) value * r + 50) / 100);
     }
 
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
-        if (RENDER_SCALE != 100) {
+        if (renderScale() != 100) {
             scalePct = Math.max(1, scaled(scalePct));
             if (dpi > 0) dpi = Math.max(1, scaled(dpi));
             navPx = scaled(navPx);
