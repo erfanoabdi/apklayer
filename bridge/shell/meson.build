@@ -59,7 +59,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
     sharpen_args += ['-DHAVE_SHARPEN_VK']
   endif
   if sharpen_src.length() > 0  # the pass alone, for tests/vm/sharpen.py (not installed)
-    executable('sharpen-test', ['../../tests/hals/sharpen-test.c', sharpen_src], dependencies: sharpen_deps, c_args: sharpen_args)
+    executable('sharpen-test', ['../../tests/hals/sharpen-test.c', sharpen_src], dependencies: sharpen_deps + [meson.get_compiler('c').find_library('m')], c_args: sharpen_args)
   endif
   executable('apklayer-shell',
     ['main.c', 'client.c', 'window.c', 'geometry.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'navbar.c', 'mobile.c', 'appinfo.c', 'dmabuf.c', 'dmabuf_shm.c', 'feedback.c', 'splash.c', 'vsync.c', 'testinput.c', 'activation.c', 'decoration.c', 'wlegl.c', 'wlshell.c', 'maliit.c', 'tablet.c', 'gamepad.c', 'sharpen_win.c', sharpen_src, generated],
