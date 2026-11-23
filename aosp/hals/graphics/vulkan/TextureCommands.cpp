@@ -113,6 +113,10 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyBufferToImage(VkCommandBuffer buffer, VkBuffer
           (unsigned long long)regions[0].bufferOffset, regions[0].imageSubresource.mipLevel, regions[0].imageExtent.width, regions[0].imageExtent.height);
     for (uint32_t r = 0; r < count; r++) {
         VkBufferImageCopy region = info->getBufferImageCopy(regions[r]);
+        if (dumping())
+            dumpRecord(findDevice(info->device()), buffer, src, region.bufferOffset,
+                       (VkDeviceSize)region.imageExtent.width * region.imageExtent.height * region.imageExtent.depth * 16, 0,
+                       regions[r].imageExtent.width, regions[r].imageExtent.height);
         fn(buffer, src, info->compressedMipmap(regions[r].imageSubresource.mipLevel), layout, 1, &region);
     }
 }
@@ -125,6 +129,10 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyBufferToImage2(VkCommandBuffer buffer, const V
     TRACE("vkCmdCopyBufferToImage2 image %p regions %u", (void*)copy->dstImage, copy->regionCount);
     for (uint32_t r = 0; r < copy->regionCount; r++) {
         VkBufferImageCopy2 region = info->getBufferImageCopy(copy->pRegions[r]);
+        if (dumping())
+            dumpRecord(c->device, buffer, copy->srcBuffer, region.bufferOffset,
+                       (VkDeviceSize)region.imageExtent.width * region.imageExtent.height * region.imageExtent.depth * 16, 0,
+                       copy->pRegions[r].imageExtent.width, copy->pRegions[r].imageExtent.height);
         VkCopyBufferToImageInfo2 one = *copy;
         one.dstImage = info->compressedMipmap(copy->pRegions[r].imageSubresource.mipLevel);
         one.regionCount = 1;
@@ -272,6 +280,24 @@ VKAPI_ATTR void VKAPI_CALL cmdPipelineBarrier2(VkCommandBuffer buffer, const VkD
     }
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL queueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo* submits, VkFence fence) {
+    VkResult result = host<PFN_vkQueueSubmit>("vkQueueSubmit")(queue, count, submits, fence);
+    if (result != VK_SUCCESS || !dumping()) return result;
+    for (uint32_t i = 0; i < count; i++) dumpSubmitted(queue, submits[i].commandBufferCount, submits[i].pCommandBuffers);
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL queueSubmit2(VkQueue queue, uint32_t count, const VkSubmitInfo2* submits, VkFence fence) {
+    VkResult result = host<PFN_vkQueueSubmit2>("vkQueueSubmit2")(queue, count, submits, fence);
+    if (result != VK_SUCCESS || !dumping()) return result;
+    for (uint32_t i = 0; i < count; i++) {
+        std::vector<VkCommandBuffer> cmds;
+        for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; j++) cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
+        dumpSubmitted(queue, cmds.size(), cmds.data());
+    }
+    return result;
+}
+
 }  // namespace
 
 void forgetCommands(Device* device) {
@@ -296,6 +322,9 @@ PFN_vkVoidFunction commandProc(VkDevice device, const char* name) {
         {"vkCmdCopyImage", reinterpret_cast<PFN_vkVoidFunction>(cmdCopyImage)},
         {"vkCmdCopyImage2", reinterpret_cast<PFN_vkVoidFunction>(cmdCopyImage2)},
         {"vkCmdCopyImage2KHR", reinterpret_cast<PFN_vkVoidFunction>(cmdCopyImage2)},
+        {"vkQueueSubmit", reinterpret_cast<PFN_vkVoidFunction>(queueSubmit)},
+        {"vkQueueSubmit2", reinterpret_cast<PFN_vkVoidFunction>(queueSubmit2)},
+        {"vkQueueSubmit2KHR", reinterpret_cast<PFN_vkVoidFunction>(queueSubmit2)},
         {"vkCmdPipelineBarrier", reinterpret_cast<PFN_vkVoidFunction>(cmdPipelineBarrier)},
         {"vkCmdPipelineBarrier2", reinterpret_cast<PFN_vkVoidFunction>(cmdPipelineBarrier2)},
         {"vkCmdPipelineBarrier2KHR", reinterpret_cast<PFN_vkVoidFunction>(cmdPipelineBarrier2)},

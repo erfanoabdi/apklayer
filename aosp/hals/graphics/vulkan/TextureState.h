@@ -26,6 +26,7 @@ using gfxstream::host::vk::VulkanDispatch;
 
 struct Device {
     VkDevice device = VK_NULL_HANDLE;
+    VkPhysicalDevice physical = VK_NULL_HANDLE;
     bool astc = false, etc2 = false;
     VulkanDispatch vk;  // what gfxstream's code calls
     PFN_vkGetImageMemoryRequirements2 getImageMemoryRequirements2 = nullptr;
@@ -66,6 +67,11 @@ PFN_vkVoidFunction commandProc(VkDevice device, const char* name);
 bool tracing();  // APKLAYER_VULKAN_TEXTURE_TRACE (TextureEmulation.cpp)
 bool skipDecode();  // APKLAYER_VULKAN_TEXTURE_TRACE=nodecode
 #define TRACE(...) do { if (::apklayer::vulkan::textures::tracing()) GFXSTREAM_INFO("texture trace: " __VA_ARGS__); } while (0)  // TextureCommands.cpp
+// APKLAYER_VULKAN_BLOCK_DUMP=<dir>[:<count>] (TextureDump.cpp): the block data of the first <count> (default 4) buffer-to-image uploads of an emulated
+// image is copied into a buffer of ours in the command buffer and written to <dir>/blocks-N-WxH-fmtF.bin once the queue submit that holds it has finished
+void dumpRecord(Device* d, VkCommandBuffer cmd, VkBuffer src, VkDeviceSize offset, VkDeviceSize size, VkFormat format, uint32_t w, uint32_t h);
+void dumpSubmitted(VkQueue queue, uint32_t count, const VkCommandBuffer* cmds);  // after the host's submit
+bool dumping();
 void forgetCommands(Device* device);                                // with gLock held
 
 }  // namespace apklayer::vulkan::textures

@@ -7,6 +7,7 @@ cc_library_shared {
         // ASTC/ETC2 the host device lacks: gfxstream's emulation (gfxstream/, vendored unmodified, docs/THIRD_PARTY.md)
         "TextureEmulation.cpp",
         "TextureCommands.cpp",
+        "TextureDump.cpp",
         "gfxstream/vulkan/emulated_textures/compressed_image_info.cpp",
         "gfxstream/vulkan/emulated_textures/gpu_decompression_pipeline.cpp",
     ],

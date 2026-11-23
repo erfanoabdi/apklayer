@@ -350,6 +350,7 @@ void created(VkPhysicalDevice physical, VkDevice device, DeviceRequest* request,
     auto proc = host<PFN_vkGetDeviceProcAddr>("vkGetDeviceProcAddr");
     auto d = std::make_unique<Device>();
     d->device = device;
+    d->physical = physical;
     d->astc = e.astc;
     d->etc2 = e.etc2;
     auto get = [&](const char* name, const char* alias = nullptr) {
