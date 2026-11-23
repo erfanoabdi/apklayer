@@ -63,3 +63,50 @@ EASU/RCAS port, the text aid or the AA pass is measured by.
 
 Limits: the input is a box-reduced copy of a full-resolution frame (a game renders at the lower size, with its own aliasing); the metrics are
 signal measures (a person judges the look); colour AA effects show in luma metrics only.
+
+## SMAA 1x and CMAA2 against our own AA (2026-11-23, RTX 5060 Ti, GLES, aliased synthetic source)
+A corpus drawn natively at the source size WITHOUT anti-aliasing (text 11-44 px, 1 px lines at many angles, shaded spheres and polygons with stair-stepped edges, foliage noise; the script was a task scratch file, not kept: `tests/vm/evalfilter.py` box-reduces an already smooth image and therefore cannot show jaggies) goes through `sharpen-test` to 1280x720; the truth is the same scene at 4x supersampling, box reduced. PSNR in dB against the truth per region, textEdge = Sobel edge strength of the text region / the truth (1.0 = as sharp), 3dJag = mean abs colour error on the 3D edge pixels (lower = smoother, closer to the truth), halo = % of pixels outside the truth's 5x5 range by more than 8 levels, ms = GPU plus fence wait per frame at 1280x720 output (200 frames; RCAS and the text aid on; differences of 0.01 ms are noise). The cmaa2 levels differ only in the edge threshold and give identical pictures on this corpus (hard, high-contrast edges) apart from foliage.
+
+```
+== 35% (448x251 -> 1280x720), aliased source ==
+filter        textPSNR textEdge linesPSNR  3dPSNR   3dJag foliage  halo%     ms       
+off             13.32    0.98   13.83   23.27   50.16   20.95   1.92  0.122
+low             13.54    0.89   14.19   23.57   49.10   21.83   1.71  0.141
+high            13.67    0.84   14.34   23.69   48.67   22.47   1.58  0.173
+smaa-low        14.34    0.68   14.61   23.90   48.25   22.28   1.60  0.153
+smaa-medium     14.35    0.68   14.64   23.92   48.38   22.31   1.58  0.149
+smaa-high       13.88    0.82   14.37   23.71   49.72   21.80   1.71  0.160
+smaa-ultra      13.88    0.82   14.38   23.72   49.54   21.80   1.71  0.165
+cmaa2-low       13.71    0.84   14.67   24.05   46.83   21.74   1.70  0.204
+cmaa2-medium    13.71    0.84   14.67   24.05   46.83   21.80   1.68  0.178
+cmaa2-high      13.71    0.84   14.67   24.05   46.83   21.82   1.66  0.187
+cmaa2-ultra     13.71    0.84   14.67   24.05   46.83   21.82   1.66  0.181
+== 50% (640x360 -> 1280x720), aliased source ==
+filter        textPSNR textEdge linesPSNR  3dPSNR   3dJag foliage  halo%     ms       
+off             17.34    0.99   15.69   26.28   33.97   24.26   0.34  0.114
+low             17.52    0.94   16.01   26.62   33.11   25.19   0.27  0.150
+high            17.60    0.91   16.20   26.82   32.75   26.11   0.23  0.169
+smaa-low        18.09    0.79   16.57   27.00   32.44   25.90   0.18  0.158
+smaa-medium     18.10    0.78   16.57   26.96   32.61   25.94   0.17  0.191
+smaa-high       17.72    0.88   16.12   26.54   34.30   25.26   0.25  0.157
+smaa-ultra      17.72    0.88   16.14   26.56   34.08   25.26   0.25  0.169
+cmaa2-low       17.67    0.91   16.88   27.32   30.99   25.18   0.24  0.187
+cmaa2-medium    17.67    0.91   16.88   27.32   30.99   25.25   0.23  0.184
+cmaa2-high      17.67    0.91   16.88   27.32   31.00   25.27   0.22  0.186
+cmaa2-ultra     17.67    0.91   16.88   27.32   30.99   25.28   0.22  0.183
+== 75% (960x540 -> 1280x720), aliased source ==
+filter        textPSNR textEdge linesPSNR  3dPSNR   3dJag foliage  halo%     ms       
+off             18.59    1.01   18.72   29.70   21.32   26.82   0.21  0.111
+low             18.70    0.99   18.86   29.88   20.90   27.36   0.19  0.139
+high            18.72    0.99   18.89   29.92   20.87   27.49   0.19  0.153
+smaa-low        19.15    0.90   19.71   30.54   19.55   28.48   0.08  0.164
+smaa-medium     19.15    0.90   19.69   30.47   19.69   28.53   0.08  0.169
+smaa-high       18.94    0.95   19.16   29.97   20.79   27.96   0.13  0.171
+smaa-ultra      18.94    0.95   19.16   29.98   20.68   27.97   0.13  0.194
+cmaa2-low       18.90    0.97   20.03   30.80   18.87   27.75   0.10  0.200
+cmaa2-medium    18.90    0.97   20.03   30.80   18.87   27.82   0.10  0.204
+cmaa2-high      18.90    0.97   20.03   30.80   18.86   27.85   0.10  0.197
+cmaa2-ultra     18.90    0.97   20.03   30.80   18.86   27.85   0.10  0.197
+```
+Reading: both new filters remove more stair steps than our own `high` on this aliased source (3dJag at 50%: off 33.97, low 33.11, high 32.75, smaa-low 32.44, smaa-medium 32.61, smaa-high 34.30, cmaa2 31.0; smaa-high/ultra keep corners and so smooth less) and CMAA2 keeps the text edges as well as `high` (0.91 against 0.91; smaa-high 0.88, smaa-low/medium 0.79: luma detection and no corner detection smear text). CMAA2 is best on 3D, thin lines and halo at all three scales and costs about 0.015 ms more than `high` at 1280x720. On `evalfilter.py` (a smooth, box-reduced source, 50%, text score PSNR: off 20.28, high 19.36, smaa-low 18.84, smaa-high 19.63, cmaa2 19.93-20.04) they do not hurt text more than `high` does: the cost of any AA there is what it blurs of something that is not aliased.
+Recommendation: the default stays `high` until a human has looked at a real window (PLAN). The candidate for a new default is `cmaa2-high` (needs ES 3.1 compute, runs as `smaa-high` where it is missing); `smaa-high` is the second choice, `smaa-low/medium` are not recommended for UI-heavy games (text).

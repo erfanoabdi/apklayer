@@ -69,3 +69,17 @@ assert e_ours >= e_bil * 1.15, 'not sharper than bilinear'
 assert p_ours >= p_bil - 0.5, 'further from the original than bilinear'
 assert e_ours >= e_off and p_ours >= p_off - 0.3, 'the text aid does not help'
 print('PASS sharpen: x%.2f edge strength, %+.2f dB' % (e_ours / e_bil, p_ours - p_bil))
+
+# SMAA 1x and CMAA2 (render-aa smaa-*, cmaa2-*) run before the upscale: the result must stay a sane picture (not further from the original than bilinear by more than
+# 0.5 dB, as sharp as bilinear or sharper), whichever level; CMAA2 without ES 3.1 compute falls back to SMAA (the log says so)
+for aa in ('smaa-low', 'smaa-high', 'smaa-ultra', 'cmaa2-low', 'cmaa2-high'):
+    with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
+        raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
+        Path(raw_in).write_bytes(small.convert('RGBA').tobytes())
+        run = subprocess.run([exe, raw_in, str(W // 2), str(H // 2), raw_out, str(W), str(H), '0.6'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else []),
+                             capture_output=True, text=True, timeout=60, env=dict(os.environ, APKLAYER_SHARPEN_AA=aa))
+        assert run.returncode == 0, '%s: sharpen-test failed (rc %d): %s' % (aa, run.returncode, run.stderr)
+        img = Image.frombytes('RGBA', (W, H), Path(raw_out).read_bytes()).convert('RGB')
+    assert edges(img) >= e_bil, '%s: not as sharp as bilinear' % aa
+    assert psnr(img, ref) >= p_bil - 0.5, '%s: further from the original than bilinear' % aa
+    print('PASS %s: x%.2f edge strength, %+.2f dB' % (aa, edges(img) / e_bil, psnr(img, ref) - p_bil))
