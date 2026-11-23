@@ -59,7 +59,8 @@ struct sharpen {
     GLuint aa_prog, calm_prog, blit_prog;         /* the post passes: anti-aliasing (FS_AA), calm (FS_CALM) and a copy */
     struct rt t0, t1, hist[2];                    /* the filter's output (t0), the anti-aliased picture (t1) and the last two calmed outputs */
     int hist_cur, hist_ok, hist_w, hist_h;        /* hist[hist_cur] is the previous output; hist_ok: it holds a frame of this size */
-    int aa_req, aa_env, calm_req, calm_env;       /* the window's render-aa / render-calm (0 default, 1 off, 2 low, 3 high); the defaults (APKLAYER_SHARPEN_AA off|low|high, else high; APKLAYER_SHARPEN_CALM, else off) */
+    int aa_req, aa_env, calm_req, calm_env, text_req, text_env;   /* text: 0 default, 1 off, 2 on (APKLAYER_SHARPEN_TEXT off|on, else on) */
+          /* the window's render-aa / render-calm (0 default, 1 off, 2 low, 3 high); the defaults (APKLAYER_SHARPEN_AA off|low|high, else high; APKLAYER_SHARPEN_CALM, else off) */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
 #endif
@@ -111,7 +112,7 @@ static GLuint program(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "low") ? 2 : 3; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; } s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "low") ? 2 : 3; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; const char *tx = getenv("APKLAYER_SHARPEN_TEXT"); s->text_env = tx && !strcmp(tx, "off") ? 1 : 2; } s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 
@@ -457,6 +458,7 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
 }
 
 void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n >= 1 && n <= 3 ? n : 0; }
+void sharpen_set_text(struct sharpen *s, int n) { if (s) s->text_req = n >= 1 && n <= 2 ? n : 0; }
 void sharpen_set_calm(struct sharpen *s, int n) { if (s) s->calm_req = n >= 1 && n <= 3 ? n : 0; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
@@ -464,7 +466,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     static int said_in, said_busy;
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) {
-        int rc = svk_render(s->vk, buf, ow, oh, sharpness, slot, fresh);
+        int rc = svk_render(s->vk, buf, ow, oh, sharpness, (s->text_req ? s->text_req : s->text_env) > 1, slot, fresh);
         if (rc == -2 && !said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SVK_SLOTS);
         return rc;
     }
@@ -549,7 +551,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glBindTexture(GL_TEXTURE_2D, s->mid_tex);
     glUniform1i(glGetUniformLocation(s->cas_prog, "tex"), 0);
     glUniform2f(glGetUniformLocation(s->cas_prog, "px"), 1.0f / (float)ow, 1.0f / (float)oh);
-    glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 2 ? 2 : sharpness);
+    glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
+    glUniform1f(glGetUniformLocation(s->cas_prog, "text"), (s->text_req ? s->text_req : s->text_env) > 1 ? 1.0f : 0.0f);
     draw();
     if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */

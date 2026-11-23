@@ -243,23 +243,23 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
         {"timezone", std::regex("[A-Za-z0-9_+/-]+")}, {"time-format", std::regex("12|24")},
         {"window-mode", std::regex("auto|mobile|desktop")}, {"navbar", std::regex("auto|on|off")},
         // render-filter: sharp (FSR 1) and off; auto, nis, sgsr, lanczos, anime4k and the key render-phases are removed features, still accepted (and read as sharp / ignored) so old settings and scripts keep working
-        {"render-scale", std::regex("(200|1[0-9][0-9]|[3-9][0-9]|2[5-9])")}, {"render-filter", std::regex("sharp|off|auto|nis|sgsr|lanczos|anime4k")}, {"render-phases", std::regex("[1-4]")}, {"render-aa", std::regex("off|low|high")}, {"render-calm", std::regex("off|low|high")}, {"render-sharpness", std::regex("off|low|medium|high")}};  // percent, 25..200 (the shell, MSG_RENDER_SCALE); above 100 renders larger than the window and shrinks it
+        {"render-scale", std::regex("(200|1[0-9][0-9]|[3-9][0-9]|2[5-9])")}, {"render-filter", std::regex("sharp|off|auto|nis|sgsr|lanczos|anime4k")}, {"render-phases", std::regex("[1-4]")}, {"render-aa", std::regex("off|low|high")}, {"render-calm", std::regex("off|low|high")}, {"render-text", std::regex("off|on")}, {"render-sharpness", std::regex("off|low|medium|high")}};  // percent, 25..200 (the shell, MSG_RENDER_SCALE); above 100 renders larger than the window and shrinks it
     auto own = propLines(file);
     if (args.empty() || (args[0] == "list" && args.size() == 1)) {
         for (const auto& [k, v] : own) printf("%s\t%s\n", clean(k).c_str(), clean(v).c_str());
         return 0;
     }
     const std::string& action = args[0];
-    if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !(keys.count(args[1]) || args[1].rfind("window-mode.", 0) == 0 || args[1].rfind("render-scale.", 0) == 0 || args[1].rfind("render-filter.", 0) == 0 || args[1].rfind("render-phases.", 0) == 0 || args[1].rfind("render-aa.", 0) == 0 || args[1].rfind("render-calm.", 0) == 0 || args[1].rfind("render-sharpness.", 0) == 0))
+    if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !(keys.count(args[1]) || args[1].rfind("window-mode.", 0) == 0 || args[1].rfind("render-scale.", 0) == 0 || args[1].rfind("render-filter.", 0) == 0 || args[1].rfind("render-phases.", 0) == 0 || args[1].rfind("render-aa.", 0) == 0 || args[1].rfind("render-calm.", 0) == 0 || args[1].rfind("render-text.", 0) == 0 || args[1].rfind("render-sharpness.", 0) == 0))
         die("settings [list] | set KEY VALUE | unset KEY; keys: night yes|no, accent #rrggbb, contrast high|normal, animations on|off, "
-            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 25..200, render-filter[.<package>] sharp|off, render-aa[.<package>] off|low|high, render-calm[.<package>] off|low|high, render-sharpness[.<package>] off|low|medium|high");
-    const std::string keyName = args[1].rfind("window-mode.", 0) == 0 ? "window-mode" : args[1].rfind("render-scale.", 0) == 0 ? "render-scale" : args[1].rfind("render-filter.", 0) == 0 ? "render-filter" : args[1].rfind("render-phases.", 0) == 0 ? "render-phases" : args[1].rfind("render-aa.", 0) == 0 ? "render-aa" : args[1].rfind("render-calm.", 0) == 0 ? "render-calm" : args[1].rfind("render-sharpness.", 0) == 0 ? "render-sharpness" : args[1];
+            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop, navbar auto|on|off, render-scale[.<package>] 25..200, render-filter[.<package>] sharp|off, render-aa[.<package>] off|low|high, render-calm[.<package>] off|low|high, render-text[.<package>] off|on, render-sharpness[.<package>] off|low|medium|high");
+    const std::string keyName = args[1].rfind("window-mode.", 0) == 0 ? "window-mode" : args[1].rfind("render-scale.", 0) == 0 ? "render-scale" : args[1].rfind("render-filter.", 0) == 0 ? "render-filter" : args[1].rfind("render-phases.", 0) == 0 ? "render-phases" : args[1].rfind("render-aa.", 0) == 0 ? "render-aa" : args[1].rfind("render-calm.", 0) == 0 ? "render-calm" : args[1].rfind("render-text.", 0) == 0 ? "render-text" : args[1].rfind("render-sharpness.", 0) == 0 ? "render-sharpness" : args[1];
     if (action == "set" && !std::regex_match(args[2], keys.at(keyName))) die("not a value for " + args[1] + ": " + args[2]);
     std::string text;
     for (const auto& [k, v] : own) if (k != args[1]) text += k + "=" + v + "\n";
     if (action == "set") text += args[1] + "=" + args[2] + "\n";
     if (!writeFile(file, text)) die("cannot write " + file);
-    bool applied = keyName != "render-scale" && keyName != "render-filter" && keyName != "render-phases" && keyName != "render-aa" && keyName != "render-calm" && keyName != "render-sharpness" && settingsChanged(l, inst);  // the render scale and filter are read when an app starts
+    bool applied = keyName != "render-scale" && keyName != "render-filter" && keyName != "render-phases" && keyName != "render-aa" && keyName != "render-calm" && keyName != "render-text" && keyName != "render-sharpness" && settingsChanged(l, inst);  // the render scale and filter are read when an app starts
     printf("apklayer: %s %s for instance %s (%s)\n", args[1].c_str(), action == "set" ? "set" : "unset", inst.id.c_str(), applied ? "applied now" : "from the app's next start");
     return 0;
 }

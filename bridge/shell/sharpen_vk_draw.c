@@ -8,8 +8,8 @@
 #include "sharpen_vk.h"
 #include "sharpen_vk_spv.h"
 
-/* the shaders' push-constant block (tools/gen/sharpen-spv.py): vec2 src, scl, px, d; float sharp, down */
-struct pc { float src[2], scl[2], px[2], d[2], sharp, down; };
+/* the shaders' push-constant block (tools/gen/sharpen-spv.py): vec2 src, scl, px, d; float sharp, down, text */
+struct pc { float src[2], scl[2], px[2], d[2], sharp, down, text; };
 enum { P_UP, P_CAS, P_DOWN };
 
 static VkRenderPass make_rp(struct svk *s, VkFormat fmt, VkImageLayout final)
@@ -164,13 +164,13 @@ static void wait_done(struct svk *s, VkFence f)
 }
 
 /* Records, submits and waits for one frame: buffer `buf` through FSR 1 (or, for a source larger than the output, the area downscale) into `o`. */
-int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, struct svk_slot *o)
+int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, int text, struct svk_slot *o)
 {
     struct svk_in *in = &s->in[buf];
     int down = in->w > ow || in->h > oh;  /* render scale above 100: the area downscale (as the GLES path) */
     if (!down && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
     struct pc pc = { { (float)in->w, (float)in->h }, { (float)ow / (float)in->w, (float)oh / (float)in->h }, { 1.0f / (float)ow, 1.0f / (float)oh },
-        { 1.0f / (float)in->w, 1.0f / (float)in->h }, sharp < 0 ? 0 : sharp > 1 ? 1 : sharp, in->w > ow ? (float)in->w / (float)ow : 0.0f };
+        { 1.0f / (float)in->w, 1.0f / (float)in->h }, sharp < 0 ? 0 : sharp > 1 ? 1 : sharp, in->w > ow ? (float)in->w / (float)ow : 0.0f, text ? 1.0f : 0.0f };
     s->vkResetDescriptorPool(s->dev, s->pool, 0);
     VkCommandBufferBeginInfo bg = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     s->vkResetCommandBuffer(s->cb, 0);

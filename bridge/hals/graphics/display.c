@@ -313,7 +313,9 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     int32_t m[21] = { 0 };
     /* apklayer patch: the render filter (`apklayer settings` render-filter sharp, cli/run.cpp): a flags word after the damage; a shell that does not know
      * it (len 80) ignores it, one that does resamples a buffer that is not the window's pixels with the upscale pass (bridge/shell/sharpen.c) */
-    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && *e && strcmp(e, "off") ? 1 : 0;  /* bit 0: FSR 1 on (any name but off: the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1); bits 1-6 are unused (they carried the mode and the phases) */
+    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && *e && strcmp(e, "off") ? 1 : 0;  /* bit 0: FSR 1 on (any name but off: the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1); bits 1-2: render-text (below); bits 3-6 are unused (they carried the mode and the phases) */
+        const char *tx = getenv("APKLAYER_RENDER_TEXT");  /* bits 1-2: the text aid after an upscale: 1 off, 2 on (0: the shell's default, on) */
+        if (tx) filter |= (!strcmp(tx, "off") ? 1 : !strcmp(tx, "on") ? 2 : 0) << 1;
         const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: the anti-aliasing after an upscale: 1 off, 2 low, 3 high (0: the shell's default, high) */
         if (aa) filter |= (!strcmp(aa, "off") ? 1 : !strcmp(aa, "low") ? 2 : !strcmp(aa, "high") ? 3 : 0) << 7;
         const char *cm = getenv("APKLAYER_RENDER_CALM");  /* bits 9-10: the calm pass (foliage noise): 1 off, 2 low, 3 high (0: the shell's default, off) */

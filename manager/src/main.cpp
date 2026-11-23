@@ -189,6 +189,9 @@ public:
         appAa_.clear();  // render-aa.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-aa.", 0) == 0) appAa_[field(r, 0).substr(10)] = field(r, 1);
         b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
+        appText_.clear();  // render-text.<package>
+        for (const auto& r : s.settings) if (field(r, 0).rfind("render-text.", 0) == 0) appText_[field(r, 0).substr(12)] = field(r, 1);
+        b.set_app_render_text_setting(slint::SharedString(appText_[current_]));
         appCalm_.clear();  // render-calm.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-calm.", 0) == 0) appCalm_[field(r, 0).substr(12)] = field(r, 1);
         b.set_app_render_calm_setting(slint::SharedString(appCalm_[current_]));
@@ -244,6 +247,7 @@ public:
     std::map<std::string, std::string> appScales_;  // render-scale.<package>
     std::map<std::string, std::string> appFilters_;  // render-filter.<package>
     std::map<std::string, std::string> appAa_;       // render-aa.<package>
+    std::map<std::string, std::string> appText_;     // render-text.<package>
     std::map<std::string, std::string> appCalm_;     // render-calm.<package>
     std::map<std::string, std::string> appSharp_;    // render-sharpness.<package>
     std::map<std::string, std::pair<int, int>> windowPx_;  // the app's window pixels at its last start (`app <package> resolution`)
@@ -498,6 +502,7 @@ private:
             b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
             b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
             b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
+            b.set_app_render_text_setting(slint::SharedString(appText_[current_]));
             b.set_app_render_calm_setting(slint::SharedString(appCalm_[current_]));
             b.set_app_render_sharpness_setting(slint::SharedString(appSharp_[current_]));
             showDetail({});
@@ -576,6 +581,7 @@ private:
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
             if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
             if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = std::string(v); ui_->global<Backend>().set_app_render_filter_setting(v); }
+            if (std::string(k).rfind("render-text.", 0) == 0) { appText_[std::string(k).substr(12)] = std::string(v); ui_->global<Backend>().set_app_render_text_setting(v); }
             if (std::string(k).rfind("render-calm.", 0) == 0) { appCalm_[std::string(k).substr(12)] = std::string(v); ui_->global<Backend>().set_app_render_calm_setting(v); }
             if (std::string(k).rfind("render-sharpness.", 0) == 0) { appSharp_[std::string(k).substr(17)] = std::string(v); ui_->global<Backend>().set_app_render_sharpness_setting(v); }
             if (std::string(k).rfind("render-aa.", 0) == 0) { appAa_[std::string(k).substr(10)] = std::string(v); ui_->global<Backend>().set_app_render_aa_setting(v); }

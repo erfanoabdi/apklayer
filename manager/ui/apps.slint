@@ -151,6 +151,15 @@ component AppDetail {
                             if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
                         }
                     }
+                    MaterialText { text: "Text aid (on by default): after an upscale, text, icons and UI lines get a little extra, clamped sharpening (no halos); 3D scenes keep the plain FSR 1 look."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: MaterialStyleMetrics.spacing_8;
+                        for choice in [{ label: "Default (on)", value: "" }, { label: "On", value: "on" }, { label: "Off", value: "off" }] : HorizontalLayout {
+                            if Backend.app-render-text-setting == choice.value : FilledButton { text: choice.label; }
+                            if Backend.app-render-text-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-text." + root.app.package, choice.value); } }
+                        }
+                    }
                     MaterialText { text: "Calm (for foliage, grass and other noisy fine detail; off by default): averages the noise of a still picture over several frames and softens textures that have no clear edge; a moving picture is left as it is. Heavier the lower the render scale."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
@@ -160,7 +169,7 @@ component AppDetail {
                             if Backend.app-render-calm-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-calm." + root.app.package, choice.value); } }
                         }
                     }
-                    MaterialText { text: "Sharpness of the upscale: scales the filter's own default (more at a lower render scale)."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "Sharpness of the upscale (FSR 1's RCAS): Medium is the reference default (0.2 stops), High the sharpest, Low one stop weaker, Off no sharpening."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;

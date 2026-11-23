@@ -34,10 +34,12 @@ void sharpen_forget(struct sharpen *s, int buf);
 
 /* The anti-aliasing pass after an upscale (GLES backend): 0 the default (APKLAYER_SHARPEN_AA off|low|high, else high), 1 off, 2 low, 3 high. */
 void sharpen_set_aa(struct sharpen *s, int n);
+/* The text aid of the RCAS pass (extra clamped sharpening of text, icons and UI lines only): 0 the default (APKLAYER_SHARPEN_TEXT off|on, else on), 1 off, 2 on. */
+void sharpen_set_text(struct sharpen *s, int n);
 /* The calm pass after an upscale (GLES backend; temporal + spatial noise reduction for foliage and grass, heavier the bigger the ratio): 0 the default (APKLAYER_SHARPEN_CALM off|low|high, else off), 1 off, 2 low, 3 high. */
 void sharpen_set_calm(struct sharpen *s, int n);
 
-/* Draws buffer `buf` into output slot `*slot` (0..7, the least recently used free one) of out_w x out_h; sharpness 0..1 (0.5: CAS default). Returns 0 and the
+/* Draws buffer `buf` into output slot `*slot` (0..7, the least recently used free one) of out_w x out_h; sharpness 0..1, FSR 1's RCAS constant exp2(-stops) (1: 0 stops, the sharpest; 0.87: the reference default 0.2 stops; 0: no sharpening). Returns 0 and the
  * slot, with *fresh set when the slot's dmabuf is new (the caller makes its wl_buffer from sharpen_slot_info), -1 when nothing could be drawn, -2 when all output buffers are held (draw it again after a sharpen_slot_release). */
 int sharpen_render(struct sharpen *s, int buf, int out_w, int out_h, float sharpness, int *slot, int *fresh);
 int sharpen_slot_info(struct sharpen *s, int slot, struct sharpen_out *out);

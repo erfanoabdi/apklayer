@@ -156,6 +156,7 @@ struct window {
     int scale;                  /* percent: buffer pixels per logical pixel of what is shown (input mapping), set by window_layout */
     int pref_scale120;          /* the same in 120ths as the compositor sent it (0 = unknown): the buffer the compositor expects is round(logical * this / 120) */
     int aa;                        /* the app's render-aa (DMABUF_FRAME flags bits 7-8: 0 default, 1 off, 2 low, 3 high) */
+    int text;                      /* the app's render-text (flags bits 1-2: 0 default, 1 off, 2 on) */
     int calm, sharpl;              /* the app's render-calm (flags bits 9-10) and render-sharpness (bits 11-13: 0 default, 1 off, 2 low, 3 medium, 4 high) */
     int pref_scale;             /* percent: the compositor's preferred scale for this surface (wp_fractional_scale_v1), 0 = output_scale */
     int told_scale;             /* scale last announced to the app */
