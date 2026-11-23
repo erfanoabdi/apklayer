@@ -8,7 +8,7 @@ static const char *FS_UP =
     "precision highp float;\n"
     "uniform samplerExternalOES tex; uniform vec2 src; uniform float down; varying vec2 uv;\n"
     "vec3 T(vec2 q) { return texture2D(tex, (q + 0.5) / src).rgb; }\n"  /* the gather4 of the reference: the texel (q) itself, fetched at its centre */
-    "float L(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }\n"
+    "float L(vec3 c) { vec3 q = floor(c * 255.0 + 0.5); return q.b * (0.5 / 255.0) + (q.r * (0.5 / 255.0) + q.g * (1.0 / 255.0)); }  /* apklayer patch: the luma on the 8 bit lattice, which is what the reference's gather of 8 bit texels sees: the sampler's unorm conversion is off by ~1e-4 (NVIDIA), and equal lumas from other colours would turn into a direction / length tie break (up to 12 levels wrong at 0.03% of the pixels) */\n"
     "void setf(inout vec2 dir, inout float len, float w, float lA, float lB, float lC, float lD, float lE) {\n"
     "  float dc = lD - lC, cb = lC - lB;\n"
     "  float lenX = 1.0 / max(max(abs(dc), abs(cb)), 1e-6), dirX = lD - lB;\n"
