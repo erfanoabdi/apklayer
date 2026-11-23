@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-23 deb of main 8cbf78df (render scale 65..200, RCAS denoise)
+- Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.git8cbf78df ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.git8cbf78df-1~noble1_amd64.deb` 25834372 bytes plus apklayer-dev; the manager and AppHost.java compiled (not compiled by the agent). Not installed. Not in it: the berberis 0085 library; the render-scale-200 startup crash (berberis code pool mmap ENOMEM) is not fixed.
+
 ## 2026-11-23 deb of main 9a292225 (render scale 60..200, FSR 1 + CMAA2 ultra fixed)
 - Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.git9a292225 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.git9a292225-1~noble1_amd64.deb` 25833832 bytes plus apklayer-dev; the manager compiled. Not installed. Not in it: the berberis 0085 library; the render-scale-200 crash is not fixed (berberis code-pool mmap ENOMEM at start, see PLAN); the shimmer fix and minimum 65 are in a later build.
 
