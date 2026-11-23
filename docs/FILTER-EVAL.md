@@ -110,3 +110,92 @@ cmaa2-ultra     18.90    0.97   20.03   30.80   18.86   27.85   0.10  0.197
 ```
 Reading: both new filters remove more stair steps than our own `high` on this aliased source (3dJag at 50%: off 33.97, low 33.11, high 32.75, smaa-low 32.44, smaa-medium 32.61, smaa-high 34.30, cmaa2 31.0; smaa-high/ultra keep corners and so smooth less) and CMAA2 keeps the text edges as well as `high` (0.91 against 0.91; smaa-high 0.88, smaa-low/medium 0.79: luma detection and no corner detection smear text). CMAA2 is best on 3D, thin lines and halo at all three scales and costs about 0.015 ms more than `high` at 1280x720. On `evalfilter.py` (a smooth, box-reduced source, 50%, text score PSNR: off 20.28, high 19.36, smaa-low 18.84, smaa-high 19.63, cmaa2 19.93-20.04) they do not hurt text more than `high` does: the cost of any AA there is what it blurs of something that is not aliased.
 Recommendation: the default stays `high` until a human has looked at a real window (PLAN). The candidate for a new default is `cmaa2-high` (needs ES 3.1 compute, runs as `smaa-high` where it is missing); `smaa-high` is the second choice, `smaa-low/medium` are not recommended for UI-heavy games (text).
+
+
+## Anti-aliasing generations (2026-11-23)
+
+Each generation built from its own commit (`953966a6` first AA, `f75c3bf5` ratio-dependent strength, `82e013e3` colour-aware + second pass, `21167569` main with SMAA/CMAA2) and driven with identical `in.raw` files through its own `tests/hals/sharpen-test.c` (FSR 1: `SHARPEN_MODE=0` in the old trees, sharpness 0.8706, `APKLAYER_SHARPEN_AA` = off|low|high|smaa-*|cmaa2-*), GLES backend (no Vulkan headers on the machine), RTX 5060 Ti. Input: the `evalcorpus.py` frame reduced to 35/50/75 % by nearest (aliased, like a game without AA) and by box; output 1280x720. Cell = **text edge** (mean Sobel out/original over the three text tiles, 1.0 = as sharp as the original) / **3D PSNR** (dB, `shaded_3d` tile against the corpus frame, which is 3x3 supersampled: the truth) / **3D jaggedness** (mean absolute RGB error, in levels, on the pixels where the truth's luma gradient exceeds 16) / **halo %** (pixels more than 3 levels outside the original's local 5x5 range, mean of all 12 tiles). GPU ms: 300 frames, one run at a time, box source. Commit `8cd20cb2` (default high) gives the same pictures as `f75c3bf5` high (identical output hashes), so it has no row of its own. The corpus has no hair/strap tile (`anime_flat` is the nearest thing), so none is reported. The old trees' "off" rows differ from main's "off" because the FSR port itself changed in between (RCAS clamp, text aid).
+
+**nearest-reduced (aliased) source**: text edge / 3D PSNR dB / 3D jaggedness / halo %
+
+| row | 35 % | 50 % | 75 % |
+|---|---|---|---|
+| bilinear | 0.67 / 36.74 / 2.9 / 0.35 | 0.77 / 36.25 / 3.3 / 0.01 | 0.84 / 40.90 / 1.7 / 0.01 |
+| 1 first AA 953966a6: off | 0.78 / 37.90 / 2.8 / 2.21 | 0.94 / 35.23 / 3.7 / 1.76 | 0.95 / 40.58 / 1.8 / 3.63 |
+| 1 first AA 953966a6: low | 0.71 / 38.23 / 2.7 / 1.41 | 0.83 / 35.58 / 3.6 / 1.05 | 0.83 / 41.45 / 1.7 / 1.79 |
+| 1 first AA 953966a6: high | 0.56 / 38.69 / 2.6 / 0.75 | 0.64 / 36.17 / 3.5 / 0.72 | 0.63 / 42.47 / 1.6 / 0.62 |
+| 2 ratio-dependent f75c3bf5: off | 0.78 / 37.90 / 2.8 / 2.21 | 0.94 / 35.23 / 3.7 / 1.76 | 0.95 / 40.58 / 1.8 / 3.63 |
+| 2 ratio-dependent f75c3bf5: low | 0.61 / 38.55 / 2.6 / 0.90 | 0.81 / 35.65 / 3.6 / 0.96 | 0.88 / 41.14 / 1.7 / 2.16 |
+| 2 ratio-dependent f75c3bf5: high | 0.56 / 38.69 / 2.6 / 0.75 | 0.69 / 36.02 / 3.5 / 0.77 | 0.83 / 41.49 / 1.7 / 1.69 |
+| 3 colour-aware + 2 pass 82e013e3: off | 0.78 / 37.90 / 2.8 / 2.21 | 0.94 / 35.23 / 3.7 / 1.76 | 0.95 / 40.58 / 1.8 / 3.63 |
+| 3 colour-aware + 2 pass 82e013e3: low | 0.60 / 38.80 / 2.6 / 0.73 | 0.80 / 35.71 / 3.6 / 0.67 | 0.87 / 41.32 / 1.7 / 1.95 |
+| 3 colour-aware + 2 pass 82e013e3: high | 0.44 / 38.63 / 2.8 / 0.51 | 0.57 / 36.21 / 3.6 / 0.50 | 0.82 / 41.77 / 1.6 / 1.50 |
+| 4/5 main 21167569: off | 0.79 / 38.06 / 3.0 / 0.06 | 0.93 / 35.48 / 3.8 / 0.02 | 0.95 / 40.58 / 2.2 / 0.05 |
+| 4/5 main 21167569: low | 0.70 / 38.61 / 3.0 / 0.06 | 0.86 / 35.81 / 3.7 / 0.01 | 0.93 / 41.08 / 2.1 / 0.03 |
+| 4/5 main 21167569: high | 0.64 / 38.45 / 3.1 / 0.10 | 0.80 / 36.06 / 3.7 / 0.01 | 0.92 / 41.20 / 2.1 / 0.03 |
+| 4/5 main 21167569: smaa-low | 0.54 / 37.96 / 3.1 / 0.32 | 0.69 / 36.25 / 3.7 / 0.10 | 0.80 / 41.17 / 2.1 / 0.03 |
+| 4/5 main 21167569: smaa-medium | 0.54 / 37.57 / 3.3 / 0.41 | 0.69 / 36.15 / 3.7 / 0.15 | 0.80 / 41.31 / 2.1 / 0.02 |
+| 4/5 main 21167569: smaa-high | 0.64 / 36.14 / 3.5 / 0.30 | 0.80 / 36.76 / 3.7 / 0.07 | 0.87 / 41.19 / 2.1 / 0.03 |
+| 4/5 main 21167569: smaa-ultra | 0.64 / 36.17 / 3.5 / 0.29 | 0.80 / 36.68 / 3.7 / 0.07 | 0.88 / 41.26 / 2.1 / 0.03 |
+| 4/5 main 21167569: cmaa2-low | 0.67 / 37.94 / 3.1 / 0.06 | 0.83 / 36.10 / 3.7 / 0.02 | 0.90 / 40.92 / 2.2 / 0.04 |
+| 4/5 main 21167569: cmaa2-medium | 0.67 / 37.87 / 3.1 / 0.05 | 0.83 / 36.17 / 3.7 / 0.02 | 0.90 / 41.06 / 2.2 / 0.03 |
+| 4/5 main 21167569: cmaa2-high | 0.67 / 37.81 / 3.2 / 0.06 | 0.83 / 36.20 / 3.7 / 0.01 | 0.90 / 41.14 / 2.1 / 0.03 |
+| 4/5 main 21167569: cmaa2-ultra | 0.68 / 37.92 / 3.2 / 0.06 | 0.83 / 36.24 / 3.7 / 0.01 | 0.90 / 41.20 / 2.1 / 0.03 |
+
+**box-reduced source**: text edge / 3D PSNR dB / 3D jaggedness / halo %
+
+| row | 35 % | 50 % | 75 % |
+|---|---|---|---|
+| bilinear | 0.53 / 36.91 / 3.1 / 1.46 | 0.65 / 39.74 / 2.4 / 0.01 | 0.81 / 42.79 / 1.3 / 0.00 |
+| 1 first AA 953966a6: off | 0.64 / 39.33 / 2.5 / 1.66 | 0.80 / 43.84 / 1.6 / 0.84 | 0.92 / 44.60 / 1.1 / 3.35 |
+| 1 first AA 953966a6: low | 0.60 / 39.48 / 2.5 / 1.34 | 0.72 / 44.14 / 1.6 / 0.42 | 0.81 / 45.75 / 1.0 / 1.63 |
+| 1 first AA 953966a6: high | 0.50 / 39.52 / 2.5 / 1.06 | 0.57 / 43.89 / 1.6 / 0.26 | 0.62 / 46.22 / 1.0 / 0.69 |
+| 2 ratio-dependent f75c3bf5: off | 0.64 / 39.33 / 2.5 / 1.66 | 0.80 / 43.84 / 1.6 / 0.84 | 0.92 / 44.60 / 1.1 / 3.35 |
+| 2 ratio-dependent f75c3bf5: low | 0.54 / 39.53 / 2.5 / 1.13 | 0.70 / 44.14 / 1.6 / 0.38 | 0.85 / 45.38 / 1.1 / 2.01 |
+| 2 ratio-dependent f75c3bf5: high | 0.50 / 39.52 / 2.5 / 1.06 | 0.61 / 44.02 / 1.6 / 0.28 | 0.81 / 45.79 / 1.0 / 1.55 |
+| 3 colour-aware + 2 pass 82e013e3: off | 0.64 / 39.33 / 2.5 / 1.66 | 0.80 / 43.84 / 1.6 / 0.84 | 0.92 / 44.60 / 1.1 / 3.35 |
+| 3 colour-aware + 2 pass 82e013e3: low | 0.51 / 39.55 / 2.5 / 1.05 | 0.69 / 44.22 / 1.6 / 0.26 | 0.85 / 45.55 / 1.0 / 1.79 |
+| 3 colour-aware + 2 pass 82e013e3: high | 0.40 / 38.87 / 2.8 / 1.04 | 0.52 / 42.93 / 1.9 / 0.21 | 0.80 / 46.00 / 1.0 / 1.37 |
+| 4/5 main 21167569: off | 0.63 / 39.05 / 2.9 / 0.62 | 0.79 / 43.70 / 1.8 / 0.01 | 0.94 / 44.64 / 1.5 / 0.02 |
+| 4/5 main 21167569: low | 0.54 / 39.03 / 3.0 / 0.66 | 0.73 / 43.66 / 1.9 / 0.00 | 0.91 / 45.08 / 1.5 / 0.01 |
+| 4/5 main 21167569: high | 0.48 / 38.54 / 3.1 / 0.74 | 0.67 / 42.97 / 2.0 / 0.02 | 0.91 / 45.18 / 1.5 / 0.01 |
+| 4/5 main 21167569: smaa-low | 0.48 / 38.21 / 3.1 / 0.97 | 0.61 / 42.94 / 1.9 / 0.07 | 0.78 / 44.70 / 1.5 / 0.01 |
+| 4/5 main 21167569: smaa-medium | 0.48 / 37.52 / 3.3 / 1.07 | 0.61 / 42.51 / 1.9 / 0.12 | 0.79 / 44.42 / 1.5 / 0.01 |
+| 4/5 main 21167569: smaa-high | 0.54 / 36.45 / 3.5 / 0.87 | 0.70 / 39.55 / 2.3 / 0.04 | 0.87 / 43.21 / 1.6 / 0.01 |
+| 4/5 main 21167569: smaa-ultra | 0.55 / 36.26 / 3.6 / 0.94 | 0.70 / 39.34 / 2.4 / 0.07 | 0.87 / 42.98 / 1.6 / 0.01 |
+| 4/5 main 21167569: cmaa2-low | 0.56 / 38.45 / 3.0 / 0.68 | 0.72 / 42.84 / 1.9 / 0.01 | 0.89 / 44.68 / 1.5 / 0.01 |
+| 4/5 main 21167569: cmaa2-medium | 0.56 / 38.29 / 3.1 / 0.71 | 0.72 / 42.55 / 1.9 / 0.01 | 0.89 / 44.61 / 1.5 / 0.01 |
+| 4/5 main 21167569: cmaa2-high | 0.56 / 38.27 / 3.1 / 0.72 | 0.72 / 42.52 / 2.0 / 0.00 | 0.89 / 44.60 / 1.5 / 0.01 |
+| 4/5 main 21167569: cmaa2-ultra | 0.57 / 38.14 / 3.2 / 0.74 | 0.73 / 42.40 / 2.0 / 0.00 | 0.89 / 44.59 / 1.5 / 0.01 |
+
+**GPU ms per frame** (GLES, 300 frames, box source, 1280x720 output)
+
+| row | 35 % | 50 % | 75 % |
+|---|---|---|---|
+| 1 first AA 953966a6: off | 0.153 | 0.135 | 0.134 |
+| 1 first AA 953966a6: low | 0.172 | 0.182 | 0.180 |
+| 1 first AA 953966a6: high | 0.193 | 0.200 | 0.180 |
+| 2 ratio-dependent f75c3bf5: off | 0.138 | 0.146 | 0.168 |
+| 2 ratio-dependent f75c3bf5: low | 0.193 | 0.186 | 0.186 |
+| 2 ratio-dependent f75c3bf5: high | 0.200 | 0.177 | 0.185 |
+| 3 colour-aware + 2 pass 82e013e3: off | 0.158 | 0.136 | 0.144 |
+| 3 colour-aware + 2 pass 82e013e3: low | 0.197 | 0.191 | 0.198 |
+| 3 colour-aware + 2 pass 82e013e3: high | 0.233 | 0.231 | 0.190 |
+| 4/5 main 21167569: off | 0.163 | 0.161 | 0.157 |
+| 4/5 main 21167569: low | 0.205 | 0.208 | 0.199 |
+| 4/5 main 21167569: high | 0.269 | 0.266 | 0.213 |
+| 4/5 main 21167569: smaa-low | 0.240 | 0.258 | 0.231 |
+| 4/5 main 21167569: smaa-medium | 0.216 | 0.221 | 0.223 |
+| 4/5 main 21167569: smaa-high | 0.236 | 0.228 | 0.264 |
+| 4/5 main 21167569: smaa-ultra | 0.241 | 0.245 | 0.268 |
+| 4/5 main 21167569: cmaa2-low | 0.242 | 0.252 | 0.273 |
+| 4/5 main 21167569: cmaa2-medium | 0.283 | 0.258 | 0.298 |
+| 4/5 main 21167569: cmaa2-high | 0.252 | 0.283 | 0.291 |
+| 4/5 main 21167569: cmaa2-ultra | 0.258 | 0.272 | 0.312 |
+
+Reading the numbers (high unless noted, nearest input unless noted):
+- First AA (`953966a6`): 3D PSNR +0.8 / +0.9 / +1.9 dB over AA off at 35/50/75 % and the FSR halo gone (3.6 % to 0.6 % at 75 %), but a flat strength cost the text (edge 0.95 to 0.63 at 75 %). Ratio-dependent strength (`f75c3bf5`) gave the text back at high ratios (75 %: 0.63 to 0.83) for about 1 dB of 3D PSNR there. The colour-aware second pass (`82e013e3`) cut halos further and is a little better on 3D at 50/75 %, but softens the text at 35/50 % (0.44 / 0.57) and on box input is worse than AA off on 3D at 35/50 % (38.9 vs 39.3, 42.9 vs 43.8 dB).
+- Current main (RCAS clamp, gate) has almost no halos (0.0-0.1 % on nearest input, 0.6-0.7 % at 35 % box) and keeps more text: high 0.64 / 0.80 / 0.92 against 0.44 / 0.57 / 0.82 for `82e013e3`. 3D PSNR is +0.4 / +0.6 / +0.6 dB over main's AA off on nearest input, but below AA off on box input at 35/50 %. Jaggedness is its weak spot: 3.1 / 3.7 / 2.1 against 2.6-2.8 / 3.5-3.6 / 1.6 for the old generations.
+- SMAA and CMAA2 do not beat the built-in pass: SMAA low/medium soften the text (0.54 / 0.69 / 0.80) for a PSNR near the built-in's; SMAA high/ultra lose 2 dB or more of 3D PSNR (35 % nearest; 50-75 % box) and have the highest jaggedness; CMAA2 keeps the text between low and off (0.67 / 0.83 / 0.90) and about matches AA off on 3D with nearest input, but loses 0.6-1.3 dB on box input at 35/50 %.
+- Best for text: main with AA off or low (0.63-0.95), CMAA2 next. Best for 3D by PSNR/jaggedness: the old high settings (`953966a6` / `f75c3bf5` high: 38.7 dB at 35 %, 42.5 dB at 75 % with 0.63 text edge), main high is the compromise (3D 38.5 / 36.1 / 41.2 dB with text 0.64 / 0.80 / 0.92 and no halo).
+- Cost: the FSR pass alone is 0.13-0.16 ms per frame, built-in low/high 0.17-0.27 (main high is the slowest of the built-ins, with its second pass), SMAA 0.22-0.27, CMAA2 0.24-0.31. GPU time is not the limit; the choice is quality.
