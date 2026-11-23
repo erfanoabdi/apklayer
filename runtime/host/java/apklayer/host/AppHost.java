@@ -509,7 +509,12 @@ public final class AppHost implements Runnable {
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
         if (renderScale() != 100) {
             scalePct = Math.max(1, scaled(scalePct));
-            if (dpi > 0) dpi = Math.max(1, scaled(dpi));
+            // the frame budget of the display sink (bridge/hals/graphics/display.c, the same rule): at most 7680x4320 px
+            int fitted = scalePct;
+            while (fitted > 1 && (long) w * fitted / 100 * ((long) h * fitted / 100) > 7680L * 4320) fitted--;
+            if (fitted != scalePct) System.out.println("[apklayer] render scale: " + scalePct + "% -> " + fitted + "% (at most 7680x4320 px)");
+            if (dpi > 0) dpi = Math.max(1, (int) (((long) scaled(dpi) * fitted + scalePct / 2) / scalePct));  // the density follows the fitted scale
+            scalePct = fitted;
             navPx = scaled(navPx);
         }
         if (dpi <= 0) dpi = 160 * scalePct / 100;

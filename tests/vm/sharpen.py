@@ -83,3 +83,17 @@ for aa in (None, 'cmaa2-high', 'smaa-low', 'smaa'):  # the default, two removed 
     assert edges(img) >= e_bil, '%s: not as sharp as bilinear' % aa
     assert psnr(img, ref) >= p_bil - 0.5, '%s: further from the original than bilinear' % aa
     print('PASS with anti-aliasing (APKLAYER_SHARPEN_AA=%s): x%.2f edge strength, %+.2f dB' % (aa, edges(img) / e_bil, psnr(img, ref) - p_bil))
+
+# Render scale 200 (a 2x source per axis, shown downscaled): the frame budget (7680x4320 px, display.c / AppHost.hostResize) lets sources up to 33 Mpx
+# through, so the pass must take them: 1080p x2, a maximized 3440x1384 window x2 (6880x2768) and 8K (7680x4320 -> 3840x2160), every anti-aliasing level
+# (the Vulkan backend has none). Checked: the pass ends 0 and the output has the asked size (4 bytes per pixel).
+for (iw, ih, ow, oh) in ((3840, 2160, 1920, 1080), (6880, 2768, 3440, 1384), (7680, 4320, 3840, 2160)):
+    with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
+        raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
+        Path(raw_in).write_bytes(Image.frombytes('RGB', (256, 256), os.urandom(256 * 256 * 3)).resize((iw, ih), Image.NEAREST).convert('RGBA').tobytes())
+        for aa in ('off', 'smaa-ultra', 'cmaa2-ultra'):
+            run = subprocess.run([exe, raw_in, str(iw), str(ih), raw_out, str(ow), str(oh), '0.6'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else []),
+                                 capture_output=True, text=True, timeout=120, env=dict(os.environ, APKLAYER_SHARPEN_AA=aa, **({'APKLAYER_SHARPEN_BACKEND': os.environ['SHARPEN_BACKEND']} if os.environ.get('SHARPEN_BACKEND') else {})))
+            assert run.returncode == 0, '%dx%d -> %dx%d %s: sharpen-test failed (rc %d): %s' % (iw, ih, ow, oh, aa, run.returncode, run.stderr)
+            assert os.path.getsize(raw_out) == ow * oh * 4, '%dx%d -> %dx%d %s: output of %d bytes' % (iw, ih, ow, oh, aa, os.path.getsize(raw_out))
+    print('PASS %dx%d -> %dx%d (render scale 200): every level' % (iw, ih, ow, oh))

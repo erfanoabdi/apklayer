@@ -98,6 +98,16 @@ static void reply(struct apklayer_display *d, uint32_t type, uint32_t len, const
         if (!render_pct) { const char *e = getenv("APKLAYER_RENDER_SCALE"); int v = e ? atoi(e) : 100; render_pct = v > 200 || v <= 0 ? 100 : v < 60 ? 60 : v; }  /* 60..200: a stored value below 60 (the old minimum was 25) is read as 60 */
         int32_t scale = render_pct == 100 ? body[3] : (int32_t)(((int64_t)body[3] * render_pct + 50) / 100);
         if (scale < 1) scale = 1;
+        /* apklayer patch: a frame budget (the same rule in AppHost.hostResize): a render scale of 200 on a HiDPI desktop is 4x per axis, 16x the pixels of the
+         * logical window (a maximized 3440x1440 window at 200% = 6880x2880 px, x2 = 13760x5760): the app's buffers, the GPU's targets and the shell's filter
+         * grow with it. Above 7680x4320 px the effective scale shrinks to fit, one log line. */
+        if (render_pct != 100 && body[1] > 0 && body[2] > 0) {
+            int32_t fitted = scale;
+            while (fitted > 1 && (int64_t)body[1] * fitted / 100 * ((int64_t)body[2] * fitted / 100) > 7680LL * 4320) fitted--;
+            static int said;
+            if (fitted != scale && !said++) fprintf(stderr, "apklayer.display: render scale %d%% of a %dx%d window: %d%% -> %d%% (at most 7680x4320 px)\n", render_pct, (int)body[1], (int)body[2], (int)scale, (int)fitted);
+            scale = fitted;
+        }
         if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], scale, turn);
         else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], scale); atomic_store(&d->pending_cfg[3], turn); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
     } else if (type == MSG_NAVBAR_PIXELS && len >= 12) {
