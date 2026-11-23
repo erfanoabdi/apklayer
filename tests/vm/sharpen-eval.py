@@ -3,7 +3,7 @@
 (bridge/shell/sharpen.c through tests/hals/sharpen-test.c) against the reference on synthetic pictures at 1280x720:
   text   UI text (four sizes, light on dark and dark on light), thin lines, icons (outlines, circles), a button row
   photo  a wallpaper picture (the 3D stand-in: gradients, soft edges), 1280x720 crop of /usr/share/wallpapers/EveningGlow
-Each picture is box-filtered down to the scale (75%, 60%; the render scale's range starts at 60%) and upscaled by the filter; compared with PIL's bilinear stretch. Per picture (and the reference itself): PSNR, SSIM
+Each picture is box-filtered down to the scale (75%, 65%; the render scale's range starts at 65%) and upscaled by the filter; compared with PIL's bilinear stretch. Per picture (and the reference itself): PSNR, SSIM
 (7x7 uniform window, luma), the mean edge strength and the 99th percentile gradient (Sobel magnitude) and the halo share (output pixels outside the reference's own 3x3 min/max by > 8/255).
 SHARPEN_MODIFIER (hex) is the accepted dmabuf modifier (NVIDIA: 0x300000000606010). Prints one table; with --json also a machine readable copy (tools compare two runs)."""
 import argparse, glob, json, os, subprocess, sys, tempfile

@@ -35,7 +35,7 @@ both polarities (1.0 = like the original; bilinear shows 0.3 contrast and 2.9x w
 step edge in output px, 1.0 = hard) and its overshoot in percent of the step. Higher is better for PSNR/SSIM/contrast, closer to 1.0 for edge/width,
 lower for rise/halo/overshoot.
 
-> 2026-11-23 (later): the text aid, the calm pass and the smaa-high, smaa-ultra, cmaa2-high settings were removed; CMAA2 ultra is the only anti-aliasing and the render scale starts at 60 %. The tables below that mention them, and the 35 % / 50 % rows, are historical measurements.
+> 2026-11-23 (later): the text aid, the calm pass and the smaa-high, smaa-ultra, cmaa2-high settings were removed; CMAA2 ultra is the only anti-aliasing and the render scale starts at 60 % (65 % since the shimmer entry below). The tables below that mention them, and the 35 % / 50 % rows, are historical measurements.
 
 ## Baseline (2026-11-23, historical: measured before our own AA was removed; the shell's pipeline then was EASU + RCAS 0.2 stops with the text aid + our AA high, GLES = Vulkan, RTX 5060 Ti; the default is cmaa2-ultra now and Vulkan has no AA)
 
@@ -251,3 +251,16 @@ cmaa2-ultra+        0.97    24.25    29.91     9.24    11.65     26.74    11.31 
 
 ```
 Reading: cmaa2-ultra at 35 / 50 / 75 %: 3D stairs 8.45 / 10.16 / 12.17 -> 7.55 / 9.42 / 11.65 (own `high`: 6.81 / 9.01 / 12.68), text edge 0.69 / 0.86 / 0.95 -> 0.71 / 0.88 / 0.97 (up), 3dPSNR -0.65 / -0.51 / -0.79 dB, halo unchanged, +0.1 ms. cmaa2-high: 3D stairs 7.98 / 10.01 / 12.76, text up 0.04 / 0.04 / 0.04. smaa-ultra: stairs 8.06 / 9.97 / 11.87 -> 7.01 / 8.79 / 11.65, text edge -0.04 / -0.04 / -0.01 (outside the ~0.02 budget at 35 and 50 %: the cost of the second run; the gate on both runs would keep text at +0.1 but gives back the whole gain), halo 0.28 -> 0.44 at 35 %. smaa-high: 35 % only, text -0.02. cmaa2-high and ultra now differ (3 vs 4 runs at 35 %, 2 vs 3 at 50 %, 1 vs 2 at 75 %); smaa-high and ultra differ at 50 and 75 % (1 vs 2 runs), at 35 % by corner rounding. The lower levels (smaa-low/medium, cmaa2-low/medium) were left (the lead is removing them); smaa-medium now has colour edges.
+
+## Shimmer (2026-11-23, RTX 5060 Ti, GLES; `tests/vm/shimmer.py`, `SHARPEN_SEQ` in sharpen-test)
+Scene 640x360 output (foliage noise, hair strands, 1 px lines, text, circles), camera step 0.25 / 0.125 source px per frame, 16 frames, aliased source (point sampled). flick = RMS frame-to-frame change of the error against the ground truth; noise = still scene, +-2 LSB input noise, mean per-pixel std of the output. 65 %, regions foliage / hair / text:
+
+| config | foliage flick | hair flick | text flick | noise (all) |
+|---|---|---|---|---|
+| bilinear | 4.35 | 24.04 | 23.73 | 0.97 |
+| EASU only (RCAS 0, no AA) | 5.00 | 27.17 | 25.29 | 1.26 |
+| EASU + RCAS (no AA) | 6.76 | 28.99 | 25.88 | 1.50 |
+| default before (CMAA2 + EASU + RCAS) | 6.34 | 26.83 | 25.70 | 1.56 |
+| default now (RCAS denoise on) | 6.17 | 26.59 | 25.64 | 1.53 |
+
+At 75 %: foliage 5.65 -> 5.43; at 100 %: 4.81 -> 4.46; 150 % unchanged (the area downscale is stable: flick below bilinear's). CMAA2: deterministic, more runs lower the flicker (0 / 1 / 2 runs: 28.75 / 27.10 / 26.59 on hair), threshold 0.025 / 0.05 / 0.1 and the colour term do not matter; with a box-filtered (already smooth) source it adds 3-5 % flick (hair 14.2 -> 14.8 at 65 %). RCAS denoise strength -1.0 instead of -0.5: foliage 6.17 -> 5.98 (not adopted, off the reference). Quality (tests/vm/sharpen-eval.py, evalalias.py), before -> after: text edge 75 % 14.13 -> 14.10, 65 % 12.98 -> 12.95; photo edge 19.02 -> 18.79 (75 %), 17.65 -> 17.44 (65 %); evalalias 3dStair 65 % 10.51 -> 10.32, 75 % 11.20 -> 11.03, 100 % 14.37 -> 14.11; txtEdge 0.95 / 0.95 / 1.05 unchanged; PSNR within 0.05 dB (100 %: +0.1).

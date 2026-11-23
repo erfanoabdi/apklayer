@@ -310,7 +310,7 @@ private:
     void showResolution(int preview = -1) {
         auto [w, h] = windowPx_[current_];
         int pct = preview > 0 ? preview : appScales_[current_].empty() ? 100 : std::atoi(appScales_[current_].c_str());
-        pct = std::max(pct, 60);  // the minimum: a stored value below 60 reads as 60
+        pct = std::max(pct, 65);  // the minimum: a stored value below 65 reads as 65
         if (preview <= 0) ui_->global<Backend>().set_app_render_scale_pct(pct);
         std::string text;
         if (w <= 0 || h <= 0) text = "Start the app once to see its resolution here.";

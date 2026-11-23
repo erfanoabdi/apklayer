@@ -77,14 +77,14 @@ static const char *FS_UP =
     "  gl_FragColor = vec4(min(max4, max(min4, aC * (1.0 / aW))), 1.0);  /* normalise and dering */\n"
     "}\n";
 
-/* RCAS (reference FsrRcasF; FSR_RCAS_LIMIT 0.25 - 1/16, no denoise as in the reference's default): sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos).
+/* RCAS (reference FsrRcasF; FSR_RCAS_LIMIT 0.25 - 1/16, with the reference's denoise option on (FSR_RCAS_DENOISE)): sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos).
  * `sharp` is the reference's constant from FsrRcasCon, exp2(-stops): 1 the sharpest (0 stops), 0.87 the reference default (0.2 stops), 0.5 one stop less, 0 off (the picture passes unchanged).
  */
 static const char *FS_CAS =
     "precision highp float;\n"
     "uniform sampler2D tex; uniform vec2 px; uniform float sharp; varying vec2 uv;\n"
     "const float HALO_OV = 0.02;  /* how far the plain RCAS result may leave the cross's range, as a fraction of that range */\n"
-    "const bool DENOISE = false;  /* FSR_RCAS_DENOISE of the reference: off by default there too */\n"
+    "const bool DENOISE = true;  /* FSR_RCAS_DENOISE of the reference, ON here (off in the reference): the sharpening shrinks by up to half where the centre differs from the mean of its four neighbours (noise, foliage, sub-pixel crawl), edges keep it: tests/vm/shimmer.py */\n"
     "vec3 T(float x, float y) { return texture2D(tex, uv + vec2(x, y) * px).rgb; }\n"
     "float L(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }\n"
     "void main() {\n"

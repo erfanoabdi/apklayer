@@ -2,7 +2,7 @@
 """The yardstick of the render filter: one command, one summary table (docs/FILTER-EVAL.md).
   tests/vm/evalfilter.py [--scales 60,75] [--filter label[:ENV=VAL,...]]... [--sharp 0.8706] [--only tile,...] [--json out.json] [--compare old.json] [--save dir] [-v]
 A synthetic 1280x720 corpus (tests/vm/evalcorpus.py: text at several sizes and fonts, icons, thin lines, calibrated stems and edges, a UI panel, shaded
-3D, foliage noise, gradients, anime flats, a perspective checker; no game data) is box-reduced to each scale (60/75% of 1280x720, the render scale's range starts at 60) and brought back
+3D, foliage noise, gradients, anime flats, a perspective checker; no game data) is box-reduced to each scale (65/75% of 1280x720, the render scale's range starts at 65) and brought back
 to 1280x720 by a bilinear stretch and by every --filter (the shell pass bridge/shell/sharpen.c through sharpen-test: dmabuf in, EGL/GLES, readback;
 default filter 'fsr1' = the current default pipeline; a filter takes environment variables, e.g. --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' (a test knob: the shell always runs cmaa2-ultra) or 'fsr1-smaa:APKLAYER_SHARPEN_AA=smaa' (the SMAA ultra fallback)
 --filter 'vk:APKLAYER_SHARPEN_BACKEND=vulkan'). Per tile: PSNR, SSIM and edge ratio (out/original; 1.0 = as sharp as the

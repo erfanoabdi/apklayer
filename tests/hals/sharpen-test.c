@@ -1,5 +1,6 @@
 /* bridge/shell/sharpen.c without a compositor: a raw RGBX picture goes into a dmabuf (a linear gbm buffer on the first render node), through the
- * upscale pass, and back as raw RGBX. tests/vm/sharpen.py compares the result with a bilinear stretch. Usage: sharpen-test in.raw w h out.raw ow oh [sharpness [accepted modifier, hex]] */
+ * upscale pass, and back as raw RGBX. tests/vm/sharpen.py compares the result with a bilinear stretch. Usage: sharpen-test in.raw w h out.raw ow oh [sharpness [accepted modifier, hex]]
+ * SHARPEN_SEQ=N: in.raw holds N frames of w x h one after the other, out.raw gets N outputs (each frame in its own buffer; the pass keeps no state between frames: tests/vm/shimmer.py). */
 #define _GNU_SOURCE
 #include <fcntl.h>
 #include <gbm.h>
@@ -15,39 +16,14 @@ int main(int argc, char **argv)
     if (argc < 7) { fprintf(stderr, "usage: sharpen-test in.raw w h out.raw ow oh [sharpness]\n"); return 2; }
     int w = atoi(argv[2]), h = atoi(argv[3]), ow = atoi(argv[5]), oh = atoi(argv[6]);
     float sharp = argc > 7 ? (float)atof(argv[7]) : 0.5f;
+    int nseq = getenv("SHARPEN_SEQ") ? atoi(getenv("SHARPEN_SEQ")) : 1;
+    if (nseq < 1) nseq = 1;
     FILE *f = fopen(argv[1], "rb");
-    uint8_t *in = malloc((size_t)w * h * 4);
-    if (!f || fread(in, 4, (size_t)w * h, f) != (size_t)w * h) { fprintf(stderr, "cannot read %s\n", argv[1]); return 2; }
+    uint8_t *in = malloc((size_t)w * h * 4 * nseq);
+    if (!f || fread(in, 4, (size_t)w * h * nseq, f) != (size_t)w * h * nseq) { fprintf(stderr, "cannot read %s\n", argv[1]); return 2; }
     fclose(f);
-    /* the producer's buffer: every render node in turn until one allocates it */
     int fd = -1;
     struct gbm_device *gbm = NULL;
-    struct gbm_bo *bo = NULL;
-    for (int n = 128; n < 140 && !bo; n++) {
-        char path[32];
-        snprintf(path, sizeof path, "/dev/dri/renderD%d", n);
-        fd = open(path, O_RDWR | O_CLOEXEC);
-        if (fd < 0) continue;
-        gbm = gbm_create_device(fd);
-        if (gbm) bo = gbm_bo_create(gbm, (uint32_t)w, (uint32_t)h, GBM_FORMAT_XRGB8888, GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING);
-        if (gbm && !bo) bo = gbm_bo_create(gbm, (uint32_t)w, (uint32_t)h, GBM_FORMAT_XRGB8888, GBM_BO_USE_LINEAR | GBM_BO_USE_WRITE);  /* NVIDIA's gbm has no linear render target */
-        if (!bo) { if (gbm) gbm_device_destroy(gbm); close(fd); }
-    }
-    if (!bo) { fprintf(stderr, "no gbm buffer\n"); return 3; }
-    uint32_t stride, mapstride;
-    void *mapdata = NULL;
-    uint8_t *map = gbm_bo_map(bo, 0, 0, (uint32_t)w, (uint32_t)h, GBM_BO_TRANSFER_WRITE, &mapstride, &mapdata);
-    if (!map) { fprintf(stderr, "cannot map the buffer\n"); return 3; }
-    for (int y = 0; y < h; y++)  /* RGBX bytes in, XRGB8888 (B, G, R, X in memory) out */
-        for (int x = 0; x < w; x++) {
-            const uint8_t *p = in + ((size_t)y * w + x) * 4;
-            uint8_t *q = map + (size_t)y * mapstride + (size_t)x * 4;
-            q[0] = p[2]; q[1] = p[1]; q[2] = p[0]; q[3] = 255;
-        }
-    gbm_bo_unmap(bo, mapdata);
-    int dfd = gbm_bo_get_fd(bo);
-    stride = gbm_bo_get_stride(bo);
-    uint32_t off = gbm_bo_get_offset(bo, 0);
     struct sharpen *s = sharpen_open();
     if (argc > 8) {  /* the accepted modifiers: hex, comma separated */
         uint64_t mods[64];
@@ -55,26 +31,60 @@ int main(int argc, char **argv)
         for (char *tok = strtok(argv[8], ","); tok && n < 64; tok = strtok(NULL, ",")) mods[n++] = strtoull(tok, NULL, 16);
         sharpen_accept(s, mods, n);
     }
-    if (sharpen_import(s, 0, 0x34325258u, w, h, 1, &dfd, &stride, &off, gbm_bo_get_modifier(bo)) < 0) { fprintf(stderr, "import failed\n"); return 4; }
-    int slot, fresh;
-    if (sharpen_render(s, 0, ow, oh, sharp, &slot, &fresh) < 0) { fprintf(stderr, "render failed\n"); return 5; }
-    if (getenv("SHARPEN_LOOPS")) {  /* timing: that many more frames, each waited for (ms per frame on stderr) */
-        int n = atoi(getenv("SHARPEN_LOOPS"));
-        struct timespec t0, t1;
-        sharpen_slot_release(s, slot);
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        for (int i = 0; i < n; i++) { int sl, fr; if (sharpen_render(s, 0, ow, oh, sharp, &sl, &fr) < 0) { fprintf(stderr, "render failed\n"); return 5; } sharpen_slot_release(s, sl); }
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        fprintf(stderr, "timing: %.3f ms per frame (%d frames)\n", ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / n, n);
+    uint8_t *out = malloc((size_t)ow * oh * 4 * nseq);
+    int slot = 0, fresh;
+    for (int fr = 0; fr < nseq; fr++) {
+        /* the producer's buffer: every render node in turn until one allocates it */
+        struct gbm_bo *bo = NULL;
+        for (int n = 128; n < 140 && !bo; n++) {
+            if (!gbm) {
+                char path[32];
+                snprintf(path, sizeof path, "/dev/dri/renderD%d", n);
+                fd = open(path, O_RDWR | O_CLOEXEC);
+                if (fd < 0) continue;
+                gbm = gbm_create_device(fd);
+            }
+            if (gbm) bo = gbm_bo_create(gbm, (uint32_t)w, (uint32_t)h, GBM_FORMAT_XRGB8888, GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING);
+            if (gbm && !bo) bo = gbm_bo_create(gbm, (uint32_t)w, (uint32_t)h, GBM_FORMAT_XRGB8888, GBM_BO_USE_LINEAR | GBM_BO_USE_WRITE);  /* NVIDIA's gbm has no linear render target */
+            if (!bo) { if (gbm) gbm_device_destroy(gbm); gbm = NULL; close(fd); }
+        }
+        if (!bo) { fprintf(stderr, "no gbm buffer\n"); return 3; }
+        uint32_t stride, mapstride;
+        void *mapdata = NULL;
+        uint8_t *map = gbm_bo_map(bo, 0, 0, (uint32_t)w, (uint32_t)h, GBM_BO_TRANSFER_WRITE, &mapstride, &mapdata);
+        if (!map) { fprintf(stderr, "cannot map the buffer\n"); return 3; }
+        for (int y = 0; y < h; y++)  /* RGBX bytes in, XRGB8888 (B, G, R, X in memory) out */
+            for (int x = 0; x < w; x++) {
+                const uint8_t *p = in + (((size_t)fr * h + y) * w + x) * 4;
+                uint8_t *q = map + (size_t)y * mapstride + (size_t)x * 4;
+                q[0] = p[2]; q[1] = p[1]; q[2] = p[0]; q[3] = 255;
+            }
+        gbm_bo_unmap(bo, mapdata);
+        int dfd = gbm_bo_get_fd(bo);
+        stride = gbm_bo_get_stride(bo);
+        uint32_t off = gbm_bo_get_offset(bo, 0);
+        int buf = fr % 8;
+        if (sharpen_import(s, buf, 0x34325258u, w, h, 1, &dfd, &stride, &off, gbm_bo_get_modifier(bo)) < 0) { fprintf(stderr, "import failed\n"); return 4; }
+        if (sharpen_render(s, buf, ow, oh, sharp, &slot, &fresh) < 0) { fprintf(stderr, "render failed\n"); return 5; }
+        if (getenv("SHARPEN_LOOPS")) {  /* timing: that many more frames, each waited for (ms per frame on stderr) */
+            int n = atoi(getenv("SHARPEN_LOOPS"));
+            struct timespec t0, t1;
+            sharpen_slot_release(s, slot);
+            clock_gettime(CLOCK_MONOTONIC, &t0);
+            for (int i = 0; i < n; i++) { int sl, f2; if (sharpen_render(s, buf, ow, oh, sharp, &sl, &f2) < 0) { fprintf(stderr, "render failed\n"); return 5; } sharpen_slot_release(s, sl); }
+            clock_gettime(CLOCK_MONOTONIC, &t1);
+            fprintf(stderr, "timing: %.3f ms per frame (%d frames)\n", ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / n, n);
+        }
+        if (sharpen_readback(s, slot, out + (size_t)fr * ow * oh * 4) < 0) { fprintf(stderr, "readback failed\n"); return 6; }
+        if (fr + 1 < nseq) sharpen_slot_release(s, slot);
+        close(dfd);
     }
-    uint8_t *out = malloc((size_t)ow * oh * 4);
-    if (sharpen_readback(s, slot, out) < 0) { fprintf(stderr, "readback failed\n"); return 6; }
     struct sharpen_out info;
     if (sharpen_slot_info(s, slot, &info) < 0) { fprintf(stderr, "no slot info\n"); return 7; }
     fprintf(stderr, "ok: %dx%d -> %dx%d, output dmabuf stride %u modifier 0x%llx\n", w, h, ow, oh, info.stride, (unsigned long long)info.modifier);
     close(info.fd);
     f = fopen(argv[4], "wb");
-    fwrite(out, 4, (size_t)ow * oh, f);
+    fwrite(out, 4, (size_t)ow * oh * nseq, f);
     fclose(f);
     sharpen_close(s);
     return 0;

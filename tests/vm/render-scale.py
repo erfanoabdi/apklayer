@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The per-app render scale (`apklayer settings set render-scale[.<package>] 25..200`; the display sink, bridge/hals/graphics/display.c, and the Java host,
+"""The per-app render scale (`apklayer settings set render-scale[.<package>] 65..200`; the display sink, bridge/hals/graphics/display.c, and the Java host,
 AppHost.RENDER_SCALE, scale what the shell tells the app): the app renders into a display of that share of its window's pixels, windowed or fullscreen,
 with the dpi scaled alike (the dp size stays), and the window shows it scaled over the whole window. APKLAYER_RENDER_SCALE=50 as cli/run.cpp sets it
 from the setting. UiBench goes fullscreen (script step fullscreen:1) and leaves (fullscreen:0). Checked at each of the three stages: the picture
