@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-23 deb of main 62370ed1 (shimmer: RCAS busy-texture fade + temporal pass)
+- Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.git62370ed1 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.git62370ed1-1~noble1_amd64.deb` 25836024 bytes plus apklayer-dev. Not installed. Not in it: the berberis 0085 library; the render-scale-200 startup crash is not fixed.
+
 ## 2026-11-23: Endfield's scrambled tiles: the cause is the tiled GBM buffer on AMD; render buffers are LINEAR now (AMD, Intel)
 
 - Cause found, not the textures: Endfield's first uploads (21 splash screens, 1920x1080 ASTC 4x4, dumped with APKLAYER_VULKAN_BLOCK_DUMP) decode cleanly with astcenc, Mesa's decoder matched astcenc on all 56 real-content probe cases, and the splash screen itself came out scrambled on screen, on Mesa 25.3.6 (ernstp PPA) and 26.2.7 (kisak) alike, with three different decoders. With `APKLAYER_GFX_LINEAR=1` (every GPU-render buffer an explicit LINEAR GBM buffer) the title screen is clean (mp100, RADV Renoir, 3440x1440).
