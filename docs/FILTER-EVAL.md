@@ -199,3 +199,54 @@ Reading the numbers (high unless noted, nearest input unless noted):
 - SMAA and CMAA2 do not beat the built-in pass: SMAA low/medium soften the text (0.54 / 0.69 / 0.80) for a PSNR near the built-in's; SMAA high/ultra lose 2 dB or more of 3D PSNR (35 % nearest; 50-75 % box) and have the highest jaggedness; CMAA2 keeps the text between low and off (0.67 / 0.83 / 0.90) and about matches AA off on 3D with nearest input, but loses 0.6-1.3 dB on box input at 35/50 %.
 - Best for text: main with AA off or low (0.63-0.95), CMAA2 next. Best for 3D by PSNR/jaggedness: the old high settings (`953966a6` / `f75c3bf5` high: 38.7 dB at 35 %, 42.5 dB at 75 % with 0.63 text edge), main high is the compromise (3D 38.5 / 36.1 / 41.2 dB with text 0.64 / 0.80 / 0.92 and no halo).
 - Cost: the FSR pass alone is 0.13-0.16 ms per frame, built-in low/high 0.17-0.27 (main high is the slowest of the built-ins, with its second pass), SMAA 0.22-0.27, CMAA2 0.24-0.31. GPU time is not the limit; the choice is quality.
+## SMAA / CMAA2 stronger on 3D (2026-11-23, RTX 5060 Ti, GLES, `tests/vm/evalalias.py`, aliased source)
+
+Source: a 4x4 supersampled scene (12 tiles: text, icons, lines, shaded shapes, a city with lamp posts and wires, foliage, four character-like tiles with 1-3 px hair strands, belts, straps, buckles, torn trouser hems, a thin blade, specular arcs, hue-only edges, a hair close-up) taken by nearest sample at the source size; truth = its box reduction. Columns: txtEdge = Sobel edge strength of the text tiles / truth (1.0 = as sharp; the text protection check: must not fall more than ~0.02 against before), uiPSNR, 3dPSNR (shapes, city, foliage), 3dJag = mean abs colour error on the truth's edge pixels, 3dStair / chStair = roughness along the truth's edges on the 3D / character tiles (lower = fewer stair steps, but below the truth's own ~11 means blur), charPSNR / charJag / charEdg (sharpness) / charHalo (% pixels > 8 levels outside the truth's 5x5 range), ms = GPU plus fence per frame at 1280x720 output (100 frames). Bilinear, off, low, high are unchanged by this work (the numbers below are the new run).
+
+Findings: thresholds 0.15..0.03 and SMAA's local contrast factor change nothing on this high-contrast corpus; CMAA2 shape blur 0.25 or SMAA corner rounding 0 smooth stairs only by blurring text as much (txtEdge -0.09..-0.17). What smooths without that is repeated runs (output of one run is the input of the next) with the text gate (the RCAS text test on the 3x3): CMAA2 text edge goes up, 3D stairs drop. Extra runs without the gate: -0.07 text edge at 35 %. SMAA runs more than twice go unstable (halo 0.4-0.8 %), so SMAA stops at two.
+
+```
+== 35% (BEFORE, then AFTER) ==
+filter          txtEdge   uiPSNR   3dPSNR    3dJag  3dStair  charPSNR  charJag  chStair  charEdg charHalo      ms
+off                0.82    19.05    24.72    18.61    10.33     22.02    21.86    10.93     0.90     0.39   0.200
+low                0.73    19.17    24.91    18.45     7.40     22.27    21.50     7.82     0.77     0.21   0.203
+high               0.68    19.14    24.48    19.23     6.81     21.97    22.22     7.41     0.67     0.26   0.256
+smaa-high          0.65    19.75    24.72    19.24     8.05     22.17    21.92     8.65     0.77     0.28   0.230   before
+smaa-ultra         0.65    19.74    24.69    19.31     8.06     22.17    21.93     8.63     0.77     0.28   0.250   before
+cmaa2-high         0.69    19.43    24.90    18.66     8.44     22.27    21.73     8.78     0.79     0.23   0.249   before
+cmaa2-ultra        0.69    19.43    24.90    18.68     8.45     22.27    21.73     8.79     0.79     0.24   0.243   before
+smaa-high+          0.63    19.70    24.24    20.19     7.21     21.91    22.46     7.82     0.72     0.30   0.263   after
+smaa-ultra+         0.61    19.77    24.11    20.50     7.01     21.88    22.60     7.57     0.70     0.44   0.304   after
+cmaa2-high+         0.73    19.12    24.46    19.57     7.98     22.02    22.23     8.34     0.75     0.23   0.350   after
+cmaa2-ultra+        0.71    19.11    24.24    20.10     7.55     21.92    22.54     7.94     0.72     0.25   0.333   after
+
+== 50% (BEFORE, then AFTER) ==
+filter          txtEdge   uiPSNR   3dPSNR    3dJag  3dStair  charPSNR  charJag  chStair  charEdg charHalo      ms
+off                0.96    20.62    26.22    14.69    12.91     22.70    18.54    12.42     0.95     0.49   0.175
+low                0.89    20.79    26.57    14.44    10.41     23.06    18.17    10.15     0.88     0.36   0.234
+high               0.84    20.80    26.38    15.10     9.01     23.11    18.69     9.11     0.80     0.40   0.264
+smaa-high          0.81    21.01    26.39    14.80     9.93     22.98    18.31    10.12     0.88     0.19   0.243   before
+smaa-ultra         0.81    21.01    26.39    14.82     9.97     22.98    18.33    10.12     0.88     0.19   0.262   before
+cmaa2-high         0.86    20.95    26.72    14.25    10.18     23.12    18.01    10.01     0.88     0.24   0.267   before
+cmaa2-ultra        0.86    20.95    26.73    14.24    10.16     23.12    18.01    10.03     0.88     0.24   0.260   before
+smaa-high+          0.81    21.01    26.39    14.80     9.93     22.98    18.31    10.12     0.88     0.19   0.429   after
+smaa-ultra+         0.77    20.99    25.98    15.96     8.79     22.99    18.85     9.13     0.82     0.09   0.402   after
+cmaa2-high+         0.90    20.64    26.40    14.76    10.01     22.95    18.34    10.06     0.87     0.30   0.306   after
+cmaa2-ultra+        0.88    20.61    26.22    15.22     9.42     22.90    18.59     9.63     0.85     0.29   0.357   after
+
+== 75% (BEFORE, then AFTER) ==
+filter          txtEdge   uiPSNR   3dPSNR    3dJag  3dStair  charPSNR  charJag  chStair  charEdg charHalo      ms
+off                1.01    24.22    29.53     9.56    14.68     26.47    11.60    14.76     1.02     0.31   0.178
+low                0.98    24.29    29.87     9.30    13.02     26.69    11.46    13.25     0.99     0.28   0.215
+high               0.98    24.29    29.90     9.34    12.68     26.72    11.51    12.96     0.98     0.28   0.228
+smaa-high          0.92    24.75    30.41     8.97    11.84     27.08    11.12    12.41     0.98     0.17   0.260   before
+smaa-ultra         0.92    24.74    30.35     9.01    11.87     27.07    11.15    12.40     0.98     0.17   0.307   before
+cmaa2-high         0.95    24.74    30.70     8.69    12.19     27.09    10.98    12.23     0.98     0.20   0.286   before
+cmaa2-ultra        0.95    24.74    30.70     8.69    12.17     27.08    10.98    12.24     0.98     0.20   0.278   before
+smaa-high+          0.92    24.75    30.41     8.97    11.84     27.08    11.12    12.41     0.98     0.17   0.262   after
+smaa-ultra+         0.91    24.72    30.35     9.09    11.65     27.08    11.28    12.09     0.97     0.17   0.319   after
+cmaa2-high+         0.99    24.32    29.93     9.17    12.76     26.80    11.19    12.97     0.99     0.24   0.276   after
+cmaa2-ultra+        0.97    24.25    29.91     9.24    11.65     26.74    11.31    12.16     0.97     0.20   0.354   after
+
+```
+Reading: cmaa2-ultra at 35 / 50 / 75 %: 3D stairs 8.45 / 10.16 / 12.17 -> 7.55 / 9.42 / 11.65 (own `high`: 6.81 / 9.01 / 12.68), text edge 0.69 / 0.86 / 0.95 -> 0.71 / 0.88 / 0.97 (up), 3dPSNR -0.65 / -0.51 / -0.79 dB, halo unchanged, +0.1 ms. cmaa2-high: 3D stairs 7.98 / 10.01 / 12.76, text up 0.04 / 0.04 / 0.04. smaa-ultra: stairs 8.06 / 9.97 / 11.87 -> 7.01 / 8.79 / 11.65, text edge -0.04 / -0.04 / -0.01 (outside the ~0.02 budget at 35 and 50 %: the cost of the second run; the gate on both runs would keep text at +0.1 but gives back the whole gain), halo 0.28 -> 0.44 at 35 %. smaa-high: 35 % only, text -0.02. cmaa2-high and ultra now differ (3 vs 4 runs at 35 %, 2 vs 3 at 50 %, 1 vs 2 at 75 %); smaa-high and ultra differ at 50 and 75 % (1 vs 2 runs), at 35 % by corner rounding. The lower levels (smaa-low/medium, cmaa2-low/medium) were left (the lead is removing them); smaa-medium now has colour edges.

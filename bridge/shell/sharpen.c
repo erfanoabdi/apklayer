@@ -448,14 +448,14 @@ static void post_tex(GLuint prog, int unit, const char *name, GLuint tex)
 }
 
 /* SMAA (aa 4..7) or CMAA2 (8..11, the same four levels) on src into dst, w x h; 0: done */
-static int aa_run(struct sharpen *s, int ext, GLuint src, int w, int h, int aa, GLuint dst)
+static int aa_run(struct sharpen *s, int ext, GLuint src, int w, int h, int aa, float ratio, GLuint dst)
 {
     static int said;
     if (aa >= 8 && s->cmaa) {
-        if (cmaa_run(s->cmaa, ext, src, w, h, aa - 8, dst, s->vbo) == 0) return 0;
+        if (cmaa_run(s->cmaa, ext, src, w, h, aa - 8, ratio, dst, s->vbo) == 0) return 0;
         if (!said++) fprintf(stderr, "[sharpen] CMAA2 failed (gl error 0x%x): SMAA of the same level runs\n", glGetError());
     }
-    return smaa_run(s->smaa, rt_ensure, ext, src, w, h, (aa - 4) & 3, dst, s->vbo);
+    return smaa_run(s->smaa, rt_ensure, ext, src, w, h, (aa - 4) & 3, ratio, dst, s->vbo);
 }
 
 static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float ratio, int aa, int calm)
@@ -463,7 +463,7 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
     GLuint cur = s->t0.tex;
     if (calm && !(rt_ensure(&s->t1, w, h) && rt_ensure(&s->hist[0], w, h) && rt_ensure(&s->hist[1], w, h))) calm = 0;
     if (aa >= 4) {  /* SMAA / CMAA2 on the filter's output (the downscale path: no place before an upscale) */
-        if (aa_run(s, 0, cur, w, h, aa, calm ? s->t1.fbo : out_fbo) < 0) aa = 0;
+        if (aa_run(s, 0, cur, w, h, aa, ratio, calm ? s->t1.fbo : out_fbo) < 0) aa = 0;
         else if (calm) cur = s->t1.tex;
     }
     if (!calm) {
@@ -578,7 +578,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     if (inl) {
         aa = 0;
         if (!calm) dst = o->fbo;
-        if (up && rt_ensure(&s->sm_src, s->in[buf].w, s->in[buf].h) && aa_run(s, 1, s->in[buf].tex, s->in[buf].w, s->in[buf].h, aa4, s->sm_src.fbo) == 0) {
+        if (up && rt_ensure(&s->sm_src, s->in[buf].w, s->in[buf].h) && aa_run(s, 1, s->in[buf].tex, s->in[buf].w, s->in[buf].h, aa4, (float)ow / (float)s->in[buf].w, s->sm_src.fbo) == 0) {
             e_tex = s->sm_src.tex; e_prog = s->up2d_prog; e_tgt = GL_TEXTURE_2D; inl = 0; pre = 1;
         }
     }
@@ -599,7 +599,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         glBindTexture(GL_TEXTURE_2D, s->mid_tex);  /* SMAA's blending reads with the bilinear filter */
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        if (rt_ensure(&s->sm_src, ow, oh) && aa_run(s, 0, s->mid_tex, ow, oh, aa4, s->sm_src.fbo) == 0) cas_in = s->sm_src.tex;
+        if (rt_ensure(&s->sm_src, ow, oh) && aa_run(s, 0, s->mid_tex, ow, oh, aa4, 1.0f, s->sm_src.fbo) == 0) cas_in = s->sm_src.tex;
         glBindTexture(GL_TEXTURE_2D, s->mid_tex);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

@@ -23,6 +23,10 @@ uint headAt(ivec2 q) { return uint(q.y * ((sz.x + 1) / 2) + q.x); }
 #define SHAPE_BLUR 0.10
 #define DAMPEN 0.15
 #endif
+uniform float u_th;     // apklayer patch: the edge threshold (reference 0.07), per level and ratio
+#define CM_EDGE_THRESHOLD u_th
+uniform float u_tg;     // apklayer patch: the text gate: no edges where the RCAS text test (sharpen_fsr.h) on the 3x3 of a quad is above this (< 0: off)
+uniform float u_ck;     // apklayer patch: colour edges: the largest channel step times this joins the luma step (0: luma only, as the reference)
 #define MAX_LINE 86.0
 #define SYM_OFFSET 0.22
 #define SLM_ITEMS 768
@@ -41,7 +45,28 @@ shared vec4 shH[256];
 shared vec4 shV[256];
 vec2 NB[16];  // neighbourhood[x][y] = NB[x * 4 + y]
 float lumaOf(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }  // the input is gamma encoded already (the reference takes the sqrt of linear colour)
-vec2 edgeL(int x, int y, float l[8]) { return vec2(abs(l[x + y * 3] - l[x + 1 + y * 3]), abs(l[x + y * 3] - l[x + (y + 1) * 3])); }
+vec3 csrc[8];
+float dstep(int a, int b) {
+  float d = abs(lumaOf(csrc[a]) - lumaOf(csrc[b]));
+  vec3 t = abs(csrc[a] - csrc[b]);
+  d = max(d, u_ck * max(t.r, max(t.g, t.b)));
+  return d;
+}
+float TL(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }
+// the text test of the RCAS pass (sharpen_fsr.h) on the 3x3 csrc[0..7] + c8: 1 where it is strong two-colour structure with a mostly axis-aligned gradient (a glyph stem, an icon or UI line)
+float textMask(vec3 c8) {
+  vec3 q[9]; for (int k = 0; k < 8; k++) q[k] = csrc[k]; q[8] = c8;
+  float lo = 9.0, hi = -9.0; vec3 cLo = q[0], cHi = q[0];
+  for (int k = 0; k < 9; k++) { float l = TL(q[k]); if (l < lo) { lo = l; cLo = q[k]; } if (l > hi) { hi = l; cHi = q[k]; } }
+  float ctr = 0.5 * (hi - lo);
+  vec3 ax = cHi - cLo; float axx = max(dot(ax, ax), 1e-6), res = 0.0;
+  for (int k = 0; k < 9; k++) res = max(res, length(q[k] - cLo - ax * clamp(dot(q[k] - cLo, ax) / axx, 0.0, 1.0)));
+  float L0 = TL(q[0]), L1 = TL(q[1]), L2 = TL(q[2]), L3 = TL(q[3]), L5 = TL(q[5]), L6 = TL(q[6]), L7 = TL(q[7]), L8 = TL(q[8]);
+  float gx = (L2 + 2.0 * L5 + L8) - (L0 + 2.0 * L3 + L6), gy = (L6 + 2.0 * L7 + L8) - (L0 + 2.0 * L1 + L2);
+  float axis = abs(abs(gx) - abs(gy)) / (abs(gx) + abs(gy) + 1e-4);
+  return smoothstep(0.28, 0.5, ctr) * (1.0 - smoothstep(0.04, 0.10, res)) * smoothstep(0.3, 0.65, axis);
+}
+vec2 edgeL(int x, int y, float l[8]) { return vec2(dstep(x + y * 3, x + 1 + y * 3), dstep(x + y * 3, x + (y + 1) * 3)); }
 float lcV(int x, int y) { return max(max(NB[(x + 1) * 4 + y].y, NB[(x + 1) * 4 + y + 1].y), max(NB[(x + 2) * 4 + y].y, NB[(x + 2) * 4 + y + 1].y)) * LC_AMOUNT; }
 float lcH(int x, int y) { return max(max(NB[x * 4 + y + 1].x, NB[(x + 1) * 4 + y + 1].x), max(NB[x * 4 + y + 2].x, NB[(x + 1) * 4 + y + 2].x)) * LC_AMOUNT; }
 void loadQ(int addr, out vec2 e00, out vec2 e10, out vec2 e01, out vec2 e11) {
@@ -54,8 +79,9 @@ void main() {
   int center = gt.x + gt.y * 16;
   bool inOut = gt.x != 15 && gt.x != 0 && gt.y != 15 && gt.y != 0;
   float l[8];
-  for (int i = 0; i < 8; i++) l[i] = lumaOf(loadSrc(pixelPos + ivec2(i % 3, i / 3)));
+  for (int i = 0; i < 8; i++) { csrc[i] = loadSrc(pixelPos + ivec2(i % 3, i / 3)); l[i] = 0.0; }
   vec2 qe0 = edgeL(0, 0, l), qe1 = edgeL(1, 0, l), qe2 = edgeL(0, 1, l), qe3 = edgeL(1, 1, l);
+  if (u_tg >= 0.0 && textMask(loadSrc(pixelPos + ivec2(2, 2))) > u_tg) { qe0 = qe1 = qe2 = qe3 = vec2(0.0); }
   shV[center] = vec4(qe0.x, qe1.x, qe2.x, qe3.x);
   shH[center] = vec4(qe0.y, qe1.y, qe2.y, qe3.y);
   memoryBarrierShared();
