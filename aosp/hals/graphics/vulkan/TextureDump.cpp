@@ -2,6 +2,8 @@
 // compressed image, as the app sent them, to files, so a reference decoder can tell bad blocks from a bad decode.
 #include "TextureState.h"
 
+#include "../../HostEnvironment.h"
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
