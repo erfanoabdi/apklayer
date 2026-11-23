@@ -368,6 +368,9 @@ run = ["python3 -u tests/vm/render-scale.py"]
 [sharpen]  # the render filter's upscale and sharpening pass alone (EGL, dma-buf import; no compositor)
 run = ["python3 -u tests/vm/sharpen.py"]
 
+[evalfilter]  # the render filter yardstick (docs/FILTER-EVAL.md): the synthetic corpus at 35/50/75%, bilinear vs the FSR 1 pipeline; fails when FSR 1 is not above bilinear on smooth and 3D tiles
+run = ["python3 -u tests/vm/evalfilter.py --check"]
+
 [decoration]
 # server-side title bars under sway (headless, its own socket) when sway is on the VM, else under the desktop's own compositor if it has xdg-decoration (KDE)
 needs = ["com.android.test.uibench"]
