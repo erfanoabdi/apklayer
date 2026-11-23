@@ -410,7 +410,7 @@ static void aa_draw(struct sharpen *s, GLuint src, GLuint out_fbo, int w, int h,
     int lvl = s->aa_req ? s->aa_req : s->aa_env;
     /* the lower the render scale (the bigger the ratio), the heavier: stairs are `ratio` pixels long, so the strength and the length of the run follow it */
     float r = clampf(ratio, 1.0f, 4.0f), str, longk;
-    if (lvl == 3) { str = 0.4f + 0.5f * (r - 1.0f); longk = (r - 1.2f) / 1.0f; }
+    if (lvl == 3) { str = 0.75f * (0.4f + 0.5f * (r - 1.0f)); longk = (r - 1.2f) / 1.0f; }  /* x0.75: the coherence gate in FS_AA makes up for the rest */
     else { str = 0.25f + 0.35f * (r - 1.0f); longk = 0.7f * (r - 1.4f) / 1.6f; }
     post_tex(s->aa_prog, 0, "tex", src);
     glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);

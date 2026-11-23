@@ -19,12 +19,14 @@ static const char *FS_AA =
     "  vec3 gx = (ne + 2.0 * e + se) - (nw + 2.0 * w + sw), gy = (sw + 2.0 * s + se) - (nw + 2.0 * n + ne);\n"
     "  float jxx = dot(gx, gx), jyy = dot(gy, gy), jxy = dot(gx, gy);\n"
     "  if (jxx + jyy < 0.0001) { gl_FragColor = vec4(c, ca); return; }\n"
+    "  /* coherence of the 3x3 gradient: the strongest gradient (the tensor's larger eigenvalue, sqrt) against 4 x the largest colour step: 1 on a clean straight edge, low on thin strokes, corners and text curves, where the direction is unreliable and the blur would only smear */\n"
+    "  float cg = smoothstep(0.7, 1.0, sqrt(0.5 * (jxx + jyy + sqrt((jxx - jyy) * (jxx - jyy) + 4.0 * jxy * jxy))) / (4.0 * max(max(length(c - n), length(c - s)), max(length(c - e), length(c - w)))));\n"
     "  float th = 0.5 * atan(2.0 * jxy, jxx - jyy);  /* the gradient's angle */\n"
     "  vec2 t = vec2(-sin(th), cos(th));              /* along the edge */\n"
     "  vec3 blur = (c * 3.0 + (T(t) + T(-t)) * 2.0 + T(t * 2.0) + T(-t * 2.0)) / 9.0;\n"
     "  vec3 blurL = (c * 3.0 + (T(t) + T(-t)) * 2.0 + (T(t * 2.0) + T(-t * 2.0)) * 2.0 + (T(t * 3.0) + T(-t * 3.0)) * 1.5 + T(t * 4.0) + T(-t * 4.0)) / 16.0;  /* a longer run, for the longer steps of a bigger upscale */\n"
     "  blur = mix(blur, blurL, longk);\n"
-    "  gl_FragColor = vec4(mix(c, blur, smoothstep(0.015, 0.08, rng) * sharp * ca * ca), ca);\n"
+    "  gl_FragColor = vec4(mix(c, blur, smoothstep(0.015, 0.08, rng) * sharp * cg * ca * ca), ca);\n"
     "}\n";
 
 /* "Calm" (opt-in, for noisy foliage and grass at a low render scale; written for this shell): (1) temporal: where the picture has not changed since the last frame
