@@ -368,6 +368,9 @@ run = ["python3 -u tests/vm/render-scale.py"]
 [sharpen]  # the render filter's upscale and sharpening pass alone (EGL, dma-buf import; no compositor)
 run = ["python3 -u tests/vm/sharpen.py"]
 
+[sharpen-parity]  # the render filter: the GLES and Vulkan backends give the same picture (needs a GPU with both)
+run = ["python3 -u tests/vm/sharpen_parity.py"]
+
 [evalfilter]  # the render filter yardstick (docs/FILTER-EVAL.md): the synthetic corpus at 35/50/75%, bilinear vs the FSR 1 pipeline; fails when FSR 1 is not above bilinear on smooth and 3D tiles
 run = ["python3 -u tests/vm/evalfilter.py --check"]
 

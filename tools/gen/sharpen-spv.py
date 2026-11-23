@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """sharpen-spv.py <glslangValidator> [out.h]: bridge/shell/sharpen_vk_spv.h, the render filter's shaders as SPIR-V for the Vulkan backend (sharpen_vk.c).
-The single source of the shaders is the GLES2 fragment shaders of FSR 1 in bridge/shell/sharpen_fsr.h and the area downscale in sharpen_down.h (C string
+The single source of the shaders is the GLES2 fragment shaders of FSR 1 in bridge/shell/sharpen_fsr.h, the area downscale in sharpen_down.h and the anti-aliasing pass in sharpen_post.h (C string
 literals); each is converted mechanically (sampler/uniform declarations, texture2D, gl_FragColor) and compiled with glslang.
 The sampler is binding 0 (tex); every other uniform is the one push-constant block below. Run after changing a filter shader and commit the header."""
 import re, subprocess, sys, tempfile, os
@@ -9,13 +9,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SH = ROOT / 'bridge/shell'
 SAMPLERS = {'tex': 0}
-ORDER = ['FS_UP', 'FS_CAS', 'FS_DOWN']
+ORDER = ['FS_UP', 'FS_CAS', 'FS_DOWN', 'FS_AA']
 VS = """#version 450
 layout(location = 0) out vec2 uv;
 void main() { vec2 p = vec2(float((gl_VertexIndex << 1) & 2), float(gl_VertexIndex & 2)) * 2.0 - 1.0; uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }
 """
 HEAD = """#version 450
-layout(push_constant) uniform PC { vec2 src; vec2 scl; vec2 px; vec2 d; float sharp; float down; float text; };
+layout(push_constant) uniform PC { vec2 src; vec2 scl; vec2 px; vec2 d; float sharp; float down; float text; float longk; };
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 fc;
 """
@@ -34,7 +34,7 @@ def literals(body, macros):
 
 
 def sources():
-    text = ''.join((SH / f).read_text() for f in ('sharpen_fsr.h', 'sharpen_down.h'))
+    text = ''.join((SH / f).read_text() for f in ('sharpen_fsr.h', 'sharpen_down.h', 'sharpen_post.h'))
     macros = {m.group(1): unescape(m.group(2)) for m in re.finditer(r'#define (\w+) "((?:[^"\\]|\\.)*)"\s*\n', text)}
     res = {}
     for m in re.finditer(r'static const char \*(FS_\w+) =\s*(.*?);\n', text, re.S):

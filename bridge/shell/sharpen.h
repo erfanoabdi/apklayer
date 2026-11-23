@@ -32,7 +32,17 @@ int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, in
                    const uint32_t *offsets, uint64_t modifier);
 void sharpen_forget(struct sharpen *s, int buf);
 
-/* The anti-aliasing pass after an upscale (GLES backend): 0 the default (APKLAYER_SHARPEN_AA off|low|high, else high), 1 off, 2 low, 3 high. */
+/* The anti-aliasing pass's strength and run length (FS_AA's `sharp` and `longk`) for level lvl (2 low, 3 high) at an upscale ratio: the lower the render scale (the bigger the ratio),
+ * the heavier, as stairs are `ratio` pixels long. Shared by the GLES (sharpen.c) and Vulkan (sharpen_vk_draw.c) backends. */
+static inline void sharpen_aa_params(int lvl, float ratio, float *str, float *longk)
+{
+    float r = ratio < 1.0f ? 1.0f : ratio > 4.0f ? 4.0f : ratio;
+    if (lvl == 3) { *str = 0.75f * (0.4f + 0.5f * (r - 1.0f)); *longk = (r - 1.2f) / 1.0f; }  /* x0.75: the coherence gate in FS_AA makes up for the rest */
+    else { *str = 0.25f + 0.35f * (r - 1.0f); *longk = 0.7f * (r - 1.4f) / 1.6f; }
+    *longk = *longk < 0.0f ? 0.0f : *longk > 1.0f ? 1.0f : *longk;
+}
+
+/* The anti-aliasing pass after an upscale (both backends): 0 the default (APKLAYER_SHARPEN_AA off|low|high, else high), 1 off, 2 low, 3 high. */
 void sharpen_set_aa(struct sharpen *s, int n);
 /* The text aid of the RCAS pass (extra clamped sharpening of text, icons and UI lines only): 0 the default (APKLAYER_SHARPEN_TEXT off|on, else on), 1 off, 2 on. */
 void sharpen_set_text(struct sharpen *s, int n);

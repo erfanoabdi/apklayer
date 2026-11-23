@@ -408,14 +408,12 @@ static void post_tex(GLuint prog, int unit, const char *name, GLuint tex)
 static void aa_draw(struct sharpen *s, GLuint src, GLuint out_fbo, int w, int h, float ratio, float scale)
 {
     int lvl = s->aa_req ? s->aa_req : s->aa_env;
-    /* the lower the render scale (the bigger the ratio), the heavier: stairs are `ratio` pixels long, so the strength and the length of the run follow it */
-    float r = clampf(ratio, 1.0f, 4.0f), str, longk;
-    if (lvl == 3) { str = 0.75f * (0.4f + 0.5f * (r - 1.0f)); longk = (r - 1.2f) / 1.0f; }  /* x0.75: the coherence gate in FS_AA makes up for the rest */
-    else { str = 0.25f + 0.35f * (r - 1.0f); longk = 0.7f * (r - 1.4f) / 1.6f; }
+    float str, longk;
+    sharpen_aa_params(lvl, ratio, &str, &longk);
     post_tex(s->aa_prog, 0, "tex", src);
     glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
     glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), clampf(str * scale, 0.0f, 1.0f));
-    glUniform1f(glGetUniformLocation(s->aa_prog, "longk"), clampf(longk, 0.0f, 1.0f));
+    glUniform1f(glGetUniformLocation(s->aa_prog, "longk"), longk);
     post_draw(s, s->aa_prog, out_fbo, w, h);
 }
 
@@ -466,7 +464,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     static int said_in, said_busy;
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) {
-        int rc = svk_render(s->vk, buf, ow, oh, sharpness, (s->text_req ? s->text_req : s->text_env) > 1, slot, fresh);
+        int rc = svk_render(s->vk, buf, ow, oh, sharpness, (s->text_req ? s->text_req : s->text_env) > 1, s->aa_req ? s->aa_req : s->aa_env, slot, fresh);
         if (rc == -2 && !said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SVK_SLOTS);
         return rc;
     }
