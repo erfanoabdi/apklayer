@@ -75,21 +75,15 @@ struct sharpen {
     int accept_n;
 };
 
-/* render-aa by name: 1 off, 4..7 smaa-low..smaa-ultra, 8..11 cmaa2-low..cmaa2-ultra (cmaa2 alone: high; the old own levels low and high: cmaa2-low and cmaa2-high); 0 unknown */
+/* render-aa by name: 1 off, 6 smaa-high, 7 smaa-ultra, 10 cmaa2-high, 11 cmaa2-ultra; the removed levels read as high (smaa-low, smaa-medium, smaa -> smaa-high; cmaa2-low, cmaa2-medium, cmaa2, low, high -> cmaa2-high); 0 unknown */
 static int aa_id(const char *a)
 {
-    static const char *const lv[4] = { "low", "medium", "high", "ultra" };
     if (!a) return 0;
     if (!strcmp(a, "off")) return 1;
-    if (!strcmp(a, "low")) return 8;
-    if (!strcmp(a, "high") || !strcmp(a, "cmaa2")) return 10;
-    for (int i = 0; i < 4; i++) {
-        char n[24];
-        snprintf(n, sizeof n, "smaa-%s", lv[i]);
-        if (!strcmp(a, n)) return 4 + i;
-        snprintf(n, sizeof n, "cmaa2-%s", lv[i]);
-        if (!strcmp(a, n)) return 8 + i;
-    }
+    if (!strcmp(a, "smaa-ultra")) return 7;
+    if (!strcmp(a, "cmaa2-ultra")) return 11;
+    if (!strcmp(a, "smaa-high") || !strcmp(a, "smaa-medium") || !strcmp(a, "smaa-low") || !strcmp(a, "smaa")) return 6;
+    if (!strncmp(a, "cmaa2", 5) || !strcmp(a, "low") || !strcmp(a, "high")) return 10;
     return 0;
 }
 
@@ -489,7 +483,7 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
     s->hist_ok = 1;
 }
 
-void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n == 2 ? 8 : n == 3 ? 10 : n == 1 || (n >= 4 && n <= 11) ? n : 0; }  /* 2, 3: the old low and high */
+void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n == 2 || n == 3 ? 10 : n == 1 ? 1 : n >= 4 && n <= 7 ? (n == 7 ? 7 : 6) : n >= 8 && n <= 11 ? (n == 11 ? 11 : 10) : 0; }  /* 2, 3: the old low and high; the removed low and medium levels read as high */
 void sharpen_set_text(struct sharpen *s, int n) { if (s) s->text_req = n >= 1 && n <= 2 ? n : 0; }
 void sharpen_set_calm(struct sharpen *s, int n) { if (s) s->calm_req = n >= 1 && n <= 3 ? n : 0; }
 

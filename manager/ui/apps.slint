@@ -154,7 +154,7 @@ component AppDetail {
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "SMAA low", value: "smaa-low" }, { label: "SMAA medium", value: "smaa-medium" }, { label: "SMAA high", value: "smaa-high" }, { label: "SMAA ultra", value: "smaa-ultra" }] : HorizontalLayout {
+                        for choice in [{ label: "SMAA high", value: "smaa-high" }, { label: "SMAA ultra", value: "smaa-ultra" }] : HorizontalLayout {
                             if Backend.app-render-aa-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
                         }
@@ -162,7 +162,7 @@ component AppDetail {
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "CMAA2 low", value: "cmaa2-low" }, { label: "CMAA2 medium", value: "cmaa2-medium" }, { label: "CMAA2 high", value: "cmaa2-high" }, { label: "CMAA2 ultra", value: "cmaa2-ultra" }] : HorizontalLayout {
+                        for choice in [{ label: "CMAA2 high", value: "cmaa2-high" }, { label: "CMAA2 ultra", value: "cmaa2-ultra" }] : HorizontalLayout {
                             if Backend.app-render-aa-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
                         }

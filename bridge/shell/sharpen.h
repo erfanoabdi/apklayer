@@ -32,8 +32,8 @@ int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, in
                    const uint32_t *offsets, uint64_t modifier);
 void sharpen_forget(struct sharpen *s, int buf);
 
-/* The anti-aliasing (GLES backend; Vulkan has none): 0 the default (APKLAYER_SHARPEN_AA off|smaa-<level>|cmaa2-<level>, else cmaa2-ultra; the old low and high read as cmaa2-low and cmaa2-high),
- * 1 off, 4..7 smaa-low..smaa-ultra, 8..11 cmaa2-low..cmaa2-ultra (2 and 3, the old low and high, are cmaa2-low and cmaa2-high). */
+/* The anti-aliasing (GLES backend; Vulkan has none): 0 the default (APKLAYER_SHARPEN_AA off|smaa-high|smaa-ultra|cmaa2-high|cmaa2-ultra, else cmaa2-ultra; the removed low and medium levels, low and high read as high),
+ * 1 off, 6 smaa-high, 7 smaa-ultra, 10 cmaa2-high, 11 cmaa2-ultra (4, 5, 8, 9, 2, 3: the removed levels, read as high). */
 void sharpen_set_aa(struct sharpen *s, int n);
 /* The text aid of the RCAS pass (extra clamped sharpening of text, icons and UI lines only): 0 the default (APKLAYER_SHARPEN_TEXT off|on, else on), 1 off, 2 on. */
 void sharpen_set_text(struct sharpen *s, int n);

@@ -32,8 +32,8 @@ using manager::summary;
 
 namespace {
 
-// a stored render-aa value as the buttons name it: the removed own levels low and high read as cmaa2-low and cmaa2-high
-std::string aaName(const std::string& v) { return v == "low" ? "cmaa2-low" : v == "high" || v == "cmaa2" ? "cmaa2-high" : v; }
+// a stored render-aa value as the buttons name it: the removed levels read as high (smaa-low, smaa-medium, smaa -> smaa-high; cmaa2-low, cmaa2-medium, cmaa2, low, high -> cmaa2-high)
+std::string aaName(const std::string& v) { return v == "smaa-low" || v == "smaa-medium" || v == "smaa" ? "smaa-high" : v == "cmaa2-low" || v == "cmaa2-medium" || v == "cmaa2" || v == "low" || v == "high" ? "cmaa2-high" : v; }
 
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
 

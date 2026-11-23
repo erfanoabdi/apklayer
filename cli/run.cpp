@@ -255,7 +255,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 else if (line.compare(0, 14 + package.size(), "render-scale." + package + "=") == 0) scaleOwn = line.substr(14 + package.size());
                 if (line.compare(0, 14, "render-filter=") == 0) filter = line.substr(14);
                 else if (line.compare(0, 15 + package.size(), "render-filter." + package + "=") == 0) filterOwn = line.substr(15 + package.size());
-                if (line.compare(0, 10, "render-aa=") == 0) aaS = line.substr(10);  // anti-aliasing (off|smaa-<level>|cmaa2-<level>; the old low and high read as cmaa2-low and cmaa2-high; the shell defaults to cmaa2-ultra)
+                if (line.compare(0, 10, "render-aa=") == 0) aaS = line.substr(10);  // anti-aliasing (off|smaa-<level>|cmaa2-<level>; the removed low and medium levels, low and high read as high; the shell defaults to cmaa2-ultra)
                 else if (line.compare(0, 11 + package.size(), "render-aa." + package + "=") == 0) aaOwn = line.substr(11 + package.size());
                 if (line.compare(0, 12, "render-calm=") == 0) calmS = line.substr(12);
                 else if (line.compare(0, 13 + package.size(), "render-calm." + package + "=") == 0) calmOwn = line.substr(13 + package.size());

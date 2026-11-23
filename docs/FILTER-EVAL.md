@@ -11,7 +11,7 @@ filter change (EASU/RCAS, AA, text aid, shader edits) is judged with it: run bef
     python3 tests/vm/evalfilter.py --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' --filter 'notext:APKLAYER_SHARPEN_TEXT=off' --scales 50 --only text_small,text_large
     python3 tests/vm/evalfilter.py --save /tmp/x          # ref.png and every output as PNG, to look at
 
-Options: `--filter label[:ENV=VAL,...]` (repeatable; the environment of the pass: `APKLAYER_SHARPEN_AA` off|smaa-<level>|cmaa2-<level> (the `render-aa` knob; default cmaa2-ultra; the old own levels `low` and `high` were removed on 2026-11-23 and read as cmaa2-low and cmaa2-high),
+Options: `--filter label[:ENV=VAL,...]` (repeatable; the environment of the pass: `APKLAYER_SHARPEN_AA` off|smaa-high|smaa-ultra|cmaa2-high|cmaa2-ultra (the `render-aa` knob; default cmaa2-ultra; smaa-low/medium and cmaa2-low/medium were removed on 2026-11-23 and read as the high level, the old own levels `low` and `high` as cmaa2-high),
 `APKLAYER_SHARPEN_TEXT` off|on (`render-text`), `_CALM`, `_BACKEND` gles|vulkan), `--sharp` (the RCAS constant exp2(-stops): 0.8706 = the default 0.2 stops), `--scales`, `--only`, `--check` (exit 1 if the first
 filter is below bilinear on PSNR/SSIM of the smooth and 3D scores; group `evalfilter`). It skips (exit 0) without a render node or the binary; on NVIDIA
 it retries with the block-linear modifier (`SHARPEN_MODIFIER` overrides). `tests/vm/sharpen.py` stays the quick pass/fail smoke test.

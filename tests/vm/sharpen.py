@@ -72,7 +72,7 @@ print('PASS sharpen: x%.2f edge strength, %+.2f dB' % (e_ours / e_bil, p_ours - 
 
 # SMAA 1x and CMAA2 (render-aa smaa-*, cmaa2-*) run before the upscale: the result must stay a sane picture (not further from the original than bilinear by more than
 # 0.5 dB, as sharp as bilinear or sharper), whichever level; CMAA2 without ES 3.1 compute falls back to SMAA (the log says so)
-for aa in ('smaa-low', 'smaa-medium', 'smaa-high', 'smaa-ultra', 'cmaa2-low', 'cmaa2-medium', 'cmaa2-high', 'cmaa2-ultra', 'cmaa2', 'low', 'high'):  # low and high: the removed own levels, read as cmaa2-low and cmaa2-high
+for aa in ('smaa-high', 'smaa-ultra', 'cmaa2-high', 'cmaa2-ultra', 'smaa-low', 'smaa-medium', 'cmaa2-low', 'cmaa2-medium', 'smaa', 'cmaa2', 'low', 'high'):  # the last eight: removed values, read as smaa-high or cmaa2-high
     with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
         raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
         Path(raw_in).write_bytes(small.convert('RGBA').tobytes())
