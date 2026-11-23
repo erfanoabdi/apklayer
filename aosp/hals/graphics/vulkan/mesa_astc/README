@@ -1,0 +1,7 @@
+Mesa's ASTC decoder, vendored for APKLAYER_VULKAN_ASTC_DECODER=mesa (TextureAstcMesa.cpp). Source: Mesa (LineageOS 24 tree external/mesa3d, 875160ed32c),
+MIT licence, Copyright (c) 2017-2023 Hans-Kristian Arntzen (Granite), see the headers of the files.
+- astc_decoder.glsl: src/compiler/glsl/astc_decoder.glsl, unmodified.
+- texcompress_astc_luts.cpp/.h: src/util/texcompress_astc_luts.*, unmodified.
+- astc_spv.h: generated, not edited by hand. As Mesa's src/vulkan/runtime/meson.build does it:
+    glslangValidator -V -S comp -x -o astc_spv.h astc_decoder.glsl        (glslang 11.8.0, Ubuntu jammy glslang-tools 11.8.0+1.3.204.0-1)
+  then the two stray lines glslang prints to stdout (the file name) are not part of the file.

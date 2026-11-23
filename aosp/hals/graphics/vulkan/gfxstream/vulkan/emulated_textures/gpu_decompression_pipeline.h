@@ -85,7 +85,7 @@ class GpuDecompressionPipeline {
     VkPipeline mPipeline = VK_NULL_HANDLE;
 };
 
-enum class AstcDecoder{Old, NewRgb, NewBc3};
+enum class AstcDecoder{Old, NewRgb, NewBc3, Mesa};  // apklayer patch: Mesa (the HAL's TextureAstcMesa.cpp)
 
 // Acts as a cache for GpuDecompressionPipeline objects
 // Currently no eviction strategy, but the maximum number of entries is bounded by the number of

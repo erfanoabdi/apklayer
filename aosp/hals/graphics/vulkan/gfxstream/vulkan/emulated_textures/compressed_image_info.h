@@ -28,6 +28,15 @@ namespace gfxstream {
 namespace host {
 namespace vk {
 
+// apklayer patch: the Mesa ASTC decoder's entry points (set by the HAL). decode records the decode of `range` (every level of it already in
+// GENERAL) and returns false when it cannot (the image then goes through the gfxstream shader); forget drops its per-image state.
+class CompressedImageInfo;
+struct MesaAstcHooks {
+    bool (*decode)(CompressedImageInfo* info, VulkanDispatch* vk, VkCommandBuffer commandBuffer, const VkImageSubresourceRange& range) = nullptr;
+    void (*forget)(CompressedImageInfo* info) = nullptr;
+};
+extern MesaAstcHooks gMesaAstcHooks;
+
 class CompressedImageInfo {
    public:
     // Static methods
@@ -111,6 +120,15 @@ class CompressedImageInfo {
     bool isEtc2() const;
     bool isAstc() const;
     VkDevice device() const { return mDevice; }
+    // apklayer patch: what the HAL's Mesa ASTC decoder (TextureAstcMesa.cpp) needs of an image
+    VkFormat compressedFormat() const { return mCompressedFormat; }
+    VkFormat outputFormat() const { return mOutputFormat; }
+    VkImageType imageType() const { return mImageType; }
+    uint32_t mipLevels() const { return mMipLevels; }
+    uint32_t layerCount() const { return mLayerCount; }
+    VkExtent3D extent() const { return mExtent; }
+    VkExtent2D blockSize() const { return mBlock; }
+    VkExtent3D mipExtent(uint32_t level) const { return mipmapExtent(level); }
     VkImage compressedMipmap(uint32_t level) { return mCompressedMipmaps[level]; }
     VkImage outputImage() { return mOutputImage; }
     void setOutputImage(VkImage image) { mOutputImage = image; }

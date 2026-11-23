@@ -1,3 +1,10 @@
+// Granite's ASTC lookup tables as Mesa ships them (mesa_astc/): vendored unmodified, so built without the HAL's -Werror
+cc_library_static {
+    name: "libapklayer_astc_luts",
+    srcs: ["mesa_astc/texcompress_astc_luts.cpp"],
+    cflags: ["-Wno-error", "-O2"],
+}
+
 // Reuse the original Android loader/WSI, with a host-loader HAL frontend.
 cc_library_shared {
     name: "vulkan.apklayer",
@@ -8,11 +15,13 @@ cc_library_shared {
         "TextureEmulation.cpp",
         "TextureCommands.cpp",
         "TextureDump.cpp",
+        "TextureAstcMesa.cpp",  // APKLAYER_VULKAN_ASTC_DECODER=mesa: Mesa's compute decoder (mesa_astc/README)
         "gfxstream/vulkan/emulated_textures/compressed_image_info.cpp",
         "gfxstream/vulkan/emulated_textures/gpu_decompression_pipeline.cpp",
     ],
     local_include_dirs: ["gfxstream"],
     header_libs: ["hwvulkan_headers", "vulkan_headers", "libapklayer_gralloc_common_headers"],
+    static_libs: ["libapklayer_astc_luts"],
     shared_libs: ["libcutils", "liblog", "libdl", "libnativewindow"],
     compile_multilib: "64",  // not yet 32-bit: arm32 Vulkan entry points are aapcs-vfp (VKAPI_ATTR) while the 32-bit process's host side is soft-float
     // -Wno-implicit-fallthrough: gfxstream's getShaderGroup (vendored unmodified) ends an exhaustive inner switch without a break

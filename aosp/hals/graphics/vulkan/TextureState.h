@@ -64,6 +64,7 @@ struct Unlink {
 };
 
 PFN_vkVoidFunction commandProc(VkDevice device, const char* name);
+void installMesaAstc();  // TextureAstcMesa.cpp: the hooks of APKLAYER_VULKAN_ASTC_DECODER=mesa
 bool tracing();  // APKLAYER_VULKAN_TEXTURE_TRACE (TextureEmulation.cpp)
 bool skipDecode();  // APKLAYER_VULKAN_TEXTURE_TRACE=nodecode
 #define TRACE(...) do { if (::apklayer::vulkan::textures::tracing()) GFXSTREAM_INFO("texture trace: " __VA_ARGS__); } while (0)  // TextureCommands.cpp
