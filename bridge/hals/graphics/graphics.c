@@ -38,6 +38,7 @@ struct apklayer_gfx {
     bool other_gpu;  /* not the compositor's GPU: window buffers must be importable there */
     bool angle;      /* ANGLE handles GPU transfers when a CPU buffer needs staging */
     bool amd;        /* amdgpu: GBM's implicit-modifier layout (pitch aligned its own way) is not what RADV or ANGLE derive from "LINEAR" */
+    bool intel;      /* i915 / xe: Mesa GBM's implicit tiled layout, same trap as amd */
     bool shadowed;   /* virtio-gpu: a dma-buf's mmap is the guest's shadow copy, not what the host GPU drew (GBM maps through a transfer) */
 };
 
@@ -95,6 +96,7 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
     drmVersionPtr version = drmGetVersion(fd);
     gfx->shadowed = version && version->name && !strcmp(version->name, "virtio_gpu");
     gfx->amd = version && version->name && !strcmp(version->name, "amdgpu");
+    gfx->intel = version && version->name && (!strcmp(version->name, "i915") || !strcmp(version->name, "xe"));
     drmFreeVersion(version);
     gfx->gbm = gbm_create_device(fd);
     if (gfx->gbm && !allocates(gfx->gbm)) {
@@ -274,8 +276,24 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
         if (bo && gfx->angle && gfx->amd && (usage & APKLAYER_GFX_RENDER)) {
             uint64_t linear = DRM_FORMAT_MOD_LINEAR;
             struct gbm_bo *lin = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, &linear, 1, flags & ~GBM_BO_USE_LINEAR);
+            if (lin && getenv("APKLAYER_GFX_DEBUG"))
+                fprintf(stderr, "apklayer-gfx: amd render buffer %ux%u fourcc 0x%x usage 0x%x flags 0x%x: gbm modifier 0x%llx stride %u, linear stride %u -> %s\n", width, height, fourcc, usage, flags,
+                        (unsigned long long)gbm_bo_get_modifier(bo), gbm_bo_get_stride_for_plane(bo, 0), gbm_bo_get_stride_for_plane(lin, 0),
+                        gbm_bo_get_stride_for_plane(lin, 0) != gbm_bo_get_stride_for_plane(bo, 0) ? "made linear" : "kept as GBM made it");
             if (lin && gbm_bo_get_stride_for_plane(lin, 0) != gbm_bo_get_stride_for_plane(bo, 0)) { gbm_bo_destroy(bo); bo = lin; }
             else if (lin) gbm_bo_destroy(lin);
+        }
+        /* AMD and Intel (Mesa GBM): a GPU-render buffer is made an explicit LINEAR one. GBM's implicit tiled layout is exported with no modifier and its
+         * importers (the Vulkan HAL's swapchain images, the shell, SurfaceFlinger) read that as LINEAR: Endfield's title screen came out cut into repeating
+         * tiles on RADV Renoir (its data and decode were right; with LINEAR the picture is clean, CHANGELOG 2026-11-23). APKLAYER_GFX_LINEAR=0 turns this
+         * off, =1 makes it so on any GPU (NVIDIA's GBM refuses LINEAR render targets: it keeps its own layout there). */
+        const char *lin_env = getenv("APKLAYER_GFX_LINEAR");
+        bool want_linear = lin_env ? strcmp(lin_env, "0") != 0 : (gfx->amd || gfx->intel);
+        if (bo && (usage & APKLAYER_GFX_RENDER) && want_linear) {
+            uint64_t linear = DRM_FORMAT_MOD_LINEAR;
+            struct gbm_bo *lin = gbm_bo_create_with_modifiers2(gfx->gbm, width, height, fourcc, &linear, 1, flags & ~GBM_BO_USE_LINEAR);
+            if (lin) { gbm_bo_destroy(bo); bo = lin; }
+            if (getenv("APKLAYER_GFX_DEBUG")) fprintf(stderr, "apklayer-gfx: LINEAR %ux%u fourcc 0x%x usage 0x%x: %s\n", width, height, fourcc, usage, lin ? "made" : "refused");
         }
         if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, flags, strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);

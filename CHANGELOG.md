@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-23: Endfield's scrambled tiles: the cause is the tiled GBM buffer on AMD; render buffers are LINEAR now (AMD, Intel)
+
+- Cause found, not the textures: Endfield's first uploads (21 splash screens, 1920x1080 ASTC 4x4, dumped with APKLAYER_VULKAN_BLOCK_DUMP) decode cleanly with astcenc, Mesa's decoder matched astcenc on all 56 real-content probe cases, and the splash screen itself came out scrambled on screen, on Mesa 25.3.6 (ernstp PPA) and 26.2.7 (kisak) alike, with three different decoders. With `APKLAYER_GFX_LINEAR=1` (every GPU-render buffer an explicit LINEAR GBM buffer) the title screen is clean (mp100, RADV Renoir, 3440x1440).
+- Reading: Mesa's GBM exports its implicit tiled layout with no modifier and the importers (Vulkan HAL swapchain images, shell, SurfaceFlinger) take that as LINEAR with GBM's pitch. graphics.c already had a workaround for AMD under ANGLE (made LINEAR only when GBM's pitch differs from the linear one), which does not catch a tiled layout with the same pitch.
+- Change (bridge/hals/graphics/graphics.c): GPU-render buffers on amdgpu and i915/xe are created LINEAR by default; `APKLAYER_GFX_LINEAR=0` turns it off, `=1` forces it on any GPU (NVIDIA's GBM refuses LINEAR render targets and keeps its own layout, the code only swaps a buffer when the linear one was made). `APKLAYER_GFX_DEBUG=1` logs each AMD render buffer's GBM modifier and stride next to the linear stride. Not checked: Intel (no machine), the earlier note that always-LINEAR made 3072x1920 ANGLE windows black on AMD (Endfield at 3440x1440 is fine); the performance of linear render targets.
+- mp100 (the owner's test PC): runtime/0.5.6/libapklayer-hal-graphics.so is now a local copy of the build (the deb's symlink is kept beside it as .link-before-linear-20261123); the Vulkan HAL there is the Mesa-decoder build (0849a3e8). Mesa on mp100 is the kisak PPA's 26.2.7 (the owner changed it).
+
 ## 2026-11-23 deb of main 8cbf78df (render scale 65..200, RCAS denoise)
 - Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.git8cbf78df ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.git8cbf78df-1~noble1_amd64.deb` 25834372 bytes plus apklayer-dev; the manager and AppHost.java compiled (not compiled by the agent). Not installed. Not in it: the berberis 0085 library; the render-scale-200 startup crash (berberis code pool mmap ENOMEM) is not fixed.
 
