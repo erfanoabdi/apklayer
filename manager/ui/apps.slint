@@ -133,22 +133,13 @@ component AppDetail {
                     padding: MaterialStyleMetrics.padding_16;
                     spacing: MaterialStyleMetrics.spacing_8;
                     MaterialText { text: "Sharper picture at a lower render scale"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
-                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. RSR is AMD's Radeon Super Resolution, which is FSR 1 (smooth edges at any scale; the shell runs the same algorithm itself on any GPU); NIS is NVIDIA's Image Scaling (crisper text, made for up to twice the size); SGSR is Qualcomm's Snapdragon Game Super Resolution 1 (sharp edges, light on the GPU); Lanczos is the classic sharp resampler; Anime4K thins and smooths lines (made for anime and line art, it needs the app to render smaller than the window). Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it with FSR 1 (AMD's FidelityFX Super Resolution 1: edge-adaptive upscale plus sharpening; it runs on any GPU) instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. Default: FSR 1 whenever the render scale is not 100%; Off keeps the plain stretch. Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Off", value: "" }, { label: "Auto", value: "auto" }, { label: "RSR", value: "sharp" }, { label: "NIS", value: "nis" }, { label: "SGSR", value: "sgsr" }, { label: "Lanczos", value: "lanczos" }, { label: "Anime4K", value: "anime4k" }] : HorizontalLayout {
+                        for choice in [{ label: "Default", value: "" }, { label: "FSR 1", value: "sharp" }, { label: "Off", value: "off" }] : HorizontalLayout {
                             if Backend.app-render-filter-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
-                        }
-                    }
-                    MaterialText { text: "Phases of the NIS, SGSR and Lanczos upscale: each phase enlarges part of the way, only the last sharpens. More phases is not always sharper (every extra phase softens a little), the default is 2."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default (2)", value: "" }, { label: "1", value: "1" }, { label: "2", value: "2" }, { label: "3", value: "3" }, { label: "4", value: "4" }] : HorizontalLayout {
-                            if Backend.app-render-phases-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-phases-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-phases." + root.app.package, choice.value); } }
                         }
                     }
                     MaterialText { text: "Anti-aliasing after an upscale: smooths the stair steps of jagged lines along their edges (a render scale below 100% shows them); text stays crisp. High is the default (the lower the render scale, the heavier it gets)."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }

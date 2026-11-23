@@ -313,14 +313,7 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     int32_t m[21] = { 0 };
     /* apklayer patch: the render filter (`apklayer settings` render-filter sharp, cli/run.cpp): a flags word after the damage; a shell that does not know
      * it (len 80) ignores it, one that does resamples a buffer that is not the window's pixels with the upscale pass (bridge/shell/sharpen.c) */
-    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && !strcmp(e, "sharp") ? 1 : 0;
-        if (e && !strcmp(e, "nis")) filter = 3;  /* bit 0: on; bits 4-6: phases; bits 1-3: 0 FSR 1, 1 NIS, 2 SGSR 1, 3 Lanczos 3, 4 Anime4K */
-        if (e && !strcmp(e, "sgsr")) filter = 5;
-        if (e && !strcmp(e, "lanczos")) filter = 7;
-        if (e && !strcmp(e, "anime4k")) filter = 9;
-        if (e && !strcmp(e, "auto")) filter = 11;  /* 5: the shell picks the mode by the ratio window/frame (sharpen_win.c) */
-        const char *ph = getenv("APKLAYER_RENDER_PHASES");  /* bits 4-6: the phases of the NIS/SGSR/Lanczos upscale (1..4, 0: the shell's default) */
-        if (ph && atoi(ph) >= 1 && atoi(ph) <= 4) filter |= atoi(ph) << 4;
+    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && *e && strcmp(e, "off") ? 1 : 0;  /* bit 0: FSR 1 on (any name but off: the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1); bits 1-6 are unused (they carried the mode and the phases) */
         const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: the anti-aliasing after an upscale: 1 off, 2 low, 3 high (0: the shell's default, high) */
         if (aa) filter |= (!strcmp(aa, "off") ? 1 : !strcmp(aa, "low") ? 2 : !strcmp(aa, "high") ? 3 : 0) << 7;
         const char *cm = getenv("APKLAYER_RENDER_CALM");  /* bits 9-10: the calm pass (foliage noise): 1 off, 2 low, 3 high (0: the shell's default, off) */

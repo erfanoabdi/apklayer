@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The render filter's pass (bridge/shell/sharpen.c) without a compositor: a text and line picture rendered at 50% (a box-filtered copy of a
-1280x720 reference) goes through the pass to 1280x720 (tests/hals/sharpen-test.c: dmabuf in, EGL, two GLES2 passes, readback). Checked: the
+1280x720 reference) goes through the pass to 1280x720 (tests/hals/sharpen-test.c: dmabuf in, EGL, FSR 1's two GLES2 passes, readback). Checked: the
 result is sharper than a bilinear stretch (the mean edge strength in the text region at least 15% higher) and no further from the reference
 (PSNR within 0.5 dB of bilinear's, usually above it). The GPU needs EGL with dma-buf import: skipped without a render node. The accepted modifier
 can be given in SHARPEN_MODIFIER (hex; NVIDIA's gbm has no linear render target)."""
@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
     raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
     Path(raw_in).write_bytes(small.convert('RGBA').tobytes())
     args = [exe, raw_in, str(W // 2), str(H // 2), raw_out, str(W), str(H), '0.6'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else [])
-    run = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    run = subprocess.run(args, capture_output=True, text=True, timeout=60, env=dict(os.environ, APKLAYER_SHARPEN_AA='off'))  # FSR 1 alone: the anti-aliasing pass (default high) softens the edges this test measures
     print(run.stderr.strip())
     if run.returncode in (3, 4): sys.exit('SKIP the GPU cannot take the picture as a dma-buf (rc %d)' % run.returncode)
     assert run.returncode == 0, 'sharpen-test failed (rc %d): %s' % (run.returncode, run.stderr)

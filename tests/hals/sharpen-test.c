@@ -57,7 +57,6 @@ int main(int argc, char **argv)
     }
     if (sharpen_import(s, 0, 0x34325258u, w, h, 1, &dfd, &stride, &off, gbm_bo_get_modifier(bo)) < 0) { fprintf(stderr, "import failed\n"); return 4; }
     int slot, fresh;
-    if (getenv("SHARPEN_MODE")) sharpen_set_mode(s, atoi(getenv("SHARPEN_MODE")));
     if (sharpen_render(s, 0, ow, oh, sharp, &slot, &fresh) < 0) { fprintf(stderr, "render failed\n"); return 5; }
     if (getenv("SHARPEN_LOOPS")) {  /* timing: that many more frames, each waited for (ms per frame on stderr) */
         int n = atoi(getenv("SHARPEN_LOOPS"));

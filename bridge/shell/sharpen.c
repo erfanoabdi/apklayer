@@ -1,5 +1,5 @@
 /* The upscale pass: see sharpen.h. EGL on the first render node that imports the app's dmabuf, two GLES2 passes: FSR 1's EASU upscale into an
- * intermediate texture, then its RCAS sharpening into one of three exportable dmabufs. */
+ * intermediate texture, then its RCAS sharpening into one of the exportable dmabufs (a source larger than the output is shrunk with an area filter instead). */
 #define _GNU_SOURCE
 #include "sharpen.h"
 
@@ -18,8 +18,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "sharpen_nis.h"
-#include "sharpen_more.h"
+#include "sharpen_post.h"
 #include "sharpen_down.h"
 #ifdef HAVE_SHARPEN_VK
 #include "sharpen_vk.h"
@@ -54,19 +53,13 @@ struct sharpen {
     PFNEGLDESTROYSYNCKHRPROC destroy_sync;
     PFNEGLDUPNATIVEFENCEFDANDROIDPROC dup_fence;
     struct { EGLImage image; GLuint tex; int w, h; uint32_t fourcc; } in[BUFS];
-    GLuint up_prog, cas_prog, nis_prog, sgsr_prog, lanczos_prog, down_prog, mid_tex, mid_fbo, vbo;
-    int mode;  /* 0: FSR 1, 1: NIS, 2: SGSR 1, 3: Lanczos 3, 4: Anime4K */
+    GLuint up_prog, cas_prog, down_prog, mid_tex, mid_fbo, vbo;
     int mid_w, mid_h;
     uint64_t tick;
-    struct a4k *a4k;
     GLuint aa_prog, calm_prog, blit_prog;         /* the post passes: anti-aliasing (FS_AA), calm (FS_CALM) and a copy */
     struct rt t0, t1, hist[2];                    /* the filter's output (t0), the anti-aliased picture (t1) and the last two calmed outputs */
     int hist_cur, hist_ok, hist_w, hist_h;        /* hist[hist_cur] is the previous output; hist_ok: it holds a frame of this size */
     int aa_req, aa_env, calm_req, calm_env;       /* the window's render-aa / render-calm (0 default, 1 off, 2 low, 3 high); the defaults (APKLAYER_SHARPEN_AA off|low|high, else high; APKLAYER_SHARPEN_CALM, else off) */
-    struct { GLuint tex, fbo; int w, h; } ph[3];  /* the intermediate pictures of the multi-phase upscale */
-    GLuint nis2d, sgsr2d, lanczos2d;   /* the one-pass shaders reading a GL_TEXTURE_2D (the intermediate) instead of the app's external image */
-    int stages_req;                    /* the window's render-phases, 0: stages */
-    int stages;                        /* phases of the NIS / SGSR 1 / Lanczos upscale (APKLAYER_SHARPEN_STAGES, 1..4; default 2) */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
 #endif
@@ -78,245 +71,7 @@ struct sharpen {
 
 static const char *VS = "attribute vec2 p; varying vec2 uv; void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }";
 
-/* AMD FidelityFX Super Resolution 1 (MIT): EASU, an edge adaptive upscale (12 taps, a Lanczos-like kernel stretched along the edge it finds; apklayer patch: the sharpest lobe ends at 0.25 - 0.10 instead of 0.25 - 0.04, measured better on text and line art at 640x360..1280x720), then RCAS,
- * a sharpening that limits itself so it cannot ring. Written for GLES2 (no gather: the taps are fetched at texel centres) after AMD's ffx_fsr1.h.
- * A source larger than the output (render scale above 100) is averaged down instead. */
-static const char *FS_UP =
-    "#extension GL_OES_EGL_image_external : require\n"
-    "precision highp float;\n"
-    "uniform samplerExternalOES tex; uniform vec2 src; uniform float down; varying vec2 uv;\n"
-    "vec3 T(vec2 q) { return texture2D(tex, (q + 0.5) / src).rgb; }\n"
-    "float L(vec3 c) { return c.g + 0.5 * (c.r + c.b); }\n"
-    "void setf(inout vec2 dir, inout float len, vec2 pp, float w, float a, float b, float c, float d, float e) {\n"
-    "  float dc = d - c, cb = c - b, lenX = 1.0 / max(max(abs(dc), abs(cb)), 0.00001), dirX = d - b;\n"
-    "  dir.x += dirX * w;\n"
-    "  lenX = clamp(abs(dirX) * lenX, 0.0, 1.0); lenX *= lenX; len += lenX * w;\n"
-    "  float ec = e - c, ca = c - a, lenY = 1.0 / max(max(abs(ec), abs(ca)), 0.00001), dirY = e - a;\n"
-    "  dir.y += dirY * w;\n"
-    "  lenY = clamp(abs(dirY) * lenY, 0.0, 1.0); lenY *= lenY; len += lenY * w;\n"
-    "}\n"
-    "void tap(inout vec3 aC, inout float aW, vec2 off, vec2 dir, vec2 len, float lob, float clp, vec3 c) {\n"
-    "  vec2 v = vec2(off.x * dir.x + off.y * dir.y, -off.x * dir.y + off.y * dir.x) * len;\n"
-    "  float d2 = min(dot(v, v), clp);\n"
-    "  float wB = 0.4 * d2 - 1.0, wA = lob * d2 - 1.0;\n"
-    "  wB *= wB; wA *= wA;\n"
-    "  wB = 1.5625 * wB - 0.5625;\n"
-    "  float w = wB * wA;\n"
-    "  aC += c * w; aW += w;\n"
-    "}\n"
-    "void main() {\n"
-    "  if (down > 0.5) {  /* a larger source than the output: the four taps around the pixel average it */\n"
-    "    vec2 h = 0.5 / src * down;\n"
-    "    vec3 r = 0.25 * (texture2D(tex, uv + vec2(-h.x, -h.y)).rgb + texture2D(tex, uv + vec2(h.x, -h.y)).rgb + texture2D(tex, uv + vec2(-h.x, h.y)).rgb + texture2D(tex, uv + vec2(h.x, h.y)).rgb);\n"
-    "    gl_FragColor = vec4(r, 1.0); return;\n"
-    "  }\n"
-    "  vec2 pos = uv * src - 0.5, fp = floor(pos), pp = pos - fp;\n"
-    "  /*   b c        f g j k are the four texels round the sample\n"
-    "     e f g h\n"
-    "     i j k l\n"
-    "       n o   */\n"
-    "  vec3 b = T(fp + vec2(0.0, -1.0)), c = T(fp + vec2(1.0, -1.0)), e = T(fp + vec2(-1.0, 0.0)), f = T(fp), g = T(fp + vec2(1.0, 0.0)), h = T(fp + vec2(2.0, 0.0));\n"
-    "  vec3 i = T(fp + vec2(-1.0, 1.0)), j = T(fp + vec2(0.0, 1.0)), k = T(fp + vec2(1.0, 1.0)), l = T(fp + vec2(2.0, 1.0)), n = T(fp + vec2(0.0, 2.0)), o = T(fp + vec2(1.0, 2.0));\n"
-    "  float bL = L(b), cL = L(c), eL = L(e), fL = L(f), gL = L(g), hL = L(h), iL = L(i), jL = L(j), kL = L(k), lL = L(l), nL = L(n), oL = L(o);\n"
-    "  vec2 dir = vec2(0.0); float len = 0.0;\n"
-    "  setf(dir, len, pp, (1.0 - pp.x) * (1.0 - pp.y), bL, eL, fL, gL, jL);\n"
-    "  setf(dir, len, pp, pp.x * (1.0 - pp.y), cL, fL, gL, hL, kL);\n"
-    "  setf(dir, len, pp, (1.0 - pp.x) * pp.y, fL, iL, jL, kL, nL);\n"
-    "  setf(dir, len, pp, pp.x * pp.y, gL, jL, kL, lL, oL);\n"
-    "  float dirR = dot(dir, dir);\n"
-    "  float coh = smoothstep(0.04, 0.25, sqrt(dirR));  /* apklayer patch: weak gradients (noise, texture) get no directional stretch: no direction flicker */\n"
-    "  bool zro = dirR < (1.0 / 32768.0);\n"
-    "  dirR = zro ? 1.0 : inversesqrt(dirR);\n"
-    "  dir.x = zro ? 1.0 : dir.x;\n"
-    "  dir *= dirR;\n"
-    "  len = len * 0.5; len *= len; len *= coh;\n"
-    "  float stretch = dot(dir, dir) / max(abs(dir.x), abs(dir.y));\n"
-    "  vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 - 0.5 * len);\n"
-    "  float lob = 0.5 + ((0.25 - 0.10) - 0.5) * len, clp = 1.0 / lob;\n"
-    "  vec3 aC = vec3(0.0); float aW = 0.0;\n"
-    "  tap(aC, aW, vec2(0.0, -1.0) - pp, dir, len2, lob, clp, b);\n"
-    "  tap(aC, aW, vec2(1.0, -1.0) - pp, dir, len2, lob, clp, c);\n"
-    "  tap(aC, aW, vec2(-1.0, 0.0) - pp, dir, len2, lob, clp, e);\n"
-    "  tap(aC, aW, vec2(0.0, 0.0) - pp, dir, len2, lob, clp, f);\n"
-    "  tap(aC, aW, vec2(1.0, 0.0) - pp, dir, len2, lob, clp, g);\n"
-    "  tap(aC, aW, vec2(2.0, 0.0) - pp, dir, len2, lob, clp, h);\n"
-    "  tap(aC, aW, vec2(-1.0, 1.0) - pp, dir, len2, lob, clp, i);\n"
-    "  tap(aC, aW, vec2(0.0, 1.0) - pp, dir, len2, lob, clp, j);\n"
-    "  tap(aC, aW, vec2(1.0, 1.0) - pp, dir, len2, lob, clp, k);\n"
-    "  tap(aC, aW, vec2(2.0, 1.0) - pp, dir, len2, lob, clp, l);\n"
-    "  tap(aC, aW, vec2(0.0, 2.0) - pp, dir, len2, lob, clp, n);\n"
-    "  tap(aC, aW, vec2(1.0, 2.0) - pp, dir, len2, lob, clp, o);\n"
-    "  vec3 pix = aC / aW;  /* ringing: not beyond the four nearest texels */\n"
-    "  pix = clamp(pix, min(min(f, g), min(j, k)), max(max(f, g), max(j, k)));\n"
-    "  gl_FragColor = vec4(clamp(pix, 0.0, 1.0), 1.0);\n"
-    "}\n";
-
-/* RCAS (AMD FidelityFX FSR 1, MIT; apklayer patch: `fl` fades the lobe in low-contrast areas where RCAS only amplifies texture/noise): sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos); `sharp` 0..1 is
- * FSR's sharpness in stops (1: the strongest, 0: two stops weaker) */
-static const char *FS_CAS =
-    "precision highp float;\n"
-    "uniform sampler2D tex; uniform vec2 px; uniform float sharp; varying vec2 uv;\n"
-    "float L(vec3 c) { return c.g + 0.5 * (c.r + c.b); }\n"
-    "void main() {\n"
-    "  vec3 b = texture2D(tex, uv + vec2(0.0, -px.y)).rgb, d = texture2D(tex, uv + vec2(-px.x, 0.0)).rgb, e = texture2D(tex, uv).rgb;\n"
-    "  vec3 f = texture2D(tex, uv + vec2(px.x, 0.0)).rgb, h = texture2D(tex, uv + vec2(0.0, px.y)).rgb;\n"
-    "  float bL = L(b), dL = L(d), eL = L(e), fL = L(f), hL = L(h);\n"
-    "  float nz = 0.25 * (bL + dL + fL + hL) - eL;\n"
-    "  float rng = max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL);\n"
-    "  nz = clamp(abs(nz) / max(rng, 0.00001), 0.0, 1.0);\n"
-    "  float fl = mix(0.1, 1.0, smoothstep(0.04, 0.25, rng));\n"
-    "  nz = -0.5 * nz + 1.0;\n"
-    "  vec3 mn4 = min(min(b, d), min(f, h)), mx4 = max(max(b, d), max(f, h));\n"
-    "  vec3 hitMin = min(mn4, e) / max(4.0 * mx4, 0.0001);\n"
-    "  vec3 hitMax = (1.0 - max(mx4, e)) / min(4.0 * mn4 - 4.0, -0.0001);\n"
-    "  vec3 lobeV = max(-hitMin, hitMax);\n"
-    "  float lobe = max(-0.1875, min(max(lobeV.r, max(lobeV.g, lobeV.b)), 0.0)) * exp2(-2.0 * (1.0 - sharp)) * nz * fl;\n"
-    "  gl_FragColor = vec4(clamp((lobe * (b + d + h + f) + e) / (4.0 * lobe + 1.0), 0.0, 1.0), 1.0);\n"
-    "}\n";
-
-/* Snapdragon Game Super Resolution 1 (Qualcomm, BSD-3-Clause, sgsr1_shader_mobile.frag, RGBA mode) as GLES2: textureGather is four texel-centre fetches of the green
- * channel; one pass into the output dmabuf. A source at least as large as the output (render scale 100 and up) is just sampled. */
-static const char *FS_SGSR =
-    "#extension GL_OES_EGL_image_external : require\n"
-    "precision highp float;\n"
-    "uniform samplerExternalOES tex; uniform vec2 src; uniform float sharp; varying vec2 uv;\n"
-    "vec4 G(vec2 c) { vec2 q = c * src; /* a texel corner: the four texels round it, x y z w as textureGather orders them */\n"
-    "  return vec4(texture2D(tex, (q + vec2(-0.5, 0.5)) / src).g, texture2D(tex, (q + vec2(0.5, 0.5)) / src).g, texture2D(tex, (q + vec2(0.5, -0.5)) / src).g, texture2D(tex, (q + vec2(-0.5, -0.5)) / src).g); }\n"
-    "vec3 cr(vec2 p) { /* Catmull-Rom through five bilinear taps (the flat areas the edge gate skips) */\n"
-    "  vec2 t = p * src, tc = floor(t - 0.5) + 0.5, f = t - tc, f2 = f * f;\n"
-    "  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f)), w1 = 1.0 + f2 * (-2.5 + 1.5 * f), w2 = f * (0.5 + f * (2.0 - 1.5 * f)), w3 = f2 * (-0.5 + 0.5 * f);\n"
-    "  vec2 w12 = w1 + w2, o = w2 / w12, a = (tc - 1.0) / src, b = (tc + 2.0) / src, m = (tc + o) / src;\n"
-    "  vec3 c = texture2D(tex, vec2(m.x, a.y)).rgb * (w12.x * w0.y) + texture2D(tex, vec2(a.x, m.y)).rgb * (w0.x * w12.y) + texture2D(tex, m).rgb * (w12.x * w12.y)\n"
-    "         + texture2D(tex, vec2(b.x, m.y)).rgb * (w3.x * w12.y) + texture2D(tex, vec2(m.x, b.y)).rgb * (w12.x * w3.y);\n"
-    "  return clamp(c / (w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y), 0.0, 1.0); }\n"
-    "float lz(float x) { float a = x - 4.0; float b = x * a - a; a *= a; return b * a; }\n"
-    "vec2 wy(float dx, float dy, float c, float std) { float x = (dx * dx + dy * dy) * 0.55 + clamp(abs(c) * std, 0.0, 1.0); float w = lz(x); return vec2(w, w * c); }\n"
-    "void main() {\n"
-    "  vec3 color = texture2D(tex, uv).rgb;\n"
-    "  vec2 inv = 1.0 / src;\n"
-    "  float dl = 0.0;\n"
-    "  vec2 ic = uv * src + vec2(-0.5, 0.5), ip = floor(ic), coord = ip * inv, pl = ic - ip;\n"
-    "  vec4 left = G(coord);\n"
-    "  float edge = abs(left.z - left.y) + abs(color.g - left.y) + abs(color.g - left.z);\n"
-    "  float gate = smoothstep(4.0 / 255.0, 12.0 / 255.0, edge);  /* soft gate: no flip between the two paths from frame to frame */\n"
-    "  if (gate > 0.0) {\n"
-    "    coord.x += inv.x;\n"
-    "    vec4 right = G(coord + vec2(inv.x, 0.0));\n"
-    "    vec4 ud; ud.xy = G(coord + vec2(0.0, -inv.y)).wz; ud.zw = G(coord + vec2(0.0, inv.y)).yx;\n"
-    "    float mean = (left.y + left.z + right.x + right.w) * 0.25;\n"
-    "    left -= vec4(mean); right -= vec4(mean); ud -= vec4(mean);\n"
-    "    float cw = color.g - mean;\n"
-    "    float sum = dot(abs(left), vec4(1.0)) + dot(abs(right), vec4(1.0)) + dot(abs(ud), vec4(1.0));\n"
-    "    float std = 2.181818 / sum;\n"
-    "    vec2 a = wy(pl.x, pl.y + 1.0, ud.x, std);\n"
-    "    a += wy(pl.x - 1.0, pl.y + 1.0, ud.y, std);\n"
-    "    a += wy(pl.x - 1.0, pl.y - 2.0, ud.z, std);\n"
-    "    a += wy(pl.x, pl.y - 2.0, ud.w, std);\n"
-    "    a += wy(pl.x + 1.0, pl.y - 1.0, left.x, std);\n"
-    "    a += wy(pl.x, pl.y - 1.0, left.y, std);\n"
-    "    a += wy(pl.x, pl.y, left.z, std);\n"
-    "    a += wy(pl.x + 1.0, pl.y, left.w, std);\n"
-    "    a += wy(pl.x - 1.0, pl.y - 1.0, right.x, std);\n"
-    "    a += wy(pl.x - 2.0, pl.y - 1.0, right.y, std);\n"
-    "    a += wy(pl.x - 2.0, pl.y, right.z, std);\n"
-    "    a += wy(pl.x - 1.0, pl.y, right.w, std);\n"
-    "    float fy = a.y / a.x;\n"
-    "    float mx = max(max(left.y, left.z), max(right.x, right.w)), mn = min(min(left.y, left.z), min(right.x, right.w));\n"
-    "    fy = clamp((1.0 + sharp) * fy, mn, mx);\n"
-    "    float d = clamp(fy - cw, -sharp * 23.0 / 255.0, sharp * 23.0 / 255.0);  /* sharp 1.0 = 40/255 */\n"
-    "    dl = d * gate;\n"
-    "  }\n"
-    "  /* flat or edge: Catmull-Rom (+ the SGSR delta), kept inside the range of the four nearest texels so it cannot ring */\n"
-    "  vec2 q = (floor(uv * src - 0.5) + 0.5) * inv;\n"
-    "  vec3 t0 = texture2D(tex, q).rgb, t1 = texture2D(tex, q + vec2(inv.x, 0.0)).rgb, t2 = texture2D(tex, q + vec2(0.0, inv.y)).rgb, t3 = texture2D(tex, q + inv).rgb;\n"
-    "  color = clamp(cr(uv) + dl, min(min(t0, t1), min(t2, t3)), max(max(t0, t1), max(t2, t3)));\n"
-    "  gl_FragColor = vec4(color, 1.0);\n"
-    "}\n";
-
-/* NVIDIA Image Scaling (NIS, MIT): a 6-tap polyphase scaler on luma blended with four directional filters (0, 45, 90, 135 degrees, weighted by an edge
- * map) and an adaptive unsharp mask; chroma comes from one bilinear tap. This is NVScaler of NIS_Scaler.h written as a fragment shader (no shared memory:
- * every pixel reads its own 6x6 luma). NVIDIA specifies 1x to 2x upscaling; the coefficient banks are in sharpen_nis.h. One pass, no RCAS. */
-static const char *FS_NIS =
-    "#extension GL_OES_EGL_image_external : require\n"
-    "precision highp float;\n"
-    "uniform samplerExternalOES tex; uniform vec2 src; uniform float sharp; uniform vec4 cs[128]; uniform vec4 cu[128]; varying vec2 uv;\n"
-    "float p[36];\n"
-    "/* apklayer: soft edge gates (main: hard ratio > 2.2 and contrast > 0.0625): ratio ramps 1.2..1.3, contrast 0.0625..0.2 */\n#define RLO 1.2\n#define RHI 1.3\n#define TLO 0.0625\n#define THI 0.2\n"
-    "#define W(r, c) p[(r) * 6 + (c)]\n"
-    "float Y(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }\n"
-    "vec4 edgeMap(float a, float b, float c, float d, float e, float f, float g, float h, float i) {\n"
-    "  float g0 = abs(a + b + c - g - h - i), g45 = abs(d + a + b - h - i - f), g90 = abs(a + d + g - c - f - i), g135 = abs(d + g + h - b - c - f);\n"
-    "  float m09 = max(g0, g90), n09 = min(g0, g90), m45 = max(g45, g135), n45 = min(g45, g135);\n"
-    "  if (m09 + m45 == 0.0) return vec4(0.0);\n"
-    "  float e09 = min(m09 / (m09 + m45), 1.0), e45 = 1.0 - e09;\n"
-    "  float c09 = clamp((m09 / max(n09, 1e-4) - RLO) / (RHI - RLO), 0.0, 1.0) * clamp((m09 - TLO) / (THI - TLO), 0.0, 1.0) * float(m09 > n45);\n"
-    "  float c45 = clamp((m45 / max(n45, 1e-4) - RLO) / (RHI - RLO), 0.0, 1.0) * clamp((m45 - TLO) / (THI - TLO), 0.0, 1.0) * float(m45 > n09);\n"
-    "  bool is0 = m09 == g0, is45 = m45 == g45;\n"
-    "  float f09 = (c09 > 0.0 && c45 > 0.0) ? e09 : 1.0, f45 = (c09 > 0.0 && c45 > 0.0) ? e45 : 1.0;\n"
-    "  f09 *= c09; f45 *= c45;\n"
-    "  return vec4(is0 ? f09 : 0.0, !is0 ? f09 : 0.0, is45 ? f45 : 0.0, !is45 ? f45 : 0.0);\n"
-    "}\n"
-    "#define EDGE(r, c) edgeMap(W(r, c), W(r, (c) + 1), W(r, (c) + 2), W((r) + 1, c), W((r) + 1, (c) + 1), W((r) + 1, (c) + 2), W((r) + 2, c), W((r) + 2, (c) + 1), W((r) + 2, (c) + 2))\n"
-    "float lti(float p0, float p1, float p2, float p3, float p4, float p5, int ph) {\n"
-    "  bool sel = ph <= 32;\n"
-    "  float s0 = sel ? p0 : p3, aMin = min(min(p1, p2), s0), aMax = max(max(p1, p2), s0);\n"
-    "  s0 = sel ? p2 : p5;\n"
-    "  float bMin = min(min(p3, p4), s0), bMax = max(max(p3, p4), s0), ac = aMax - aMin, bc = bMax - bMin;\n"
-    "  float ratio = max(ac, bc) / (min(ac, bc) + 0.00392157);\n"
-    "  return 1.0 - clamp((ratio - 2.0) * 0.125, 0.0, 1.0);\n"
-    "}\n"
-    "float poly6(float p0, float p1, float p2, float p3, float p4, float p5, int ph) {\n"
-    "  vec4 a = cs[ph * 2], b = cs[ph * 2 + 1], ua = cu[ph * 2], ub = cu[ph * 2 + 1];\n"
-    "  vec4 q = vec4(p0, p1, p2, p3);\n"
-    "  float y = dot(a, q) + b.x * p4 + b.y * p5, yu = dot(ua, q) + ub.x * p4 + ub.y * p5;\n"
-    "  float sl = sharp - 0.5, k = sl >= 0.0 ? 1.25 : 1.0, kMax = sl >= 0.0 ? 1.25 : 1.75;\n"
-    "  float strMin = max(0.0, 0.4 + sl * k * 1.2), strMax = 1.6 + sl * kMax * 1.8, limMin = max(0.1, 0.14 + sl * k * 0.32), limMax = 0.5 + sl * k * 0.6;\n"
-    "  float ys = 1.0 - clamp((y - 0.45) * (1.0 / 0.45), 0.0, 1.0);\n"
-    "  yu *= ys * (strMax - strMin) + strMin;\n"
-    "  float lim = (ys * (limMax - limMin) + limMin) * y;\n"
-    "  yu = min(lim, max(-lim, yu));\n"
-    "  return y + yu * lti(p0, p1, p2, p3, p4, p5, ph);\n"
-    "}\n"
-    "int phase(float f) { return int(min(f * 64.0, 63.0)); }\n"
-    "void main() {\n"
-    "  vec2 pos = uv * src - 0.5, fl = floor(pos), fr = pos - fl;\n"
-    "  int fxi = phase(fr.x), fyi = phase(fr.y);\n"
-    "  for (int i = 0; i < 6; i++)\n"
-    "    for (int j = 0; j < 6; j++) p[i * 6 + j] = Y(texture2D(tex, (fl + vec2(float(j) - 2.0, float(i) - 2.0) + 0.5) / src).rgb);\n"
-    "  vec4 e00 = EDGE(1, 1), e01 = EDGE(1, 2), e10 = EDGE(2, 1), e11 = EDGE(2, 2);\n"
-    "  vec4 w = mix(mix(e00, e01, fr.x), mix(e10, e11, fr.x), fr.y);\n"
-    "  float base = 1.0 - w.x - w.y - w.z - w.w;\n"
-    "  vec4 yA = cs[fyi * 2], yB = cs[fyi * 2 + 1], xA = cs[fxi * 2], xB = cs[fxi * 2 + 1];\n"
-    "#define COLV(j) (p[j] * yA.x + p[6 + (j)] * yA.y + p[12 + (j)] * yA.z + p[18 + (j)] * yA.w + p[24 + (j)] * yB.x + p[30 + (j)] * yB.y)\n"
-    "  float opY = (COLV(0) * xA.x + COLV(1) * xA.y + COLV(2) * xA.z + COLV(3) * xA.w + COLV(4) * xB.x + COLV(5) * xB.y) * base;\n"
-    "  if (w.x > 0.0)  /* 0 degrees */\n"
-    "    opY += poly6(mix(W(0, 2), W(0, 3), fr.x), mix(W(1, 2), W(1, 3), fr.x), mix(W(2, 2), W(2, 3), fr.x), mix(W(3, 2), W(3, 3), fr.x), mix(W(4, 2), W(4, 3), fr.x), mix(W(5, 2), W(5, 3), fr.x), fyi) * w.x;\n"
-    "  if (w.y > 0.0)  /* 90 degrees */\n"
-    "    opY += poly6(mix(W(2, 0), W(3, 0), fr.y), mix(W(2, 1), W(3, 1), fr.y), mix(W(2, 2), W(3, 2), fr.y), mix(W(2, 3), W(3, 3), fr.y), mix(W(2, 4), W(3, 4), fr.y), mix(W(2, 5), W(3, 5), fr.y), fxi) * w.y;\n"
-    "  if (w.z > 0.0) {  /* 45 degrees */\n"
-    "    float pb = 0.5 + 0.5 * (fr.x - fr.y);\n"
-    "    float t1 = mix(W(2, 1), W(1, 2), pb), t3 = mix(W(3, 2), W(2, 3), pb), t5 = mix(W(4, 3), W(3, 4), pb);\n"
-    "    float d = pb - 0.5, ad = abs(d); bool up = d >= 0.0;\n"
-    "    float t0 = mix(W(1, 1), up ? W(0, 2) : W(2, 0), ad), t2 = mix(W(2, 2), up ? W(1, 3) : W(3, 1), ad), t4 = mix(W(3, 3), up ? W(2, 4) : W(4, 2), ad), t6 = mix(W(4, 4), up ? W(3, 5) : W(5, 3), ad);\n"
-    "    float pp = fr.x + fr.y;\n"
-    "    if (pp >= 1.0) opY += poly6(t1, t2, t3, t4, t5, t6, phase(pp - 1.0)) * w.z;\n"
-    "    else opY += poly6(t0, t1, t2, t3, t4, t5, phase(pp)) * w.z;\n"
-    "  }\n"
-    "  if (w.w > 0.0) {  /* 135 degrees */\n"
-    "    float pb = 0.5 * (fr.x + fr.y);\n"
-    "    float t1 = mix(W(3, 1), W(4, 2), pb), t3 = mix(W(2, 2), W(3, 3), pb), t5 = mix(W(1, 3), W(2, 4), pb);\n"
-    "    float d = pb - 0.5, ad = abs(d); bool up = d >= 0.0;\n"
-    "    float t0 = mix(W(4, 1), up ? W(5, 2) : W(3, 0), ad), t2 = mix(W(3, 2), up ? W(4, 3) : W(2, 1), ad), t4 = mix(W(2, 3), up ? W(3, 4) : W(1, 2), ad), t6 = mix(W(1, 4), up ? W(2, 5) : W(0, 3), ad);\n"
-    "    float pp = 1.0 + (fr.x - fr.y);\n"
-    "    if (pp >= 1.0) opY += poly6(t1, t2, t3, t4, t5, t6, phase(pp - 1.0)) * w.w;\n"
-    "    else opY += poly6(t0, t1, t2, t3, t4, t5, phase(pp)) * w.w;\n"
-    "  }\n"
-    "  float lo = min(min(W(2, 2), W(2, 3)), min(W(3, 2), W(3, 3))), hi = max(max(W(2, 2), W(2, 3)), max(W(3, 2), W(3, 3)));\n"
-    "  opY = clamp(opY, lo - 0.3 * (hi - lo), hi + 0.3 * (hi - lo));  /* apklayer: keep the result near the 2x2 source range (halos) */\n"
-    "  vec3 op = texture2D(tex, uv).rgb;\n"
-    "  gl_FragColor = vec4(clamp(op + (opY - Y(op)), 0.0, 1.0), 1.0);\n"
-    "}\n";
-
+#include "sharpen_fsr.h"
 
 static GLuint compile(GLenum type, const char *src)
 {
@@ -353,23 +108,10 @@ static GLuint program(const char *fs)
     return p;
 }
 
-/* the same shader reading a plain 2D texture: the external-image extension line is dropped and the sampler type changed */
-static GLuint program_2d(const char *fs)
-{
-    static const char ext[] = "#extension GL_OES_EGL_image_external : require\n";
-    char *t = strdup(fs), *q;
-    if (!t) return 0;
-    if ((q = strstr(t, ext))) memmove(q, q + sizeof ext - 1, strlen(q + sizeof ext - 1) + 1);
-    while ((q = strstr(t, "samplerExternalOES"))) { memcpy(q, "sampler2D", 9); memmove(q + 9, q + 18, strlen(q + 18) + 1); }
-    GLuint g = program(t);
-    free(t);
-    return g;
-}
-
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "low") ? 2 : 3; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; } s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = a && !strcmp(a, "off") ? 1 : a && !strcmp(a, "low") ? 2 : 3; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; } s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 
@@ -487,17 +229,10 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->up_prog = program(FS_UP);
         s->cas_prog = program(FS_CAS);
         if (!s->up_prog || !s->cas_prog) { if (d) closedir(d); return -1; }
-        s->nis_prog = program(FS_NIS);  /* optional: without it the NIS mode draws with FSR */
-        s->sgsr_prog = program(FS_SGSR);
-        s->lanczos_prog = program(FS_LANCZOS);
         s->aa_prog = program(FS_AA);
         s->calm_prog = program(FS_CALM);
         s->blit_prog = program(FS_BLIT);
-        s->nis2d = program_2d(FS_NIS);
-        s->sgsr2d = program_2d(FS_SGSR);
-        s->lanczos2d = program_2d(FS_LANCZOS);
-        s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is averaged by the mode's own shader */
-        if (!s->nis_prog) fprintf(stderr, "[sharpen] NIS shader unavailable on this GPU: FSR 1 is used\n");
+        s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is shrunk by EASU's own `down` branch */
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
@@ -623,8 +358,6 @@ static void draw(void)
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
-#include "sharpen_a4k.h"
-
 /* The post passes after an upscale (GLES backend): the filter draws into t0 (output size, LINEAR); then the anti-aliasing pass (t0 -> t1, or into the output) and the
  * calm pass (reads the picture and the previous output, writes hist[], copied into the output). Both grow with the upscale ratio: the lower the render scale, the heavier. */
 static GLuint rt_ensure(struct rt *r, int w, int h)
@@ -723,66 +456,15 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
     s->hist_ok = 1;
 }
 
-/* The multi-phase upscale (NIS, SGSR 1, Lanczos): N equal-ratio phases, each the mode's own shader; the first reads the app's buffer, the next ones the
- * previous phase's RGBA8 picture (LINEAR), only the last sharpens (the others run at sharpness 0), the last draws into the output dmabuf. Measured: for these
- * filters every phase costs a little quality (the intermediate is re-rounded to 8 bits and softened), it is the owner's choice. 0: done. */
-static int phases(struct sharpen *s, int buf, GLuint pext, GLuint p2d, int ow, int oh, float sharp, GLuint out_fbo, int n)
-{
-    int iw = s->in[buf].w, ih = s->in[buf].h, pw = iw, phh = ih;
-    for (int k = 1; k <= n; k++) {
-        int mw = k == n ? ow : (int)(iw * pow((double)ow / iw, (double)k / n) + 0.5), mh = k == n ? oh : (int)(ih * pow((double)oh / ih, (double)k / n) + 0.5);
-        GLuint fbo = out_fbo;
-        if (k < n) {
-            if (s->ph[k - 1].w != mw || s->ph[k - 1].h != mh) {
-                if (s->ph[k - 1].fbo) glDeleteFramebuffers(1, &s->ph[k - 1].fbo);
-                if (s->ph[k - 1].tex) glDeleteTextures(1, &s->ph[k - 1].tex);
-                glGenTextures(1, &s->ph[k - 1].tex);
-                glBindTexture(GL_TEXTURE_2D, s->ph[k - 1].tex);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mw, mh, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                glGenFramebuffers(1, &s->ph[k - 1].fbo);
-                glBindFramebuffer(GL_FRAMEBUFFER, s->ph[k - 1].fbo);
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s->ph[k - 1].tex, 0);
-                if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { s->ph[k - 1].w = s->ph[k - 1].h = 0; return -1; }
-                s->ph[k - 1].w = mw; s->ph[k - 1].h = mh;
-            }
-            fbo = s->ph[k - 1].fbo;
-        }
-        GLuint prog = k == 1 ? pext : p2d;
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glViewport(0, 0, mw, mh);
-        glUseProgram(prog);
-        glActiveTexture(GL_TEXTURE0);
-        if (k == 1) glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex); else glBindTexture(GL_TEXTURE_2D, s->ph[k - 2].tex);
-        glUniform1i(glGetUniformLocation(prog, "tex"), 0);
-        glUniform2f(glGetUniformLocation(prog, "src"), (float)pw, (float)phh);
-        glUniform1f(glGetUniformLocation(prog, "sharp"), k == n ? (sharp < 0 ? 0 : sharp > 2 ? 2 : sharp) : 0.0f);
-        glUniform2f(glGetUniformLocation(prog, "scl"), (float)mw / (float)pw, (float)mh / (float)phh);
-        glUniform4fv(glGetUniformLocation(prog, "cs"), 128, nis_coef_scale);
-        glUniform4fv(glGetUniformLocation(prog, "cu"), 128, nis_coef_usm);
-        glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-        draw();
-        pw = mw; phh = mh;
-    }
-    return 0;
-}
-
-void sharpen_set_mode(struct sharpen *s, int mode) { if (s) s->mode = mode; }
 void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n >= 1 && n <= 3 ? n : 0; }
 void sharpen_set_calm(struct sharpen *s, int n) { if (s) s->calm_req = n >= 1 && n <= 3 ? n : 0; }
-void sharpen_set_stages(struct sharpen *s, int n) { if (s) s->stages_req = n >= 1 && n <= 4 ? n : 0; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
     static int said_in, said_busy;
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) {
-        s->vk->stages = s->stages_req ? s->stages_req : s->stages;
-        int rc = svk_render(s->vk, s->mode, buf, ow, oh, sharpness, slot, fresh);
+        int rc = svk_render(s->vk, buf, ow, oh, sharpness, slot, fresh);
         if (rc == -2 && !said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SVK_SLOTS);
         return rc;
     }
@@ -828,50 +510,22 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     int calm = s->calm_prog && s->blit_prog && up && (s->calm_req ? s->calm_req : s->calm_env) > 1;
     GLuint dst = (aa || calm) ? rt_ensure(&s->t0, ow, oh) : o->fbo;
     if ((aa || calm) && !dst) { aa = calm = 0; dst = o->fbo; }
-    if (s->mode == 4 && s->in[buf].w < ow && s->in[buf].h < oh && a4k_ready(&s->a4k, s->in[buf].w, s->in[buf].h)) {  /* Anime4K CNN: six passes, the last into the output dmabuf */
-        a4k_run(s->a4k, s->in[buf].tex, s->in[buf].w, s->in[buf].h, ow, oh, dst, s->vbo);
-        if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
-        gpu_wait(s);
-        o->busy = 1;
-        o->used = ++s->tick;
-        s->last = k;
-        *slot = k;
-        return 0;
-    }
-    GLuint one = s->mode == 1 ? s->nis_prog : s->mode == 2 ? s->sgsr_prog : s->mode == 3 ? s->lanczos_prog : 0;
-    if (s->down_prog && (s->in[buf].w > ow || s->in[buf].h > oh)) one = s->down_prog;  /* render scale above 100: every mode shrinks the larger picture with the Lanczos 2 area filter */
-    int st = s->stages_req ? s->stages_req : s->stages;
-    if (one && one != s->down_prog && st > 1 && ow > s->in[buf].w * 1.05 && oh > s->in[buf].h * 1.05) {  /* an upscale: the phases */
-        GLuint p2d = s->mode == 1 ? s->nis2d : s->mode == 2 ? s->sgsr2d : s->lanczos2d;
-        if (p2d && phases(s, buf, one, p2d, ow, oh, sharpness, dst, st) == 0) {
-            if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
-            gpu_wait(s);
-            o->busy = 1;
-            o->used = ++s->tick;
-            s->last = k;
-            *slot = k;
-            return 0;
-        }
-    }
-    if (one) {  /* NIS, SGSR 1, Lanczos, the downscale: one pass, straight into the output dmabuf */
+    if (s->down_prog && (s->in[buf].w > ow || s->in[buf].h > oh)) {  /* render scale above 100: the larger picture is shrunk with the Lanczos 2 area filter, one pass straight into dst */
         glBindFramebuffer(GL_FRAMEBUFFER, dst);
         glViewport(0, 0, ow, oh);
-        glUseProgram(one);
+        glUseProgram(s->down_prog);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->in[buf].tex);
-        glUniform1i(glGetUniformLocation(one, "tex"), 0);
-        glUniform2f(glGetUniformLocation(one, "src"), (float)s->in[buf].w, (float)s->in[buf].h);
-        glUniform1f(glGetUniformLocation(one, "sharp"), sharpness < 0 ? 0 : sharpness > 2 ? 2 : sharpness);
-        glUniform2f(glGetUniformLocation(one, "scl"), (float)ow / (float)s->in[buf].w, (float)oh / (float)s->in[buf].h);
-        glUniform4fv(glGetUniformLocation(one, "cs"), 128, nis_coef_scale);
-        glUniform4fv(glGetUniformLocation(one, "cu"), 128, nis_coef_usm);
+        glUniform1i(glGetUniformLocation(s->down_prog, "tex"), 0);
+        glUniform2f(glGetUniformLocation(s->down_prog, "src"), (float)s->in[buf].w, (float)s->in[buf].h);
+        glUniform2f(glGetUniformLocation(s->down_prog, "scl"), (float)ow / (float)s->in[buf].w, (float)oh / (float)s->in[buf].h);
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();
         if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
         gpu_wait(s);
         o->busy = 1;
-        o->used = ++s->tick;
+    o->used = ++s->tick;
         s->last = k;
         *slot = k;
         return 0;
@@ -900,7 +554,7 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
-        o->used = ++s->tick;
+    o->used = ++s->tick;
     s->last = k;
     *slot = k;
     return 0;
@@ -941,7 +595,6 @@ void sharpen_close(struct sharpen *s)
 #ifdef HAVE_SHARPEN_VK
     svk_close(s->vk);
 #endif
-    free(s->a4k);  /* its GL objects go with the context */
     if (s->ready) {
         eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
         for (int i = 0; i < BUFS; i++) sharpen_forget(s, i);

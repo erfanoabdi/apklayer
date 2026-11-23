@@ -160,7 +160,7 @@ fail:
     return -1;
 }
 
-int svk_render(struct svk *s, int mode, int buf, int ow, int oh, float sharp, int *slot, int *fresh)
+int svk_render(struct svk *s, int buf, int ow, int oh, float sharp, int *slot, int *fresh)
 {
     if (buf < 0 || buf >= SVK_BUFS || !s->in[buf].used) return -1;
     int k = -1;
@@ -174,7 +174,7 @@ int svk_render(struct svk *s, int mode, int buf, int ow, int oh, float sharp, in
         if (slot_make(s, o, ow, oh) < 0) { fprintf(stderr, "[sharpen] Vulkan: no output buffer %dx%d (%d modifiers offered)\n", ow, oh, s->accept_n); return -1; }
         *fresh = 1;
     }
-    if (svk_record(s, mode, buf, ow, oh, sharp, o) < 0) return -1;
+    if (svk_record(s, buf, ow, oh, sharp, o) < 0) return -1;
     o->busy = 1;
     o->used = ++s->tick;
     s->last = k;
@@ -244,8 +244,6 @@ static void device_destroy(struct svk *s)
         for (int i = 0; i < SVK_BUFS; i++) svk_forget(s, i);
         for (int i = 0; i < SVK_SLOTS; i++) slot_free(s, &s->out[i]);
         svk_img_free(s, &s->mid);
-        for (int i = 0; i < 3; i++) svk_img_free(s, &s->ph[i]);
-        for (int i = 0; i < 3; i++) svk_img_free(s, &s->f16[i]);
         svk_pipelines_free(s);
         if (s->cp) s->vkDestroyCommandPool(s->dev, s->cp, NULL);
         s->vkDestroyDevice(s->dev, NULL);
@@ -326,7 +324,6 @@ int svk_prepare(struct svk **out, uint32_t fourcc, int w, int h, int n, const in
     struct svk *s = calloc(1, sizeof *s);
     if (!s) return -1;
     for (int i = 0; i < SVK_SLOTS; i++) s->out[i].fd = -1;
-    { const char *e = getenv("APKLAYER_SHARPEN_STAGES"); s->stages = e && atoi(e) >= 1 && atoi(e) <= 4 ? atoi(e) : 2; }
     s->lib = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
     if (!s->lib) goto fail;
     s->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(s->lib, "vkGetInstanceProcAddr");

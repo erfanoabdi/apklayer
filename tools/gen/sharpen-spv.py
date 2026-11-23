@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """sharpen-spv.py <glslangValidator> [out.h]: bridge/shell/sharpen_vk_spv.h, the render filter's shaders as SPIR-V for the Vulkan backend (sharpen_vk.c).
-The single source of the filters is the GLES2 fragment shaders in bridge/shell/sharpen.c, sharpen_more.h (C string literals); each is converted
-mechanically (sampler/uniform declarations, texture2D, gl_FragColor, NIS's coefficient banks from sharpen_nis.h as constant arrays) and compiled with glslang.
-Samplers are bindings 0..3 (tex, g, n, dir); every other uniform is the one push-constant block below. Run after changing a filter shader and commit the header."""
+The single source of the shaders is the GLES2 fragment shaders of FSR 1 in bridge/shell/sharpen_fsr.h and the area downscale in sharpen_down.h (C string
+literals); each is converted mechanically (sampler/uniform declarations, texture2D, gl_FragColor) and compiled with glslang.
+The sampler is binding 0 (tex); every other uniform is the one push-constant block below. Run after changing a filter shader and commit the header."""
 import re, subprocess, sys, tempfile, os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SH = ROOT / 'bridge/shell'
-SAMPLERS = {'tex': 0, 'g': 1, 'n': 2, 'dir': 3}
-ORDER = ['FS_UP', 'FS_CAS', 'FS_NIS', 'FS_SGSR', 'FS_LANCZOS', 'FS_A4K_C1', 'FS_A4K_C2', 'FS_A4K_C3', 'FS_A4K_C4', 'FS_A4K_D2S', 'FS_A4K_FIN', 'FS_DOWN']
+SAMPLERS = {'tex': 0}
+ORDER = ['FS_UP', 'FS_CAS', 'FS_DOWN']
 VS = """#version 450
 layout(location = 0) out vec2 uv;
 void main() { vec2 p = vec2(float((gl_VertexIndex << 1) & 2), float(gl_VertexIndex & 2)) * 2.0 - 1.0; uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }
@@ -34,23 +34,12 @@ def literals(body, macros):
 
 
 def sources():
-    text = ''.join((SH / f).read_text() for f in ('sharpen.c', 'sharpen_more.h', 'sharpen_a4k_cnn.h', 'sharpen_down.h'))
+    text = ''.join((SH / f).read_text() for f in ('sharpen_fsr.h', 'sharpen_down.h'))
     macros = {m.group(1): unescape(m.group(2)) for m in re.finditer(r'#define (\w+) "((?:[^"\\]|\\.)*)"\s*\n', text)}
-    macros['A4K_HEAD'] = macros.get('A4K_HEAD', '')
     res = {}
     for m in re.finditer(r'static const char \*(FS_\w+) =\s*(.*?);\n', text, re.S):
         if m.group(1) in ORDER: res[m.group(1)] = literals(m.group(2), macros)
     return res
-
-
-def nis_arrays():
-    t = (SH / 'sharpen_nis.h').read_text()
-    out = ''
-    for name, glname in (('nis_coef_scale', 'cs'), ('nis_coef_usm', 'cu')):
-        body = re.search(name + r'\[512\] = \{(.*?)\};', t, re.S).group(1)
-        v = [x.strip().rstrip('f') for x in body.replace('\n', ' ').split(',') if x.strip()]
-        out += 'const vec4 %s[128] = vec4[128](%s);\n' % (glname, ','.join('vec4(%s,%s,%s,%s)' % tuple(v[i:i + 4]) for i in range(0, 512, 4)))
-    return out
 
 
 def convert(name, s):
@@ -59,9 +48,6 @@ def convert(name, s):
     for m in re.finditer(r'uniform (?:samplerExternalOES|sampler2D) (\w+);', s):
         decl += 'layout(set = 0, binding = %d) uniform sampler2D %s;\n' % (SAMPLERS[m.group(1)], m.group(1))
     s = re.sub(r'uniform (?:samplerExternalOES|sampler2D) \w+;', '', s)
-    if 'uniform vec4 cs[128]' in s:
-        s = s.replace('uniform vec4 cs[128];', '').replace('uniform vec4 cu[128];', '')
-        decl += nis_arrays()
     s = re.sub(r'uniform (?:vec2|float) \w+;', '', s)
     s = s.replace('varying vec2 uv;', '')
     s = s.replace('gl_FragColor', 'fc').replace('texture2D(', 'texture(')

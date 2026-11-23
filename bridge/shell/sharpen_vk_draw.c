@@ -10,7 +10,7 @@
 
 /* the shaders' push-constant block (tools/gen/sharpen-spv.py): vec2 src, scl, px, d; float sharp, down */
 struct pc { float src[2], scl[2], px[2], d[2], sharp, down; };
-enum { P_UP, P_CAS, P_NIS, P_SGSR, P_LANCZOS, P_C1, P_C2, P_C3, P_C4, P_D2S, P_FIN, P_DOWN };
+enum { P_UP, P_CAS, P_DOWN };
 
 static VkRenderPass make_rp(struct svk *s, VkFormat fmt, VkImageLayout final)
 {
@@ -43,11 +43,9 @@ void svk_pipelines_free(struct svk *s)
     if (s->pl) s->vkDestroyPipelineLayout(s->dev, s->pl, NULL);
     if (s->dsl) s->vkDestroyDescriptorSetLayout(s->dev, s->dsl, NULL);
     if (s->lin) s->vkDestroySampler(s->dev, s->lin, NULL);
-    if (s->nea) s->vkDestroySampler(s->dev, s->nea, NULL);
     if (s->rp_mid) s->vkDestroyRenderPass(s->dev, s->rp_mid, NULL);
     if (s->rp_out) s->vkDestroyRenderPass(s->dev, s->rp_out, NULL);
-    if (s->rp_f16) s->vkDestroyRenderPass(s->dev, s->rp_f16, NULL);
-    s->vs = 0; s->pool = 0; s->pl = 0; s->dsl = 0; s->lin = s->nea = 0; s->rp_mid = s->rp_out = s->rp_f16 = 0;
+    s->vs = 0; s->pool = 0; s->pl = 0; s->dsl = 0; s->lin = 0; s->rp_mid = s->rp_out = 0;
 }
 
 static VkShaderModule module(struct svk *s, const uint32_t *code, size_t bytes)
@@ -62,24 +60,19 @@ int svk_pipelines(struct svk *s)
     VkSamplerCreateInfo sc = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE };
     if (s->vkCreateSampler(s->dev, &sc, NULL, &s->lin) != VK_SUCCESS) goto fail;
-    sc.magFilter = sc.minFilter = VK_FILTER_NEAREST;
-    if (s->vkCreateSampler(s->dev, &sc, NULL, &s->nea) != VK_SUCCESS) goto fail;
-    VkSampler imm[4] = { s->lin, s->nea, s->nea, s->nea };  /* tex (the app's buffer: bilinear), then g, n, dir (the intermediates: exact texels) */
-    VkDescriptorSetLayoutBinding bd[4];
-    for (int i = 0; i < 4; i++) bd[i] = (VkDescriptorSetLayoutBinding){ (uint32_t)i, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &imm[i] };
-    VkDescriptorSetLayoutCreateInfo dl = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 4, .pBindings = bd };
+    VkDescriptorSetLayoutBinding bd = { 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &s->lin };  /* tex: the app's buffer or EASU's picture, bilinear */
+    VkDescriptorSetLayoutCreateInfo dl = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 1, .pBindings = &bd };
     if (s->vkCreateDescriptorSetLayout(s->dev, &dl, NULL, &s->dsl) != VK_SUCCESS) goto fail;
     VkPushConstantRange pr = { VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(struct pc) };
     VkPipelineLayoutCreateInfo pli = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &s->dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pr };
     if (s->vkCreatePipelineLayout(s->dev, &pli, NULL, &s->pl) != VK_SUCCESS) goto fail;
-    VkDescriptorPoolSize ps = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 32 };
+    VkDescriptorPoolSize ps = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8 };
     VkDescriptorPoolCreateInfo dp = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 8, .poolSizeCount = 1, .pPoolSizes = &ps };
     if (s->vkCreateDescriptorPool(s->dev, &dp, NULL, &s->pool) != VK_SUCCESS) goto fail;
     s->rp_mid = make_rp(s, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     s->rp_out = make_rp(s, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
-    s->rp_f16 = make_rp(s, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     s->vs = module(s, svk_spv_vs, sizeof svk_spv_vs);
-    if (!s->rp_mid || !s->rp_out || !s->rp_f16 || !s->vs) goto fail;
+    if (!s->rp_mid || !s->rp_out || !s->vs) goto fail;
     VkPipelineVertexInputStateCreateInfo vi = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
     VkPipelineInputAssemblyStateCreateInfo ia = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST };
     VkPipelineViewportStateCreateInfo vp = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .scissorCount = 1 };
@@ -97,7 +90,7 @@ int svk_pipelines(struct svk *s)
             { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = s->fs[i], .pName = "main" } };
         VkGraphicsPipelineCreateInfo gi = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = st, .pVertexInputState = &vi, .pInputAssemblyState = &ia,
             .pViewportState = &vp, .pRasterizationState = &rs, .pMultisampleState = &ms, .pColorBlendState = &cb, .pDynamicState = &ds, .layout = s->pl,
-            .renderPass = i >= P_C1 && i <= P_C4 ? s->rp_f16 : s->rp_mid };  /* rp_mid and rp_out are compatible: the same pipelines draw into either */
+            .renderPass = s->rp_mid };  /* rp_mid and rp_out are compatible: the same pipelines draw into either */
         if (s->vkCreateGraphicsPipelines(s->dev, VK_NULL_HANDLE, 1, &gi, NULL, &s->pipe[i]) != VK_SUCCESS) { s->pipe[i] = VK_NULL_HANDLE; goto fail; }
     }
     return 0;
@@ -130,22 +123,15 @@ static int target(struct svk *s, struct svk_img *t, VkFormat fmt, VkRenderPass r
     return 0;
 }
 
-static void pass(struct svk *s, int pipe, VkRenderPass rp, VkFramebuffer fb, int w, int h, const VkImageView *v, const struct pc *pc)
+static void pass(struct svk *s, int pipe, VkRenderPass rp, VkFramebuffer fb, int w, int h, VkImageView v, const struct pc *pc)
 {
     VkDescriptorSet set;
     VkDescriptorSetAllocateInfo ai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = s->pool, .descriptorSetCount = 1, .pSetLayouts = &s->dsl };
     if (s->vkAllocateDescriptorSets(s->dev, &ai, &set) != VK_SUCCESS) return;
-    VkDescriptorImageInfo ii[4];
-    VkWriteDescriptorSet wr[4];
-    int nw = 0;
-    for (int i = 0; i < 4; i++) {
-        if (!v[i]) continue;
-        ii[nw] = (VkDescriptorImageInfo){ VK_NULL_HANDLE, v[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };  /* the sampler is immutable */
-        wr[nw] = (VkWriteDescriptorSet){ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set, .dstBinding = (uint32_t)i, .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii[nw] };
-        nw++;
-    }
-    s->vkUpdateDescriptorSets(s->dev, (uint32_t)nw, wr, 0, NULL);
+    VkDescriptorImageInfo ii = { VK_NULL_HANDLE, v, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };  /* the sampler is immutable */
+    VkWriteDescriptorSet wr = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set, .dstBinding = 0, .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii };
+    s->vkUpdateDescriptorSets(s->dev, 1, &wr, 0, NULL);
     VkRenderPassBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = rp, .framebuffer = fb, .renderArea = { { 0, 0 }, { (uint32_t)w, (uint32_t)h } } };
     s->vkCmdBeginRenderPass(s->cb, &bi, VK_SUBPASS_CONTENTS_INLINE);
     s->vkCmdBindPipeline(s->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[pipe]);
@@ -177,27 +163,12 @@ static void wait_done(struct svk *s, VkFence f)
     s->vkQueueWaitIdle(s->q);
 }
 
-/* Records, submits and waits for one frame: buffer `buf` through the passes of `mode` into `o`. */
-int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, struct svk_slot *o)
+/* Records, submits and waits for one frame: buffer `buf` through FSR 1 (or, for a source larger than the output, the area downscale) into `o`. */
+int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, struct svk_slot *o)
 {
     struct svk_in *in = &s->in[buf];
-    if (in->w > ow || in->h > oh) mode = 5;  /* a larger source (render scale above 100): the area downscale, whatever the mode (as the GLES path) */
-    if (mode == 4 && !(in->w < ow && in->h < oh)) mode = 0;  /* Anime4K needs a smaller source (as the GLES path): FSR 1 */
-    if (mode < 0 || mode > 5) mode = 0;
-    if (mode == 4) {  /* the CNN's three half-float layers at the source's size, the 2x picture (RGBA8) in `mid`; FSR 1 when the GPU cannot make them */
-        int ok = 1;
-        for (int i = 0; i < 3 && ok; i++) if (target(s, &s->f16[i], VK_FORMAT_R16G16B16A16_SFLOAT, s->rp_f16, in->w, in->h) < 0) ok = 0;
-        if (ok && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, 2 * in->w, 2 * in->h) < 0) ok = 0;
-        if (!ok) mode = 0;
-    }
-    if (mode == 0 && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
-    int nph = (mode >= 1 && mode <= 3 && s->stages > 1 && ow > in->w * 1.05 && oh > in->h * 1.05) ? s->stages : 1;  /* the phases of an upscale (as the GLES path) */
-    int msz[4][2];
-    for (int k = 1; k <= nph; k++) {
-        msz[k - 1][0] = k == nph ? ow : (int)(in->w * pow((double)ow / in->w, (double)k / nph) + 0.5);
-        msz[k - 1][1] = k == nph ? oh : (int)(in->h * pow((double)oh / in->h, (double)k / nph) + 0.5);
-        if (k < nph && target(s, &s->ph[k - 1], VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, msz[k - 1][0], msz[k - 1][1]) < 0) return -1;
-    }
+    int down = in->w > ow || in->h > oh;  /* render scale above 100: the area downscale (as the GLES path) */
+    if (!down && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
     struct pc pc = { { (float)in->w, (float)in->h }, { (float)ow / (float)in->w, (float)oh / (float)in->h }, { 1.0f / (float)ow, 1.0f / (float)oh },
         { 1.0f / (float)in->w, 1.0f / (float)in->h }, sharp < 0 ? 0 : sharp > 1 ? 1 : sharp, in->w > ow ? (float)in->w / (float)ow : 0.0f };
     s->vkResetDescriptorPool(s->dev, s->pool, 0);
@@ -211,41 +182,11 @@ int svk_record(struct svk *s, int mode, int buf, int ow, int oh, float sharp, st
         s->vkCmdPipelineBarrier(s->cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &br);
         in->seen = 1;
     }
-    VkImageView ext = in->i.view, none = VK_NULL_HANDLE;
-    switch (mode) {
-    case 0: {  /* FSR 1: EASU into the intermediate, RCAS into the output */
-        VkImageView a[4] = { ext, none, none, none }, b[4] = { s->mid.view, none, none, none };
-        pass(s, P_UP, s->rp_mid, s->mid.fb, ow, oh, a, &pc);
-        pass(s, P_CAS, s->rp_out, o->i.fb, ow, oh, b, &pc);
-        break;
-    }
-    case 1: case 2: case 3: case 5: {  /* NIS, SGSR 1, Lanczos, the downscale: one pass */
-        int pipe = mode == 1 ? P_NIS : mode == 2 ? P_SGSR : mode == 3 ? P_LANCZOS : P_DOWN;
-        VkImageView prev = ext;
-        int pw = in->w, phh = in->h;
-        for (int k = 1; k <= nph; k++) {  /* one phase when nph is 1 */
-            int mw = msz[k - 1][0], mh = msz[k - 1][1];
-            struct pc q = pc;
-            if (nph > 1) q = (struct pc){ { (float)pw, (float)phh }, { (float)mw / (float)pw, (float)mh / (float)phh }, { 1.0f / (float)mw, 1.0f / (float)mh }, { 1.0f / (float)pw, 1.0f / (float)phh }, k == nph ? pc.sharp : 0.0f, 0.0f };
-            VkImageView a[4] = { prev, none, none, none };
-            if (k < nph) pass(s, pipe, s->rp_mid, s->ph[k - 1].fb, mw, mh, a, &q); else pass(s, pipe, s->rp_out, o->i.fb, ow, oh, a, &q);
-            if (k < nph) prev = s->ph[k - 1].view;
-            pw = mw; phh = mh;
-        }
-        break;
-    }
-    default: {  /* Anime4K CNN: four conv layers (T0 T1 T2 T0), depth-to-space into the 2x `mid`, Lanczos 3 into the output */
-        VkImageView t0 = s->f16[0].view, t1 = s->f16[1].view, t2 = s->f16[2].view;
-        VkImageView a[4] = { ext, none, none, none }, b[4] = { none, t0, none, none }, c[4] = { none, none, t1, none }, d[4] = { none, none, none, t2 }, e[4] = { ext, t0, none, none }, f[4] = { none, s->mid.view, none, none };
-        struct pc p2 = pc;  /* the last pass samples the 2x picture */
-        p2.src[0] = 2.0f * (float)in->w; p2.src[1] = 2.0f * (float)in->h;
-        pass(s, P_C1, s->rp_f16, s->f16[0].fb, in->w, in->h, a, &pc);
-        pass(s, P_C2, s->rp_f16, s->f16[1].fb, in->w, in->h, b, &pc);
-        pass(s, P_C3, s->rp_f16, s->f16[2].fb, in->w, in->h, c, &pc);
-        pass(s, P_C4, s->rp_f16, s->f16[0].fb, in->w, in->h, d, &pc);
-        pass(s, P_D2S, s->rp_mid, s->mid.fb, 2 * in->w, 2 * in->h, e, &pc);
-        pass(s, P_FIN, s->rp_out, o->i.fb, ow, oh, f, &p2);
-    }
+    if (down) {
+        pass(s, P_DOWN, s->rp_out, o->i.fb, ow, oh, in->i.view, &pc);
+    } else {  /* FSR 1: EASU into the intermediate, RCAS into the output */
+        pass(s, P_UP, s->rp_mid, s->mid.fb, ow, oh, in->i.view, &pc);
+        pass(s, P_CAS, s->rp_out, o->i.fb, ow, oh, s->mid.view, &pc);
     }
     if (s->has_foreign) {  /* the output goes back to the outside (the compositor) */
         VkImageMemoryBarrier br = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, .oldLayout = VK_IMAGE_LAYOUT_GENERAL, .newLayout = VK_IMAGE_LAYOUT_GENERAL,

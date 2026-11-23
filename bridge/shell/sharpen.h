@@ -1,6 +1,5 @@
 /* The shell's optional upscale pass (`apklayer settings` render-filter sharp): a game that renders at a render scale other than the window's
- * pixels is shown through a Catmull-Rom bicubic resample and a contrast adaptive sharpening step (the technique of AMD's CAS) instead of the
- * compositor's bilinear stretch. The app's dmabufs are imported into EGL (the first render node that takes them), the result is drawn into a ring
+ * pixels is shown through FSR 1 (EASU upscale + RCAS sharpening) instead of the compositor's bilinear stretch. The app's dmabufs are imported into EGL (the first render node that takes them), the result is drawn into a ring
  * of dmabufs the window shows. No Wayland here (the window glue is sharpen_win.c; tests/hals/sharpen-test.c runs this alone). Every function
  * can fail: the caller keeps the zero-copy path then. Single threaded (the shell's main thread). */
 #ifndef APKLAYER_SHARPEN_H
@@ -33,10 +32,6 @@ int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, in
                    const uint32_t *offsets, uint64_t modifier);
 void sharpen_forget(struct sharpen *s, int buf);
 
-/* 0: FSR 1 (EASU + RCAS), 1: NVIDIA Image Scaling (one pass; the sharpness is NIS's 0..1 slider), 2: Snapdragon GSR 1 (one pass), 3: Lanczos 3, 4: Anime4K (the CNN: six passes), 5: auto (chosen per frame by sharpen_win.c, never reaches here). Takes effect with the next sharpen_render. */
-void sharpen_set_mode(struct sharpen *s, int mode);
-/* Phases of the NIS / SGSR 1 / Lanczos upscale: 1..4, 0 the default (APKLAYER_SHARPEN_STAGES, else 2). Takes effect with the next sharpen_render. */
-void sharpen_set_stages(struct sharpen *s, int n);
 /* The anti-aliasing pass after an upscale (GLES backend): 0 the default (APKLAYER_SHARPEN_AA off|low|high, else high), 1 off, 2 low, 3 high. */
 void sharpen_set_aa(struct sharpen *s, int n);
 /* The calm pass after an upscale (GLES backend; temporal + spatial noise reduction for foliage and grass, heavier the bigger the ratio): 0 the default (APKLAYER_SHARPEN_CALM off|low|high, else off), 1 off, 2 low, 3 high. */

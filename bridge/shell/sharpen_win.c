@@ -208,21 +208,15 @@ int sharpen_win_show(struct window *w, int buf)
         give_back(w, sw->pending, "replaced before it was drawn");
         sw->pending = -1;
     }
-    int mode = w->filter - 1;  /* 0 FSR 1, 1 NIS, 2 SGSR 1, 3 Lanczos 3, 4 Anime4K, 5 auto */
-    /* auto (the implicit filter of a render scale other than 100): SGSR 1 for a ratio window/frame below 1.2, NIS above (benchmark of all modes
-     * at ratios 1.1..4 on text, line art and smooth images: NIS is ahead of FSR 1 by 0.7-1 dB / 0.5-0.8 SSIM points from 1.25 up, SGSR 1 at 1.1) */
-    if (mode == 5) mode = (long)ow * 10 < (long)sw->w[buf] * 12 ? 2 : 1;
-    sharpen_set_stages(sw->s, w->phases);
     sharpen_set_aa(sw->s, w->aa);
     sharpen_set_calm(sw->s, w->calm);
-    sharpen_set_mode(sw->s, mode);
-    /* the sharpness: the mode's own default (NIS 0.3, SGSR 1.0, else FSR 1 / Lanczos 0.55) times the app's render-sharpness (off 0, low 0.5, medium 1, high 1.5) times a
-     * factor that grows with the upscale ratio (0.8 + 0.25 (ratio - 1), 0.8..1.6): the lower the render scale, the sharper; capped at 1 (SGSR 1: 2) */
+    /* the sharpness: FSR 1's RCAS default 0.55 times the app's render-sharpness (off 0, low 0.5, medium 1, high 1.5) times a factor that grows with the upscale ratio
+     * (0.8 + 0.25 (ratio - 1), 0.8..1.6): the lower the render scale, the sharper; capped at 1 */
     static const float lvl[5] = { 1.0f, 0.0f, 0.5f, 1.0f, 1.5f };
-    float ratio = (float)ow / (float)(sw->w[buf] > 0 ? sw->w[buf] : ow), rf = 0.8f + 0.25f * (ratio - 1.0f), base = mode == 1 ? 0.3f : mode == 2 ? 1.0f : 0.55f;
+    float ratio = (float)ow / (float)(sw->w[buf] > 0 ? sw->w[buf] : ow), rf = 0.8f + 0.25f * (ratio - 1.0f);
     rf = rf < 0.8f ? 0.8f : rf > 1.6f ? 1.6f : rf;
-    float sh = base * lvl[w->sharpl >= 0 && w->sharpl <= 4 ? w->sharpl : 0] * rf, cap = mode == 2 ? 2.0f : 1.0f;
-    int rc = sharpen_render(sw->s, buf, ow, oh, sh > cap ? cap : sh, &slot, &fresh);
+    float sh = 0.55f * lvl[w->sharpl >= 0 && w->sharpl <= 4 ? w->sharpl : 0] * rf;
+    int rc = sharpen_render(sw->s, buf, ow, oh, sh > 1.0f ? 1.0f : sh, &slot, &fresh);
     if (rc == -2) { if (sw->pending != buf) sw->pending_ms = now_ms(); sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
     if (rc < 0) {
         sw->fail_n++;

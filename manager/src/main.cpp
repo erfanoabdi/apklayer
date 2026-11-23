@@ -184,11 +184,8 @@ public:
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-scale.", 0) == 0) appScales_[field(r, 0).substr(13)] = field(r, 1);
         b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
         appFilters_.clear();  // render-filter.<package>
-        for (const auto& r : s.settings) if (field(r, 0).rfind("render-filter.", 0) == 0) appFilters_[field(r, 0).substr(14)] = field(r, 1);
+        for (const auto& r : s.settings) if (field(r, 0).rfind("render-filter.", 0) == 0) { std::string f = field(r, 1); appFilters_[field(r, 0).substr(14)] = f.empty() || f == "off" ? f : "sharp"; }  // the removed filters (nis, sgsr, lanczos, anime4k, auto) read as FSR 1
         b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
-        appPhases_.clear();  // render-phases.<package>
-        for (const auto& r : s.settings) if (field(r, 0).rfind("render-phases.", 0) == 0) appPhases_[field(r, 0).substr(14)] = field(r, 1);
-        b.set_app_render_phases_setting(slint::SharedString(appPhases_[current_]));
         appAa_.clear();  // render-aa.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-aa.", 0) == 0) appAa_[field(r, 0).substr(10)] = field(r, 1);
         b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
@@ -246,7 +243,6 @@ public:
     std::map<std::string, std::string> appModes_;
     std::map<std::string, std::string> appScales_;  // render-scale.<package>
     std::map<std::string, std::string> appFilters_;  // render-filter.<package>
-    std::map<std::string, std::string> appPhases_;   // render-phases.<package>
     std::map<std::string, std::string> appAa_;       // render-aa.<package>
     std::map<std::string, std::string> appCalm_;     // render-calm.<package>
     std::map<std::string, std::string> appSharp_;    // render-sharpness.<package>
@@ -501,7 +497,6 @@ private:
             b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
             b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
             b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
-            b.set_app_render_phases_setting(slint::SharedString(appPhases_[current_]));
             b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
             b.set_app_render_calm_setting(slint::SharedString(appCalm_[current_]));
             b.set_app_render_sharpness_setting(slint::SharedString(appSharp_[current_]));
@@ -584,7 +579,6 @@ private:
             if (std::string(k).rfind("render-calm.", 0) == 0) { appCalm_[std::string(k).substr(12)] = std::string(v); ui_->global<Backend>().set_app_render_calm_setting(v); }
             if (std::string(k).rfind("render-sharpness.", 0) == 0) { appSharp_[std::string(k).substr(17)] = std::string(v); ui_->global<Backend>().set_app_render_sharpness_setting(v); }
             if (std::string(k).rfind("render-aa.", 0) == 0) { appAa_[std::string(k).substr(10)] = std::string(v); ui_->global<Backend>().set_app_render_aa_setting(v); }
-            if (std::string(k).rfind("render-phases.", 0) == 0) { appPhases_[std::string(k).substr(14)] = std::string(v); ui_->global<Backend>().set_app_render_phases_setting(v); }
             if (std::string(k).rfind("render-scale.", 0) == 0) { appScales_[std::string(k).substr(13)] = std::string(v); ui_->global<Backend>().set_app_render_scale_setting(v); showResolution(); }
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
             else action("Saving", {"settings", "set", std::string(k), std::string(v)});

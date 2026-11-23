@@ -1,4 +1,4 @@
-/* The downscale shader (sharpen.c: used by every render-filter mode when the app's buffer is larger than the output, i.e. render scale above 100): a
+/* The downscale shader (sharpen.c: used when the app's buffer is larger than the output, i.e. render scale above 100): a
  * Lanczos 2 area filter. The kernel is stretched by the ratio source/output on each axis (so every source texel under the output pixel counts, nothing
  * aliases as bilinear does at ratios like 1.33 / 1.5), over texel-centre fetches, weights normalised; one pass. An axis that is not larger than the output
  * keeps ratio 1 (a plain Lanczos 2 interpolation there). Handles ratios up to 3 (taps -6..6). Uniforms: tex, src (the source size), scl (output / source). */
