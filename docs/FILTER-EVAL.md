@@ -36,27 +36,30 @@ both polarities (1.0 = like the original; bilinear shows 0.3 contrast and 2.9x w
 step edge in output px, 1.0 = hard) and its overshoot in percent of the step. Higher is better for PSNR/SSIM/contrast, closer to 1.0 for edge/width,
 lower for rise/halo/overshoot.
 
-## Baseline (2026-11-23, default pipeline: EASU + RCAS 0.55 + AA high, GLES, RTX 5060 Ti)
+## Baseline (2026-11-23, the shell's default pipeline: EASU + RCAS 0.2 stops with the text aid + AA high, GLES = Vulkan, RTX 5060 Ti)
 
-| scale | score | PSNR bil / fsr1 | SSIM bil / fsr1 | edge bil / fsr1 |
+| scale | score | PSNR bil / fsr1 / fsr1 AA off | SSIM bil / fsr1 / AA off | edge bil / fsr1 / AA off |
 |---|---|---|---|---|
-| 35 % | text | 17.56 / 17.23 | 0.743 / 0.746 | 0.53 / 0.50 |
-| 35 % | 3d | 27.97 / 28.87 | 0.841 / 0.856 | 0.74 / 0.77 |
-| 35 % | ui | 20.72 / 20.86 | 0.808 / 0.828 | 0.56 / 0.59 |
-| 50 % | text | 19.37 / 18.90 | 0.829 / 0.831 | 0.65 / 0.60 |
-| 50 % | 3d | 30.33 / 31.70 | 0.901 / 0.913 | 0.82 / 0.84 |
-| 50 % | ui | 23.20 / 24.01 | 0.874 / 0.895 | 0.67 / 0.74 |
-| 75 % | text | 21.90 / 22.06 | 0.913 / 0.918 | 0.81 / 0.79 |
-| 75 % | 3d | 33.16 / 34.67 | 0.950 / 0.960 | 0.91 / 0.93 |
-| 75 % | ui | 25.93 / 26.89 | 0.940 / 0.953 | 0.84 / 0.87 |
+| 35 % | text | 17.56 / 17.16 / 17.99 | 0.743 / 0.744 / 0.778 | 0.53 / 0.48 / 0.63 |
+| 35 % | 3d | 27.97 / 27.94 / 29.06 | 0.841 / 0.826 / 0.871 | 0.74 / 0.71 / 0.82 |
+| 35 % | ui | 20.72 / 20.77 / 21.19 | 0.808 / 0.824 / 0.835 | 0.56 / 0.58 / 0.64 |
+| 35 % | smooth | 35.19 / 42.25 / 42.38 | 0.987 / 0.991 / 0.991 | 0.99 / 1.00 / 1.01 |
+| 50 % | text | 19.37 / 19.36 / 20.28 | 0.829 / 0.854 / 0.879 | 0.65 / 0.67 / 0.79 |
+| 50 % | 3d | 30.33 / 30.75 / 32.28 | 0.901 / 0.897 / 0.928 | 0.82 / 0.80 / 0.91 |
+| 50 % | ui | 23.20 / 24.07 / 24.71 | 0.874 / 0.896 / 0.904 | 0.67 / 0.76 / 0.81 |
+| 50 % | smooth | 37.37 / 47.04 / 47.11 | 0.991 / 0.996 / 0.996 | 0.99 / 1.01 / 1.01 |
+| 75 % | text | 21.90 / 23.37 / 23.77 | 0.913 / 0.941 / 0.944 | 0.81 / 0.91 / 0.94 |
+| 75 % | 3d | 33.16 / 34.19 / 34.30 | 0.950 / 0.957 / 0.959 | 0.91 / 0.95 / 0.98 |
+| 75 % | ui | 25.93 / 27.87 / 28.05 | 0.940 / 0.959 / 0.960 | 0.84 / 0.93 / 0.95 |
+| 75 % | smooth | 43.41 / 51.42 / 51.25 | 0.996 / 0.998 / 0.998 | 0.99 / 1.01 / 1.01 |
 
-Text stems (1 px / 2 px, contrast then width) and step edge rise, bilinear vs FSR 1: 35 %: 0.32/0.64 and 2.9/1.5 vs 0.34/0.64 and 2.8/1.5, rise 4.6 vs 4.2 px;
-50 %: 0.37/0.75 and 2.5/1.25 vs 0.44/0.88 and 2.15/1.09, rise 2.20 vs 1.57; 75 %: 0.87/0.87 and 1.46/1.13 vs 0.96/0.97 and 1.23/1.01, rise 2.36 vs 2.38.
+Text stems (1 px / 2 px, contrast, then width) and step edge rise, bilinear vs FSR 1 (default): 35 %: 0.32/0.64 and 2.9/1.47 vs 0.32/0.64 and 2.9/1.52, rise 4.58 vs 4.14 px; 50 %: 0.37/0.75 and 2.5/1.25 vs 0.43/0.87 and 2.1/1.00, rise 2.20 vs 0.81 px; 75 %: 0.87/0.87 and 1.5/1.13 vs 0.99/0.99 and 1.2/1.09, rise 2.36 vs 2.18 px.
 
-What it shows: FSR 1 beats bilinear on smooth, 3D and UI content at every scale, but on text the PSNR is below bilinear at 35 and 50 % and the edge
-strength is below bilinear (0.50 vs 0.53, 0.60 vs 0.65): the AA pass softens text (`APKLAYER_SHARPEN_AA=off` gives text +0.7..2 dB over the default
-and edge 0.62/0.78/0.91, with 0.4..1.7 % halos), and at 75 % the step edge is no sharper than bilinear (rise 2.38 vs 2.36 px). These are the
-numbers the text aids and the EASU/RCAS port are measured by.
+What it shows: FSR 1 beats bilinear on smooth and UI content at every scale, on 3D at 50 and 75 % and on text at 75 %; at 35 % (text, 3D) and for the text at 50 % the
+default AA pass pulls PSNR to bilinear's level or just below and SSIM/edge on the 3D tiles below it (AA off: above bilinear everywhere, text 17.99 / 20.28 dB, edge 0.63 / 0.79).
+The AA gate keeps it from smearing stems (stem contrast and the step edge's rise equal with AA off); what it still softens are the glyph bodies and 3D detail. The GLES and Vulkan
+backends give the same numbers (tests/vm/sharpen_parity.py). These are the numbers a change to the
+EASU/RCAS port, the text aid or the AA pass is measured by.
 
 Limits: the input is a box-reduced copy of a full-resolution frame (a game renders at the lower size, with its own aliasing); the metrics are
 signal measures (a person judges the look); colour AA effects show in luma metrics only.
