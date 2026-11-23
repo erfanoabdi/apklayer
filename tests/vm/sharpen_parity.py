@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The render filter's two backends on the same input (tests/hals/sharpen-test via APKLAYER_SHARPEN_BACKEND=gles|vulkan): FSR 1 (EASU, RCAS with its text aid and
-mask, the anti-aliasing pass once and twice, the area downscale) must agree within 8 LSB (the GPUs' float rounding; a handful of samples at a threshold of the text mask or an EASU direction tie may differ more, up to 20) on odd sizes, non-integer ratios, 1:1, tiny and
-large outputs, with the text aid and the AA level off, low and high. SKIP without a render node, Vulkan or a sharpen-test built with both backends (SHARPEN_TEST
+"""The render filter's two backends on the same input (tests/hals/sharpen-test via APKLAYER_SHARPEN_BACKEND=gles|vulkan): FSR 1 (EASU, RCAS with its text aid,
+the area downscale; no anti-aliasing: Vulkan has none) must agree within 8 LSB (the GPUs' float rounding; a handful of samples at a threshold of the text mask or an EASU direction tie may differ more, up to 20) on odd sizes, non-integer ratios, 1:1, tiny and
+large outputs, with the text aid on and off. SKIP without a render node, Vulkan or a sharpen-test built with both backends (SHARPEN_TEST
 names the binary). SHARPEN_MODIFIER: the accepted modifier (hex; NVIDIA needs one)."""
 import glob, os, subprocess, sys, tempfile
 import numpy as np
@@ -26,7 +26,7 @@ def picture(w, h):
 def run(tmp, backend, w, h, ow, oh, env):
     out = os.path.join(tmp, backend + '.raw')
     r = subprocess.run([exe, os.path.join(tmp, 'in.raw'), str(w), str(h), out, str(ow), str(oh), '0.5'] + ([MOD] if MOD else []),
-                       env=dict(os.environ, APKLAYER_SHARPEN_BACKEND=backend, **env), capture_output=True, text=True, timeout=60)
+                       env=dict(os.environ, APKLAYER_SHARPEN_BACKEND=backend, APKLAYER_SHARPEN_AA='off', **env), capture_output=True, text=True, timeout=60)  # the Vulkan backend has no anti-aliasing (SMAA / CMAA2 are GLES only): both run without
     if r.returncode in (3, 4): sys.exit('SKIP %s cannot take the picture as a dma-buf (rc %d)' % (backend, r.returncode))
     if r.returncode and backend == 'vulkan' and 'Vulkan' not in r.stderr: sys.exit('SKIP no Vulkan backend (rc %d)' % r.returncode)
     assert r.returncode == 0, '%s failed (rc %d): %s' % (backend, r.returncode, r.stderr)
@@ -35,8 +35,7 @@ def run(tmp, backend, w, h, ow, oh, env):
 
 cases = [(640, 360, 1280, 720, {}), (641, 361, 1283, 721, {}), (853, 480, 1280, 720, {}), (1000, 563, 1280, 720, {}), (64, 36, 1280, 720, {}), (1280, 720, 1281, 721, {}),
          (1, 1, 64, 64, {}), (2, 2, 5, 5, {}), (100, 50, 50, 25, {}), (640, 360, 640, 360, {}), (1920, 1080, 1280, 720, {}),
-         (640, 360, 1280, 720, {'APKLAYER_SHARPEN_AA': 'low'}), (640, 360, 1280, 720, {'APKLAYER_SHARPEN_AA': 'off'}), (640, 360, 1280, 720, {'APKLAYER_SHARPEN_TEXT': 'off'}),
-         (1000, 563, 1280, 720, {'APKLAYER_SHARPEN_AA': 'low'}), (960, 540, 1280, 720, {'APKLAYER_SHARPEN_AA': 'high'}), (448, 252, 1280, 720, {})]  # ratios 2, 1.28 (one AA pass), 1.33, 2.86 (two passes)
+         (640, 360, 1280, 720, {'APKLAYER_SHARPEN_TEXT': 'off'}), (960, 540, 1280, 720, {}), (448, 252, 1280, 720, {})]  # ratios 2, 1.33, 2.86
 with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-par-') as tmp:
     for w, h, ow, oh, env in cases:
         open(os.path.join(tmp, 'in.raw'), 'wb').write(picture(w, h))

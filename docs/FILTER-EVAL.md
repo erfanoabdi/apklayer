@@ -11,7 +11,7 @@ filter change (EASU/RCAS, AA, text aid, shader edits) is judged with it: run bef
     python3 tests/vm/evalfilter.py --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' --filter 'notext:APKLAYER_SHARPEN_TEXT=off' --scales 50 --only text_small,text_large
     python3 tests/vm/evalfilter.py --save /tmp/x          # ref.png and every output as PNG, to look at
 
-Options: `--filter label[:ENV=VAL,...]` (repeatable; the environment of the pass: `APKLAYER_SHARPEN_AA` off|low|high (the `render-aa` knob),
+Options: `--filter label[:ENV=VAL,...]` (repeatable; the environment of the pass: `APKLAYER_SHARPEN_AA` off|smaa-<level>|cmaa2-<level> (the `render-aa` knob; default cmaa2-ultra; the old own levels `low` and `high` were removed on 2026-11-23 and read as cmaa2-low and cmaa2-high),
 `APKLAYER_SHARPEN_TEXT` off|on (`render-text`), `_CALM`, `_BACKEND` gles|vulkan), `--sharp` (the RCAS constant exp2(-stops): 0.8706 = the default 0.2 stops), `--scales`, `--only`, `--check` (exit 1 if the first
 filter is below bilinear on PSNR/SSIM of the smooth and 3D scores; group `evalfilter`). It skips (exit 0) without a render node or the binary; on NVIDIA
 it retries with the block-linear modifier (`SHARPEN_MODIFIER` overrides). `tests/vm/sharpen.py` stays the quick pass/fail smoke test.
@@ -36,7 +36,7 @@ both polarities (1.0 = like the original; bilinear shows 0.3 contrast and 2.9x w
 step edge in output px, 1.0 = hard) and its overshoot in percent of the step. Higher is better for PSNR/SSIM/contrast, closer to 1.0 for edge/width,
 lower for rise/halo/overshoot.
 
-## Baseline (2026-11-23, the shell's default pipeline: EASU + RCAS 0.2 stops with the text aid + AA high, GLES = Vulkan, RTX 5060 Ti)
+## Baseline (2026-11-23, historical: measured before our own AA was removed; the shell's pipeline then was EASU + RCAS 0.2 stops with the text aid + our AA high, GLES = Vulkan, RTX 5060 Ti; the default is cmaa2-ultra now and Vulkan has no AA)
 
 | scale | score | PSNR bil / fsr1 / fsr1 AA off | SSIM bil / fsr1 / AA off | edge bil / fsr1 / AA off |
 |---|---|---|---|---|

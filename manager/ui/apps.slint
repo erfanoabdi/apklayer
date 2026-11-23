@@ -142,11 +142,11 @@ component AppDetail {
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
                         }
                     }
-                    MaterialText { text: "Anti-aliasing: smooths the stair steps of jagged edges (a render scale below 100% shows them). Built-in low/high work after the upscale on the stair steps and keep text crisp (high is the default, heavier the lower the render scale). SMAA and CMAA2 work on the game's own picture before the upscale (the higher the level, the more they catch, at a higher cost; CMAA2 needs OpenGL ES 3.1 compute and uses SMAA of the same level without it)."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "Anti-aliasing: smooths the stair steps of jagged edges (a render scale below 100% shows them). SMAA and CMAA2 work on the game's own picture before the upscale (the higher the level, the more they catch, at a higher cost; CMAA2 needs OpenGL ES 3.1 compute and uses SMAA of the same level without it; the default is CMAA2 ultra; the Vulkan backend has none)."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default (high)", value: "" }, { label: "Off", value: "off" }, { label: "Low", value: "low" }, { label: "High", value: "high" }] : HorizontalLayout {
+                        for choice in [{ label: "Default (CMAA2 ultra)", value: "" }, { label: "Off", value: "off" }] : HorizontalLayout {
                             if Backend.app-render-aa-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
                         }

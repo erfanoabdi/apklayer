@@ -108,7 +108,6 @@ static const char *FS_CAS =
     "    nz = clamp(abs(nz) / max(max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL), 1e-5), 0.0, 1.0);\n"
     "    lobe *= -0.5 * nz + 1.0;\n"
     "  }\n"
-    "  float keep = 1.0;  /* alpha: 1 - the text mask, for the anti-aliasing pass that may follow (sharpen_post.h: it leaves text pixels alone); the output buffers are X formats, alpha is ignored there */\n"
     "  vec3 pix = (lobe * b + lobe * d + lobe * h + lobe * f + e) / (4.0 * lobe + 1.0);\n"
     "  { vec3 lo = min(mn4, e), hi = max(mx4, e), ov = HALO_OV * (hi - lo);  /* apklayer patch: the sharpened value may leave the cross's range by a fraction of it only (halo cap; the reference only keeps it inside 0..1) */\n"
     "    pix = clamp(pix, lo - ov, hi + ov); }\n"
@@ -139,7 +138,6 @@ static const char *FS_CAS =
     "    mn = min(mn, min(p2, q2)); mx = max(mx, max(p2, q2));\n"
     "    vec3 lap = e - 0.25 * (p1 + q1 + 0.5 * (p2 + q2)) * (4.0 / 3.0);\n"
     "    pix = mix(pix, clamp(pix + TEXTK * lap, mn, mx), t);\n"
-    "    keep = 1.0 - t;\n"
     "  }\n"
-    "  gl_FragColor = vec4(clamp(pix, 0.0, 1.0), keep);\n"
+    "  gl_FragColor = vec4(clamp(pix, 0.0, 1.0), 1.0);\n"
     "}\n";

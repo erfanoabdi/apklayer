@@ -36,7 +36,7 @@ def render(text):
         raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
         Path(raw_in).write_bytes(small.convert('RGBA').tobytes())
         args = [exe, raw_in, str(W // 2), str(H // 2), raw_out, str(W), str(H), '0.8706'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else [])
-        env = dict(os.environ, APKLAYER_SHARPEN_AA='off', APKLAYER_SHARPEN_TEXT=text)  # FSR 1 alone: the anti-aliasing pass (default high) softens the edges this test measures
+        env = dict(os.environ, APKLAYER_SHARPEN_AA='off', APKLAYER_SHARPEN_TEXT=text)  # FSR 1 alone: SMAA / CMAA2 (default cmaa2-ultra) would change the edges this test measures
         if os.environ.get('SHARPEN_BACKEND'): env['APKLAYER_SHARPEN_BACKEND'] = os.environ['SHARPEN_BACKEND']
         run = subprocess.run(args, capture_output=True, text=True, timeout=60, env=env)
         print(run.stderr.strip())
@@ -72,12 +72,12 @@ print('PASS sharpen: x%.2f edge strength, %+.2f dB' % (e_ours / e_bil, p_ours - 
 
 # SMAA 1x and CMAA2 (render-aa smaa-*, cmaa2-*) run before the upscale: the result must stay a sane picture (not further from the original than bilinear by more than
 # 0.5 dB, as sharp as bilinear or sharper), whichever level; CMAA2 without ES 3.1 compute falls back to SMAA (the log says so)
-for aa in ('smaa-low', 'smaa-high', 'smaa-ultra', 'cmaa2-low', 'cmaa2-high'):
+for aa in ('smaa-low', 'smaa-medium', 'smaa-high', 'smaa-ultra', 'cmaa2-low', 'cmaa2-medium', 'cmaa2-high', 'cmaa2-ultra', 'cmaa2', 'low', 'high'):  # low and high: the removed own levels, read as cmaa2-low and cmaa2-high
     with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
         raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
         Path(raw_in).write_bytes(small.convert('RGBA').tobytes())
         run = subprocess.run([exe, raw_in, str(W // 2), str(H // 2), raw_out, str(W), str(H), '0.6'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else []),
-                             capture_output=True, text=True, timeout=60, env=dict(os.environ, APKLAYER_SHARPEN_AA=aa))
+                             capture_output=True, text=True, timeout=60, env=dict(os.environ, APKLAYER_SHARPEN_AA=aa, **({'APKLAYER_SHARPEN_BACKEND': os.environ['SHARPEN_BACKEND']} if os.environ.get('SHARPEN_BACKEND') else {})))  # with SHARPEN_BACKEND=vulkan the level is ignored (no anti-aliasing there): the same sanity limits hold
         assert run.returncode == 0, '%s: sharpen-test failed (rc %d): %s' % (aa, run.returncode, run.stderr)
         img = Image.frombytes('RGBA', (W, H), Path(raw_out).read_bytes()).convert('RGB')
     assert edges(img) >= e_bil, '%s: not as sharp as bilinear' % aa

@@ -93,7 +93,7 @@ def run(exe, backend, env, sharp, small):
     with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-eval-') as tmp:
         ri, ro = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
         Path(ri).write_bytes(small.convert('RGBA').tobytes())
-        e = dict(os.environ, APKLAYER_SHARPEN_AA='off')  # FSR 1 alone unless --env APKLAYER_SHARPEN_AA=low|high
+        e = dict(os.environ, APKLAYER_SHARPEN_AA='off')  # FSR 1 alone unless --env APKLAYER_SHARPEN_AA=smaa-<level>|cmaa2-<level>
         e.update(env)
         if backend == 'vulkan': e['APKLAYER_SHARPEN_BACKEND'] = 'vulkan'
         r = subprocess.run([exe, ri, str(small.width), str(small.height), ro, str(W), str(H), str(sharp)] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else []), capture_output=True, text=True, timeout=60, env=e)

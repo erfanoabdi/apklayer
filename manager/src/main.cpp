@@ -32,6 +32,9 @@ using manager::summary;
 
 namespace {
 
+// a stored render-aa value as the buttons name it: the removed own levels low and high read as cmaa2-low and cmaa2-high
+std::string aaName(const std::string& v) { return v == "low" ? "cmaa2-low" : v == "high" || v == "cmaa2" ? "cmaa2-high" : v; }
+
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
 
 // the native bridge's mode without the heavy tier (binary_translation 0008: the property berberis.mode.<package>)
@@ -187,7 +190,7 @@ public:
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-filter.", 0) == 0) { std::string f = field(r, 1); appFilters_[field(r, 0).substr(14)] = f.empty() || f == "off" ? f : "sharp"; }  // the removed filters (nis, sgsr, lanczos, anime4k, auto) read as FSR 1
         b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
         appAa_.clear();  // render-aa.<package>
-        for (const auto& r : s.settings) if (field(r, 0).rfind("render-aa.", 0) == 0) appAa_[field(r, 0).substr(10)] = field(r, 1);
+        for (const auto& r : s.settings) if (field(r, 0).rfind("render-aa.", 0) == 0) appAa_[field(r, 0).substr(10)] = aaName(field(r, 1));
         b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
         appText_.clear();  // render-text.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-text.", 0) == 0) appText_[field(r, 0).substr(12)] = field(r, 1);
@@ -584,7 +587,7 @@ private:
             if (std::string(k).rfind("render-text.", 0) == 0) { appText_[std::string(k).substr(12)] = std::string(v); ui_->global<Backend>().set_app_render_text_setting(v); }
             if (std::string(k).rfind("render-calm.", 0) == 0) { appCalm_[std::string(k).substr(12)] = std::string(v); ui_->global<Backend>().set_app_render_calm_setting(v); }
             if (std::string(k).rfind("render-sharpness.", 0) == 0) { appSharp_[std::string(k).substr(17)] = std::string(v); ui_->global<Backend>().set_app_render_sharpness_setting(v); }
-            if (std::string(k).rfind("render-aa.", 0) == 0) { appAa_[std::string(k).substr(10)] = std::string(v); ui_->global<Backend>().set_app_render_aa_setting(v); }
+            if (std::string(k).rfind("render-aa.", 0) == 0) { appAa_[std::string(k).substr(10)] = aaName(std::string(v)); ui_->global<Backend>().set_app_render_aa_setting(slint::SharedString(appAa_[std::string(k).substr(10)])); }
             if (std::string(k).rfind("render-scale.", 0) == 0) { appScales_[std::string(k).substr(13)] = std::string(v); ui_->global<Backend>().set_app_render_scale_setting(v); showResolution(); }
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
             else action("Saving", {"settings", "set", std::string(k), std::string(v)});

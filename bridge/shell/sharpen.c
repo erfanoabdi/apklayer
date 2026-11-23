@@ -61,11 +61,11 @@ struct sharpen {
     struct smaa *smaa;                            /* SMAA 1x (sharpen_smaa.c), NULL when its tables or shaders failed */
     GLuint up2d_prog;                             /* EASU reading a GL_TEXTURE_2D: the anti-aliased source (SMAA / CMAA2 run before the upscale) */
     struct rt sm_src;                             /* their output: the source-sized picture before EASU, or the output-sized one before RCAS */
-    GLuint aa_prog, calm_prog, blit_prog;         /* the post passes: anti-aliasing (FS_AA), calm (FS_CALM) and a copy */
-    struct rt t0, t1, hist[2];                    /* the filter's output (t0), the anti-aliased picture (t1) and the last two calmed outputs */
+    GLuint calm_prog, blit_prog;                  /* the post passes: calm (FS_CALM) and a copy */
+    struct rt t0, t1, hist[2];                    /* the filter's output (t0), SMAA / CMAA2's result (t1) and the last two calmed outputs */
     int hist_cur, hist_ok, hist_w, hist_h;        /* hist[hist_cur] is the previous output; hist_ok: it holds a frame of this size */
     int aa_req, aa_env, calm_req, calm_env, text_req, text_env;   /* text: 0 default, 1 off, 2 on (APKLAYER_SHARPEN_TEXT off|on, else on) */
-          /* the window's render-aa / render-calm (0 default, 1 off, 2 low, 3 high, 4..7 SMAA low..ultra, 8..11 CMAA2 low..ultra); the defaults (APKLAYER_SHARPEN_AA off|low|high|smaa-<level>|cmaa2-<level>, else high; APKLAYER_SHARPEN_CALM, else off) */
+          /* the window's render-aa / render-calm (0 default, 1 off, 4..7 SMAA low..ultra, 8..11 CMAA2 low..ultra); the defaults (APKLAYER_SHARPEN_AA off|smaa-<level>|cmaa2-<level>, else cmaa2-ultra; APKLAYER_SHARPEN_CALM, else off) */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
 #endif
@@ -75,15 +75,14 @@ struct sharpen {
     int accept_n;
 };
 
-/* render-aa by name: 1 off, 2 low, 3 high (our own), 4..7 smaa-low..smaa-ultra, 8..11 cmaa2-low..cmaa2-ultra (cmaa2 alone: high); 0 unknown */
+/* render-aa by name: 1 off, 4..7 smaa-low..smaa-ultra, 8..11 cmaa2-low..cmaa2-ultra (cmaa2 alone: high; the old own levels low and high: cmaa2-low and cmaa2-high); 0 unknown */
 static int aa_id(const char *a)
 {
     static const char *const lv[4] = { "low", "medium", "high", "ultra" };
     if (!a) return 0;
     if (!strcmp(a, "off")) return 1;
-    if (!strcmp(a, "low")) return 2;
-    if (!strcmp(a, "high")) return 3;
-    if (!strcmp(a, "cmaa2")) return 10;
+    if (!strcmp(a, "low")) return 8;
+    if (!strcmp(a, "high") || !strcmp(a, "cmaa2")) return 10;
     for (int i = 0; i < 4; i++) {
         char n[24];
         snprintf(n, sizeof n, "smaa-%s", lv[i]);
@@ -149,7 +148,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = aa_id(a) ? aa_id(a) : 3; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; const char *tx = getenv("APKLAYER_SHARPEN_TEXT"); s->text_env = tx && !strcmp(tx, "off") ? 1 : 2; } s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = aa_id(a) ? aa_id(a) : 11; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; const char *tx = getenv("APKLAYER_SHARPEN_TEXT"); s->text_env = tx && !strcmp(tx, "off") ? 1 : 2; } s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 
@@ -270,7 +269,6 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->up_prog = program(FS_UP);
         s->cas_prog = program(FS_CAS);
         if (!s->up_prog || !s->cas_prog) { if (d) closedir(d); return -1; }
-        s->aa_prog = program(FS_AA);
         s->up2d_prog = program_2d(FS_UP);
         s->smaa = s->up2d_prog ? smaa_create(program) : NULL;
         s->cmaa = s->smaa ? cmaa_create(program) : NULL;
@@ -403,8 +401,8 @@ static void draw(void)
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
-/* The post passes after an upscale (GLES backend): the filter draws into t0 (output size, LINEAR); then the anti-aliasing pass (t0 -> t1, or into the output) and the
- * calm pass (reads the picture and the previous output, writes hist[], copied into the output). Both grow with the upscale ratio: the lower the render scale, the heavier. */
+/* The post passes (GLES backend): the filter draws into t0 (output size, LINEAR); then SMAA / CMAA2 where they run on the filter's output (t0 -> t1, or into the output) and the
+ * calm pass (reads the picture and the previous output, writes hist[], copied into the output; it grows with the upscale ratio). */
 static GLuint rt_ensure(struct rt *r, int w, int h)
 {
     if (r->w != w || r->h != h) {
@@ -460,19 +458,6 @@ static int aa_run(struct sharpen *s, int ext, GLuint src, int w, int h, int aa, 
     return smaa_run(s->smaa, rt_ensure, ext, src, w, h, (aa - 4) & 3, dst, s->vbo);
 }
 
-static void aa_draw(struct sharpen *s, GLuint src, GLuint out_fbo, int w, int h, float ratio, float scale)
-{
-    int lvl = s->aa_req ? s->aa_req : s->aa_env;
-    if (lvl > 3) lvl = 3;  /* SMAA / CMAA2 asked for but not available: the built-in high */
-    float str, longk;
-    sharpen_aa_params(lvl, ratio, &str, &longk);
-    post_tex(s->aa_prog, 0, "tex", src);
-    glUniform2f(glGetUniformLocation(s->aa_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
-    glUniform1f(glGetUniformLocation(s->aa_prog, "sharp"), clampf(str * scale, 0.0f, 1.0f));
-    glUniform1f(glGetUniformLocation(s->aa_prog, "longk"), longk);
-    post_draw(s, s->aa_prog, out_fbo, w, h);
-}
-
 static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float ratio, int aa, int calm)
 {
     GLuint cur = s->t0.tex;
@@ -480,16 +465,6 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
     if (aa >= 4) {  /* SMAA / CMAA2 on the filter's output (the downscale path: no place before an upscale) */
         if (aa_run(s, 0, cur, w, h, aa, calm ? s->t1.fbo : out_fbo) < 0) aa = 0;
         else if (calm) cur = s->t1.tex;
-    } else if (aa) {
-        /* the high level at a bigger upscale smooths twice (t0 -> t1 -> output, or back into t0 for the calm pass): long stair steps get a longer effective run */
-        int twice = (s->aa_req ? s->aa_req : s->aa_env) >= 3 && ratio >= 1.5f && rt_ensure(&s->t1, w, h);
-        if (twice) {
-            aa_draw(s, cur, s->t1.fbo, w, h, ratio, 1.0f);
-            aa_draw(s, s->t1.tex, calm ? s->t0.fbo : out_fbo, w, h, ratio, 0.5f);  /* the second pass at half strength: text and strokes keep their crispness */
-        } else {
-            aa_draw(s, cur, calm ? s->t1.fbo : out_fbo, w, h, ratio, 1.0f);
-            if (calm) cur = s->t1.tex;
-        }
     }
     if (!calm) {
         if (!aa) { post_tex(s->blit_prog, 0, "tex", cur); post_draw(s, s->blit_prog, out_fbo, w, h); }
@@ -514,7 +489,7 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
     s->hist_ok = 1;
 }
 
-void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n >= 1 && n <= 11 ? n : 0; }
+void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n == 2 ? 8 : n == 3 ? 10 : n == 1 || (n >= 4 && n <= 11) ? n : 0; }  /* 2, 3: the old low and high */
 void sharpen_set_text(struct sharpen *s, int n) { if (s) s->text_req = n >= 1 && n <= 2 ? n : 0; }
 void sharpen_set_calm(struct sharpen *s, int n) { if (s) s->calm_req = n >= 1 && n <= 3 ? n : 0; }
 
@@ -523,7 +498,9 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     static int said_in, said_busy;
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) {
-        int rc = svk_render(s->vk, buf, ow, oh, sharpness, (s->text_req ? s->text_req : s->text_env) > 1, (s->aa_req ? s->aa_req : s->aa_env) > 3 ? 3 : s->aa_req ? s->aa_req : s->aa_env, slot, fresh);  /* the Vulkan backend has the built-in anti-aliasing only: SMAA / CMAA2 become high there */
+        static int said_vkaa;
+        if ((s->aa_req ? s->aa_req : s->aa_env) > 1 && !said_vkaa++) fprintf(stderr, "[sharpen] the Vulkan backend has no anti-aliasing (SMAA and CMAA2 are GLES only): none is applied\n");
+        int rc = svk_render(s->vk, buf, ow, oh, sharpness, (s->text_req ? s->text_req : s->text_env) > 1, slot, fresh);
         if (rc == -2 && !said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SVK_SLOTS);
         return rc;
     }
@@ -568,8 +545,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     int aa = s->aa_req ? s->aa_req : s->aa_env;
     static int said_aa, said_cmaa;
     if (aa >= 8 && !s->cmaa) { aa -= 4; if (!said_cmaa++) fprintf(stderr, "[sharpen] CMAA2 needs OpenGL ES 3.1 compute, not available here: SMAA of the same level runs\n"); }
-    if (aa >= 4 && !s->smaa) { aa = 3; if (!said_aa++) fprintf(stderr, "[sharpen] SMAA unavailable on this GPU: the built-in anti-aliasing is used\n"); }
-    aa = aa >= 4 ? aa : (s->aa_prog && up && aa > 1 ? 1 : 0);  /* 1: ours (low / high, only after an upscale); 4..11: SMAA / CMAA2 at any size */
+    if (aa >= 4 && !s->smaa) { aa = 1; if (!said_aa++) fprintf(stderr, "[sharpen] SMAA unavailable on this GPU: no anti-aliasing\n"); }
+    if (aa < 4) aa = 0;  /* 4..11: SMAA / CMAA2 at any size */
     int calm = s->calm_prog && s->blit_prog && up && (s->calm_req ? s->calm_req : s->calm_env) > 1;
     GLuint dst = (aa || calm) ? rt_ensure(&s->t0, ow, oh) : o->fbo;
     if ((aa || calm) && !dst) { aa = calm = 0; dst = o->fbo; }

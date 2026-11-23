@@ -316,7 +316,7 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && *e && strcmp(e, "off") ? 1 : 0;  /* bit 0: FSR 1 on (any name but off: the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1); bits 1-2: render-text (below); bits 3-6 are unused (they carried the mode and the phases) */
         const char *tx = getenv("APKLAYER_RENDER_TEXT");  /* bits 1-2: the text aid after an upscale: 1 off, 2 on (0: the shell's default, on) */
         if (tx) filter |= (!strcmp(tx, "off") ? 1 : !strcmp(tx, "on") ? 2 : 0) << 1;
-        const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: the anti-aliasing after an upscale: 1 off, 2 low, 3 high (0: the shell's default, high); bits 14-17 (a shell that predates them
+        const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: 1 off, 2 low, 3 high (the shell reads low and high as cmaa2-low and cmaa2-high; 0: the shell's default, cmaa2-ultra); bits 14-17 (a shell that predates them
          * reads 0 in bits 7-8, its default): 1..4 smaa-low..smaa-ultra, 5..8 cmaa2-low..cmaa2-ultra (before the upscale, SMAA 1x / CMAA2; bits 7-8 then stay 0) */
         if (aa) {
             static const char *const lv[4] = { "low", "medium", "high", "ultra" };

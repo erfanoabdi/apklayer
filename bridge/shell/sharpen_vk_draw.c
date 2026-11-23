@@ -8,9 +8,9 @@
 #include "sharpen_vk.h"
 #include "sharpen_vk_spv.h"
 
-/* the shaders' push-constant block (tools/gen/sharpen-spv.py): vec2 src, scl, px, d; float sharp, down, text, longk */
-struct pc { float src[2], scl[2], px[2], d[2], sharp, down, text, longk; };
-enum { P_UP, P_CAS, P_DOWN, P_AA };
+/* the shaders' push-constant block (tools/gen/sharpen-spv.py): vec2 src, scl, px, d; float sharp, down, text */
+struct pc { float src[2], scl[2], px[2], d[2], sharp, down, text; };
+enum { P_UP, P_CAS, P_DOWN };
 
 static VkRenderPass make_rp(struct svk *s, VkFormat fmt, VkImageLayout final)
 {
@@ -164,18 +164,13 @@ static void wait_done(struct svk *s, VkFence f)
 }
 
 /* Records, submits and waits for one frame: buffer `buf` through FSR 1 (or, for a source larger than the output, the area downscale) into `o`. */
-int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, int text, int aa, struct svk_slot *o)
+int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, int text, struct svk_slot *o)
 {
     struct svk_in *in = &s->in[buf];
     int down = in->w > ow || in->h > oh;  /* render scale above 100: the area downscale (as the GLES path) */
     if (!down && target(s, &s->mid, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) return -1;
-    int lvl = aa > 1 && ow > in->w && oh > in->h ? aa : 0;  /* the anti-aliasing pass after an upscale (2 low, 3 high), as the GLES path: RCAS draws into t0, FS_AA into the output */
-    float ratio = (float)ow / (float)in->w, str, longk;
-    sharpen_aa_params(lvl, ratio, &str, &longk);
-    int twice = lvl == 3 && ratio >= 1.5f && target(s, &s->t1, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) == 0;  /* the high level at a bigger ratio smooths twice (t0 -> t1 -> output) */
-    if (lvl && target(s, &s->t0, VK_FORMAT_B8G8R8A8_UNORM, s->rp_mid, ow, oh) < 0) lvl = twice = 0;
     struct pc pc = { { (float)in->w, (float)in->h }, { (float)ow / (float)in->w, (float)oh / (float)in->h }, { 1.0f / (float)ow, 1.0f / (float)oh },
-        { 1.0f / (float)in->w, 1.0f / (float)in->h }, sharp < 0 ? 0 : sharp > 1 ? 1 : sharp, in->w > ow ? (float)in->w / (float)ow : 0.0f, text ? 1.0f : 0.0f, 0.0f };
+        { 1.0f / (float)in->w, 1.0f / (float)in->h }, sharp < 0 ? 0 : sharp > 1 ? 1 : sharp, in->w > ow ? (float)in->w / (float)ow : 0.0f, text ? 1.0f : 0.0f };
     s->vkResetDescriptorPool(s->dev, s->pool, 0);
     VkCommandBufferBeginInfo bg = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     s->vkResetCommandBuffer(s->cb, 0);
@@ -191,17 +186,7 @@ int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, int text, in
         pass(s, P_DOWN, s->rp_out, o->i.fb, ow, oh, in->i.view, &pc);
     } else {  /* FSR 1: EASU into the intermediate, RCAS into the output */
         pass(s, P_UP, s->rp_mid, s->mid.fb, ow, oh, in->i.view, &pc);
-        pass(s, P_CAS, lvl ? s->rp_mid : s->rp_out, lvl ? s->t0.fb : o->i.fb, ow, oh, s->mid.view, &pc);
-        if (lvl) {  /* FS_AA reads the plain 2D picture and its alpha (1 - the text mask of RCAS) */
-            struct pc q = pc;
-            q.sharp = str < 0 ? 0 : str > 1 ? 1 : str;
-            q.longk = longk;
-            if (twice) {
-                pass(s, P_AA, s->rp_mid, s->t1.fb, ow, oh, s->t0.view, &q);
-                q.sharp *= 0.5f;  /* the second pass at half strength: text and strokes keep their crispness */
-                pass(s, P_AA, s->rp_out, o->i.fb, ow, oh, s->t1.view, &q);
-            } else pass(s, P_AA, s->rp_out, o->i.fb, ow, oh, s->t0.view, &q);
-        }
+        pass(s, P_CAS, s->rp_out, o->i.fb, ow, oh, s->mid.view, &pc);
     }
     if (s->has_foreign) {  /* the output goes back to the outside (the compositor) */
         VkImageMemoryBarrier br = { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, .oldLayout = VK_IMAGE_LAYOUT_GENERAL, .newLayout = VK_IMAGE_LAYOUT_GENERAL,

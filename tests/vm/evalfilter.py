@@ -4,7 +4,7 @@
 A synthetic 1280x720 corpus (tests/vm/evalcorpus.py: text at several sizes and fonts, icons, thin lines, calibrated stems and edges, a UI panel, shaded
 3D, foliage noise, gradients, anime flats, a perspective checker; no game data) is box-reduced to each scale (35/50/75% of 1280x720) and brought back
 to 1280x720 by a bilinear stretch and by every --filter (the shell pass bridge/shell/sharpen.c through sharpen-test: dmabuf in, EGL/GLES, readback;
-default filter 'fsr1' = the current default pipeline; a filter takes environment variables, e.g. --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off'
+default filter 'fsr1' = the current default pipeline; a filter takes environment variables, e.g. --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' (the default AA is cmaa2-ultra) or 'fsr1-smaa:APKLAYER_SHARPEN_AA=smaa-high'
 --filter 'vk:APKLAYER_SHARPEN_BACKEND=vulkan' --filter 'notext:APKLAYER_SHARPEN_TEXT=off'). Per tile: PSNR, SSIM and edge ratio (out/original; 1.0 = as sharp as the
 original) against the original, halo (percent of pixels outside the original's local range by more than 3 levels). Text: stem contrast and width
 ratio (1, 2, 3 px stems, both polarities; 1.0 = like the original) and edge acuity (10-90% rise in px, 1.0 = hard edge) with overshoot. The 'score'
