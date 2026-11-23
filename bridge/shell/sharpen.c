@@ -21,6 +21,7 @@
 #include "sharpen_down.h"
 #include "sharpen_smaa.h"  /* struct rt, SMAA 1x */
 #include "sharpen_cmaa.h"  /* CMAA2 (GLES 3.1 compute) */
+#include "sharpen_temporal.h"  /* the temporal stabiliser (apklayer patch) */
 #ifdef HAVE_SHARPEN_VK
 #include "sharpen_vk.h"
 #endif
@@ -61,7 +62,9 @@ struct sharpen {
     GLuint up2d_prog;                             /* EASU reading a GL_TEXTURE_2D: the anti-aliased source (SMAA / CMAA2 run before the upscale) */
     struct rt sm_src;                             /* their output: the source-sized picture before EASU, or the output-sized one before RCAS */
     GLuint blit_prog;                             /* a copy (FS_BLIT), where SMAA / CMAA2 fail */
+    struct tmpl *tmpl;                            /* the temporal pass, NULL where it does not build or APKLAYER_SHARPEN_TEMPORAL=off (a test knob) */
     struct rt t0;                                 /* the filter's output before SMAA / CMAA2 on it */
+    int tmp_off;
     int aa_off, aa_smaa;                          /* APKLAYER_SHARPEN_AA=off|smaa: test knobs (FSR 1 alone; SMAA ultra where CMAA2 would run), not settings */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
@@ -131,6 +134,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
+    if (s) { const char *t = getenv("APKLAYER_SHARPEN_TEMPORAL"); s->tmp_off = t && !strcmp(t, "off"); }
     if (s) { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_off = a && !strcmp(a, "off"); s->aa_smaa = a && !strcmp(a, "smaa"); s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
@@ -257,6 +261,7 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->cmaa = s->smaa ? cmaa_create(program) : NULL;
         fprintf(stderr, "[sharpen] %s; SMAA %s, CMAA2 %s\n", glGetString(GL_VERSION), s->smaa ? "ready" : "unavailable", s->cmaa ? "ready" : "unavailable (needs OpenGL ES 3.1 compute)");
         s->blit_prog = program(FS_BLIT);
+        s->tmpl = s->tmp_off ? NULL : tmpl_create(program);
         s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is shrunk by EASU's own `down` branch */
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
@@ -562,6 +567,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
     draw();
     if (aa) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa);
+    if (s->in[buf].w <= ow && s->in[buf].h <= oh)  /* no temporal pass on a downscale: the area filter is stable by itself and the history would only blur it (tests/vm/shimmer.py, 150 %) */
+        tmpl_run(s->tmpl, rt_ensure, s->vbo, o->tex, o->fbo, ow, oh, s->in[buf].tex, s->in[buf].w, s->in[buf].h, sharpness);
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
     o->used = ++s->tick;
@@ -617,5 +624,6 @@ void sharpen_close(struct sharpen *s)
     }
     free(s->smaa);
     cmaa_free(s->cmaa);
+    tmpl_free(s->tmpl);
     free(s);
 }

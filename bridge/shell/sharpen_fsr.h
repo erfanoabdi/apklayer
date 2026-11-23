@@ -77,13 +77,14 @@ static const char *FS_UP =
     "  gl_FragColor = vec4(min(max4, max(min4, aC * (1.0 / aW))), 1.0);  /* normalise and dering */\n"
     "}\n";
 
-/* RCAS (reference FsrRcasF; FSR_RCAS_LIMIT 0.25 - 1/16, with the reference's denoise option on (FSR_RCAS_DENOISE)): sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos).
+/* RCAS (reference FsrRcasF; FSR_RCAS_LIMIT 0.25 - 1/16, with the reference's denoise option on (FSR_RCAS_DENOISE) and, apklayer, a lobe that fades out in busy texture (BUSY_LO..BUSY_HI)): sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos).
  * `sharp` is the reference's constant from FsrRcasCon, exp2(-stops): 1 the sharpest (0 stops), 0.87 the reference default (0.2 stops), 0.5 one stop less, 0 off (the picture passes unchanged).
  */
 static const char *FS_CAS =
     "precision highp float;\n"
     "uniform sampler2D tex; uniform vec2 px; uniform float sharp; varying vec2 uv;\n"
     "const float HALO_OV = 0.02;  /* how far the plain RCAS result may leave the cross's range, as a fraction of that range */\n"
+    "const float BUSY_LO = 2.5, BUSY_HI = 4.0;  /* apklayer patch, see below */\n"
     "const bool DENOISE = true;  /* FSR_RCAS_DENOISE of the reference, ON here (off in the reference): the sharpening shrinks by up to half where the centre differs from the mean of its four neighbours (noise, foliage, sub-pixel crawl), edges keep it: tests/vm/shimmer.py */\n"
     "vec3 T(float x, float y) { return texture2D(tex, uv + vec2(x, y) * px).rgb; }\n"
     "float L(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }\n"
@@ -100,6 +101,12 @@ static const char *FS_CAS =
     "    float nz = 0.25 * bL + 0.25 * dL + 0.25 * fL + 0.25 * hL - eL;\n"
     "    nz = clamp(abs(nz) / max(max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL), 1e-5), 0.0, 1.0);\n"
     "    lobe *= -0.5 * nz + 1.0;\n"
+    "  }\n"
+    "  {  /* apklayer patch: busy texture (foliage, hair, grass) gets less sharpening: the total variation of the 3x3 (12 neighbour pairs) against its range is ~3 on a straight edge and 4 and more in texture; the lobe fades out between BUSY_LO and BUSY_HI (tests/vm/shimmer.py) */\n"
+    "    float aL = L(T(-1.0, -1.0)), cL = L(T(1.0, -1.0)), gL = L(T(-1.0, 1.0)), iL = L(T(1.0, 1.0));\n"
+    "    float rg = max(max(max(max(bL, dL), max(eL, fL)), max(hL, max(max(aL, cL), max(gL, iL)))) - min(min(min(bL, dL), min(eL, fL)), min(hL, min(min(aL, cL), min(gL, iL)))), 1e-5);\n"
+    "    float tv = abs(aL - bL) + abs(bL - cL) + abs(dL - eL) + abs(eL - fL) + abs(gL - hL) + abs(hL - iL) + abs(aL - dL) + abs(dL - gL) + abs(bL - eL) + abs(eL - hL) + abs(cL - fL) + abs(fL - iL);\n"
+    "    lobe *= 1.0 - smoothstep(BUSY_LO, BUSY_HI, tv / rg);\n"
     "  }\n"
     "  vec3 pix = (lobe * b + lobe * d + lobe * h + lobe * f + e) / (4.0 * lobe + 1.0);\n"
     "  { vec3 lo = min(mn4, e), hi = max(mx4, e), ov = HALO_OV * (hi - lo);  /* apklayer patch: the sharpened value may leave the cross's range by a fraction of it only (halo cap; the reference only keeps it inside 0..1) */\n"
