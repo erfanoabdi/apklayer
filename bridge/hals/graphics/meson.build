@@ -27,11 +27,13 @@ if vulkan_dep.found()
   # ASTC/ETC2 emulation of the HAL (TextureEmulation.cpp, gfxstream's decoder) on the host's GPU
   vk_hal = '../../../aosp/hals/graphics/vulkan/'
   executable('vulkan-textures-test', ['../../../tests/hals/vulkan-textures-test.cpp', vk_hal + 'TextureEmulation.cpp', vk_hal + 'TextureCommands.cpp',
-      vk_hal + 'gfxstream/vulkan/emulated_textures/compressed_image_info.cpp', vk_hal + 'gfxstream/vulkan/emulated_textures/gpu_decompression_pipeline.cpp'],
+      vk_hal + 'gfxstream/vulkan/emulated_textures/compressed_image_info.cpp', vk_hal + 'gfxstream/vulkan/emulated_textures/gpu_decompression_pipeline.cpp',
+      vk_hal + 'TextureAstcMesa.cpp', vk_hal + 'TextureDump.cpp', vk_hal + 'mesa_astc/texcompress_astc_luts.cpp'],
     include_directories: include_directories(vk_hal + 'gfxstream'), cpp_args: ['-Wno-missing-field-initializers', '-Wno-unused-parameter'],
     override_options: ['cpp_std=c++20'], dependencies: [vulkan_dep, dependency('dl')])
   executable('vulkan-astc-probe', ['../../../tests/hals/vulkan-astc-probe.cpp', vk_hal + 'TextureEmulation.cpp', vk_hal + 'TextureCommands.cpp',
-      vk_hal + 'gfxstream/vulkan/emulated_textures/compressed_image_info.cpp', vk_hal + 'gfxstream/vulkan/emulated_textures/gpu_decompression_pipeline.cpp'],
+      vk_hal + 'gfxstream/vulkan/emulated_textures/compressed_image_info.cpp', vk_hal + 'gfxstream/vulkan/emulated_textures/gpu_decompression_pipeline.cpp',
+      vk_hal + 'TextureAstcMesa.cpp', vk_hal + 'TextureDump.cpp', vk_hal + 'mesa_astc/texcompress_astc_luts.cpp'],
     include_directories: include_directories(vk_hal + 'gfxstream'), cpp_args: ['-Wno-missing-field-initializers', '-Wno-unused-parameter'],
     override_options: ['cpp_std=c++20'], dependencies: [vulkan_dep, dependency('dl')])
 endif

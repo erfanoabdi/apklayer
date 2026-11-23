@@ -256,6 +256,8 @@ bool decode(gfxstream::host::vk::CompressedImageInfo* info, gfxstream::host::vk:
         }
         chosen.push_back(it->second);
     }
+    TRACE("mesa astc decode: image %p %ux%u block %ux%u levels %u+%u layers %u+%u", (void*)info->outputImage(), info->extent().width, info->extent().height, block.width,
+          block.height, requested.baseMipLevel, levels, requested.baseArrayLayer, layers);
     v.bindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     for (uint32_t i = 0; i < levels; i++) {
         VkExtent3D e = info->mipExtent(requested.baseMipLevel + i);

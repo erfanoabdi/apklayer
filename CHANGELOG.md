@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-23: Mesa ASTC decoder: probe results on the NVIDIA PC
+
+- The probe (tests/hals/vulkan-astc-probe.cpp, built on the Mac with g++ from the tree plus the AOSP vulkan-headers; meson entries for TextureAstcMesa.cpp, TextureDump.cpp and the LUT file added) runs on the NVIDIA PC's RTX 5060 Ti (proprietary driver, no ASTC): `tests/vm/astc-probe.py` (every block size, UNORM and sRGB, mips, layers, partial blocks, row length; reference = astcenc 5.7.1 built from source, SSE2) passes 56 of 56 with `APKLAYER_VULKAN_ASTC_DECODER=mesa` and with `new`, worst texel difference 1; the size probe (void-extent blocks, 64x64 to 2048x1024) passes with both. With TEXTURE_TRACE=1 the `mesa astc decode:` line appears only with `mesa` (new trace line in TextureAstcMesa.cpp). Not measured: speed. Not run yet: mp100 (AMD) and Endfield.
+
 ## 2026-11-23 deb of main f00e8e30 (CMAA2 ultra default, trimmed AA list)
 - Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.gitf00e8e30 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.gitf00e8e30-1~noble1_amd64.deb` 25869870 bytes, plus apklayer-dev. Full build, so the manager (Slint) compiled too. Has: FSR 1 reference port + text aid, SMAA/CMAA2 high and ultra with the 3D-strength runs, render-aa default cmaa2-ultra, our own AA removed. Vulkan has no AA. Not in it: the berberis 0085 library. Not installed, not run on PGR.
 
