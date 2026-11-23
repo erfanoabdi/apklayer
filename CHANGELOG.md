@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-23 deb of main f00e8e30 (CMAA2 ultra default, trimmed AA list)
+- Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.gitf00e8e30 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.gitf00e8e30-1~noble1_amd64.deb` 25869870 bytes, plus apklayer-dev. Full build, so the manager (Slint) compiled too. Has: FSR 1 reference port + text aid, SMAA/CMAA2 high and ultra with the 3D-strength runs, render-aa default cmaa2-ultra, our own AA removed. Vulkan has no AA. Not in it: the berberis 0085 library. Not installed, not run on PGR.
+
 ## 2026-11-23 render-aa trimmed to off | smaa-high | smaa-ultra | cmaa2-high | cmaa2-ultra
 - Owner: "make it less options, remove the lower ones, they don't benefit". Removed smaa-low, smaa-medium, cmaa2-low, cmaa2-medium (docs/FILTER-EVAL.md: smaa-low/medium smeared text for no gain on 3D; the cmaa2 levels were nearly identical). Default stays cmaa2-ultra; high/ultra behaviour (runs, thresholds, text gate) is unchanged.
 - Old stored values map, not error: smaa-low, smaa-medium, smaa -> smaa-high; cmaa2-low, cmaa2-medium, cmaa2, low, high -> cmaa2-high. Mapped in `aa_id`/`sharpen_set_aa` (shell), `display.c` (flags encoding; bit layout kept, old ids 4, 5, 8, 9 still decode as high), the manager's `aaName`; the CLI still accepts the old names. Manager: 2 + 2 buttons. `tests/vm/sharpen.py` runs the four values plus the removed ones.
