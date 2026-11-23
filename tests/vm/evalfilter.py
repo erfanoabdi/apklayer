@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """The yardstick of the render filter: one command, one summary table (docs/FILTER-EVAL.md).
-  tests/vm/evalfilter.py [--scales 35,50,75] [--filter label[:ENV=VAL,...]]... [--sharp 0.8706] [--only tile,...] [--json out.json] [--compare old.json] [--save dir] [-v]
+  tests/vm/evalfilter.py [--scales 60,75] [--filter label[:ENV=VAL,...]]... [--sharp 0.8706] [--only tile,...] [--json out.json] [--compare old.json] [--save dir] [-v]
 A synthetic 1280x720 corpus (tests/vm/evalcorpus.py: text at several sizes and fonts, icons, thin lines, calibrated stems and edges, a UI panel, shaded
-3D, foliage noise, gradients, anime flats, a perspective checker; no game data) is box-reduced to each scale (35/50/75% of 1280x720) and brought back
+3D, foliage noise, gradients, anime flats, a perspective checker; no game data) is box-reduced to each scale (60/75% of 1280x720, the render scale's range starts at 60) and brought back
 to 1280x720 by a bilinear stretch and by every --filter (the shell pass bridge/shell/sharpen.c through sharpen-test: dmabuf in, EGL/GLES, readback;
-default filter 'fsr1' = the current default pipeline; a filter takes environment variables, e.g. --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' (the default AA is cmaa2-ultra) or 'fsr1-smaa:APKLAYER_SHARPEN_AA=smaa-high'
---filter 'vk:APKLAYER_SHARPEN_BACKEND=vulkan' --filter 'notext:APKLAYER_SHARPEN_TEXT=off'). Per tile: PSNR, SSIM and edge ratio (out/original; 1.0 = as sharp as the
+default filter 'fsr1' = the current default pipeline; a filter takes environment variables, e.g. --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' (a test knob: the shell always runs cmaa2-ultra) or 'fsr1-smaa:APKLAYER_SHARPEN_AA=smaa' (the SMAA ultra fallback)
+--filter 'vk:APKLAYER_SHARPEN_BACKEND=vulkan'). Per tile: PSNR, SSIM and edge ratio (out/original; 1.0 = as sharp as the
 original) against the original, halo (percent of pixels outside the original's local range by more than 3 levels). Text: stem contrast and width
 ratio (1, 2, 3 px stems, both polarities; 1.0 = like the original) and edge acuity (10-90% rise in px, 1.0 = hard edge) with overshoot. The 'score'
 rows average the tiles (text = the three text tiles, 3d = shaded_3d, foliage, checker_persp). Reads the sharpen-test binary from SHARPEN_TEST or the
@@ -127,7 +127,7 @@ def compare(all_res, old, labels):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--scales', default='35,50,75')
+    ap.add_argument('--scales', default='60,75')
     ap.add_argument('--filter', action='append', default=[], help="label[:ENV=VAL,...]; default 'fsr1'")
     ap.add_argument('--sharp', type=float, default=0.8706, help='RCAS constant passed to the pass: exp2(-stops), default 0.8706 = 0.2 stops, the shell default')
     ap.add_argument('--only', default='', help='comma separated tiles')

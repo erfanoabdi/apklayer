@@ -9,7 +9,7 @@ uniform sampler2D tex;
 #endif
 uniform vec4 rt; varying vec2 uv; uniform float smaa_th, smaa_lca;
 vec3 S(vec2 c) { return texture2D(tex, c).rgb; }
-uniform float smaa_tg;  /* apklayer patch: the text gate: edges of a pixel whose 3x3 the RCAS text test (sharpen_fsr.h) calls text are dropped when its value is above this (< 0: off) */
+uniform float smaa_tg;  /* apklayer patch: the text gate: edges of a pixel whose 3x3 the text test (strong two-colour structure with a mostly axis-aligned gradient: a glyph stem, an icon edge, a UI line) calls text are dropped when its value is above this (< 0: off) */
 float TL(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }
 float textMask(vec2 c) {
   vec3 q[9];

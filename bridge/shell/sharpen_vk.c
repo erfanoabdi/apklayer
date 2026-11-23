@@ -160,7 +160,7 @@ fail:
     return -1;
 }
 
-int svk_render(struct svk *s, int buf, int ow, int oh, float sharp, int text, int *slot, int *fresh)
+int svk_render(struct svk *s, int buf, int ow, int oh, float sharp, int *slot, int *fresh)
 {
     if (buf < 0 || buf >= SVK_BUFS || !s->in[buf].used) return -1;
     int k = -1;
@@ -174,7 +174,7 @@ int svk_render(struct svk *s, int buf, int ow, int oh, float sharp, int text, in
         if (slot_make(s, o, ow, oh) < 0) { fprintf(stderr, "[sharpen] Vulkan: no output buffer %dx%d (%d modifiers offered)\n", ow, oh, s->accept_n); return -1; }
         *fresh = 1;
     }
-    if (svk_record(s, buf, ow, oh, sharp, text, o) < 0) return -1;
+    if (svk_record(s, buf, ow, oh, sharp, o) < 0) return -1;
     o->busy = 1;
     o->used = ++s->tick;
     s->last = k;

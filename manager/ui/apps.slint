@@ -114,7 +114,7 @@ component AppDetail {
                         spacing: MaterialStyleMetrics.spacing_16;
                         alignment: stretch;
                         scale-slider := DragSlider {
-                            minimum: 25;
+                            minimum: 60;
                             maximum: 200;
                             step: 5;
                             value <=> Backend.app-render-scale-pct;
@@ -133,56 +133,13 @@ component AppDetail {
                     padding: MaterialStyleMetrics.padding_16;
                     spacing: MaterialStyleMetrics.spacing_8;
                     MaterialText { text: "Sharper picture at a lower render scale"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
-                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it with FSR 1 (AMD's FidelityFX Super Resolution 1: edge-adaptive upscale plus sharpening; it runs on any GPU) instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. Default: FSR 1 whenever the render scale is not 100%; Off keeps the plain stretch. Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    MaterialText { text: "When the app renders at another size than its window, the shell upscales and sharpens it with FSR 1 (AMD's FidelityFX Super Resolution 1: edge-adaptive upscale plus sharpening; it runs on any GPU) instead of the compositor's soft stretch. Uses the GPU; where it cannot, the picture is shown as before. FSR 1 is the default; Off keeps the plain stretch. Anti-aliasing (CMAA2 ultra, before the upscale) always runs with it. Takes effect when the app is started again."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default", value: "" }, { label: "FSR 1", value: "sharp" }, { label: "Off", value: "off" }] : HorizontalLayout {
+                        for choice in [{ label: "FSR 1", value: "sharp" }, { label: "Off", value: "off" }] : HorizontalLayout {
                             if Backend.app-render-filter-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
-                        }
-                    }
-                    MaterialText { text: "Anti-aliasing: smooths the stair steps of jagged edges (a render scale below 100% shows them). SMAA and CMAA2 work on the game's own picture before the upscale (the higher the level, the more they catch, at a higher cost; CMAA2 needs OpenGL ES 3.1 compute and uses SMAA of the same level without it; the default is CMAA2 ultra; the Vulkan backend has none)."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default (CMAA2 ultra)", value: "" }, { label: "Off", value: "off" }] : HorizontalLayout {
-                            if Backend.app-render-aa-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
-                        }
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "SMAA high", value: "smaa-high" }, { label: "SMAA ultra", value: "smaa-ultra" }] : HorizontalLayout {
-                            if Backend.app-render-aa-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
-                        }
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "CMAA2 high", value: "cmaa2-high" }, { label: "CMAA2 ultra", value: "cmaa2-ultra" }] : HorizontalLayout {
-                            if Backend.app-render-aa-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-aa-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-aa." + root.app.package, choice.value); } }
-                        }
-                    }
-                    MaterialText { text: "Text aid (on by default): after an upscale, text, icons and UI lines get a little extra, clamped sharpening (no halos); 3D scenes keep the plain FSR 1 look."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default (on)", value: "" }, { label: "On", value: "on" }, { label: "Off", value: "off" }] : HorizontalLayout {
-                            if Backend.app-render-text-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-text-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-text." + root.app.package, choice.value); } }
-                        }
-                    }
-                    MaterialText { text: "Calm (for foliage, grass and other noisy fine detail; off by default): averages the noise of a still picture over several frames and softens textures that have no clear edge; a moving picture is left as it is. Heavier the lower the render scale."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "Default (off)", value: "" }, { label: "Low", value: "low" }, { label: "High", value: "high" }] : HorizontalLayout {
-                            if Backend.app-render-calm-setting == choice.value : FilledButton { text: choice.label; }
-                            if Backend.app-render-calm-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-calm." + root.app.package, choice.value); } }
                         }
                     }
                     MaterialText { text: "Sharpness of the upscale (FSR 1's RCAS): Medium is the reference default (0.2 stops), High the sharpest, Low one stop weaker, Off no sharpening."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }

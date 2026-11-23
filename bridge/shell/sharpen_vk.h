@@ -64,7 +64,7 @@ void svk_close(struct svk *s);
 void svk_accept(struct svk *s, const uint64_t *mods, int n);
 int svk_import(struct svk *s, int buf, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod);
 void svk_forget(struct svk *s, int buf);
-int svk_render(struct svk *s, int buf, int ow, int oh, float sharp, int text, int *slot, int *fresh);
+int svk_render(struct svk *s, int buf, int ow, int oh, float sharp, int *slot, int *fresh);
 int svk_slot_info(struct svk *s, int slot, struct sharpen_out *out);
 void svk_slot_release(struct svk *s, int slot);
 int svk_readback(struct svk *s, int slot, void *rgba);
@@ -72,7 +72,7 @@ int svk_readback(struct svk *s, int slot, void *rgba);
 /* sharpen_vk_draw.c */
 int svk_pipelines(struct svk *s);
 void svk_pipelines_free(struct svk *s);
-int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, int text, struct svk_slot *o);
+int svk_record(struct svk *s, int buf, int ow, int oh, float sharp, struct svk_slot *o);
 void svk_img_free(struct svk *s, struct svk_img *i);
 int svk_mem_type(struct svk *s, uint32_t bits, VkMemoryPropertyFlags want);
 #endif

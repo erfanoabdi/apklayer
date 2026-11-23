@@ -32,13 +32,8 @@ int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, in
                    const uint32_t *offsets, uint64_t modifier);
 void sharpen_forget(struct sharpen *s, int buf);
 
-/* The anti-aliasing (GLES backend; Vulkan has none): 0 the default (APKLAYER_SHARPEN_AA off|smaa-high|smaa-ultra|cmaa2-high|cmaa2-ultra, else cmaa2-ultra; the removed low and medium levels, low and high read as high),
- * 1 off, 6 smaa-high, 7 smaa-ultra, 10 cmaa2-high, 11 cmaa2-ultra (4, 5, 8, 9, 2, 3: the removed levels, read as high). */
-void sharpen_set_aa(struct sharpen *s, int n);
-/* The text aid of the RCAS pass (extra clamped sharpening of text, icons and UI lines only): 0 the default (APKLAYER_SHARPEN_TEXT off|on, else on), 1 off, 2 on. */
-void sharpen_set_text(struct sharpen *s, int n);
-/* The calm pass after an upscale (GLES backend; temporal + spatial noise reduction for foliage and grass, heavier the bigger the ratio): 0 the default (APKLAYER_SHARPEN_CALM off|low|high, else off), 1 off, 2 low, 3 high. */
-void sharpen_set_calm(struct sharpen *s, int n);
+/* Anti-aliasing is not a setting: on the GLES backend CMAA2 (ultra) runs on the app's picture before the upscale, SMAA (ultra) where OpenGL ES 3.1 compute is missing, none where SMAA is
+ * unavailable too; the Vulkan backend has none. APKLAYER_SHARPEN_AA=off (FSR 1 alone, tests/vm/sharpen.py) and =smaa (the SMAA ultra fallback) are test knobs, not settings. */
 
 /* Draws buffer `buf` into output slot `*slot` (0..7, the least recently used free one) of out_w x out_h; sharpness 0..1, FSR 1's RCAS constant exp2(-stops) (1: 0 stops, the sharpest; 0.87: the reference default 0.2 stops; 0: no sharpening). Returns 0 and the
  * slot, with *fresh set when the slot's dmabuf is new (the caller makes its wl_buffer from sharpen_slot_info), -1 when nothing could be drawn, -2 when all output buffers are held (draw it again after a sharpen_slot_release). */

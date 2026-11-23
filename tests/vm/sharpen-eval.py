@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""sharpen-eval.py <sharpen-test> [--backend gles|vulkan] [--env K=V ...] [--sharp 0.8706] [--scales 0.5,0.35] [--json out.json]: measures the render filter
+"""sharpen-eval.py <sharpen-test> [--backend gles|vulkan] [--env K=V ...] [--sharp 0.8706] [--scales 0.75,0.6] [--json out.json]: measures the render filter
 (bridge/shell/sharpen.c through tests/hals/sharpen-test.c) against the reference on synthetic pictures at 1280x720:
   text   UI text (four sizes, light on dark and dark on light), thin lines, icons (outlines, circles), a button row
   photo  a wallpaper picture (the 3D stand-in: gradients, soft edges), 1280x720 crop of /usr/share/wallpapers/EveningGlow
-Each picture is box-filtered down to the scale (50%, 35%) and upscaled by the filter; compared with PIL's bilinear stretch. Per picture (and the reference itself): PSNR, SSIM
+Each picture is box-filtered down to the scale (75%, 60%; the render scale's range starts at 60%) and upscaled by the filter; compared with PIL's bilinear stretch. Per picture (and the reference itself): PSNR, SSIM
 (7x7 uniform window, luma), the mean edge strength and the 99th percentile gradient (Sobel magnitude) and the halo share (output pixels outside the reference's own 3x3 min/max by > 8/255).
-SHARPEN_MODIFIER (hex) is the accepted dmabuf modifier (NVIDIA: 0x300000000606010). Prints one table; with --json also a machine readable copy (tools compare two runs, e.g. text off and on: the photo rows must not differ)."""
+SHARPEN_MODIFIER (hex) is the accepted dmabuf modifier (NVIDIA: 0x300000000606010). Prints one table; with --json also a machine readable copy (tools compare two runs)."""
 import argparse, glob, json, os, subprocess, sys, tempfile
 from pathlib import Path
 import numpy as np
@@ -93,7 +93,7 @@ def run(exe, backend, env, sharp, small):
     with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-eval-') as tmp:
         ri, ro = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
         Path(ri).write_bytes(small.convert('RGBA').tobytes())
-        e = dict(os.environ, APKLAYER_SHARPEN_AA='off')  # FSR 1 alone unless --env APKLAYER_SHARPEN_AA=smaa-<level>|cmaa2-<level>
+        e = dict(os.environ, APKLAYER_SHARPEN_AA='off')  # FSR 1 alone unless --env APKLAYER_SHARPEN_AA= (empty: the anti-aliasing the shell always runs, CMAA2 ultra)
         e.update(env)
         if backend == 'vulkan': e['APKLAYER_SHARPEN_BACKEND'] = 'vulkan'
         r = subprocess.run([exe, ri, str(small.width), str(small.height), ro, str(W), str(H), str(sharp)] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else []), capture_output=True, text=True, timeout=60, env=e)
@@ -104,7 +104,7 @@ def run(exe, backend, env, sharp, small):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('exe'); ap.add_argument('--backend', default='gles'); ap.add_argument('--env', action='append', default=[])
-    ap.add_argument('--sharp', type=float, default=0.8706); ap.add_argument('--scales', default='0.5,0.35'); ap.add_argument('--json'); ap.add_argument('--keep')
+    ap.add_argument('--sharp', type=float, default=0.8706); ap.add_argument('--scales', default='0.75,0.6'); ap.add_argument('--json'); ap.add_argument('--keep')
     a = ap.parse_args()
     env = dict(x.split('=', 1) for x in a.env)
     res = {}

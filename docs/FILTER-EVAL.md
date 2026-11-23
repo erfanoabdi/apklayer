@@ -1,18 +1,17 @@
 # Render filter yardstick (`tests/vm/evalfilter.py`)
 
-One command measures the whole render filter (FSR 1 with its text aid and the AA pass, `bridge/shell/sharpen*.c`) against bilinear on a generated corpus. Every
-filter change (EASU/RCAS, AA, text aid, shader edits) is judged with it: run before, run after, quote the table. This is the yardstick; `tests/vm/sharpen-eval.py`
+One command measures the whole render filter (FSR 1 and the AA pass, `bridge/shell/sharpen*.c`) against bilinear on a generated corpus. Every
+filter change (EASU/RCAS, AA, shader edits) is judged with it: run before, run after, quote the table. This is the yardstick; `tests/vm/sharpen-eval.py`
 (two pictures, PSNR/SSIM/edge/steepness/halo, `--env` for the knobs) stays as the small quick check and for the numbers older changelog entries quote.
 
     ninja -C b bridge/shell/sharpen-test                 # once (or set SHARPEN_TEST=<binary>)
     python3 tests/vm/evalfilter.py                        # 35/50/75 %, bilinear vs the current default pipeline ("fsr1"), ~3 s
     python3 tests/vm/evalfilter.py --json before.json     # ... change the shader, rebuild ...
     python3 tests/vm/evalfilter.py --compare before.json  # mean differences current - saved
-    python3 tests/vm/evalfilter.py --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' --filter 'notext:APKLAYER_SHARPEN_TEXT=off' --scales 50 --only text_small,text_large
+    python3 tests/vm/evalfilter.py --filter 'fsr1-noaa:APKLAYER_SHARPEN_AA=off' --scales 60 --only text_small,text_large
     python3 tests/vm/evalfilter.py --save /tmp/x          # ref.png and every output as PNG, to look at
 
-Options: `--filter label[:ENV=VAL,...]` (repeatable; the environment of the pass: `APKLAYER_SHARPEN_AA` off|smaa-high|smaa-ultra|cmaa2-high|cmaa2-ultra (the `render-aa` knob; default cmaa2-ultra; smaa-low/medium and cmaa2-low/medium were removed on 2026-11-23 and read as the high level, the old own levels `low` and `high` as cmaa2-high),
-`APKLAYER_SHARPEN_TEXT` off|on (`render-text`), `_CALM`, `_BACKEND` gles|vulkan), `--sharp` (the RCAS constant exp2(-stops): 0.8706 = the default 0.2 stops), `--scales`, `--only`, `--check` (exit 1 if the first
+Options: `--filter label[:ENV=VAL,...]` (repeatable; the environment of the pass: `APKLAYER_SHARPEN_AA=off` (a test knob: the shell always runs CMAA2 ultra; `APKLAYER_SHARPEN_AA=smaa` forces the SMAA ultra fallback), `APKLAYER_SHARPEN_BACKEND` gles|vulkan), `--sharp` (the RCAS constant exp2(-stops): 0.8706 = the default 0.2 stops), `--scales`, `--only`, `--check` (exit 1 if the first
 filter is below bilinear on PSNR/SSIM of the smooth and 3D scores; group `evalfilter`). It skips (exit 0) without a render node or the binary; on NVIDIA
 it retries with the block-linear modifier (`SHARPEN_MODIFIER` overrides). `tests/vm/sharpen.py` stays the quick pass/fail smoke test.
 
@@ -35,6 +34,8 @@ Text-specific, on the `stems` tile: **contrast** (peak above the background, out
 both polarities (1.0 = like the original; bilinear shows 0.3 contrast and 2.9x width for a 1 px stem at 35 %), **edge acuity** (10-90 % rise of a
 step edge in output px, 1.0 = hard) and its overshoot in percent of the step. Higher is better for PSNR/SSIM/contrast, closer to 1.0 for edge/width,
 lower for rise/halo/overshoot.
+
+> 2026-11-23 (later): the text aid, the calm pass and the smaa-high, smaa-ultra, cmaa2-high settings were removed; CMAA2 ultra is the only anti-aliasing and the render scale starts at 60 %. The tables below that mention them, and the 35 % / 50 % rows, are historical measurements.
 
 ## Baseline (2026-11-23, historical: measured before our own AA was removed; the shell's pipeline then was EASU + RCAS 0.2 stops with the text aid + our AA high, GLES = Vulkan, RTX 5060 Ti; the default is cmaa2-ultra now and Vulkan has no AA)
 
@@ -59,7 +60,7 @@ What it shows: FSR 1 beats bilinear on smooth and UI content at every scale, on 
 default AA pass pulls PSNR to bilinear's level or just below and SSIM/edge on the 3D tiles below it (AA off: above bilinear everywhere, text 17.99 / 20.28 dB, edge 0.63 / 0.79).
 The AA gate keeps it from smearing stems (stem contrast and the step edge's rise equal with AA off); what it still softens are the glyph bodies and 3D detail. The GLES and Vulkan
 backends give the same numbers (tests/vm/sharpen_parity.py). These are the numbers a change to the
-EASU/RCAS port, the text aid or the AA pass is measured by.
+EASU/RCAS port, the AA pass is measured by.
 
 Limits: the input is a box-reduced copy of a full-resolution frame (a game renders at the lower size, with its own aliasing); the metrics are
 signal measures (a person judges the look); colour AA effects show in luma metrics only.

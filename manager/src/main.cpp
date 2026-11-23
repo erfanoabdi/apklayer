@@ -2,6 +2,7 @@
 // UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE...] [--screenshot OUT.png [--size WxH] [--page N] [--scroll PX] [--app PKG]
 // [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...] (the screenshot mode: presses the labelled
 // elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
+#include <algorithm>
 #include <map>
 #include <png.h>
 
@@ -32,8 +33,9 @@ using manager::summary;
 
 namespace {
 
-// a stored render-aa value as the buttons name it: the removed levels read as high (smaa-low, smaa-medium, smaa -> smaa-high; cmaa2-low, cmaa2-medium, cmaa2, low, high -> cmaa2-high)
-std::string aaName(const std::string& v) { return v == "smaa-low" || v == "smaa-medium" || v == "smaa" ? "smaa-high" : v == "cmaa2-low" || v == "cmaa2-medium" || v == "cmaa2" || v == "low" || v == "high" ? "cmaa2-high" : v; }
+
+// a stored render-filter value as the buttons name it: FSR 1 ("sharp", also for an empty value and the removed filters nis, sgsr, lanczos, anime4k, auto) or "off"
+std::string filterName(const std::string& v) { return v == "off" ? v : "sharp"; }
 
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
 
@@ -187,17 +189,8 @@ public:
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-scale.", 0) == 0) appScales_[field(r, 0).substr(13)] = field(r, 1);
         b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
         appFilters_.clear();  // render-filter.<package>
-        for (const auto& r : s.settings) if (field(r, 0).rfind("render-filter.", 0) == 0) { std::string f = field(r, 1); appFilters_[field(r, 0).substr(14)] = f.empty() || f == "off" ? f : "sharp"; }  // the removed filters (nis, sgsr, lanczos, anime4k, auto) read as FSR 1
-        b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
-        appAa_.clear();  // render-aa.<package>
-        for (const auto& r : s.settings) if (field(r, 0).rfind("render-aa.", 0) == 0) appAa_[field(r, 0).substr(10)] = aaName(field(r, 1));
-        b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
-        appText_.clear();  // render-text.<package>
-        for (const auto& r : s.settings) if (field(r, 0).rfind("render-text.", 0) == 0) appText_[field(r, 0).substr(12)] = field(r, 1);
-        b.set_app_render_text_setting(slint::SharedString(appText_[current_]));
-        appCalm_.clear();  // render-calm.<package>
-        for (const auto& r : s.settings) if (field(r, 0).rfind("render-calm.", 0) == 0) appCalm_[field(r, 0).substr(12)] = field(r, 1);
-        b.set_app_render_calm_setting(slint::SharedString(appCalm_[current_]));
+        for (const auto& r : s.settings) if (field(r, 0).rfind("render-filter.", 0) == 0) { std::string f = field(r, 1); appFilters_[field(r, 0).substr(14)] = filterName(f); }
+        b.set_app_render_filter_setting(slint::SharedString(filterName(appFilters_[current_])));
         appSharp_.clear();  // render-sharpness.<package>
         for (const auto& r : s.settings) if (field(r, 0).rfind("render-sharpness.", 0) == 0) appSharp_[field(r, 0).substr(17)] = field(r, 1);
         b.set_app_render_sharpness_setting(slint::SharedString(appSharp_[current_]));
@@ -249,9 +242,6 @@ public:
     std::map<std::string, std::string> appModes_;
     std::map<std::string, std::string> appScales_;  // render-scale.<package>
     std::map<std::string, std::string> appFilters_;  // render-filter.<package>
-    std::map<std::string, std::string> appAa_;       // render-aa.<package>
-    std::map<std::string, std::string> appText_;     // render-text.<package>
-    std::map<std::string, std::string> appCalm_;     // render-calm.<package>
     std::map<std::string, std::string> appSharp_;    // render-sharpness.<package>
     std::map<std::string, std::pair<int, int>> windowPx_;  // the app's window pixels at its last start (`app <package> resolution`)
     std::function<void()> applied;  // the screenshot mode's event: a refresh begun after the scripted input reached the window
@@ -320,6 +310,7 @@ private:
     void showResolution(int preview = -1) {
         auto [w, h] = windowPx_[current_];
         int pct = preview > 0 ? preview : appScales_[current_].empty() ? 100 : std::atoi(appScales_[current_].c_str());
+        pct = std::max(pct, 60);  // the minimum: a stored value below 60 reads as 60
         if (preview <= 0) ui_->global<Backend>().set_app_render_scale_pct(pct);
         std::string text;
         if (w <= 0 || h <= 0) text = "Start the app once to see its resolution here.";
@@ -503,10 +494,7 @@ private:
             b.set_has_current_app(true);
             b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
             b.set_app_render_scale_setting(slint::SharedString(appScales_[current_]));
-            b.set_app_render_filter_setting(slint::SharedString(appFilters_[current_]));
-            b.set_app_render_aa_setting(slint::SharedString(appAa_[current_]));
-            b.set_app_render_text_setting(slint::SharedString(appText_[current_]));
-            b.set_app_render_calm_setting(slint::SharedString(appCalm_[current_]));
+            b.set_app_render_filter_setting(slint::SharedString(filterName(appFilters_[current_])));
             b.set_app_render_sharpness_setting(slint::SharedString(appSharp_[current_]));
             showDetail({});
             later([cli = cli_, p = current_] { return loadDetail(cli, p); }, [this, p = current_](const Detail& d) {
@@ -583,11 +571,8 @@ private:
         b.on_preview_render_scale([this](int pct) { showResolution(pct); });
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
             if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
-            if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = std::string(v); ui_->global<Backend>().set_app_render_filter_setting(v); }
-            if (std::string(k).rfind("render-text.", 0) == 0) { appText_[std::string(k).substr(12)] = std::string(v); ui_->global<Backend>().set_app_render_text_setting(v); }
-            if (std::string(k).rfind("render-calm.", 0) == 0) { appCalm_[std::string(k).substr(12)] = std::string(v); ui_->global<Backend>().set_app_render_calm_setting(v); }
+            if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = filterName(std::string(v)); ui_->global<Backend>().set_app_render_filter_setting(slint::SharedString(filterName(std::string(v)))); }
             if (std::string(k).rfind("render-sharpness.", 0) == 0) { appSharp_[std::string(k).substr(17)] = std::string(v); ui_->global<Backend>().set_app_render_sharpness_setting(v); }
-            if (std::string(k).rfind("render-aa.", 0) == 0) { appAa_[std::string(k).substr(10)] = aaName(std::string(v)); ui_->global<Backend>().set_app_render_aa_setting(slint::SharedString(appAa_[std::string(k).substr(10)])); }
             if (std::string(k).rfind("render-scale.", 0) == 0) { appScales_[std::string(k).substr(13)] = std::string(v); ui_->global<Backend>().set_app_render_scale_setting(v); showResolution(); }
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
             else action("Saving", {"settings", "set", std::string(k), std::string(v)});

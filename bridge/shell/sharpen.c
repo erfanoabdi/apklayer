@@ -18,7 +18,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "sharpen_post.h"
 #include "sharpen_down.h"
 #include "sharpen_smaa.h"  /* struct rt, SMAA 1x */
 #include "sharpen_cmaa.h"  /* CMAA2 (GLES 3.1 compute) */
@@ -57,15 +56,13 @@ struct sharpen {
     GLuint up_prog, cas_prog, down_prog, mid_tex, mid_fbo, vbo;
     int mid_w, mid_h;
     uint64_t tick;
-    struct cmaa *cmaa;                            /* CMAA2, NULL without an ES 3.1 context (then SMAA of the same level runs) */
+    struct cmaa *cmaa;                            /* CMAA2 (ultra), NULL without an ES 3.1 context (then SMAA ultra runs) */
     struct smaa *smaa;                            /* SMAA 1x (sharpen_smaa.c), NULL when its tables or shaders failed */
     GLuint up2d_prog;                             /* EASU reading a GL_TEXTURE_2D: the anti-aliased source (SMAA / CMAA2 run before the upscale) */
     struct rt sm_src;                             /* their output: the source-sized picture before EASU, or the output-sized one before RCAS */
-    GLuint calm_prog, blit_prog;                  /* the post passes: calm (FS_CALM) and a copy */
-    struct rt t0, t1, hist[2];                    /* the filter's output (t0), SMAA / CMAA2's result (t1) and the last two calmed outputs */
-    int hist_cur, hist_ok, hist_w, hist_h;        /* hist[hist_cur] is the previous output; hist_ok: it holds a frame of this size */
-    int aa_req, aa_env, calm_req, calm_env, text_req, text_env;   /* text: 0 default, 1 off, 2 on (APKLAYER_SHARPEN_TEXT off|on, else on) */
-          /* the window's render-aa / render-calm (0 default, 1 off, 4..7 SMAA low..ultra, 8..11 CMAA2 low..ultra); the defaults (APKLAYER_SHARPEN_AA off|smaa-<level>|cmaa2-<level>, else cmaa2-ultra; APKLAYER_SHARPEN_CALM, else off) */
+    GLuint blit_prog;                             /* a copy (FS_BLIT), where SMAA / CMAA2 fail */
+    struct rt t0;                                 /* the filter's output before SMAA / CMAA2 on it */
+    int aa_off, aa_smaa;                          /* APKLAYER_SHARPEN_AA=off|smaa: test knobs (FSR 1 alone; SMAA ultra where CMAA2 would run), not settings */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
 #endif
@@ -75,18 +72,10 @@ struct sharpen {
     int accept_n;
 };
 
-/* render-aa by name: 1 off, 6 smaa-high, 7 smaa-ultra, 10 cmaa2-high, 11 cmaa2-ultra; the removed levels read as high (smaa-low, smaa-medium, smaa -> smaa-high; cmaa2-low, cmaa2-medium, cmaa2, low, high -> cmaa2-high); 0 unknown */
-static int aa_id(const char *a)
-{
-    if (!a) return 0;
-    if (!strcmp(a, "off")) return 1;
-    if (!strcmp(a, "smaa-ultra")) return 7;
-    if (!strcmp(a, "cmaa2-ultra")) return 11;
-    if (!strcmp(a, "smaa-high") || !strcmp(a, "smaa-medium") || !strcmp(a, "smaa-low") || !strcmp(a, "smaa")) return 6;
-    if (!strncmp(a, "cmaa2", 5) || !strcmp(a, "low") || !strcmp(a, "high")) return 10;
-    return 0;
-}
-
+static const char *FS_BLIT =
+    "precision highp float;\n"
+    "uniform sampler2D tex; varying vec2 uv;\n"
+    "void main() { gl_FragColor = vec4(texture2D(tex, uv).rgb, 1.0); }\n";
 static const char *VS = "attribute vec2 p; varying vec2 uv; void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }";
 
 #include "sharpen_fsr.h"
@@ -142,7 +131,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
-    if (s) { { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_env = aa_id(a) ? aa_id(a) : 11; const char *cm = getenv("APKLAYER_SHARPEN_CALM"); s->calm_env = cm && !strcmp(cm, "low") ? 2 : cm && !strcmp(cm, "high") ? 3 : 1; const char *tx = getenv("APKLAYER_SHARPEN_TEXT"); s->text_env = tx && !strcmp(tx, "off") ? 1 : 2; } s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
+    if (s) { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_off = a && !strcmp(a, "off"); s->aa_smaa = a && !strcmp(a, "smaa"); s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
 }
 
@@ -267,7 +256,6 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->smaa = s->up2d_prog ? smaa_create(program) : NULL;
         s->cmaa = s->smaa ? cmaa_create(program) : NULL;
         fprintf(stderr, "[sharpen] %s; SMAA %s, CMAA2 %s\n", glGetString(GL_VERSION), s->smaa ? "ready" : "unavailable", s->cmaa ? "ready" : "unavailable (needs OpenGL ES 3.1 compute)");
-        s->calm_prog = program(FS_CALM);
         s->blit_prog = program(FS_BLIT);
         s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is shrunk by EASU's own `down` branch */
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
@@ -395,8 +383,7 @@ static void draw(void)
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
-/* The post passes (GLES backend): the filter draws into t0 (output size, LINEAR); then SMAA / CMAA2 where they run on the filter's output (t0 -> t1, or into the output) and the
- * calm pass (reads the picture and the previous output, writes hist[], copied into the output; it grows with the upscale ratio). */
+/* The post pass (GLES backend): SMAA / CMAA2 on the filter's output (the downscale path: no place before an upscale), t0 into the output. */
 static GLuint rt_ensure(struct rt *r, int w, int h)
 {
     if (r->w != w || r->h != h) {
@@ -419,8 +406,6 @@ static GLuint rt_ensure(struct rt *r, int w, int h)
     return r->fbo;
 }
 
-static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
-
 static void post_draw(struct sharpen *s, GLuint prog, GLuint fbo, int w, int h)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -441,51 +426,21 @@ static void post_tex(GLuint prog, int unit, const char *name, GLuint tex)
     glActiveTexture(GL_TEXTURE0);
 }
 
-/* SMAA (aa 4..7) or CMAA2 (8..11, the same four levels) on src into dst, w x h; 0: done */
+/* CMAA2 (aa 2) or SMAA (aa 1, the fallback), both ultra, on src into dst, w x h; 0: done */
 static int aa_run(struct sharpen *s, int ext, GLuint src, int w, int h, int aa, float ratio, GLuint dst)
 {
     static int said;
-    if (aa >= 8 && s->cmaa) {
-        if (cmaa_run(s->cmaa, ext, src, w, h, aa - 8, ratio, dst, s->vbo) == 0) return 0;
-        if (!said++) fprintf(stderr, "[sharpen] CMAA2 failed (gl error 0x%x): SMAA of the same level runs\n", glGetError());
+    if (aa == 2 && s->cmaa) {
+        if (cmaa_run(s->cmaa, ext, src, w, h, ratio, dst, s->vbo) == 0) return 0;
+        if (!said++) fprintf(stderr, "[sharpen] CMAA2 failed (gl error 0x%x): SMAA ultra runs\n", glGetError());
     }
-    return smaa_run(s->smaa, rt_ensure, ext, src, w, h, (aa - 4) & 3, ratio, dst, s->vbo);
+    return smaa_run(s->smaa, rt_ensure, ext, src, w, h, ratio, dst, s->vbo);
 }
 
-static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float ratio, int aa, int calm)
+static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float ratio, int aa)
 {
-    GLuint cur = s->t0.tex;
-    if (calm && !(rt_ensure(&s->t1, w, h) && rt_ensure(&s->hist[0], w, h) && rt_ensure(&s->hist[1], w, h))) calm = 0;
-    if (aa >= 4) {  /* SMAA / CMAA2 on the filter's output (the downscale path: no place before an upscale) */
-        if (aa_run(s, 0, cur, w, h, aa, ratio, calm ? s->t1.fbo : out_fbo) < 0) aa = 0;
-        else if (calm) cur = s->t1.tex;
-    }
-    if (!calm) {
-        if (!aa) { post_tex(s->blit_prog, 0, "tex", cur); post_draw(s, s->blit_prog, out_fbo, w, h); }
-        return;
-    }
-    int lvl = s->calm_req ? s->calm_req : s->calm_env;
-    float r = clampf(ratio, 1.0f, 4.0f), tstr, sstr;
-    if (lvl == 3) { tstr = 0.45f + 0.2f * (r - 1.0f); sstr = 0.3f + 0.2f * (r - 1.0f); }
-    else { tstr = 0.3f + 0.12f * (r - 1.0f); sstr = 0.15f + 0.1f * (r - 1.0f); }
-    if (s->hist_w != w || s->hist_h != h) { s->hist_ok = 0; s->hist_w = w; s->hist_h = h; }
-    int hp = s->hist_cur, np = hp ^ 1;
-    post_tex(s->calm_prog, 0, "cur", cur);
-    post_tex(s->calm_prog, 1, "hist", s->hist[hp].tex);
-    glUniform2f(glGetUniformLocation(s->calm_prog, "px"), 1.0f / (float)w, 1.0f / (float)h);
-    glUniform1f(glGetUniformLocation(s->calm_prog, "tstr"), clampf(tstr, 0.0f, 0.85f));  /* never freeze a pixel: a quarter of every new frame always comes through */
-    glUniform1f(glGetUniformLocation(s->calm_prog, "sstr"), clampf(sstr, 0.0f, 0.8f));
-    glUniform1f(glGetUniformLocation(s->calm_prog, "use"), s->hist_ok ? 1.0f : 0.0f);
-    post_draw(s, s->calm_prog, s->hist[np].fbo, w, h);
-    post_tex(s->blit_prog, 0, "tex", s->hist[np].tex);
-    post_draw(s, s->blit_prog, out_fbo, w, h);
-    s->hist_cur = np;
-    s->hist_ok = 1;
+    if (aa_run(s, 0, s->t0.tex, w, h, aa, ratio, out_fbo) < 0) { post_tex(s->blit_prog, 0, "tex", s->t0.tex); post_draw(s, s->blit_prog, out_fbo, w, h); }
 }
-
-void sharpen_set_aa(struct sharpen *s, int n) { if (s) s->aa_req = n == 2 || n == 3 ? 10 : n == 1 ? 1 : n >= 4 && n <= 7 ? (n == 7 ? 7 : 6) : n >= 8 && n <= 11 ? (n == 11 ? 11 : 10) : 0; }  /* 2, 3: the old low and high; the removed low and medium levels read as high */
-void sharpen_set_text(struct sharpen *s, int n) { if (s) s->text_req = n >= 1 && n <= 2 ? n : 0; }
-void sharpen_set_calm(struct sharpen *s, int n) { if (s) s->calm_req = n >= 1 && n <= 3 ? n : 0; }
 
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
@@ -493,8 +448,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) {
         static int said_vkaa;
-        if ((s->aa_req ? s->aa_req : s->aa_env) > 1 && !said_vkaa++) fprintf(stderr, "[sharpen] the Vulkan backend has no anti-aliasing (SMAA and CMAA2 are GLES only): none is applied\n");
-        int rc = svk_render(s->vk, buf, ow, oh, sharpness, (s->text_req ? s->text_req : s->text_env) > 1, slot, fresh);
+        if (!s->aa_off && !said_vkaa++) fprintf(stderr, "[sharpen] the Vulkan backend has no anti-aliasing (SMAA and CMAA2 are GLES only): none is applied\n");
+        int rc = svk_render(s->vk, buf, ow, oh, sharpness, slot, fresh);
         if (rc == -2 && !said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SVK_SLOTS);
         return rc;
     }
@@ -535,15 +490,13 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
-    int up = ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: the filter draws into t0, the post passes (anti-aliasing, calm) into the output */
-    int aa = s->aa_req ? s->aa_req : s->aa_env;
+    int up = ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: SMAA / CMAA2 run on the app's buffer before EASU */
+    int aa = s->aa_off ? 0 : s->cmaa && !s->aa_smaa ? 2 : s->smaa ? 1 : 0;
     static int said_aa, said_cmaa;
-    if (aa >= 8 && !s->cmaa) { aa -= 4; if (!said_cmaa++) fprintf(stderr, "[sharpen] CMAA2 needs OpenGL ES 3.1 compute, not available here: SMAA of the same level runs\n"); }
-    if (aa >= 4 && !s->smaa) { aa = 1; if (!said_aa++) fprintf(stderr, "[sharpen] SMAA unavailable on this GPU: no anti-aliasing\n"); }
-    if (aa < 4) aa = 0;  /* 4..11: SMAA / CMAA2 at any size */
-    int calm = s->calm_prog && s->blit_prog && up && (s->calm_req ? s->calm_req : s->calm_env) > 1;
-    GLuint dst = (aa || calm) ? rt_ensure(&s->t0, ow, oh) : o->fbo;
-    if ((aa || calm) && !dst) { aa = calm = 0; dst = o->fbo; }
+    if (!s->aa_off && !s->cmaa && s->smaa && !said_cmaa++) fprintf(stderr, "[sharpen] CMAA2 needs OpenGL ES 3.1 compute, not available here: SMAA ultra runs\n");
+    if (!s->aa_off && !s->smaa && !said_aa++) fprintf(stderr, "[sharpen] SMAA unavailable on this GPU: no anti-aliasing\n");
+    GLuint dst = aa ? rt_ensure(&s->t0, ow, oh) : o->fbo;
+    if (aa && !dst) { aa = 0; dst = o->fbo; }
     if (s->down_prog && (s->in[buf].w > ow || s->in[buf].h > oh)) {  /* render scale above 100: the larger picture is shrunk with the Lanczos 2 area filter, one pass straight into dst */
         glBindFramebuffer(GL_FRAMEBUFFER, dst);
         glViewport(0, 0, ow, oh);
@@ -556,22 +509,22 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
         glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         draw();
-        if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
+        if (aa) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa);
         gpu_wait(s);
         o->busy = 1;
-    o->used = ++s->tick;
+        o->used = ++s->tick;
         s->last = k;
         *slot = k;
         return 0;
     }
-    /* SMAA / CMAA2 before FSR 1 (AMD: anti-alias the source, then upscale): on the app's buffer when it is smaller than the output (EASU then reads the result),
+    /* CMAA2 / SMAA before FSR 1 (AMD: anti-alias the source, then upscale): on the app's buffer when it is smaller than the output (EASU then reads the result),
      * else on the shrunk picture before RCAS */
-    int inl = aa >= 4, aa4 = aa, pre = 0;
+    int inl = aa, aa4 = aa, pre = 0;
     GLuint e_tex = s->in[buf].tex, e_prog = s->up_prog;
     GLenum e_tgt = GL_TEXTURE_EXTERNAL_OES;
     if (inl) {
         aa = 0;
-        if (!calm) dst = o->fbo;
+        dst = o->fbo;
         if (up && rt_ensure(&s->sm_src, s->in[buf].w, s->in[buf].h) && aa_run(s, 1, s->in[buf].tex, s->in[buf].w, s->in[buf].h, aa4, (float)ow / (float)s->in[buf].w, s->sm_src.fbo) == 0) {
             e_tex = s->sm_src.tex; e_prog = s->up2d_prog; e_tgt = GL_TEXTURE_2D; inl = 0; pre = 1;
         }
@@ -607,9 +560,8 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glUniform1i(glGetUniformLocation(s->cas_prog, "tex"), 0);
     glUniform2f(glGetUniformLocation(s->cas_prog, "px"), 1.0f / (float)ow, 1.0f / (float)oh);
     glUniform1f(glGetUniformLocation(s->cas_prog, "sharp"), sharpness < 0 ? 0 : sharpness > 1 ? 1 : sharpness);
-    glUniform1f(glGetUniformLocation(s->cas_prog, "text"), (s->text_req ? s->text_req : s->text_env) > 1 ? 1.0f : 0.0f);
     draw();
-    if (aa || calm) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa, calm);
+    if (aa) post_run(s, o->fbo, ow, oh, (float)ow / (float)s->in[buf].w, aa);
     gpu_wait(s);  /* the compositor reads the dmabuf next: no explicit sync here */
     o->busy = 1;
     o->used = ++s->tick;

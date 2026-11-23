@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The render filter's two backends on the same input (tests/hals/sharpen-test via APKLAYER_SHARPEN_BACKEND=gles|vulkan): FSR 1 (EASU, RCAS with its text aid,
-the area downscale; no anti-aliasing: Vulkan has none) must agree within 8 LSB (the GPUs' float rounding; a handful of samples at a threshold of the text mask or an EASU direction tie may differ more, up to 20) on odd sizes, non-integer ratios, 1:1, tiny and
-large outputs, with the text aid on and off. SKIP without a render node, Vulkan or a sharpen-test built with both backends (SHARPEN_TEST
+"""The render filter's two backends on the same input (tests/hals/sharpen-test via APKLAYER_SHARPEN_BACKEND=gles|vulkan): FSR 1 (EASU, RCAS,
+the area downscale; no anti-aliasing: Vulkan has none) must agree within 8 LSB (the GPUs' float rounding; a handful of samples at an EASU direction tie may differ more, up to 20) on odd sizes, non-integer ratios, 1:1, tiny and
+large outputs. SKIP without a render node, Vulkan or a sharpen-test built with both backends (SHARPEN_TEST
 names the binary). SHARPEN_MODIFIER: the accepted modifier (hex; NVIDIA needs one)."""
 import glob, os, subprocess, sys, tempfile
 import numpy as np
@@ -35,11 +35,11 @@ def run(tmp, backend, w, h, ow, oh, env):
 
 cases = [(640, 360, 1280, 720, {}), (641, 361, 1283, 721, {}), (853, 480, 1280, 720, {}), (1000, 563, 1280, 720, {}), (64, 36, 1280, 720, {}), (1280, 720, 1281, 721, {}),
          (1, 1, 64, 64, {}), (2, 2, 5, 5, {}), (100, 50, 50, 25, {}), (640, 360, 640, 360, {}), (1920, 1080, 1280, 720, {}),
-         (640, 360, 1280, 720, {'APKLAYER_SHARPEN_TEXT': 'off'}), (960, 540, 1280, 720, {}), (448, 252, 1280, 720, {})]  # ratios 2, 1.33, 2.86
+         (960, 540, 1280, 720, {}), (448, 252, 1280, 720, {})]  # ratios 2, 1.33, 2.86
 with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-par-') as tmp:
     for w, h, ow, oh, env in cases:
         open(os.path.join(tmp, 'in.raw'), 'wb').write(picture(w, h))
         d = np.abs(run(tmp, 'gles', w, h, ow, oh, env) - run(tmp, 'vulkan', w, h, ow, oh, env))
         print('%dx%d -> %dx%d %s: max %d, mean %.4f, %d samples over 8' % (w, h, ow, oh, env, d.max(), d.mean(), (d > 8).sum()))
-        assert d.max() <= 20 and (d > 8).sum() <= 10, 'GLES and Vulkan differ'  # a few samples flip at a threshold (text mask, EASU direction ties): the GPUs' rounding
+        assert d.max() <= 20 and (d > 8).sum() <= 10, 'GLES and Vulkan differ'  # a few samples flip at a threshold (EASU direction ties): the GPUs' rounding
 print('PASS sharpen-parity')

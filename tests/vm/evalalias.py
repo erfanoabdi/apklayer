@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The yardstick for anti-aliasing on ALIASED input (docs/FILTER-EVAL.md; tests/vm/evalfilter.py box-reduces an already smooth image and cannot show jaggies):
-  tests/vm/evalalias.py [--scales 35,50,75] [--filter label[:ENV=VAL,...]]... [--sharp 0.8706] [--loops 100] [--save dir] [--json f]
+  tests/vm/evalalias.py [--scales 60,75] [--filter label[:ENV=VAL,...]]... [--sharp 0.8706] [--loops 100] [--save dir] [--json f]
 A 1280x720 scene of 12 tiles is drawn at 4x4 supersampling (no anti-aliasing in PIL); the TRUTH is its box reduction to 1280x720, the SOURCE at a scale is the nearest sample of
 the hires picture at the source size (a game rendering without AA), brought to 1280x720 by every --filter (bridge/shell/sharpen.c through sharpen-test, env as in evalfilter).
 Tiles: text_small, text_large, icons, lines (UI) | shapes (shaded spheres and polygons with specular), city (buildings, lamp posts, wires, railings), foliage (3D) | char1..char4 (character-like:
@@ -211,14 +211,14 @@ def measure(out, truth, tiles):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--scales', default='35,50,75'); ap.add_argument('--filter', action='append', default=[]); ap.add_argument('--sharp', type=float, default=0.8706)
+    ap.add_argument('--scales', default='60,75'); ap.add_argument('--filter', action='append', default=[]); ap.add_argument('--sharp', type=float, default=0.8706)
     ap.add_argument('--loops', type=int, default=100); ap.add_argument('--save'); ap.add_argument('--json'); ap.add_argument('--exe'); ap.add_argument('--only', default='')
     a = ap.parse_args()
     exe = a.exe or F.find_exe()
     if not exe: sys.exit('SKIP sharpen-test not built')
     if not glob.glob('/dev/dri/renderD*'): sys.exit('SKIP no render node')
     filters = [('bilinear', None), ('truth', 'truth')]
-    for f in a.filter or ['smaa-high:APKLAYER_SHARPEN_AA=smaa-high', 'smaa-ultra:APKLAYER_SHARPEN_AA=smaa-ultra', 'cmaa2-high:APKLAYER_SHARPEN_AA=cmaa2-high', 'cmaa2-ultra:APKLAYER_SHARPEN_AA=cmaa2-ultra']:
+    for f in a.filter or ['cmaa2-ultra:', 'smaa-ultra:APKLAYER_SHARPEN_AA=smaa', 'noaa:APKLAYER_SHARPEN_AA=off']:
         label, _, env = f.partition(':'); filters.append((label, dict(kv.split('=', 1) for kv in env.split(';') if kv)))
     hi, truth, tiles = corpus()
     if a.save: os.makedirs(a.save, exist_ok=True); truth.save(os.path.join(a.save, 'truth.png'))

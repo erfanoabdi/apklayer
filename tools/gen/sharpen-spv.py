@@ -15,7 +15,7 @@ layout(location = 0) out vec2 uv;
 void main() { vec2 p = vec2(float((gl_VertexIndex << 1) & 2), float(gl_VertexIndex & 2)) * 2.0 - 1.0; uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }
 """
 HEAD = """#version 450
-layout(push_constant) uniform PC { vec2 src; vec2 scl; vec2 px; vec2 d; float sharp; float down; float text; };
+layout(push_constant) uniform PC { vec2 src; vec2 scl; vec2 px; vec2 d; float sharp; float down; };
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 fc;
 """

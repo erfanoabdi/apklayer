@@ -122,11 +122,8 @@ export global Backend {
     in property <string> navbar-setting;  // the navigation bar on desktop windows (`apklayer settings` navbar): "" automatic (where the compositor draws the title bar), "on", "off"
     in property <string> app-window-mode-setting;  // the selected app's window style override (window-mode.<package>): "" follows the instance, "mobile", "desktop"
     in property <string> app-resolution-text;  // the selected app's window pixels and the fullscreen render resolution at its scale
-    in property <string> app-render-text-setting;  // the selected app's text aid after an upscale (render-text.<package>): "" the default (on), "off", "on"
-    in property <string> app-render-calm-setting;  // the selected app's calm pass for foliage noise (render-calm.<package>): "" the default (off), "off", "low", "high"
     in property <string> app-render-sharpness-setting;  // the selected app's sharpness (render-sharpness.<package>): "" medium, "off", "low", "medium", "high"
-    in property <string> app-render-aa-setting;  // the selected app's anti-aliasing (render-aa.<package>): "" the default (cmaa2-ultra), "off", "smaa-high", "smaa-ultra", "cmaa2-high", "cmaa2-ultra"
-    in property <string> app-render-filter-setting;  // the selected app's render filter (render-filter.<package>): "" the default (FSR 1 when the render scale is not 100), "sharp" FSR 1, "off" the compositor's plain stretch
+    in property <string> app-render-filter-setting;  // the selected app's render filter (render-filter.<package>): "sharp" FSR 1 (also what an empty stored value reads as), "off" the compositor's plain stretch
     in property <string> app-render-scale-setting;  // the selected app's render scale (render-scale.<package>, percent): "" full size; a fullscreen game renders at that share of the window
     in-out property <float> app-render-scale-pct: 100;  // the render scale as a number for the slider
     callback preview-render-scale(int);  // the slider moves: the resolution text follows without saving

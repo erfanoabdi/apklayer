@@ -208,9 +208,6 @@ int sharpen_win_show(struct window *w, int buf)
         give_back(w, sw->pending, "replaced before it was drawn");
         sw->pending = -1;
     }
-    sharpen_set_aa(sw->s, w->aa);
-    sharpen_set_calm(sw->s, w->calm);
-    sharpen_set_text(sw->s, w->text);
     /* the sharpness: FSR 1's RCAS constant exp2(-stops) of the app's render-sharpness: off 0 (no sharpening), low 1 stop (0.5), medium 0.2 stops (0.87, the reference's default), high 0 stops (1, the sharpest the reference allows) */
     static const float lvl[5] = { 0.8706f, 0.0f, 0.5f, 0.8706f, 1.0f };
     float sh = lvl[w->sharpl >= 0 && w->sharpl <= 4 ? w->sharpl : 0];

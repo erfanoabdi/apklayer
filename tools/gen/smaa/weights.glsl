@@ -11,7 +11,6 @@ uniform vec4 rt; varying vec2 uv;
 vec2 rnd2(vec2 x) { return floor(x + 0.5); }
 vec4 rnd4(vec4 x) { return floor(x + 0.5); }
 vec4 EO(vec2 c, vec2 o) { return texture2D(edges, c + o * rt.xy); }
-#ifndef SMAA_DISABLE_DIAG_DETECTION
 vec2 decd2(vec2 e) { e.r = e.r * abs(5.0 * e.r - 5.0 * 0.75); return rnd2(e); }
 vec4 decd4(vec4 e) { e.rb = e.rb * abs(5.0 * e.rb - 5.0 * 0.75); return rnd4(e); }
 vec2 sd1(vec2 tc, vec2 dir, out vec2 e) {
@@ -67,7 +66,6 @@ vec2 diagWeights(vec2 tc, vec2 e) {
   }
   return weights;
 }
-#endif
 float searchLen(vec2 e, float offset) {
   vec2 scale = SEARCH_SIZE * vec2(0.5, -1.0), bias = SEARCH_SIZE * vec2(offset, 1.0);
   scale += vec2(-1.0, 1.0); bias += vec2(0.5, -0.5);
@@ -119,10 +117,8 @@ void main() {
   vec4 weights = vec4(0.0);
   vec2 e = texture2D(edges, uv).rg;
   if (e.g > 0.0) {
-#ifndef SMAA_DISABLE_DIAG_DETECTION
     weights.rg = diagWeights(uv, e);
     if (weights.r == -weights.g) {
-#endif
     vec2 d; vec3 coords;
     coords.x = sxl(o0.xy, o2.x);
     coords.y = o1.y;
@@ -135,7 +131,6 @@ void main() {
     float e2 = EO(coords.zy, vec2(1.0, 0.0)).r;
     weights.rg = areaF(sq, e1, e2, 0.0);
     coords.y = uv.y;
-#ifndef SMAA_DISABLE_CORNER_DETECTION
     {
       vec4 tcn = coords.xyzy;
       vec2 lr = step(d.xy, d.yx), rounding = (1.0 - CORNER_NORM) * lr;
@@ -147,10 +142,7 @@ void main() {
       factor.y -= rounding.y * EO(tcn.zw, vec2(1.0, -2.0)).r;
       weights.rg *= clamp(factor, 0.0, 1.0);
     }
-#endif
-#ifndef SMAA_DISABLE_DIAG_DETECTION
     } else e.r = 0.0;
-#endif
   }
   if (e.r > 0.0) {
     vec2 d; vec3 coords;
@@ -165,7 +157,6 @@ void main() {
     float e2 = EO(coords.xz, vec2(0.0, 1.0)).g;
     weights.ba = areaF(sq, e1, e2, 0.0);
     coords.x = uv.x;
-#ifndef SMAA_DISABLE_CORNER_DETECTION
     {
       vec4 tcn = coords.xyxz;
       vec2 lr = step(d.xy, d.yx), rounding = (1.0 - CORNER_NORM) * lr;
@@ -177,7 +168,6 @@ void main() {
       factor.y -= rounding.y * EO(tcn.zw, vec2(-2.0, 1.0)).g;
       weights.ba *= clamp(factor, 0.0, 1.0);
     }
-#endif
   }
   gl_FragColor = weights;
 }

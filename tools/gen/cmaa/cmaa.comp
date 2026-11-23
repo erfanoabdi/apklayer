@@ -25,7 +25,7 @@ uint headAt(ivec2 q) { return uint(q.y * ((sz.x + 1) / 2) + q.x); }
 #endif
 uniform float u_th;     // apklayer patch: the edge threshold (reference 0.07), per level and ratio
 #define CM_EDGE_THRESHOLD u_th
-uniform float u_tg;     // apklayer patch: the text gate: no edges where the RCAS text test (sharpen_fsr.h) on the 3x3 of a quad is above this (< 0: off)
+uniform float u_tg;     // apklayer patch: the text gate: no edges where the text test on the 3x3 of a quad is above this (< 0: off)
 uniform float u_ck;     // apklayer patch: colour edges: the largest channel step times this joins the luma step (0: luma only, as the reference)
 #define MAX_LINE 86.0
 #define SYM_OFFSET 0.22
@@ -53,7 +53,7 @@ float dstep(int a, int b) {
   return d;
 }
 float TL(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }
-// the text test of the RCAS pass (sharpen_fsr.h) on the 3x3 csrc[0..7] + c8: 1 where it is strong two-colour structure with a mostly axis-aligned gradient (a glyph stem, an icon or UI line)
+// the text test on the 3x3 csrc[0..7] + c8: 1 where it is strong two-colour structure with a mostly axis-aligned gradient (a glyph stem, an icon or UI line)
 float textMask(vec3 c8) {
   vec3 q[9]; for (int k = 0; k < 8; k++) q[k] = csrc[k]; q[8] = c8;
   float lo = 9.0, hi = -9.0; vec3 cLo = q[0], cHi = q[0];

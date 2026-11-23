@@ -95,7 +95,7 @@ static void reply(struct apklayer_display *d, uint32_t type, uint32_t len, const
          * the window's pixels; the shell shows the buffer over the whole window (its viewport). Here, per launch, not in the shell: the shell is shared
          * by the instances and outlives an upgrade, so an app restart is enough for a changed setting. The Java host scales its side (AppHost). */
         static int render_pct;
-        if (!render_pct) { const char *e = getenv("APKLAYER_RENDER_SCALE"); int v = e ? atoi(e) : 100; render_pct = v >= 25 && v <= 200 ? v : 100; }
+        if (!render_pct) { const char *e = getenv("APKLAYER_RENDER_SCALE"); int v = e ? atoi(e) : 100; render_pct = v > 200 || v <= 0 ? 100 : v < 60 ? 60 : v; }  /* 60..200: a stored value below 60 (the old minimum was 25) is read as 60 */
         int32_t scale = render_pct == 100 ? body[3] : (int32_t)(((int64_t)body[3] * render_pct + 50) / 100);
         if (scale < 1) scale = 1;
         if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], scale, turn);
@@ -313,22 +313,8 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     int32_t m[21] = { 0 };
     /* apklayer patch: the render filter (`apklayer settings` render-filter sharp, cli/run.cpp): a flags word after the damage; a shell that does not know
      * it (len 80) ignores it, one that does resamples a buffer that is not the window's pixels with the upscale pass (bridge/shell/sharpen.c) */
-    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && *e && strcmp(e, "off") ? 1 : 0;  /* bit 0: FSR 1 on (any name but off: the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1); bits 1-2: render-text (below); bits 3-6 are unused (they carried the mode and the phases) */
-        const char *tx = getenv("APKLAYER_RENDER_TEXT");  /* bits 1-2: the text aid after an upscale: 1 off, 2 on (0: the shell's default, on) */
-        if (tx) filter |= (!strcmp(tx, "off") ? 1 : !strcmp(tx, "on") ? 2 : 0) << 1;
-        const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: 1 off, 2 low, 3 high (the shell reads low and high as cmaa2-high; 0: the shell's default, cmaa2-ultra); bits 14-17 (a shell that predates them
-         * reads 0 in bits 7-8, its default): 3 smaa-high, 4 smaa-ultra, 7 cmaa2-high, 8 cmaa2-ultra (1, 2, 5, 6, the removed low and medium levels, are still read by the shell as high) (before the upscale, SMAA 1x / CMAA2; bits 7-8 then stay 0) */
-        if (aa) {
-            /* off | smaa-high | smaa-ultra | cmaa2-high | cmaa2-ultra; the removed values map: smaa-low, smaa-medium, smaa -> smaa-high; cmaa2-low, cmaa2-medium, cmaa2, low, high -> cmaa2-high */
-            int v = !strcmp(aa, "off") ? 1 : 0, x = 0;
-            if (!strcmp(aa, "smaa-ultra")) x = 4;
-            else if (!strncmp(aa, "smaa", 4)) x = 3;
-            else if (!strcmp(aa, "cmaa2-ultra")) x = 8;
-            else if (!strncmp(aa, "cmaa2", 5) || !strcmp(aa, "low") || !strcmp(aa, "high")) x = 7;
-            filter |= v << 7 | x << 14;
-        }
-        const char *cm = getenv("APKLAYER_RENDER_CALM");  /* bits 9-10: the calm pass (foliage noise): 1 off, 2 low, 3 high (0: the shell's default, off) */
-        if (cm) filter |= (!strcmp(cm, "off") ? 1 : !strcmp(cm, "low") ? 2 : !strcmp(cm, "high") ? 3 : 0) << 9;
+    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && !strcmp(e, "off") ? 0 : 1;  /* bit 0: FSR 1 on (on unless the value is off: an empty or unset one is FSR 1 too; the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1);
+         * bits 1-10 and 14-17 are unused (once render-text, render-aa, render-calm: those settings are gone, anti-aliasing is always CMAA2 ultra) and bits 3-6 too (the mode and the phases) */
         const char *sh = getenv("APKLAYER_RENDER_SHARPNESS");  /* bits 11-13: 1 off, 2 low, 3 medium, 4 high (0: medium) */
         if (sh) filter |= (!strcmp(sh, "off") ? 1 : !strcmp(sh, "low") ? 2 : !strcmp(sh, "medium") ? 3 : !strcmp(sh, "high") ? 4 : 0) << 11;
     } m[20] = filter; }

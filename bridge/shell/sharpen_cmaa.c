@@ -1,8 +1,7 @@
-/* CMAA2 for the render filter: see sharpen_cmaa.h. The reference's presets (CMAA2_STATIC_QUALITY_PRESET) are the edge threshold only: LOW 0.15, MEDIUM 0.10, HIGH 0.07, ULTRA 0.05; "extra
- * sharpness" stays off. apklayer additions, to smooth 3D content harder at low render scales (docs/FILTER-EVAL.md, aliased corpus): colour edges (hue-only edges on characters), the
- * level's number of runs one after the other (more at a bigger upscale ratio) and a text gate (the RCAS text test on the quad's 3x3 removes its edges, so UI text, icons and lines are
- * not smoothed, however many runs). The working picture is an RGBA8 copy of the source (the kernels read it with texelFetch and the last one writes the blended pixels into it),
- * edges as R32UI (one word per pixel), the blend lists as storage buffers. */
+/* CMAA2 for the render filter: see sharpen_cmaa.h. The ULTRA preset of the reference (CMAA2_STATIC_QUALITY_PRESET: edge threshold 0.05); "extra sharpness" stays off. apklayer additions, to smooth 3D content
+ * harder at low render scales (docs/FILTER-EVAL.md, aliased corpus): colour edges (hue-only edges on characters), a number of runs one after the other that grows with the upscale ratio and a text gate
+ * (the RCAS text test on the quad's 3x3 removes its edges, so UI text, icons and lines are not smoothed, however many runs). The working picture is an RGBA8 copy of the source (the kernels read it
+ * with texelFetch and the last one writes the blended pixels into it), edges as R32UI (one word per pixel), the blend lists as storage buffers. */
 #include "sharpen_cmaa.h"
 
 #include <EGL/egl.h>
@@ -14,8 +13,8 @@
 
 #include "sharpen_cmaa_cs.h"
 
-/* per level: edge threshold (the reference's LOW .15, MEDIUM .10, HIGH .07, ULTRA .05) and the colour edge factor (0: luma only, as the reference). apklayer: colour edges, the text gate and the repeated runs below are ours */
-static const float TH[4] = { 0.15f, 0.10f, 0.07f, 0.05f }, COLOR_K[4] = { 0.0f, 0.4f, 0.5f, 0.6f };
+/* the edge threshold (the reference's ULTRA .05) and the colour edge factor (0: luma only, as the reference). apklayer: colour edges, the text gate and the repeated runs below are ours */
+static const float TH = 0.05f, COLOR_K = 0.6f;
 #define TEXT_GATE 0.1f  /* the text test's value above which a quad gets no edges: text, icons and UI lines stay as the game drew them */
 enum { K_EDGES, K_ARGS, K_CAND, K_APPLY };
 static const char *const KNAME[4] = { "K_EDGES", "K_ARGS", "K_CAND", "K_APPLY" };
@@ -168,17 +167,17 @@ static void use(GLuint p, int w, int h, const float *t)
 }
 
 /* how many runs one after the other: the lower the render scale the longer the stair steps the upscale makes of a pixel, and a run only blends what it finds (the text gate keeps the extra runs
- * off text); low 1, medium 2 from a ratio of 2, high the ratio rounded (1..3), ultra 1.4 x the ratio (1..4: 2 at 75 %, 3 at 50 %, 4 at 35 %) */
-static int runs(int level, float ratio)
+ * off text): 1.4 x the ratio rounded, 1..4 (2 at 75 %, 3 at 50 %, 4 at 35 % and lower) */
+static int runs(float ratio)
 {
-    int n = level == 0 ? 1 : level == 1 ? (ratio >= 2.0f ? 2 : 1) : level == 2 ? (int)(ratio + 0.5f) : (int)(1.4f * ratio + 0.5f);
-    return n < 1 ? 1 : n > (level == 2 ? 3 : 4) ? (level == 2 ? 3 : 4) : n;
+    int n = (int)(1.4f * ratio + 0.5f);
+    return n < 1 ? 1 : n > 4 ? 4 : n;
 }
 
-int cmaa_run(struct cmaa *c, int ext, GLuint src, int w, int h, int level, float ratio, GLuint dst, GLuint vbo)
+int cmaa_run(struct cmaa *c, int ext, GLuint src, int w, int h, float ratio, GLuint dst, GLuint vbo)
 {
-    if (!c || level < 0 || level > 3 || w < 4 || h < 4 || !ensure(c, w, h)) return -1;
-    float t[2] = { TH[level], COLOR_K[level] };
+    if (!c || w < 4 || h < 4 || !ensure(c, w, h)) return -1;
+    float t[2] = { TH, COLOR_K };
     glDisable(GL_BLEND);
     blit(ext ? c->blit_ext : c->blit_2d, ext ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D, src, c->work_fbo, w, h, vbo);
     for (int i = 0; i < 6; i++) c->bind_base(GL_SHADER_STORAGE_BUFFER, (GLuint)i, c->ssbo[i]);
@@ -188,7 +187,7 @@ int cmaa_run(struct cmaa *c, int ext, GLuint src, int w, int h, int level, float
     glBindTexture(GL_TEXTURE_2D, c->work_tex);
     const GLbitfield all = GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_COMMAND_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT | GL_FRAMEBUFFER_BARRIER_BIT;
     c->barrier(GL_FRAMEBUFFER_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-    int iters = runs(level, ratio);
+    int iters = runs(ratio);
     for (int it = 0; it < iters; it++) {
         use(c->edges, w, h, t);
         c->dispatch((GLuint)((w + 27) / 28), (GLuint)((h + 27) / 28), 1);

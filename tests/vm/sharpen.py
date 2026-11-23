@@ -2,8 +2,8 @@
 """The render filter's pass (bridge/shell/sharpen.c) without a compositor: a text and line picture rendered at 50% (a box-filtered copy of a
 1280x720 reference) goes through the pass to 1280x720 (tests/hals/sharpen-test.c: dmabuf in, EGL, FSR 1's EASU and RCAS, readback). Checked: the
 result is sharper than a bilinear stretch (the mean edge strength in the text region at least 15% higher), no further from the reference
-(PSNR within 0.5 dB of bilinear's, usually above it), and the text aid (APKLAYER_SHARPEN_TEXT=on, the default) makes the strokes steeper than with it off
-without lowering the PSNR by more than 0.3 dB. SHARPEN_TEST is the sharpen-test binary to use (else the first one found in a build dir), SHARPEN_BACKEND=vulkan runs the Vulkan backend. The GPU needs EGL with dma-buf import: skipped without a render node. The accepted modifier
+(PSNR within 0.5 dB of bilinear's, usually above it); then the same with the anti-aliasing the shell always runs before the upscale (CMAA2 ultra, SMAA ultra
+without OpenGL ES 3.1 compute; none on Vulkan): still a sane picture. APKLAYER_SHARPEN_AA=off is the test knob that leaves it out, to measure FSR 1 alone. SHARPEN_TEST is the sharpen-test binary to use (else the first one found in a build dir), SHARPEN_BACKEND=vulkan runs the Vulkan backend. The GPU needs EGL with dma-buf import: skipped without a render node. The accepted modifier
 can be given in SHARPEN_MODIFIER (hex; NVIDIA's gbm has no linear render target)."""
 import glob
 import math
@@ -31,12 +31,12 @@ d.rectangle((60, 320, 360, 420), outline=(255, 200, 0), width=2)
 d.ellipse((420, 300, 620, 500), outline=(0, 200, 255), width=2)
 small = ref.resize((W // 2, H // 2), Image.BOX)
 
-def render(text):
+def render():
     with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
         raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
         Path(raw_in).write_bytes(small.convert('RGBA').tobytes())
         args = [exe, raw_in, str(W // 2), str(H // 2), raw_out, str(W), str(H), '0.8706'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else [])
-        env = dict(os.environ, APKLAYER_SHARPEN_AA='off', APKLAYER_SHARPEN_TEXT=text)  # FSR 1 alone: SMAA / CMAA2 (default cmaa2-ultra) would change the edges this test measures
+        env = dict(os.environ, APKLAYER_SHARPEN_AA='off')  # FSR 1 alone: the anti-aliasing (always on, CMAA2 ultra) would change the edges this test measures
         if os.environ.get('SHARPEN_BACKEND'): env['APKLAYER_SHARPEN_BACKEND'] = os.environ['SHARPEN_BACKEND']
         run = subprocess.run(args, capture_output=True, text=True, timeout=60, env=env)
         print(run.stderr.strip())
@@ -45,7 +45,7 @@ def render(text):
         return Image.frombytes('RGBA', (W, H), Path(raw_out).read_bytes()).convert('RGB')
 
 
-ours, ours_off = render('on'), render('off')
+ours = render()
 bilinear = small.resize((W, H), Image.BILINEAR)
 
 
@@ -61,25 +61,25 @@ def edges(image):  # the mean gradient strength of the text region
 
 
 e_ours, e_bil = edges(ours), edges(bilinear)
-e_off = edges(ours_off)
-p_ours, p_bil, p_off = psnr(ours, ref), psnr(bilinear, ref), psnr(ours_off, ref)
-print('text aid off: edge strength %.2f, PSNR %.2f dB' % (e_off, p_off))
+p_ours, p_bil = psnr(ours, ref), psnr(bilinear, ref)
 print('edge strength: ours %.2f, bilinear %.2f (x%.2f); PSNR vs the original: ours %.2f dB, bilinear %.2f dB' % (e_ours, e_bil, e_ours / e_bil, p_ours, p_bil))
 assert e_ours >= e_bil * 1.15, 'not sharper than bilinear'
 assert p_ours >= p_bil - 0.5, 'further from the original than bilinear'
-assert e_ours >= e_off and p_ours >= p_off - 0.3, 'the text aid does not help'
 print('PASS sharpen: x%.2f edge strength, %+.2f dB' % (e_ours / e_bil, p_ours - p_bil))
 
-# SMAA 1x and CMAA2 (render-aa smaa-*, cmaa2-*) run before the upscale: the result must stay a sane picture (not further from the original than bilinear by more than
-# 0.5 dB, as sharp as bilinear or sharper), whichever level; CMAA2 without ES 3.1 compute falls back to SMAA (the log says so)
-for aa in ('smaa-high', 'smaa-ultra', 'cmaa2-high', 'cmaa2-ultra', 'smaa-low', 'smaa-medium', 'cmaa2-low', 'cmaa2-medium', 'smaa', 'cmaa2', 'low', 'high'):  # the last eight: removed values, read as smaa-high or cmaa2-high
+# the anti-aliasing (CMAA2 ultra, SMAA ultra without ES 3.1 compute; the log says which) runs before the upscale: the result must stay a sane picture (not further from the original
+# than bilinear by more than 0.5 dB, as sharp as bilinear or sharper). Removed settings are not read any more: an old APKLAYER_SHARPEN_AA value other than off changes nothing.
+for aa in (None, 'cmaa2-high', 'smaa-low', 'smaa'):  # the default, two removed values (ignored: the same ultra run) and the test knob for the SMAA ultra fallback
     with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
         raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
         Path(raw_in).write_bytes(small.convert('RGBA').tobytes())
+        env = {k: v for k, v in os.environ.items() if k != 'APKLAYER_SHARPEN_AA'}
+        if aa: env['APKLAYER_SHARPEN_AA'] = aa
+        if os.environ.get('SHARPEN_BACKEND'): env['APKLAYER_SHARPEN_BACKEND'] = os.environ['SHARPEN_BACKEND']
         run = subprocess.run([exe, raw_in, str(W // 2), str(H // 2), raw_out, str(W), str(H), '0.6'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else []),
-                             capture_output=True, text=True, timeout=60, env=dict(os.environ, APKLAYER_SHARPEN_AA=aa, **({'APKLAYER_SHARPEN_BACKEND': os.environ['SHARPEN_BACKEND']} if os.environ.get('SHARPEN_BACKEND') else {})))  # with SHARPEN_BACKEND=vulkan the level is ignored (no anti-aliasing there): the same sanity limits hold
+                             capture_output=True, text=True, timeout=60, env=env)
         assert run.returncode == 0, '%s: sharpen-test failed (rc %d): %s' % (aa, run.returncode, run.stderr)
         img = Image.frombytes('RGBA', (W, H), Path(raw_out).read_bytes()).convert('RGB')
     assert edges(img) >= e_bil, '%s: not as sharp as bilinear' % aa
     assert psnr(img, ref) >= p_bil - 0.5, '%s: further from the original than bilinear' % aa
-    print('PASS %s: x%.2f edge strength, %+.2f dB' % (aa, edges(img) / e_bil, psnr(img, ref) - p_bil))
+    print('PASS with anti-aliasing (APKLAYER_SHARPEN_AA=%s): x%.2f edge strength, %+.2f dB' % (aa, edges(img) / e_bil, psnr(img, ref) - p_bil))

@@ -1,6 +1,6 @@
-/* FSR 1 (AMD FidelityFX Super Resolution 1, MIT, ffx_fsr1.h) as GLES2 fragment shaders: FS_UP (EASU) and FS_CAS (RCAS plus the optional text aid). sharpen.c includes it; tools/gen/sharpen-spv.py turns it into sharpen_vk_spv.h.
+/* FSR 1 (AMD FidelityFX Super Resolution 1, MIT, ffx_fsr1.h) as GLES2 fragment shaders: FS_UP (EASU) and FS_CAS (RCAS). sharpen.c includes it; tools/gen/sharpen-spv.py turns it into sharpen_vk_spv.h.
  * EASU and RCAS follow the reference line by line (same constants, same 12 taps, same min/max clamps); what differs is listed in docs/THIRD_PARTY.md: the gather4 loads are
- * twelve texel-centre fetches (the same texels), the approximate rcp/rsq are exact divisions, the zero-division guards RCAS needs without the reference's rcp(0)=inf, and the text aid (not AMD's). The picture is
+ * twelve texel-centre fetches (the same texels), the approximate rcp/rsq are exact divisions, the zero-division guards RCAS needs without the reference's rcp(0)=inf, and the 2% halo cap of RCAS. The picture is
  * used as it is stored: the apps' buffers are gamma encoded, which is the perceptual space the reference asks for (no transfer function: FsrRcasInput is the identity).
  * A source larger than the output (render scale above 100) is averaged down instead. */
 static const char *FS_UP =
@@ -79,24 +79,17 @@ static const char *FS_UP =
 
 /* RCAS (reference FsrRcasF; FSR_RCAS_LIMIT 0.25 - 1/16, no denoise as in the reference's default): sharpening from the 5-tap cross, the strength per pixel limited so the result stays inside the range (no clipping, no halos).
  * `sharp` is the reference's constant from FsrRcasCon, exp2(-stops): 1 the sharpest (0 stops), 0.87 the reference default (0.2 stops), 0.5 one stop less, 0 off (the picture passes unchanged).
- * The text aid (`text` 1, not AMD's): where the 3x3 around the pixel is strong two-colour structure with a mostly axis-aligned gradient (a glyph stem, an icon edge, a UI line), the pixel gets an extra unsharp
- * step along that axis, clamped to the 3x3's per-channel min/max (so it cannot overshoot); elsewhere (3D, photos, gradients) the result is the plain RCAS. */
+ */
 static const char *FS_CAS =
     "precision highp float;\n"
-    "uniform sampler2D tex; uniform vec2 px; uniform float sharp; uniform float text; varying vec2 uv;\n"
-    "const float TEXTK = 2.0;\n"
+    "uniform sampler2D tex; uniform vec2 px; uniform float sharp; varying vec2 uv;\n"
     "const float HALO_OV = 0.02;  /* how far the plain RCAS result may leave the cross's range, as a fraction of that range */\n"
     "const bool DENOISE = false;  /* FSR_RCAS_DENOISE of the reference: off by default there too */\n"
     "vec3 T(float x, float y) { return texture2D(tex, uv + vec2(x, y) * px).rgb; }\n"
     "float L(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }\n"
     "void main() {\n"
     "  vec3 b = T(0.0, -1.0), d = T(-1.0, 0.0), e = T(0.0, 0.0), f = T(1.0, 0.0), h = T(0.0, 1.0);\n"
-    "  vec3 a, c, g, i;  /* the corners, for the text aid */\n"
-    "  if (b == e && d == e && f == e && h == e) {  /* apklayer patch (speed, same result): equal cross: the plain RCAS is exactly e (its range is the point e); with the text aid the corners decide too */\n"
-    "    if (text < 0.5) { gl_FragColor = vec4(e, 1.0); return; }\n"
-    "    a = T(-1.0, -1.0); c = T(1.0, -1.0); g = T(-1.0, 1.0); i = T(1.0, 1.0);\n"
-    "    if (a == e && c == e && g == e && i == e) { gl_FragColor = vec4(e, 1.0); return; }\n"
-    "  } else if (text > 0.5) { a = T(-1.0, -1.0); c = T(1.0, -1.0); g = T(-1.0, 1.0); i = T(1.0, 1.0); }\n"
+    "  if (b == e && d == e && f == e && h == e) { gl_FragColor = vec4(e, 1.0); return; }  /* apklayer patch (speed, same result): equal cross: RCAS is exactly e (its range is the point e) */\n"
     "  float bL = L(b), dL = L(d), eL = L(e), fL = L(f), hL = L(h);\n"
     "  vec3 mn4 = min(min(b, d), min(f, h)), mx4 = max(max(b, d), max(f, h));\n"
     "  vec3 hitMin = min(mn4, e) / max(4.0 * mx4, 1e-5);  /* (the reference divides by 4 * mx4 and relies on the GPU's max() ignoring the NaN of 0/0) */\n"
@@ -111,33 +104,5 @@ static const char *FS_CAS =
     "  vec3 pix = (lobe * b + lobe * d + lobe * h + lobe * f + e) / (4.0 * lobe + 1.0);\n"
     "  { vec3 lo = min(mn4, e), hi = max(mx4, e), ov = HALO_OV * (hi - lo);  /* apklayer patch: the sharpened value may leave the cross's range by a fraction of it only (halo cap; the reference only keeps it inside 0..1) */\n"
     "    pix = clamp(pix, lo - ov, hi + ov); }\n"
-    "  if (text > 0.5) {\n"
-    "    float aL = L(a), cL = L(c), gL = L(g), iL = L(i);\n"
-    "    vec3 mn = min(min(min(a, c), min(g, i)), mn4), mx = max(max(max(a, c), max(g, i)), mx4);\n"
-    "    mn = min(mn, e); mx = max(mx, e);\n"
-    "    float ctr = 0.5 * (max(max(max(aL, cL), max(gL, iL)), max(max(max(bL, dL), max(eL, fL)), hL)) - min(min(min(aL, cL), min(gL, iL)), min(min(min(bL, dL), min(eL, fL)), hL)));\n"
-    "    /* two colours only: every pixel of the 3x3 lies near the line between the darkest and the brightest one */\n"
-    "    vec3 cLo = a, cHi = a; float lLo = aL, lHi = aL;\n"
-    "    if (bL < lLo) { lLo = bL; cLo = b; } if (bL > lHi) { lHi = bL; cHi = b; }\n"
-    "    if (cL < lLo) { lLo = cL; cLo = c; } if (cL > lHi) { lHi = cL; cHi = c; }\n"
-    "    if (dL < lLo) { lLo = dL; cLo = d; } if (dL > lHi) { lHi = dL; cHi = d; }\n"
-    "    if (eL < lLo) { lLo = eL; cLo = e; } if (eL > lHi) { lHi = eL; cHi = e; }\n"
-    "    if (fL < lLo) { lLo = fL; cLo = f; } if (fL > lHi) { lHi = fL; cHi = f; }\n"
-    "    if (gL < lLo) { lLo = gL; cLo = g; } if (gL > lHi) { lHi = gL; cHi = g; }\n"
-    "    if (hL < lLo) { lLo = hL; cLo = h; } if (hL > lHi) { lHi = hL; cHi = h; }\n"
-    "    if (iL < lLo) { lLo = iL; cLo = i; } if (iL > lHi) { lHi = iL; cHi = i; }\n"
-    "    vec3 ax = cHi - cLo; float axx = max(dot(ax, ax), 1e-6), res = 0.0;\n"
-    "    vec3 q[9]; q[0] = a; q[1] = b; q[2] = c; q[3] = d; q[4] = e; q[5] = f; q[6] = g; q[7] = h; q[8] = i;\n"
-    "    for (int k = 0; k < 9; k++) res = max(res, length(q[k] - cLo - ax * clamp(dot(q[k] - cLo, ax) / axx, 0.0, 1.0)));\n"
-    "    /* a mostly horizontal or vertical gradient (Sobel) */\n"
-    "    float gx = (cL + 2.0 * fL + iL) - (aL + 2.0 * dL + gL), gy = (gL + 2.0 * hL + iL) - (aL + 2.0 * bL + cL);\n"
-    "    float axis = abs(abs(gx) - abs(gy)) / (abs(gx) + abs(gy) + 1e-4);\n"
-    "    float t = smoothstep(0.28, 0.5, ctr) * (1.0 - smoothstep(0.04, 0.10, res)) * smoothstep(0.3, 0.65, axis);\n"
-    "    bool hx = abs(gx) > abs(gy);  /* the axis the gradient runs along */\n"
-    "    vec3 p1 = hx ? d : b, q1 = hx ? f : h, p2 = hx ? T(-2.0, 0.0) : T(0.0, -2.0), q2 = hx ? T(2.0, 0.0) : T(0.0, 2.0);\n"
-    "    mn = min(mn, min(p2, q2)); mx = max(mx, max(p2, q2));\n"
-    "    vec3 lap = e - 0.25 * (p1 + q1 + 0.5 * (p2 + q2)) * (4.0 / 3.0);\n"
-    "    pix = mix(pix, clamp(pix + TEXTK * lap, mn, mx), t);\n"
-    "  }\n"
     "  gl_FragColor = vec4(clamp(pix, 0.0, 1.0), 1.0);\n"
     "}\n";
