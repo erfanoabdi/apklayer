@@ -171,7 +171,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         struct window *w = len >= 80 ? window_find(c, v[0]) : NULL;
         int nplanes = len >= 80 ? v[5] : 0;
         if (nplanes < 0 || nplanes > 4 || nplanes > c->nfds) nplanes = 0;
-        if (w) { w->filter = len >= 84 && (v[20] & 1);  /* FSR 1; bits 1-2 render-text, bits 3-6 unused (once the mode and the phases) */ w->text = len >= 84 ? (v[20] >> 1) & 3 : 0; w->aa = len >= 84 ? (v[20] >> 7) & 3 : 0; w->calm = len >= 84 ? (v[20] >> 9) & 3 : 0; w->sharpl = len >= 84 ? (v[20] >> 11) & 7 : 0; window_dmabuf_frame(w, v, c->fds, nplanes); }
+        if (w) { w->filter = len >= 84 && (v[20] & 1);  /* FSR 1; bits 1-2 render-text, bits 3-6 unused (once the mode and the phases) */ w->text = len >= 84 ? (v[20] >> 1) & 3 : 0; w->aa = len >= 84 ? ((v[20] >> 14) & 15 ? 3 + ((v[20] >> 14) & 15) : (v[20] >> 7) & 3) : 0;  /* 1 off, 2 low, 3 high, 4..7 SMAA low..ultra, 8..11 CMAA2 low..ultra */ w->calm = len >= 84 ? (v[20] >> 9) & 3 : 0; w->sharpl = len >= 84 ? (v[20] >> 11) & 7 : 0; window_dmabuf_frame(w, v, c->fds, nplanes); }
         for (int i = 0; i < nplanes; i++) close(c->fds[i]); /* the shell kept its own dup, if it needed one */
         memmove(c->fds, c->fds + nplanes, (size_t)(c->nfds - nplanes) * sizeof(int));
         c->nfds -= nplanes;

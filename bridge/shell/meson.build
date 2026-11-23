@@ -41,7 +41,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
   sharpen_deps = []
   sharpen_args = []
   if egl_dep.found() and gbm_dep.found() and gles_dep.found()
-    sharpen_src = ['sharpen.c']
+    sharpen_src = ['sharpen.c', 'sharpen_smaa.c', 'sharpen_cmaa.c']
     sharpen_deps = [egl_dep, gbm_dep, gles_dep]
     sharpen_args = ['-DHAVE_SHARPEN']
   endif

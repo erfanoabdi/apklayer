@@ -316,8 +316,20 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && *e && strcmp(e, "off") ? 1 : 0;  /* bit 0: FSR 1 on (any name but off: the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1); bits 1-2: render-text (below); bits 3-6 are unused (they carried the mode and the phases) */
         const char *tx = getenv("APKLAYER_RENDER_TEXT");  /* bits 1-2: the text aid after an upscale: 1 off, 2 on (0: the shell's default, on) */
         if (tx) filter |= (!strcmp(tx, "off") ? 1 : !strcmp(tx, "on") ? 2 : 0) << 1;
-        const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: the anti-aliasing after an upscale: 1 off, 2 low, 3 high (0: the shell's default, high) */
-        if (aa) filter |= (!strcmp(aa, "off") ? 1 : !strcmp(aa, "low") ? 2 : !strcmp(aa, "high") ? 3 : 0) << 7;
+        const char *aa = getenv("APKLAYER_RENDER_AA");  /* bits 7-8: the anti-aliasing after an upscale: 1 off, 2 low, 3 high (0: the shell's default, high); bits 14-17 (a shell that predates them
+         * reads 0 in bits 7-8, its default): 1..4 smaa-low..smaa-ultra, 5..8 cmaa2-low..cmaa2-ultra (before the upscale, SMAA 1x / CMAA2; bits 7-8 then stay 0) */
+        if (aa) {
+            static const char *const lv[4] = { "low", "medium", "high", "ultra" };
+            int v = !strcmp(aa, "off") ? 1 : !strcmp(aa, "low") ? 2 : !strcmp(aa, "high") ? 3 : 0, x = !strcmp(aa, "cmaa2") ? 7 : 0;  /* cmaa2 alone: cmaa2-high */
+            for (int i = 0; i < 4 && !x; i++) {
+                char n[24];
+                snprintf(n, sizeof n, "smaa-%s", lv[i]);
+                if (!strcmp(aa, n)) x = 1 + i;
+                snprintf(n, sizeof n, "cmaa2-%s", lv[i]);
+                if (!strcmp(aa, n)) x = 5 + i;
+            }
+            filter |= v << 7 | x << 14;
+        }
         const char *cm = getenv("APKLAYER_RENDER_CALM");  /* bits 9-10: the calm pass (foliage noise): 1 off, 2 low, 3 high (0: the shell's default, off) */
         if (cm) filter |= (!strcmp(cm, "off") ? 1 : !strcmp(cm, "low") ? 2 : !strcmp(cm, "high") ? 3 : 0) << 9;
         const char *sh = getenv("APKLAYER_RENDER_SHARPNESS");  /* bits 11-13: 1 off, 2 low, 3 medium, 4 high (0: medium) */
