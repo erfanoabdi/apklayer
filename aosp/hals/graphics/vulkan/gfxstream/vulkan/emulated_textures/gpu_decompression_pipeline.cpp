@@ -41,7 +41,7 @@ static AstcDecoder initialAstcDecoder() {
 #else
     const char* e = std::getenv("APKLAYER_VULKAN_ASTC_DECODER");
 #endif
-    return e && !strcmp(e, "old") ? AstcDecoder::Old : e && !strcmp(e, "mesa") ? AstcDecoder::Mesa : AstcDecoder::NewRgb;
+    return e && !strcmp(e, "old") ? AstcDecoder::Old : e && !strcmp(e, "new") ? AstcDecoder::NewRgb : AstcDecoder::Mesa;  // the default is Mesa's decoder
 }
 static AstcDecoder activeAstcDecoder = initialAstcDecoder();
 
