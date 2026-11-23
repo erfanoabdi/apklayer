@@ -218,7 +218,7 @@ def main():
     if not exe: sys.exit('SKIP sharpen-test not built')
     if not glob.glob('/dev/dri/renderD*'): sys.exit('SKIP no render node')
     filters = [('bilinear', None), ('truth', 'truth')]
-    for f in a.filter or ['off:APKLAYER_SHARPEN_AA=off', 'low:APKLAYER_SHARPEN_AA=low', 'high:APKLAYER_SHARPEN_AA=high']:
+    for f in a.filter or ['smaa-high:APKLAYER_SHARPEN_AA=smaa-high', 'smaa-ultra:APKLAYER_SHARPEN_AA=smaa-ultra', 'cmaa2-high:APKLAYER_SHARPEN_AA=cmaa2-high', 'cmaa2-ultra:APKLAYER_SHARPEN_AA=cmaa2-ultra']:
         label, _, env = f.partition(':'); filters.append((label, dict(kv.split('=', 1) for kv in env.split(';') if kv)))
     hi, truth, tiles = corpus()
     if a.save: os.makedirs(a.save, exist_ok=True); truth.save(os.path.join(a.save, 'truth.png'))
