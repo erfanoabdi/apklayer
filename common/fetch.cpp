@@ -44,7 +44,7 @@ std::string wget(const std::string& url, const std::string& out, const Progress&
         dup2(devnull, 0);
         dup2(devnull, 1);
         // a stalled server fails in minutes, not wget's default of 20 tries of 15 minutes each
-        execlp("wget", "wget", "-q", "--tries=3", "--timeout=30", "--show-progress", "--progress=bar:force:noscroll", "--compression=auto", "-O", out.c_str(), "--", url.c_str(), nullptr);
+        execlp("wget", "wget", "-q", "--tries=3", "--timeout=30", "--show-progress", "--progress=bar:force:noscroll", "-O", out.c_str(), "--", url.c_str(), nullptr);
         _exit(127);
     }
     close(err[1]);
