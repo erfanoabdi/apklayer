@@ -291,3 +291,37 @@ Combinations (65 / 75 %, flick): base foliage 6.17 / 5.43, hair 26.59 / 24.15; c
 Quality of the adopted pipeline, before -> after (75 / 65 %): sharpen-eval text PSNR 24.20 -> 24.15 / 22.77 -> 22.71, text edge 13.81 -> 13.60 / 12.61 -> 12.36, photo PSNR 28.77 -> 28.59 / 27.60 -> 27.48, photo edge 16.93 -> 15.82 / 15.44 -> 14.46; evalalias txtEdge 0.95 -> 0.94 / 0.95 -> 0.94 (100 %: 1.05 -> 1.04), 3dPSNR 30.25 -> 30.28 (75 %), 29.50 -> 29.55 (65 %), 31.71 -> 32.07 (100 %), uiPSNR +0.03 / +0.02 / +0.24, 3dStair 10.32 -> 9.58 (65 %), 11.03 -> 10.32 (75 %), 14.11 -> 12.89 (100 %). sharpen.py passes on GLES and Vulkan, sharpen_parity.py (GLES = Vulkan, one frame) unchanged (max 1 LSB).
 Cost (SHARPEN_LOOPS=300, 960x540 -> 1280x720 and 2880x1620 -> 3840x2160): base 0.53 / 3.30 ms per frame; busy RCAS only 0.52 / 3.31 (free); with the temporal pass 0.63 / 4.15 (+0.09 ms at 720p, +0.85 ms at 4K: two copies of the output, one of the source, the blend with 9 + 16 fetches).
 What was adopted, where it deviates from AMD: (c) RCAS's lobe is scaled down in busy texture (`BUSY_LO` / `BUSY_HI` in FS_CAS; both backends); (d) a temporal pass after the filter, GLES only (`sharpen_temporal.c`; the Vulkan backend keeps none: it would need two history images, a copy of the source and a fourth pipeline, no trivial change; it also has no CMAA2). EASU is untouched (b not adopted); AMD's reference has neither. Limits: the temporal pass trades a slight blur of moving low-contrast detail (changes under ~20 levels, e.g. a pan over grass with 10-level texture) for calm; a human has to judge whether that reads as ghosting in PGR (docs/PLAN.md). Aliased hair and 1 px lines stay close to the game's own flicker (hair -6 / -7 %): the history that would cure it (weight 0.25..0.5, no gate: -19..-36 %) also smears every moving edge.
+
+## AA, third round (2026-11-25, RTX 5060 Ti, GLES; nothing adopted)
+Goal: cut the residual stair steps / crawl of hair and 1 px lines on aliased 3D sources without costing text (text edge loss < 2 %) or blurring UI. Yardsticks: `tests/vm/evalalias.py` (aliased scene, 60 % source, columns txtEdge / 3dPSNR / 3dJag / 3dStair / charJag / chStair / charEdge) and `tests/vm/shimmer.py --scales 65 --configs default` (aliased source, flick = crawl, edge = edge strength). Candidates were built with temporary env knobs (not kept).
+
+What the corpus shows first: the nearest-sampled source has already lost the 1 px wires and part of the hair strands (dashed in the source); no AA can bring them back (only history / jitter could). What CMAA2 can do is round the steps of what is left, and it does (3dStair 11.95 -> 9.26, charStair 11.86 -> 9.46 at 60 %), at 3dJag +0.26 and txtEdge -0.06 against FSR alone. Note `Stair` falls with any blur (bilinear 10.5, truth 11.1), so a lower Stair is only a gain when txtEdge and Jag hold.
+
+**A. CMAA2 parameters (evalalias, 60 %; base = shipped: threshold 0.05, colour factor 0.6, 1.4 x ratio runs, max 4)**
+
+| variant | txtEdge | 3dPSNR | 3dJag | 3dStair | charJag | chStair | charEdge |
+|---|---|---|---|---|---|---|---|
+| FSR alone (AA off) | 0.97 | 28.33 | 12.14 | 11.95 | 15.45 | 11.86 | 0.98 |
+| base | 0.91 | 28.28 | 12.40 | 9.26 | 15.54 | 9.46 | 0.92 |
+| threshold 0.03 | 0.91 | 28.31 | 12.40 | 9.25 | 15.56 | 9.43 | 0.92 |
+| threshold 0.02 | 0.91 | 28.33 | 12.38 | 9.27 | 15.57 | 9.44 | 0.92 |
+| colour factor 1.0 | 0.91 | 28.29 | 12.41 | 9.26 | 15.55 | 9.45 | 0.92 |
+| colour factor 0 (luma only) | 0.91 | 28.28 | 12.41 | 9.27 | 15.53 | 9.46 | 0.92 |
+| runs 2.0 x ratio | 0.89 | 28.04 | 12.82 | 8.78 | 15.93 | 8.99 | 0.90 |
+| runs 2.5 x ratio, max 6 | 0.88 | 27.80 | 13.28 | 8.44 | 16.33 | 8.64 | 0.87 |
+
+Threshold and colour factor are saturated on this high-contrast corpus (differences <= 0.03); more runs trade fidelity for smoothness (PSNR -0.2..-0.5 dB, Jag +0.4..0.9, text edge -0.02..-0.03): rejected. Shimmer 65 % (flick / hair edge): base hair 24.88 / 27.64; runs 2.0 24.59 / 25.39; runs 2.8 max 6 24.41 / 23.77 (the 2 % flick gain costs 14 % of the hair's edge strength); threshold 0.025 foliage err 7.10 -> 6.91, flick 5.07 -> 4.99 (noise level); colour factor 1.2 no change.
+
+**B. Edge-directed stair smoother after EASU, before RCAS** (a new GLES pass at output resolution: Sobel direction of the 3x3, average with taps at +-1 and +-2 px along the tangent, clamped to the 3x3 range, faded in with contrast, off on axis-aligned edges, ~0.1 ms at 720p). evalalias 65 %, then shimmer 65 % (hair flick 24.88 base):
+
+| variant | txtEdge | 3dPSNR | 3dJag | 3dStair | charJag | shimmer hair flick / edge | text flick |
+|---|---|---|---|---|---|---|---|
+| base (CMAA2 only) | 0.94 | 29.55 | 10.35 | 9.58 | 12.47 | 24.88 / 27.64 | 25.03 |
+| pass, strength 1.0 (60 % table: txtEdge 0.83, 3dJag 12.89 vs 12.40) | - | - | - | - | - | 23.08 / 23.67 | 24.16 |
+| strength 0.5 | 0.89 | 29.41 | 10.60 | 9.00 | 12.75 | 23.75 / 25.46 | 24.36 |
+| contrast floor x2.7 | 0.87 | 29.29 | 10.71 | 8.94 | 12.92 | 23.59 / 25.40 | 24.17 |
+| axis limit 0.15 | 0.88 | 29.23 | 10.83 | 9.08 | 13.00 | 23.65 / 25.08 | 24.44 |
+
+Hair flick -5..-7 %, but txtEdge -0.05..-0.07 (limit 0.02), 3dJag +0.25..0.5, hair edge strength -8..-14 % and PSNR -0.15..-0.26 dB: it blurs what it should only straighten, and at output resolution the CMAA text gate is not available. Rejected.
+
+Result: no change adopted, CMAA2 ultra and the SMAA fallback stay as they are. Open: a text-safe version of B would need the gate computed at source resolution and handed on (a mask texture), for a measured gain of about 5 % crawl; a real cut of hair/line crawl needs sub-pixel history (the temporal pass's area), not more spatial AA. Not tried: CMAA2 extra edge classes for 1 px lines (the source has already dropped most of them), Vulkan AA port.
