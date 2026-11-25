@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-25: The AOT cache was never rebuilt after a runtime update (CdsDump.trainSpare)
+
+- Cause: `trainSpare` returned when ANY `*.aot.log` existed in the instance's cds directory ("one attempt per instance"). The cache key hashes the runtime build, so after the first cache (an old `78d5...aot.log` from 2026-11-18) every later key found a log and never trained: spares ran in `-XX:AOTMode=record` for nothing (each wrote a 100-300 MB `.aotconf.*`; 8.8 GB piled up in one test session), took about 9 s to prepare, and cold starts ran without the cache.
+- Fix: the guard looks for this key's own log (`<cache>.log`) only. Tried on the NVIDIA PC with a host-classes.jar that has the one class replaced (a new key): the spare trained once and the cache was made (141 MB, the stale one removed by the create step).
+- Aurora Store, first frame, before -> after: cold stack 5.3 s -> 4.9 s (app loader 1.05 s -> 0.83 s); relaunch right after a stop 4.3-4.6 s -> 3.9 s (the spare is ready after about 1 s instead of 9 s; the target arrived 1.2 s after the launch instead of 1.9 s). Spare ready and idle: 2.2 s as before.
+- Not changed: spares of different packages still replace each other (a spare is one app's), so a stack start with many components keeps starting and ending spares until it settles; each ended recording spare leaves its `.aotconf.*` until the next one removes it (10 minutes).
+
 ## 2026-11-25: Start-up measured (Aurora Store, NVIDIA PC) and Endfield's load profiled
 
 - Start of an app with its spare ready (idle 10 s or more): first frame 2.2 s (target handed over at 25 ms, app loader 23 ms, apphost run at 50 ms, hub registered 420 ms, onCreate done 860 ms). With no spare (cold stack): 5.3 s, of which the app loader (loadNativeRuntime) is 1.05 s. A launch right after another app's stop takes a spare that is prepared but not yet idle: the target arrives 1.9 s late, first frame 4.3-4.6 s. New marks "target received", "app loader built", "host class loaded" (Main.java).

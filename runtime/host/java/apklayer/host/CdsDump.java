@@ -35,15 +35,15 @@ final class CdsDump {
     }
 
     /** JDK 25: the idle spare (AppSpare) trains the AOT cache headless, so no user launch has to: it links its classes and ends (the configuration is
-     *  written at its exit). A launch that takes the spare meanwhile just runs (it records for nothing, no more). One attempt per instance (an earlier
+     *  written at its exit). A launch that takes the spare meanwhile just runs (it records for nothing, no more). One attempt per cache key (an earlier
      *  create's log stays). The spare the hub starts is not sandboxed, so a sandboxed instance gets its cache too (cli/sandbox.cpp strips the recording
      *  from sandboxed JVMs). */
     static void trainSpare() {
         String file = System.getProperty("apklayer.cdsdump");
         if (file == null || !file.endsWith(".aot") || !ManagementFactory.getRuntimeMXBean().getInputArguments().contains("-XX:AOTMode=record")) return;
-        try (DirectoryStream<Path> tried = Files.newDirectoryStream(Path.of(file).getParent(), "*.aot.log")) {
-            if (tried.iterator().hasNext()) return;
-        } catch (Exception noDirectoryYet) { /* none made */ }
+        // one attempt per cache (its key: the runtime build and the JVM options): the log of an earlier key's create said "tried" for every later key, so after
+        // a runtime update the cache was never made again and every spare recorded for nothing (2026-11-25: spares took 9 s to prepare, a cold start 5.3 s)
+        if (Files.exists(Path.of(file + ".log"))) return;
         dump(Path.of(file), true);
     }
 
