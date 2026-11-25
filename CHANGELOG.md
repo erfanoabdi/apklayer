@@ -12,6 +12,9 @@
   existing per-app sandbox flag; retain the installed/claimed UID check.
 - Binder caller lookup now excludes the shared Linux UID before caching an
   Android identity, matching the existing oneway path. It resolves shared-host
+## 2026-11-25 deb of main 08aa6d33 (temporal oscillation pass)
+- Build log: `tools/release/build-deb.sh noble 0.5.6+local20261125.git08aa6d33 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (removed). Succeeded: `apklayer_0.5.6+local20261125.git08aa6d33-1~noble1_amd64.deb` 25837936 bytes plus apklayer-dev. Not installed.
+
   callers through the hub instead. No account UID or package UID is rewritten.
 - Build: targeted Java 25 compilation against the checksum-verified ARM64
   runtime 0.5.6; replace only the two changed classes and their nested classes
