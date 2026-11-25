@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25: render filter, oscillation history (shimmer, fourth round A)
+
+- `bridge/shell/sharpen_temporal.c`: the temporal pass now also blends the history (weight 0.7) where a pixel oscillates: a per-pixel counter of luma sign flips caused by jumps of the app's own texels (point sampling), kept in two ping-pong RGBA8 targets. Hair flicker -17 / -18 % (65 / 75 %), -11 % at 100 %; scroll edge/truth and ghost unchanged; smooth (box) sources unchanged. +0.055 ms at 720p, +0.5 ms at 4K. Numbers: docs/FILTER-EVAL.md. GLES only.
+- Build log: no build in `~/los24`; `sharpen-test` compiled by hand with gcc in a scratch dir (deleted); shimmer.py, ghost.py, sharpen.py pass on the local RTX 5060 Ti.
+
 ## 2026-11-24: Host UIDs in Android's application range
 
 - An unsandboxed Flatpak launched by Linux UID 10001 rejected Telegram's Android
