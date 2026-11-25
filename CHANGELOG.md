@@ -7,6 +7,11 @@
 - Aurora Store, first frame, before -> after: cold stack 5.3 s -> 4.9 s (app loader 1.05 s -> 0.83 s); relaunch right after a stop 4.3-4.6 s -> 3.9 s (the spare is ready after about 1 s instead of 9 s; the target arrived 1.2 s after the launch instead of 1.9 s). Spare ready and idle: 2.2 s as before.
 - Not changed: spares of different packages still replace each other (a spare is one app's), so a stack start with many components keeps starting and ending spares until it settles; each ended recording spare leaves its `.aotconf.*` until the next one removes it (10 minutes).
 
+## 2026-11-25: Play Store updates failed (gRPC UNKNOWN): non-main threads read SystemClock behind the monotonic clock
+
+- Symptom: downloads worked, installing an update did not (`A/Finsky: Unexpected exception: StatusRuntimeException: UNKNOWN` at "Local install scheduled"). Cause in the app log: `IllegalArgumentException: duration (-0.137s) must not be negative` in gRPC's SerializingExecutor: Robolectric's paused SystemClock moves only on main-looper steps, so a stamp from System.nanoTime on one thread and a SystemClock reading on another gave a negative duration. Fix: `ShadowHostSystemClock` returns max(paused, System.nanoTime()) on threads other than main (64cc20af).
+- Checked on the owner's default instance (patched copy of runtime 0.5.6's host-classes.jar): Endfield "(re)installed version 71" through Play Store, no "must not be negative", no Play Integrity (-100) or "Last device integrity refresh attempt failed" lines after the restart (the earlier -100 and integrity-refresh errors were probably the same bug in other gRPC calls; not forced by an app asking for an integrity token). Cronet "native library failed to load" (OkHttp fallback) not investigated.
+
 ## 2026-11-25: Start-up measured (Aurora Store, NVIDIA PC) and Endfield's load profiled
 
 - Start of an app with its spare ready (idle 10 s or more): first frame 2.2 s (target handed over at 25 ms, app loader 23 ms, apphost run at 50 ms, hub registered 420 ms, onCreate done 860 ms). With no spare (cold stack): 5.3 s, of which the app loader (loadNativeRuntime) is 1.05 s. A launch right after another app's stop takes a spare that is prepared but not yet idle: the target arrives 1.9 s late, first frame 4.3-4.6 s. New marks "target received", "app loader built", "host class loaded" (Main.java).
