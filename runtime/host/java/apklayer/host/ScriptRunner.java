@@ -205,6 +205,12 @@ final class ScriptRunner {
         } else if (step.equals("views")) { // every window's view tree: class, visibility, alpha, size, position (an invisible dialog's cause)
             java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
             for (android.view.View root : views) dumpView(root, 0);
+        } else if (step.startsWith("hit:")) { // hit:x,y every view under the point, per window (topmost window last): visibility, clickable, long-clickable, touch listener (why a tap does not arrive)
+            String[] p = step.substring(4).split(",");
+            java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
+            android.view.View top = HostWindows.topWindow(views, Integer.parseInt(p[0]), Integer.parseInt(p[1]));
+            System.out.println("[apklayer] hit top window: " + (top == null ? "none" : top.getClass().getName() + " " + top.getLayoutParams()));
+            for (android.view.View root : views) hit(root, Integer.parseInt(p[0]), Integer.parseInt(p[1]), 0);
         } else if (step.equals("navinset")) { // the top window's navigation bar inset (bottom, px), as its app sees it
             java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
             android.view.WindowInsets wi = views.get(views.size() - 1).getRootWindowInsets();
@@ -221,12 +227,25 @@ final class ScriptRunner {
         String text = v instanceof android.widget.TextView ? " \"" + ((android.widget.TextView) v).getText() + "\"" : "";
         if (v.getId() != android.view.View.NO_ID) try { text += " id=" + v.getResources().getResourceEntryName(v.getId()) + "(0x" + Integer.toHexString(v.getId()) + ")"; } catch (RuntimeException noName) { }
         System.out.println("[apklayer] view " + "  ".repeat(depth) + v.getClass().getName() + " vis=" + v.getVisibility() + " alpha=" + v.getAlpha()
-                + " scale=" + v.getScaleX() + " " + v.getWidth() + "x" + v.getHeight() + "@" + at[0] + "," + at[1] + text);
+                + " scale=" + v.getScaleX() + (v.isClickable() ? " clickable" : "") + (v.isLongClickable() ? " longClickable" : "") + (v.hasOnClickListeners() ? " onClick" : "") + " " + v.getWidth() + "x" + v.getHeight() + "@" + at[0] + "," + at[1] + text);
         // Compose draws its text itself: the semantics tree reaches us as accessibility nodes (the view's provider), texts only
         android.view.accessibility.AccessibilityNodeProvider provider = v.getAccessibilityNodeProvider();
         if (provider != null) dumpNodes(provider, android.view.accessibility.AccessibilityNodeProvider.HOST_VIEW_ID, depth + 1);
-        if (depth < 14 && v instanceof android.view.ViewGroup g)
+        if (depth < 60 && v instanceof android.view.ViewGroup g)
             for (int c = 0; c < g.getChildCount(); c++) dumpView(g.getChildAt(c), depth + 1);
+    }
+
+    private static void hit(android.view.View v, int x, int y, int depth) {
+        int[] at = new int[2];
+        v.getLocationOnScreen(at);
+        if (x < at[0] || y < at[1] || x >= at[0] + v.getWidth() || y >= at[1] + v.getHeight()) return;
+        String id = "";
+        if (v.getId() != android.view.View.NO_ID) try { id = " id=" + v.getResources().getResourceEntryName(v.getId()); } catch (RuntimeException noName) { }
+        System.out.println("[apklayer] hit " + "  ".repeat(depth) + v.getClass().getName() + id + " vis=" + v.getVisibility() + " shown=" + v.isShown() + " enabled=" + v.isEnabled()
+                + " clickable=" + v.isClickable() + " longClickable=" + v.isLongClickable() + " alpha=" + v.getAlpha() + " " + v.getWidth() + "x" + v.getHeight() + "@" + at[0] + "," + at[1]
+                + (v.hasOnClickListeners() ? " onClick" : "") + (v.isFocusable() ? " focusable" : ""));
+        if (v instanceof android.view.ViewGroup g)
+            for (int c = g.getChildCount() - 1; c >= 0; c--) hit(g.getChildAt(c), x, y, depth + 1);
     }
 
     private static void dumpNodes(android.view.accessibility.AccessibilityNodeProvider provider, int id, int depth) {
