@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-24: Host UIDs in Android's application range
+
+- An unsandboxed Flatpak launched by Linux UID 10001 rejected Telegram's Android
+  UID 10010 during hub registration. Gate the kernel-UID equality check on the
+  existing per-app sandbox flag; retain the installed/claimed UID check.
+- Binder caller lookup now excludes the shared Linux UID before caching an
+  Android identity, matching the existing oneway path. It resolves shared-host
+  callers through the hub instead. No account UID or package UID is rewritten.
+- Build: targeted Java 25 compilation against the checksum-verified ARM64
+  runtime 0.5.6; replace only the two changed classes and their nested classes
+  in a copy of host-classes.jar. Hardware validation recorded separately.
+
 ## 2026-11-23 deb of main 62370ed1 (shimmer: RCAS busy-texture fade + temporal pass)
 - Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.git62370ed1 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.git62370ed1-1~noble1_amd64.deb` 25836024 bytes plus apklayer-dev. Not installed. Not in it: the berberis 0085 library; the render-scale-200 startup crash is not fixed.
 

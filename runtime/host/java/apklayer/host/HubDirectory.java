@@ -314,7 +314,8 @@ final class HubDirectory extends Binder {
                     isolatedOwners.put(appUid, name);
                 }
                 else if (installedUid >= 0 && appUid != installedUid && pid != android.os.Process.myPid()) throw new SecurityException(name + " is uid " + installedUid + ", not " + appUid);
-                if (kernel >= android.os.Process.FIRST_APPLICATION_UID && kernel <= android.os.Process.LAST_APPLICATION_UID && kernel != installedUid)
+                // Only the per-app sandbox maps Linux uids to Android app identities.
+                if (SANDBOXED && kernel >= android.os.Process.FIRST_APPLICATION_UID && kernel <= android.os.Process.LAST_APPLICATION_UID && kernel != installedUid)
                     throw new SecurityException(name + " is uid " + installedUid + ", its process runs as " + kernel);
                 Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, isolatedProcess ? installedUid : appUid, instance, process);  // the app's own uid for the hub's bookkeeping
                 synchronized (peers) {

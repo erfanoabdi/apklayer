@@ -40,7 +40,7 @@ public class ShadowHostRealBinder {
         Integer known = APP_UIDS.get(pid);
         if (known != null) return known;
         int kernel = kernelUid(pid);
-        if (kernel >= Process.FIRST_APPLICATION_UID && kernel <= Process.LAST_APPLICATION_UID) { APP_UIDS.put(pid, kernel); return kernel; }  // a sandboxed app: the kernel's word
+        if (kernel >= Process.FIRST_APPLICATION_UID && kernel <= Process.LAST_APPLICATION_UID && kernel != linuxUid()) { APP_UIDS.put(pid, kernel); return kernel; }  // never cache the shared desktop uid as an app identity
         if (Boolean.TRUE.equals(RESOLVING.get())) return ShadowHostProcess.ownUid();  // the hub call below went through a proxy transaction listener (MediaProvider's) that asks the calling uid again
         RESOLVING.set(true);
         int uid;
