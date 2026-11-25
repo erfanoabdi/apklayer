@@ -22,10 +22,22 @@ public class ShadowHostSystemClock extends ShadowPausedSystemClock {
     private static long lastNanos;
     private static int reads;
 
-    @Implementation protected static long uptimeMillis() { catchUp(); return ShadowPausedSystemClock.uptimeMillis(); }
-    @Implementation protected static long uptimeNanos() { catchUp(); return ShadowPausedSystemClock.uptimeNanos(); }
-    @Implementation protected static long elapsedRealtime() { catchUp(); return ShadowPausedSystemClock.elapsedRealtime(); }
-    @Implementation protected static long elapsedRealtimeNanos() { catchUp(); return ShadowPausedSystemClock.elapsedRealtimeNanos(); }
+    @Implementation protected static long uptimeMillis() { return uptimeNanos() / 1_000_000L; }
+    @Implementation protected static long uptimeNanos() { catchUp(); return read(ShadowPausedSystemClock.uptimeNanos()); }
+    @Implementation protected static long elapsedRealtime() { return elapsedRealtimeNanos() / 1_000_000L; }
+    @Implementation protected static long elapsedRealtimeNanos() { catchUp(); return read(ShadowPausedSystemClock.elapsedRealtimeNanos()); }
+
+    /**
+     * Other threads do not wait for the main thread's next step: a stamp taken from System.nanoTime (or currentTimeMillis) on one thread and a
+     * SystemClock reading on another then gave a negative duration (Play Store's update check: "duration (-0.137s) must not be negative", every
+     * install of an update failed with gRPC UNKNOWN). A paused clock behind (for threads other than main) the monotonic clock reads the monotonic clock; one ahead is kept.
+     */
+    private static long read(long paused) {
+        Thread thread = main;
+        if (thread == null || Thread.currentThread() == thread) return paused;  // the main thread's reads stay on the looper's clock
+        long real = System.nanoTime();  // this class is not instrumented: the JVM's CLOCK_MONOTONIC
+        return real > paused ? real : paused;
+    }
 
     private static void catchUp() {
         Thread thread = main;
@@ -34,7 +46,7 @@ public class ShadowHostSystemClock extends ShadowPausedSystemClock {
             if (looper == null) return;
             thread = main = looper.getThread();
         }
-        if (Thread.currentThread() != thread) return;  // other threads wait for the main thread's next step, which advances the clock
+        if (Thread.currentThread() != thread) return;  // other threads read through read()
         long now = ShadowPausedSystemClock.uptimeNanos();  // the paused clock
         if (now != lastNanos) { lastNanos = now; reads = 0; return; }
         if (++reads < SPIN_READS) return;
