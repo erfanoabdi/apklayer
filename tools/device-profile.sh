@@ -2,7 +2,7 @@
 # tools/device-profile.sh <profile>|off [instance]: which device an instance presents. The default is the Pixel 8 (bridge/native/apklayer.prop). A profile from
 # bridge/native/profiles/<profile>.prop (pixel8, pixel5, desktop) is written as instance property overrides (`apklayer prop set`; ro.* are write-once and the overrides
 # load first, so they win), from the instance's next start; `off` removes every override this script wrote, back to the default. The CPU half is the property
-# berberis.cpuinfo (the translator's /proc/cpuinfo and MIDR_EL1): `pixel5` (the Cortex-A76/A55 core with its ISA gate; the Pixel 8's own ARMv9 cores are not emulated, so the pixel8 profile keeps it) or, for any other profile, its name (the translator's generic core).
+# berberis.cpuinfo (the translator's /proc/cpuinfo and MIDR_EL1): `pixel5` (Kryo 475), `pixel8` (Tensor G3's A510/A715/X3 identity, binary_translation 0086; a library without 0086 treats it as the generic core) or, for any other profile, its name (the translator's generic core).
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"; dir="$here/../bridge/native/profiles"
 [ $# -ge 1 ] || { echo "usage: $0 <profile>|off [instance]" >&2; exit 2; }
@@ -15,6 +15,5 @@ if [ "$profile" = off ]; then
 fi
 [ -f "$dir/$profile.prop" ] || { echo "no profile $profile (have: $(cd "$dir" && ls *.prop | sed 's/\.prop$//' | tr '\n' ' '))" >&2; exit 1; }
 grep -E '^[a-z]' "$dir/$profile.prop" | while IFS== read -r k v; do apklayer $inst prop set "$k" "$v" >/dev/null; done
-cpu=$profile; [ "$profile" != pixel8 ] || cpu=pixel5
-apklayer $inst prop set berberis.cpuinfo "$cpu" >/dev/null
+apklayer $inst prop set berberis.cpuinfo "$profile" >/dev/null
 echo "device profile $profile set; restart the instance (apklayer stop)"

@@ -1,0 +1,74 @@
+From: Claude <noreply@anthropic.com>
+Subject: [PATCH] apklayer: berberis.cpuinfo = pixel8 (Google Tensor G3 cores for /proc/cpuinfo and MIDR_EL1)
+
+The default device is a Pixel 8 (bridge/native/profiles/pixel8.prop), so the CPU the guest reads agrees with it: `berberis.cpuinfo=pixel8` (property, or
+BERBERIS_CPUINFO) lists the Tensor G3's 8 cores: cpu0-3 Cortex-A510 (part 0xd46), cpu4-6 Cortex-A715 (part 0xd4d), cpu7 Cortex-X3 (part 0xd4e), implementer
+0x41, variant 0x1, revision 1 for the A510 and X3 and 0 for the A715; a guest read of MIDR_EL1 (interpreter and lite tier) returns cpu0's, the A510's
+0x411FD461. Same design as 0020/0021 (only /proc/cpuinfo and MIDR_EL1 are profiled; the Features line stays what AT_HWCAP and the interpreter provide, so
+no SVE/SVE2/BF16/I8MM is advertised: the translator cannot run them). The part numbers are the cores' architectural IDs; variant and revision are from
+memory of a Pixel 8, not captured. NOT BUILT: written while the Mac tree was unreachable; apply after 0021 and build before it ships.
+Module libberberis_arm64.
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -564,6 +564,9 @@ class Interpreter {
+           const char* profile = cpuinfo_profile.get();
+           if (profile != nullptr && std::strcmp(profile, "pixel5") == 0) {
+             return 0x51DF805EULL;
++          }
++          if (profile != nullptr && std::strcmp(profile, "pixel8") == 0) {  // apklayer patch (0086): Cortex-A510 r1p1, cpu0 of the Tensor G3
++            return 0x411FD461ULL;
+           }
+         }
+         return 0x410FD034ULL;
+diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulation.cc
+--- a/kernel_api/arm64/open_emulation.cc
++++ b/kernel_api/arm64/open_emulation.cc
+@@ -125,6 +125,8 @@ struct CoreIdentity {
+   const char* revision;
+   const char* part_big;  // cores from `big_from` on
+   int big_from;
++  const char* part_mid;  // apklayer patch (0086): cores from `mid_from` up to `big_from` (nullptr: none)
++  int mid_from;
+ };
+ bool ProfileIdentity(CoreIdentity* id) {
+   static ConfigStr config("BERBERIS_CPUINFO", "berberis.cpuinfo");
+@@ -133,7 +135,11 @@ bool ProfileIdentity(CoreIdentity* id) {
+   if (profile != nullptr && strcmp(profile, "pixel5") == 0) {
+-    *id = {8, "0x51", "0xd", "0x805", "14", "0x804", 6};
++    *id = {8, "0x51", "0xd", "0x805", "14", "0x804", 6, nullptr, 0};
+     return true;
+   }
++  if (profile != nullptr && strcmp(profile, "pixel8") == 0) {  // Tensor G3: 4x A510, 3x A715, 1x X3
++    *id = {8, "0x41", "0x1", "0xd46", "1", "0xd4e", 7, "0xd4d", 4};
++    return true;
++  }
+   return false;
+ }
+ }  // namespace
+@@ -172,7 +178,9 @@ std::string FormatGuestCpuinfo(int num_cpus) {
+                      "CPU revision\t: %s\n"
+                      "\n",
+                      i, profile ? identity.implementer : "0x41", profile ? identity.variant : "0x1",
+-                     profile ? (i >= identity.big_from ? identity.part_big : identity.part) : "0xd05", profile ? identity.revision : "0");
++                     profile ? (i >= identity.big_from ? identity.part_big
++                                : (identity.part_mid != nullptr && i >= identity.mid_from) ? identity.part_mid : identity.part) : "0xd05",
++                     profile ? identity.revision : "0");
+     if (n > 0) {
+       out.append(block, static_cast<size_t>(n));
+     }
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+@@ -745,7 +745,10 @@
+       // Silver. The region is translated once, so the value is read when it is translated.
+       static const uint64_t midr = [] {
+         ConfigStr profile("BERBERIS_CPUINFO", "berberis.cpuinfo");
+-        return profile.get() != nullptr && strcmp(profile.get(), "pixel5") == 0 ? 0x51DF805EULL : 0x410FD034ULL;
++        if (profile.get() != nullptr && strcmp(profile.get(), "pixel5") == 0) return 0x51DF805EULL;
++        // apklayer patch (0086): Cortex-A510 r1p1, cpu0 of the Tensor G3
++        if (profile.get() != nullptr && strcmp(profile.get(), "pixel8") == 0) return 0x411FD461ULL;
++        return 0x410FD034ULL;
+       }();
+       Register res = AllocTempReg();
+       if (!success()) return no_register;
