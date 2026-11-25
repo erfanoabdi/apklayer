@@ -12,6 +12,9 @@
   runtime 0.5.6; replace only the two changed classes and their nested classes
   in a copy of host-classes.jar. Hardware validation recorded separately.
 
+## 2026-11-25 deb of main ee55c3c6 (FSR 1 calm-area EASU lobe; AA and shimmer third rounds: no change)
+- Build log: `tools/release/build-deb.sh noble 0.5.6+local20261125.gitee55c3c6 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (removed). Succeeded: `apklayer_0.5.6+local20261125.gitee55c3c6-1~noble1_amd64.deb` 25836530 bytes plus apklayer-dev. Not installed. Not in it: the berberis 0085 library; render-scale-200 startup crash unfixed.
+
 ## 2026-11-23 deb of main 62370ed1 (shimmer: RCAS busy-texture fade + temporal pass)
 - Build log: `tools/release/build-deb.sh noble 0.5.6+local20261123.git62370ed1 ~/apklayer-build/prebuilts ~/apklayer-deb-render/out` in a temporary worktree (Maven 429 workaround: jar copied in and removed; worktree removed). Succeeded: `apklayer_0.5.6+local20261123.git62370ed1-1~noble1_amd64.deb` 25836024 bytes plus apklayer-dev. Not installed. Not in it: the berberis 0085 library; the render-scale-200 startup crash is not fixed.
 
