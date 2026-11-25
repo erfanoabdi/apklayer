@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-25: Start-up measured (Aurora Store, NVIDIA PC) and Endfield's load profiled
+
+- Start of an app with its spare ready (idle 10 s or more): first frame 2.2 s (target handed over at 25 ms, app loader 23 ms, apphost run at 50 ms, hub registered 420 ms, onCreate done 860 ms). With no spare (cold stack): 5.3 s, of which the app loader (loadNativeRuntime) is 1.05 s. A launch right after another app's stop takes a spare that is prepared but not yet idle: the target arrives 1.9 s late, first frame 4.3-4.6 s. New marks "target received", "app loader built", "host class loaded" (Main.java).
+- Endfield, cold, to the title screen: about 46 s on the NVIDIA PC and 48 s on mp100 (second run 43 s: not I/O or shader caches). `perf record` of the process: 69.5% translated guest code, 7.7% libberberis_arm64 (interpreter and translator), 4.1% libc, 1.4% libjvm; main Unity thread 56%. A translation cache could save at most ~8%. Heavy tier (`berberis.mode.<pkg> two-gear`) is slower (still on the studio logo at 72 s, process at 5.9 GB in disk wait).
+- Test hygiene: my runs with a swapped host-classes.jar made every spare train a new AOT configuration (78 `.aotconf.*` files, 8.8 GB in the instance's cds directory); deleted.
+
 ## 2026-11-25: render filter, oscillation history (shimmer, fourth round A)
 
 - `bridge/shell/sharpen_temporal.c`: the temporal pass now also blends the history (weight 0.7) where a pixel oscillates: a per-pixel counter of luma sign flips caused by jumps of the app's own texels (point sampling), kept in two ping-pong RGBA8 targets. Hair flicker -17 / -18 % (65 / 75 %), -11 % at 100 %; scroll edge/truth and ghost unchanged; smooth (box) sources unchanged. +0.055 ms at 720p, +0.5 ms at 4K. Numbers: docs/FILTER-EVAL.md. GLES only.

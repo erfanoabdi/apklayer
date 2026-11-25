@@ -94,8 +94,11 @@ public final class Main {
                     // an app's window process, or a package's headless component host (the hub's `apklayer component-host`: -Dapklayer.componenthost)
                     boolean componentHost = Boolean.getBoolean("apklayer.componenthost");
                     Path apk = Path.of(target[0]), classes = Path.of(target[1]);
+                    StartTrace.mark("target received");
                     Thread.currentThread().setContextClassLoader(appLoader(sandbox, apk, classes));
+                    StartTrace.mark("app loader built");
                     Class<?> host = sandbox.bootstrappedClass(componentHost ? ComponentHost.class : AppHost.class);
+                    StartTrace.mark("host class loaded");
                     Constructor<?> ctor = host.getConstructor(AndroidSandbox.class, Path.class, Path.class);
                     ((Runnable) ctor.newInstance(sandbox, apk, out)).run();
                 } catch (ReflectiveOperationException e) {
