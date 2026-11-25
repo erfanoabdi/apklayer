@@ -55,6 +55,7 @@ public final class AppHost implements Runnable {
     private int imeShown;                                // the host keyboard's height the app was last told (px)
     private boolean mobile;                              // the shell's mobile window style (a phone: its turns are rotations)
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
+    private int forcedFrom;                              // the window's shape before a forced orientation (1 landscape, 2 portrait, 0: not forced)
     private boolean turnRequested;                       // that request turns the window: its configure is a rotation (hostResize)
     private final HostTextBridge text = new HostTextBridge();
     private ShellClient shell;
@@ -392,14 +393,21 @@ public final class AppHost implements Runnable {
         if (req == lastOrientation) return;
         lastOrientation = req;
         boolean landscape = req == 0 || req == 6 || req == 11, portrait = req == 1 || req == 7 || req == 12;
+        // Leaving a forced shape (YouTube's fullscreen exit asks UNSPECIFIED/USER/SENSOR...): the window goes back to the shape it had before
+        // the force, then the shape lock ends (0 x 0).
+        boolean back = !landscape && !portrait && forcedFrom != 0;
+        if (landscape || portrait) { if (forcedFrom == 0) forcedFrom = logicalW > logicalH ? 1 : 2; }
+        else if (back) { landscape = forcedFrom == 1; portrait = forcedFrom == 2; forcedFrom = 0; }
         boolean turn = (landscape && logicalW < logicalH) || (portrait && logicalW > logicalH);
         turnRequested = turn;
-        if (turn) System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
+        if (turn) System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + (back ? " restored" : " requested"));
         // the shell keeps a fixed orientation's shape through drag resizes too (0 x 0: none), turns the window when it has the other shape and
         // answers with a configure
         int longer = Math.max(logicalW, logicalH), shorter = Math.min(logicalW, logicalH);
-        if (shell != null) shell.sendWindowSize(landscape ? longer : portrait ? shorter : 0, landscape ? shorter : portrait ? longer : 0);
-        else if (turn) hostResize(logicalH, logicalW, logicalScale, logicalDpi, 0);
+        if (shell != null) {
+            shell.sendWindowSize(landscape ? longer : portrait ? shorter : 0, landscape ? shorter : portrait ? longer : 0);
+            if (back) shell.sendWindowSize(0, 0);
+        } else if (turn) hostResize(logicalH, logicalW, logicalScale, logicalDpi, 0);
     }
 
 

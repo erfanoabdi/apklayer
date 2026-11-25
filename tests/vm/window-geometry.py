@@ -21,8 +21,9 @@ PKG = 'com.android.test.uibench'
 DECOR_H = 46  # bridge/shell/decor.h; 0 where the compositor draws the title bar (KDE, sway: server-side decorations, see bar_h)
 ENV = dict(instance.ENV)
 STEPS = ((5000, 'hover:1,0'), (8000, 'hover:2,0'), (11000, 'hover:3,0'), (14000, 'hover:4,0'), (17000, 'hover:5,0'), (17500, 'orient:0'),
-         (20000, 'hover:6,0'), (22000, 'hover:7,0'))
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=24000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
+         (20000, 'hover:6,0'), (22000, 'hover:7,0'),
+         (22500, 'orient:-1'), (25000, 'hover:8,0'))
+ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=27000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
 CONFIGURE = re.compile(r'configure content (\d+)x(\d+) @(\d+)% \((\d+)x(\d+) px\), title bar (\d+) logical = (\d+) px(, maximized)?')
 seen, checks = [], []
 bar_h = DECOR_H
@@ -106,8 +107,12 @@ try:
                 elif 'script: hover:7,0' in line:
                     assert len(configures()) == count, 'a stale floating configure reshaped the window back: %s' % (configures()[-1],)
                     checks.append('stale configure ignored')
+                elif 'script: hover:8,0' in line:  # UNSPECIFIED after the forced landscape (YouTube leaving fullscreen): the shape from before
+                    back = configures()[-1]
+                    assert back[:2] == first[:2], 'leaving the forced landscape did not restore %s: %s' % (first[:2], back[:2])
+                    checks.append('orientation restored')
     assert app.wait() == 0, 'app failed'
-    assert len(checks) == 8, checks
+    assert len(checks) == 9, checks
     print('PASS window geometry and scale: %s' % ', '.join(checks), flush=True)
 finally:
     instance.stop()
