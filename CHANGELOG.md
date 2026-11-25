@@ -7,6 +7,11 @@
 - Aurora Store, first frame, before -> after: cold stack 5.3 s -> 4.9 s (app loader 1.05 s -> 0.83 s); relaunch right after a stop 4.3-4.6 s -> 3.9 s (the spare is ready after about 1 s instead of 9 s; the target arrived 1.2 s after the launch instead of 1.9 s). Spare ready and idle: 2.2 s as before.
 - Not changed: spares of different packages still replace each other (a spare is one app's), so a stack start with many components keeps starting and ending spares until it settles; each ended recording spare leaves its `.aotconf.*` until the next one removes it (10 minutes).
 
+## 2026-11-25: the default device is a Pixel 8 (shiba)
+
+- `bridge/native/apklayer.prop`, new `profiles/pixel8.prop` and `pixel8-extra.prop` (loaded by cli/stack.cpp; first_api_level 34): brand google, model Pixel 8, device/name/board shiba, platform zuma, SoC Google Tensor G3. The bootloader version and SoC strings come from memory of a retail unit, not from a device: check them. `pixel5` stays as a profile (`tools/device-profile.sh pixel5`).
+- The CPU half is unchanged on purpose: `berberis.cpuinfo=pixel5` (Cortex-A76/A55 with the ISA gate). The Pixel 8's ARMv9 cores (X3/A715/A510, SVE2) are not emulated, so /proc/cpuinfo and MIDR still say the older core: an app comparing both could notice. tests/vm/properties.sh and the heap test text follow the new names. Not run: needs a new deb (the installed one reads its own copy of these files).
+
 ## 2026-11-25: Play Store updates failed (gRPC UNKNOWN): non-main threads read SystemClock behind the monotonic clock
 
 - Symptom: downloads worked, installing an update did not (`A/Finsky: Unexpected exception: StatusRuntimeException: UNKNOWN` at "Local install scheduled"). Cause in the app log: `IllegalArgumentException: duration (-0.137s) must not be negative` in gRPC's SerializingExecutor: Robolectric's paused SystemClock moves only on main-looper steps, so a stamp from System.nanoTime on one thread and a SystemClock reading on another gave a negative duration. Fix: `ShadowHostSystemClock` returns max(paused, System.nanoTime()) on threads other than main (64cc20af).

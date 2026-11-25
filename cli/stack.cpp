@@ -351,7 +351,7 @@ static std::string deviceGraphicsProperties(const Instance& inst) {
 // apklayer.prop, the tree's build.prop) and what init derives from them (setDerivedProperties). The stack's start, and `exec` without a stack.
 static void loadProperties(const Layout& l, const Instance& inst, const NativeEnv& ne) {
     const std::string& n = l.native;
-    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(l.root, "bridge/native/profiles/pixel5-extra.prop"), join(n, "android-root/props/system_build.prop")};
+    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(l.root, "bridge/native/profiles/pixel8-extra.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }

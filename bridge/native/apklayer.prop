@@ -11,7 +11,7 @@ ro.hardware.gralloc=apklayer
 ro.zygote=zygote64
 # The device an instance presents (what a device's vendor partition defines; the GSI's system values say "generic", which apps take for an emulator).
 # Android's Build.* and the native readers both see these; the fingerprint and the CPU ABI lists are derived at stack start (cli/stack.cpp).
-# The default is a Google Pixel 5 (redfin, Snapdragon 765G): the same values as bridge/native/profiles/pixel5.prop (tools/device-profile.sh), whose CPU half
+# The default is a Google Pixel 8 (shiba, Tensor G3): the same values as bridge/native/profiles/pixel8.prop (tools/device-profile.sh), whose CPU half
 # is `berberis.cpuinfo=pixel5` below (the translator's /proc/cpuinfo and MIDR_EL1). `apklayer prop set` overrides any of them per instance; tools/device-profile.sh
 # off sets the instance back to the generic desktop (profiles/desktop.prop). ro.hardware stays "apklayer": the graphics and gralloc modules are chosen by it.
 berberis.cpuinfo=pixel5
@@ -20,41 +20,41 @@ berberis.cpuinfo=pixel5
 berberis.mode=lite-translate-or-interpret
 ro.product.brand=google
 ro.product.manufacturer=Google
-ro.product.model=Pixel 5
-ro.product.device=redfin
-ro.product.name=redfin
-ro.product.board=redfin
-ro.board.platform=lito
-ro.bootloader=slider-1.2-7683913
-ro.soc.manufacturer=Qualcomm
-ro.soc.model=SM7250
-ro.hardware.chipname=SM7250
-ro.build.product=redfin
+ro.product.model=Pixel 8
+ro.product.device=shiba
+ro.product.name=shiba
+ro.product.board=shiba
+ro.board.platform=zuma
+ro.bootloader=shusky-15.2-12157576
+ro.soc.manufacturer=Google
+ro.soc.model=Tensor G3
+ro.hardware.chipname=zuma
+ro.build.product=shiba
 ro.product.system.brand=google
 ro.product.system.manufacturer=Google
-ro.product.system.model=Pixel 5
-ro.product.system.device=redfin
-ro.product.system.name=redfin
+ro.product.system.model=Pixel 8
+ro.product.system.device=shiba
+ro.product.system.name=shiba
 ro.product.vendor.brand=google
 ro.product.vendor.manufacturer=Google
-ro.product.vendor.model=Pixel 5
-ro.product.vendor.device=redfin
-ro.product.vendor.name=redfin
+ro.product.vendor.model=Pixel 8
+ro.product.vendor.device=shiba
+ro.product.vendor.name=shiba
 ro.product.odm.brand=google
 ro.product.odm.manufacturer=Google
-ro.product.odm.model=Pixel 5
-ro.product.odm.device=redfin
-ro.product.odm.name=redfin
+ro.product.odm.model=Pixel 8
+ro.product.odm.device=shiba
+ro.product.odm.name=shiba
 ro.product.product.brand=google
 ro.product.product.manufacturer=Google
-ro.product.product.model=Pixel 5
-ro.product.product.device=redfin
-ro.product.product.name=redfin
+ro.product.product.model=Pixel 8
+ro.product.product.device=shiba
+ro.product.product.name=shiba
 ro.product.system_ext.brand=google
 ro.product.system_ext.manufacturer=Google
-ro.product.system_ext.model=Pixel 5
-ro.product.system_ext.device=redfin
-ro.product.system_ext.name=redfin
+ro.product.system_ext.model=Pixel 8
+ro.product.system_ext.device=shiba
+ro.product.system_ext.name=shiba
 # a release build, as a shipped device reports (the tree is userdebug/test-keys, which root detectors flag); ro.debuggable is the tree's 0. The display id,
 # flavor and description that embed them are derived at stack start (cli/stack.cpp).
 ro.build.type=user
@@ -64,8 +64,8 @@ ro.system.build.tags=release-keys
 # a release build's builder (Build.USER/HOST), not the machine that built the tree: Google's builds are made by android-build on a build-farm host
 ro.build.user=android-build
 ro.build.host=abfarm-release-rbe-64-00057
-# the lineage name of the tree's GSI product (generic_x86_64) is the tree's, not the device's: the Pixel 5's product name
-ro.lineage.device=redfin
+# the lineage name of the tree's GSI product (generic_x86_64) is the tree's, not the device's: the Pixel 8's product name
+ro.lineage.device=shiba
 # a phone-class device (the GSI's system build.prop has none; Robolectric's says "robolectric", an emulator image "emulator")
 ro.build.characteristics=nosdcard
 # SurfaceFlinger pre-compiles shaders at startup by rendering into dummy buffers of many formats; one of them cannot be wrapped as a

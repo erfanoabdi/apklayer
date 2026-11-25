@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Heap limits as the Pixel 5 profile reports them (hello-heap, android:largeHeap): Runtime.maxMemory 512 MB (heapsize; 256 without largeHeap), getMemoryClass 256,
+"""Heap limits as the Pixel 8 profile reports them (hello-heap, android:largeHeap): Runtime.maxMemory 512 MB (heapsize; 256 without largeHeap), getMemoryClass 256,
 getLargeMemoryClass 512, and the app still gets to hold its 700 MB: there is no hard heap cap (docs/runtime-identity-matrix.md)."""
 import os
 from pathlib import Path

@@ -21,7 +21,7 @@ public class ShadowHostActivityManager extends ShadowActivityManager {
         return HubActivityManager.service(ShadowActivityManager.getService());
     }
 
-    /** What the device reports (dalvik.vm.heapgrowthlimit, 256 on the Pixel 5 profile); Robolectric's shadow answers a fixed 16. getLargeMemoryClass is not shadowed (heapsize). */
+    /** What the device reports (dalvik.vm.heapgrowthlimit, 256 on the Pixel 8 profile); Robolectric's shadow answers a fixed 16. getLargeMemoryClass is not shadowed (heapsize). */
     @Implementation
     @Override
     protected int getMemoryClass() { return ActivityManager.staticGetMemoryClass(); }

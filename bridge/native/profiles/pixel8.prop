@@ -1,0 +1,43 @@
+# Device profile: Google Pixel 8 (shiba, Google Tensor G3 / zuma). Applied with tools/device-profile.sh pixel8 (instance overrides: ro.* are
+# write-once and the overrides load first, so these win over apklayer.prop and the tree's build.prop). The Android version stays the tree's (a real
+# Pixel 8 runs newer): the fingerprint is derived from these names, release and build id (cli/stack.cpp). ro.hardware stays "apklayer": the graphics
+# and gralloc modules are chosen by ro.hardware.egl/vulkan/gralloc, and hw_get_module falls back to ro.hardware.
+# (The bootloader version and the SoC strings are written from memory of a retail Pixel 8: check them against a real unit when one is at hand.)
+ro.product.brand=google
+ro.product.manufacturer=Google
+ro.product.model=Pixel 8
+ro.product.device=shiba
+ro.product.name=shiba
+ro.product.board=shiba
+ro.board.platform=zuma
+ro.bootloader=shusky-15.2-12157576
+ro.soc.manufacturer=Google
+ro.soc.model=Tensor G3
+ro.hardware.chipname=zuma
+ro.build.product=shiba
+ro.build.characteristics=nosdcard
+ro.product.system.brand=google
+ro.product.system.manufacturer=Google
+ro.product.system.model=Pixel 8
+ro.product.system.device=shiba
+ro.product.system.name=shiba
+ro.product.vendor.brand=google
+ro.product.vendor.manufacturer=Google
+ro.product.vendor.model=Pixel 8
+ro.product.vendor.device=shiba
+ro.product.vendor.name=shiba
+ro.product.odm.brand=google
+ro.product.odm.manufacturer=Google
+ro.product.odm.model=Pixel 8
+ro.product.odm.device=shiba
+ro.product.odm.name=shiba
+ro.product.product.brand=google
+ro.product.product.manufacturer=Google
+ro.product.product.model=Pixel 8
+ro.product.product.device=shiba
+ro.product.product.name=shiba
+ro.product.system_ext.brand=google
+ro.product.system_ext.manufacturer=Google
+ro.product.system_ext.model=Pixel 8
+ro.product.system_ext.device=shiba
+ro.product.system_ext.name=shiba
