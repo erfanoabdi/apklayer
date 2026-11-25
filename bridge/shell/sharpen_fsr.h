@@ -1,6 +1,6 @@
 /* FSR 1 (AMD FidelityFX Super Resolution 1, MIT, ffx_fsr1.h) as GLES2 fragment shaders: FS_UP (EASU) and FS_CAS (RCAS). sharpen.c includes it; tools/gen/sharpen-spv.py turns it into sharpen_vk_spv.h.
  * EASU and RCAS follow the reference line by line (same constants, same 12 taps, same min/max clamps); what differs is listed in docs/THIRD_PARTY.md: the gather4 loads are
- * twelve texel-centre fetches (the same texels), the approximate rcp/rsq are exact divisions, the zero-division guards RCAS needs without the reference's rcp(0)=inf, and the 2% halo cap of RCAS. The picture is
+ * twelve texel-centre fetches (the same texels), the approximate rcp/rsq are exact divisions, the zero-division guards RCAS needs without the reference's rcp(0)=inf, the 2% halo cap of RCAS and EASU's calm-area lobe (CALM_D, docs/PATCHES.md). The picture is
  * used as it is stored: the apps' buffers are gamma encoded, which is the perceptual space the reference asks for (no transfer function: FsrRcasInput is the identity).
  * A source larger than the output (render scale above 100) is averaged down instead. */
 static const char *FS_UP =
@@ -28,6 +28,7 @@ static const char *FS_UP =
     "  float w = wB * wA;\n"
     "  aC += c * w; aW += w;\n"
     "}\n"
+    "const float CALM_D = 0.3, CALM_LO = 1.5, CALM_HI = 3.0;  /* apklayer patch, see calm below */\n"
     "void main() {\n"
     "  if (down > 0.5) {  /* a larger source than the output: the four taps around the pixel average it */\n"
     "    vec2 h = 0.5 / src * down;\n"
@@ -59,7 +60,12 @@ static const char *FS_UP =
     "  len = len * 0.5; len *= len;\n"
     "  float stretch = (dir.x * dir.x + dir.y * dir.y) / max(abs(dir.x), abs(dir.y));\n"
     "  vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 + -0.5 * len);\n"
-    "  float lob = 0.5 + ((1.0 / 4.0 - 0.04) - 0.5) * len, clp = 1.0 / lob;\n"
+    "  /* apklayer patch (calm texture): the total variation of the 12 neighbour pairs of the kernel against the range of the 12 taps (as the RCAS busy fade): ~3 on a straight edge, 4 and more in texture. Where it is low (flat, text, clean edges) the lobe of a plain area shrinks from 0.5 by up to CALM_D: a sharper kernel (more like Lanczos) with no shimmer cost; in busy texture the reference lobe stays */\n"
+    "  float tv = abs(bL - fL) + abs(cL - gL) + abs(eL - fL) + abs(fL - gL) + abs(gL - hL) + abs(iL - jL) + abs(jL - kL) + abs(kL - lL) + abs(fL - jL) + abs(gL - kL) + abs(nL - jL) + abs(oL - kL);\n"
+    "  float rg = max(max(max(max(bL, cL), max(eL, fL)), max(max(gL, hL), max(iL, jL))), max(max(kL, lL), max(nL, oL))) - min(min(min(bL, cL), min(eL, fL)), min(min(gL, hL), min(min(iL, jL), min(min(kL, lL), min(nL, oL)))));\n"
+    "  float calm = 1.0 - smoothstep(CALM_LO, CALM_HI, tv / max(rg, 1e-5));\n"
+    "  float lob0 = 0.5 - CALM_D * calm;  /* the reference: 0.5 */\n"
+    "  float lob = lob0 + ((1.0 / 4.0 - 0.04) - lob0) * len, clp = 1.0 / lob;\n"
     "  vec3 min4 = min(min(f, g), min(j, k)), max4 = max(max(f, g), max(j, k));\n"
     "  vec3 aC = vec3(0.0); float aW = 0.0;\n"
     "  tap(aC, aW, vec2(0.0, -1.0) - pp, dir, len2, lob, clp, b);\n"

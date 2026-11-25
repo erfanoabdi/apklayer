@@ -16,7 +16,7 @@ def shader_source():
     lits = re.findall(r'"(?:[^"\\]|\\.)*"', m.group(1))  # (the C comments between the literals hold no quotes that matter)
     s = ''.join(ast.literal_eval(x) for x in lits)
     s = s.replace('#extension GL_OES_EGL_image_external : require\n', '').replace('samplerExternalOES', 'sampler2D')
-    return s
+    return re.sub(r'CALM_D = [0-9.]+', 'CALM_D = 0.0', s, count=1)  # the calm-texture lobe (apklayer patch) is a deliberate deviation: compare with it off
 
 
 DT = np.float64
