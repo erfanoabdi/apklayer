@@ -126,6 +126,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - libc symbols Android's libraries import that bionic_translation lacks: `bridge/native/android_platform.c`; generated do-nothing stubs: `bridge/native/android_stubs.c` (`tools/gen/android-stubs.py`).
 - SELinux: `bridge/ndk/libselinux.c` allows every check (the kernel has no SELinux).
 - JNI shim `bridge/native/runtime_shim.c`: binder/callback threads attach to the JVM, `@CriticalNative` argument thunk, `GetFieldID(FileDescriptor, "descriptor")` answers OpenJDK's `fd`.
+- libcore.io.Memory natives as a host shadow (`runtime/host/java/apklayer/host/ShadowHostMemory.java`): the instrumented class's `$$robo$$peekByte$nativeBinding` etc. were unbound and returned 0; peek/poke over Unsafe (YouTube's Elements engine reads upb messages through them).
 - Robolectric setup as its simulator's `AppLoader`: the APK as the manifest, `FixedConfiguration` (NATIVE graphics/SQLite, PAUSED looper), `LazyApplication` with persistent data dirs (`runtime/host/java/apklayer/host/AppEnvironment.java`); JDK opens in `runtime/host/jvm.args`.
 - Activity stack and task rules emulating ActivityThread/ActivityTaskManager: `AppHost.java`, `LaunchRules.java`.
 - InputMethodManager: every showSoftInput and hideSoftInputFromWindow reaches the shell (the host keyboard shown or hidden), not only a change of Robolectric's visibility flag (`HostTextBridge.followShowRequests`, `HostTextBridge.ImeShadow`).
