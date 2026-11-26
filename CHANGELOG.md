@@ -7,6 +7,11 @@
 - Aurora Store, first frame, before -> after: cold stack 5.3 s -> 4.9 s (app loader 1.05 s -> 0.83 s); relaunch right after a stop 4.3-4.6 s -> 3.9 s (the spare is ready after about 1 s instead of 9 s; the target arrived 1.2 s after the launch instead of 1.9 s). Spare ready and idle: 2.2 s as before.
 - Not changed: spares of different packages still replace each other (a spare is one app's), so a stack start with many components keeps starting and ending spares until it settles; each ended recording spare leaves its `.aotconf.*` until the next one removes it (10 minutes).
 
+## 2026-11-25: YouTube gear, panels, fullscreen exit: ten-agent investigation
+- Fullscreen exit: `AppHost.followOrientation` returns the window to its pre-force shape when a forced landscape is replaced by UNSPECIFIED/USER/SENSOR (YouTube re-entered fullscreen at once because the window stayed landscape; log: requestedVisibleTypes 496/503 cycles). Not run: `tests/run window-geometry` has a new `orient:-1` step.
+- `views` script step prints to depth 60 (was 14, which hid the Litho rows) and clickable flags; new step `hit:x,y`; `tests/vm/youtube-gear.py` (own instance, view dump, tap, gear hit test).
+- Findings: see the YouTube item in docs/PLAN.md: protobuf side cleared, Litho rows measure to height 0.
+
 ## 2026-11-25: the default device is a Pixel 8 (shiba)
 
 - `bridge/native/apklayer.prop`, new `profiles/pixel8.prop` and `pixel8-extra.prop` (loaded by cli/stack.cpp; first_api_level 34): brand google, model Pixel 8, device/name/board shiba, platform zuma, SoC Google Tensor G3. The bootloader version and SoC strings come from memory of a retail unit, not from a device: check them. `pixel5` stays as a profile (`tools/device-profile.sh pixel5`).
