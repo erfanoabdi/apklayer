@@ -12,9 +12,9 @@ ro.zygote=zygote64
 # The device an instance presents (what a device's vendor partition defines; the GSI's system values say "generic", which apps take for an emulator).
 # Android's Build.* and the native readers both see these; the fingerprint and the CPU ABI lists are derived at stack start (cli/stack.cpp).
 # The default is a Google Pixel 8 (shiba, Tensor G3): the same values as bridge/native/profiles/pixel8.prop (tools/device-profile.sh), whose CPU half
-# is `berberis.cpuinfo=pixel5` below (the translator's /proc/cpuinfo and MIDR_EL1). `apklayer prop set` overrides any of them per instance; tools/device-profile.sh
+# is `berberis.cpuinfo=pixel8` below (Tensor G3: A510/A715/X3 ids, binary_translation 0086) (the translator's /proc/cpuinfo and MIDR_EL1). `apklayer prop set` overrides any of them per instance; tools/device-profile.sh
 # off sets the instance back to the generic desktop (profiles/desktop.prop). ro.hardware stays "apklayer": the graphics and gralloc modules are chosen by it.
-berberis.cpuinfo=pixel5
+berberis.cpuinfo=pixel8
 # The translator's default mode: lite translation, no heavy tier (it miscompiled PGR's home scene into block noise). One app goes back to the
 # upstream default with `apklayer prop set berberis.mode.<package> two-gear` (binary_translation 0008); BERBERIS_MODE still wins.
 berberis.mode=lite-translate-or-interpret
