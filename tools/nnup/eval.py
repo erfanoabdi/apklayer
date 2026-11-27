@@ -5,7 +5,7 @@ import sys, os, glob, subprocess, tempfile, torch, torch.nn.functional as F, num
 from pathlib import Path
 from PIL import Image
 from nnup import Net
-from pretrained import Pre
+from pretrained import Pre, Waifu
 W, H = 1280, 720
 def ssim(a, b):  # N,3,H,W in 0..1, gaussian 11x11
     g = torch.exp(-((torch.arange(11) - 5.0) ** 2) / (2 * 1.5 ** 2)); g = (g / g.sum()); k = (g[:, None] * g[None]).expand(3, 1, 11, 11).to(a.device)
@@ -24,6 +24,8 @@ T = lambda im: torch.from_numpy(np.array(im.convert('RGB'))).permute(2, 0, 1).fl
 net = Net().cuda(); net.load_state_dict(torch.load(sys.argv[1])); net.eval()
 pre = {n: Pre(n).to('cuda') for n in ('ESPCN_x2', 'FSRCNN_x2', 'FSRCNN-small_x2')}
 files = [f for f in sorted(glob.glob(os.path.expanduser(os.environ.get('NNUP_DATA', '~/Pictures/Schermafdrukken')) + '/*.png')) if min(Image.open(f).size) >= 400][-3:]
+wf = {n: Waifu(os.path.expanduser('~/apklayer-nnup-work/w/up7_%s.json' % n)).to('cuda') for n in ('art', 'photo')}  # 10 MB each, fetched from nagadomi/waifu2x models/upconv_7 (not in the repo)
+wf = {'waifu2x-' + k: v for k, v in wf.items()}
 res = {}
 for f in files:
     im = Image.open(f).convert('RGB'); 
@@ -34,6 +36,8 @@ for f in files:
             outs = {'bilinear': small.resize((W, H), Image.BILINEAR), 'fsr1': fsr(sys.argv[2], small, False), 'fsr1+cmaa2': fsr(sys.argv[2], small, True)}
             with torch.no_grad(): outs['net'] = Image.fromarray((net(T(small), (H, W))[0].permute(1, 2, 0).cpu().numpy() * 255 + .5).astype(np.uint8))
             for n, p in pre.items():
+                with torch.no_grad(): outs[n] = Image.fromarray((p(T(small), (H, W))[0].permute(1, 2, 0).cpu().numpy() * 255 + .5).astype(np.uint8))
+            for n, p in wf.items():
                 with torch.no_grad(): outs[n] = Image.fromarray((p(T(small), (H, W))[0].permute(1, 2, 0).cpu().numpy() * 255 + .5).astype(np.uint8))
             for k, o in outs.items():
                 r = res.setdefault((s, k), []); r.append((psnr(T(o), T(hr)), ssim(T(o), T(hr))))

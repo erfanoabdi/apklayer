@@ -26,3 +26,22 @@ class Pre(torch.nn.Module):
         o = torch.cat([R, G, B], 1)
         if tuple(o.shape[-2:]) != tuple(size): o = F.interpolate(o, size=size, mode='bicubic', align_corners=False, antialias=True)
         return o.clamp(0, 1)
+
+
+class Waifu(torch.nn.Module):
+    """waifu2x upconv_7 (nagadomi/waifu2x, MIT) scale2.0x_model.json, RGB in/out: six valid 3x3 convs with LeakyReLU(0.1), then a 4x4 stride-2 transposed conv.
+    The input is replicate-padded by 7 so the output is exactly 2x."""
+    def __init__(s, path):
+        super().__init__(); import json
+        L = json.load(open(path)); s.convs = []
+        for l in L[:-1]:
+            w = torch.tensor(l['weight'], dtype=torch.float32).view(l['nOutputPlane'], l['nInputPlane'], 3, 3); s.convs.append((w, torch.tensor(l['bias'], dtype=torch.float32)))
+        l = L[-1]; s.dw = torch.tensor(l['weight'], dtype=torch.float32).view(l['nInputPlane'], l['nOutputPlane'], 4, 4); s.db = torch.tensor(l['bias'], dtype=torch.float32)
+    def to(s, dev):
+        s.convs = [(w.to(dev), b.to(dev)) for w, b in s.convs]; s.dw = s.dw.to(dev); s.db = s.db.to(dev); return s
+    def forward(s, x, size):
+        x = F.pad(x, (7, 7, 7, 7), mode='replicate')
+        for w, b in s.convs: x = F.leaky_relu(F.conv2d(x, w, b), 0.1)
+        o = F.conv_transpose2d(x, s.dw, s.db, stride=2, padding=3)
+        if tuple(o.shape[-2:]) != tuple(size): o = F.interpolate(o, size=size, mode='bicubic', align_corners=False, antialias=True)
+        return o.clamp(0, 1)
