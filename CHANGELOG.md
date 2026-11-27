@@ -15,6 +15,8 @@
 
 - Build log: `m libberberis_arm64 berberis_arm64_host_tests` (gsi_x86_64, Mac VM) with 0089: a flag-setting instruction followed by B.cond branches on the live x86 flags (`lahf; seto al; jcc`), NZCV stored on both paths; test binary copied to this PC (the Mac VM cannot map low host code under OrbStack) and run in `~/apklayer-lite-fuse`.
 
+- Done: patch 0089 (lite_translator.h/.cc, lite_translator_integer_ctrl.inc, lite_translate_region.cc; docs/PATCHES.md). Tests (host binary run on this PC, each test alone, old binary from 2026-11-19 vs the new one): Arm64LiteTranslateRegionTest + dispatch/loop/recovery/FPSR/RegMapping/DifferentialFuzz/MemoryDifferentialFuzz: 2308 ok / 62 fail before, 2309 ok / 62 fail after, same 62 (the new test FlagSetterBranchDifferential is the +1: 19 setters x 14 conditions x 121 edge operands, JIT vs interpreter on branch target, NZCV and result; plus setter+CSEL and a setter ending the region; its counters assert thousands of taken, not-taken and non-zero-flag cases). The 62 failures exist in the old binary too (SIGILL cores of the test host; not looked at). Endfield load marks (3 quiet interleaved pairs, instance eff, prebuilt 9b37b8b2 vs 0089 build eab691e3): index_initial 17.32 -> 16.88 s, ClientData/Default.json 22.30 -> 21.67 s, mscorlib resource 12.19 -> 11.83 s (-2.5..3%, every pair); two earlier pairs run while I was also working on the machine were 17-39 s and are not used. Prebuilt committed in the local prebuilts clone, lock row updated, not pushed.
+
 ## 2026-11-27: game loading: berberis host-call overhead (binary_translation 0087, build running, not yet measured)
 
 - Build log: `m libberberis_arm64` in ~/los24 (gsi_x86_64) on the Mac, started 16:2x.

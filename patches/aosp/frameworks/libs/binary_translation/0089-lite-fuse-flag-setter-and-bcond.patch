@@ -1,0 +1,293 @@
+From: apklayer
+Subject: [PATCH] lite tier: a flag-setting instruction followed by B.cond branches on the live x86 flags (0089)
+
+ADDS/SUBS/CMP/CMN/ANDS/TST (imm, shifted, extended) defer their NZCV store (DeferStoreArmNZCV); the region driver stores it before any
+instruction that is not B.cond (FlushPendingNzcvAtInsn) and at the end of the region; B.cond captures NZCV with LAHF/SETO (EFLAGS kept),
+jumps on the x86 condition and stores NZCV on both paths. HI/LS after ADDS/ANDS use the old path. Test: FlagSetterBranchDifferential
+(19 setters x 14 conditions x 121 operands, JIT vs interpreter; plus setter + CSEL and a setter that ends the region). Module libberberis_arm64.
+
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
+@@ -227,6 +227,7 @@
+   [[nodiscard]] Assembler* as() { return &as_; }
+   [[nodiscard]] bool success() const { return success_; }
+   bool is_region_end_reached() const { return is_region_end_reached_; }
++  void FlushPendingNzcvAtInsn(uint32_t next_insn) { FlushPendingNzcv(next_insn); }  // apklayer patch (0089): for the region driver
+ 
+   void FreeTempRegs() {
+     gp_allocator_.FreeTemps();
+@@ -520,9 +521,13 @@
+   // use AL for overflow (avoids clobbering rcx in allocator pool).
+   // LAHF stores SF|ZF|CF to AH (bits 8-15). SETCC OF stores to AL (bits 0-7).
+   // AND kFlagsNZCVMask keeps N(bit15), Z(bit14), C(bit8), V(bit0). No rcx save/restore needed.
+-  void EmitStoreArmNZCV(bool is_sub) {
++  // apklayer patch (0089): the NZCV store is split in two so that a flag-setting instruction followed by B.cond can branch on the live x86
++  // flags (no store, reload and bt through memory): EmitCaptureNZCV reads them (LAHF and SETO keep EFLAGS), EmitFinishNZCV masks and stores.
++  void EmitCaptureNZCV() {
+     as_.Lahf();
+     as_.Setcc(Condition::kOverflow, Assembler::rax);
++  }
++  void EmitFinishNZCV(bool is_sub) {
+     as_.Andl(Assembler::rax, static_cast<int32_t>(kFlagsNZCVMask));
+     if (is_sub) {
+       as_.Xorl(Assembler::rax, static_cast<int32_t>(CPUState::kFlagCarry));  // invert ARM borrow
+@@ -530,6 +535,26 @@
+     int32_t flags_offset = offsetof(ThreadState, cpu.flags);
+     as_.Movw({.base = Assembler::rbp, .disp = flags_offset}, Assembler::rax);
+   }
++  void EmitStoreArmNZCV(bool is_sub) {
++    EmitCaptureNZCV();
++    EmitFinishNZCV(is_sub);
++  }
++
++  // Flag-setting integer instructions (ADDS/SUBS/CMP/CMN/ANDS/TST) call this instead of EmitStoreArmNZCV: the store waits in pending_nzcv_
++  // while EFLAGS stay live, until the driver (FlushPendingNzcv, before the next instruction) or BranchCond resolves it. Only emitted code
++  // that keeps EFLAGS (MOVs of the destination write) may sit between the instruction and the resolution.
++  void DeferStoreArmNZCV(bool is_sub) {
++    pending_nzcv_.valid = true;
++    pending_nzcv_.is_sub = is_sub;
++  }
++  // Called by the region driver before each instruction (next_insn: its word) and once at the end of the region (0): stores a pending NZCV
++  // unless the next instruction is B.cond, which resolves it itself.
++  void FlushPendingNzcv(uint32_t next_insn) {
++    if (!pending_nzcv_.valid) return;
++    if ((next_insn & 0xff000010u) == 0x54000000u) return;  // B.cond
++    pending_nzcv_.valid = false;
++    EmitStoreArmNZCV(pending_nzcv_.is_sub);
++  }
+ 
+   // Emit a jump to `not_met` when the ARM64 condition `cond` is NOT satisfied
+   // by the current NZCV in ThreadState.cpu.flags. Shared by every flag
+@@ -738,6 +763,11 @@
+   Assembler::Label* loop_head_ = nullptr;
+   bool mapped_after_loop_head_ = false;
+   bool saw_self_back_edge_ = false;
++  // A deferred NZCV store (DeferStoreArmNZCV): EFLAGS hold the flags of the last instruction.
++  struct PendingNzcv {
++    bool valid = false;
++    bool is_sub = false;
++  } pending_nzcv_;
+ };
+ 
+ }  // namespace berberis
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.cc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.cc
+@@ -229,7 +229,43 @@
+ 
+   // Jump over the branch-taken path (to cont) when the condition is not
+   // satisfied. EmitJumpIfCondNotMet tests cpu.flags in memory directly.
+-  EmitJumpIfCondNotMet(cond, *cont);
++  // apklayer patch (0089): right after a flag-setting instruction the x86 flags are live: branch on them, and store NZCV on both paths.
++  bool fused = false;
++  bool fused_is_sub = false;
++  if (pending_nzcv_.valid) {
++    fused_is_sub = pending_nzcv_.is_sub;
++    pending_nzcv_.valid = false;
++    Condition not_met = Condition::kInvalidCondition;
++    switch (cond) {
++      case Decoder::Condition::kEq: not_met = Condition::kNotEqual; break;
++      case Decoder::Condition::kNe: not_met = Condition::kEqual; break;
++      case Decoder::Condition::kCs: not_met = fused_is_sub ? Condition::kBelow : Condition::kAboveEqual; break;
++      case Decoder::Condition::kCc: not_met = fused_is_sub ? Condition::kAboveEqual : Condition::kBelow; break;
++      case Decoder::Condition::kMi: not_met = Condition::kPositiveOrZero; break;
++      case Decoder::Condition::kPl: not_met = Condition::kNegative; break;
++      case Decoder::Condition::kVs: not_met = Condition::kNoOverflow; break;
++      case Decoder::Condition::kVc: not_met = Condition::kOverflow; break;
++      case Decoder::Condition::kHi: if (fused_is_sub) not_met = Condition::kBelowEqual; break;
++      case Decoder::Condition::kLs: if (fused_is_sub) not_met = Condition::kAbove; break;
++      case Decoder::Condition::kGe: not_met = Condition::kLess; break;
++      case Decoder::Condition::kLt: not_met = Condition::kGreaterEqual; break;
++      case Decoder::Condition::kGt: not_met = Condition::kLessEqual; break;
++      case Decoder::Condition::kLe: not_met = Condition::kGreater; break;
++      default: break;
++    }
++    if (not_met != Condition::kInvalidCondition) {
++      EmitCaptureNZCV();  // LAHF/SETO keep EFLAGS
++      as_.Jcc(not_met, *cont);
++      fused = true;
++    } else {
++      EmitStoreArmNZCV(fused_is_sub);
++    }
++  }
++  if (fused) {
++    EmitFinishNZCV(fused_is_sub);  // taken path: eax still holds the captured flags
++  } else {
++    EmitJumpIfCondNotMet(cond, *cont);
++  }
+ 
+   // forward branch extension with back-edge detection
+   GuestAddr target = GetInsnAddr() + offset;
+@@ -241,6 +277,7 @@
+   ExitRegionOrLoop(target);
+   // Fall-through: continue translating if forward branch (is_region_end_reached_ not set).
+   as_.Bind(cont);
++  if (fused) EmitFinishNZCV(fused_is_sub);  // not-taken path: the jump came straight from the compare, eax is intact
+ }
+ 
+ //
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+@@ -52,7 +52,7 @@
+       }
+     }
+     if (set_flags) {
+-      EmitStoreArmNZCV(is_sub);
++      DeferStoreArmNZCV(is_sub);
+     }
+     return res;
+   }
+@@ -110,7 +110,7 @@
+     }
+     if (opcode == Decoder::LogicalImmOpcode::kAnds) {
+       // ANDS/TST: x86 AND clears CF and OF, so ARM64 C=0 and V=0 naturally.
+-      EmitStoreArmNZCV(/*is_sub=*/false);
++      DeferStoreArmNZCV(/*is_sub=*/false);
+     }
+     return res;
+   }
+@@ -855,7 +855,7 @@
+       }
+     }
+     if (opcode == Decoder::LogicalShiftedRegOpcode::kAnds) {
+-      EmitStoreArmNZCV(/*is_sub=*/false);
++      DeferStoreArmNZCV(/*is_sub=*/false);
+     }
+     return res;
+   }
+@@ -882,7 +882,7 @@
+       }
+     }
+     if (set_flags) {
+-      EmitStoreArmNZCV(is_sub);
++      DeferStoreArmNZCV(is_sub);
+     }
+     return res;
+   }
+@@ -971,7 +971,7 @@
+     }
+ 
+     if (set_flags) {
+-      EmitStoreArmNZCV(is_sub);
++      DeferStoreArmNZCV(is_sub);
+     }
+     return res;
+   }
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region.cc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region.cc
+@@ -82,6 +82,7 @@
+     // and translation continues to the region's natural end. Ending the region
+     // here instead would split hot straight-line code (function prologues are
+     // the worst case) into fragments too small for the heavy tier to gear up.
++    translator.FlushPendingNzcvAtInsn(*ToHostAddr<const uint32_t>(translator.GetInsnAddr()));  // apklayer patch (0089)
+     uint8_t insn_size = decoder.Decode(ToHostAddr<const uint16_t>(translator.GetInsnAddr()));
+     if (!translator.success()) {
+       // JIT break profiling
+@@ -101,6 +102,8 @@
+     translator.IncrementInsnAddr(insn_size);
+   }
+ 
++  translator.FlushPendingNzcvAtInsn(0);  // apklayer patch (0089): a flag-setting last instruction
++
+   // A back-edge to the start always ends the region, so this is the state
+   // every back-edge leaves.
+   auto loop_state = translator.CaptureLoopEntryState();
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region_exec_tests.cc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translate_region_exec_tests.cc
+@@ -4276,6 +4276,97 @@
+   }
+ }
+ 
++// apklayer patch (0089): a flag-setting instruction followed by B.cond branches on the live x86 flags and stores NZCV on both paths. Every
++// flag setter x every condition x edge operands, JIT vs interpreter: where the branch goes, the NZCV left behind and the setter's result;
++// also the setter followed by a CSEL (the store must reach memory first) and a setter that ends the region.
++TEST_F(Arm64LiteTranslateRegionTest, FlagSetterBranchDifferential) {
++  struct Setter { const char* name; uint32_t insn; };
++  const Setter setters[] = {
++      {"subs x2,x0,x1", 0xEB010002}, {"cmp x0,x1", 0xEB01001F}, {"subs w2,w0,w1", 0x6B010002}, {"cmp w0,w1", 0x6B01001F},
++      {"adds x2,x0,x1", 0xAB010002}, {"cmn x0,x1", 0xAB01001F}, {"adds w2,w0,w1", 0x2B010002}, {"cmn w0,w1", 0x2B01001F},
++      {"ands x2,x0,x1", 0xEA010002}, {"tst x0,x1", 0xEA01001F}, {"ands w2,w0,w1", 0x6A010002}, {"tst w0,w1", 0x6A01001F},
++      {"cmp x0,#5", 0xF100141F},     {"cmp w0,#5", 0x7100141F}, {"adds x2,x0,#5", 0xB1001402}, {"tst x0,#1", 0xF240001F},
++      {"cmp x0,w1,uxtw", 0xEB21401F}, {"subs x2,x0,x1,lsl #3", 0xEB010C02}, {"adds x2,x0,w1,sxtw", 0xAB21C002},
++  };
++  const uint64_t vals[] = {0,          1,          2,           5,           0x7fffffffULL, 0x80000000ULL,
++                           0xffffffffULL, 0x100000000ULL, 0x7fffffffffffffffULL, 0x8000000000000000ULL, ~0ULL};
++  constexpr uint16_t kMask = 0xC101;  // N Z C V
++  auto run = [&](const uint32_t* code, uint64_t x0, uint64_t x1, uint16_t flags0) {
++    GuestAddr start = ToGuestAddr(code);
++    for (int i = 0; i < 31; i++) state_.cpu.x[i] = 0;
++    state_.cpu.x[0] = x0;
++    state_.cpu.x[1] = x1;
++    state_.cpu.x[4] = 0x1111;
++    state_.cpu.x[5] = 0x2222;
++    state_.cpu.flags = flags0;
++    state_.cpu.insn_addr = start;
++    return start;
++  };
++  uint32_t code[3];
++  uint64_t taken = 0, not_taken = 0, flagged = 0, results = 0;
++  for (const Setter& st : setters) {
++    for (uint32_t cond = 0; cond < 14; cond++) {
++      // [setter; b.cond +8; (fall-through end)] -> stops at +8, taken at +12.
++      code[0] = st.insn;
++      code[1] = 0x54000000u | (2u << 5) | cond;
++      code[2] = 0xd503201f;  // nop
++      GuestAddr start = ToGuestAddr(&code[0]);
++      MachineCode mc;
++      auto [ok, stop] = TryLiteTranslateRegion(start, &mc, LiteTranslateParams{.end_pc = start + 8, .allow_dispatch = false});
++      ASSERT_TRUE(ok) << st.name;
++      HostCodeAddr hc = GetDefaultCodePoolInstance()->Add(&mc);
++      for (uint64_t x0 : vals) {
++        for (uint64_t x1 : vals) {
++          run(code, x0, x1, 0);
++          TestingRunGeneratedCode(&state_, AsHostCode(hc), start);
++          uint64_t j_off = state_.cpu.insn_addr - start;
++          uint16_t j_flags = state_.cpu.flags & kMask;
++          uint64_t j_x2 = state_.cpu.x[2];
++          run(code, x0, x1, 0);
++          for (int k = 0; k < 2; k++) InterpretInsn(&state_);
++          (j_off == 12 ? taken : not_taken)++;
++          flagged += j_flags != 0;
++          results += j_x2 != 0;
++          EXPECT_EQ(j_off, state_.cpu.insn_addr - start) << st.name << " cond=" << cond << std::hex << " x0=" << x0 << " x1=" << x1;
++          EXPECT_EQ(j_flags, state_.cpu.flags & kMask) << st.name << " cond=" << cond << std::hex << " x0=" << x0 << " x1=" << x1;
++          EXPECT_EQ(j_x2, state_.cpu.x[2]) << st.name << " cond=" << cond << std::hex << " x0=" << x0 << " x1=" << x1;
++        }
++      }
++    }
++  }
++  EXPECT_GT(taken, 5000u);
++  EXPECT_GT(not_taken, 5000u);
++  EXPECT_GT(flagged, 5000u);
++  EXPECT_GT(results, 1000u);
++  // setter then CSEL x3, x4, x5, cond (reads the stored flags), and a setter that ends the region.
++  for (const Setter& st : setters) {
++    for (uint32_t cond = 0; cond < 14; cond++) {
++      code[0] = st.insn;
++      code[1] = 0x9a850083u | (cond << 12);  // csel x3, x4, x5, cond
++      GuestAddr start = ToGuestAddr(&code[0]);
++      for (size_t n : {size_t{1}, size_t{2}}) {
++        MachineCode mc;
++        auto [ok, stop] = TryLiteTranslateRegion(start, &mc, LiteTranslateParams{.end_pc = start + 4 * n, .allow_dispatch = false});
++        ASSERT_TRUE(ok) << st.name;
++        HostCodeAddr hc = GetDefaultCodePoolInstance()->Add(&mc);
++        for (uint64_t x0 : vals) {
++          for (uint64_t x1 : {uint64_t{0}, uint64_t{5}, ~uint64_t{0}, uint64_t{0x80000000}}) {
++            run(code, x0, x1, 0);
++            TestingRunGeneratedCode(&state_, AsHostCode(hc), start);
++            uint16_t j_flags = state_.cpu.flags & kMask;
++            uint64_t j_x3 = state_.cpu.x[3], j_x2 = state_.cpu.x[2];
++            run(code, x0, x1, 0);
++            for (size_t k = 0; k < n; k++) InterpretInsn(&state_);
++            EXPECT_EQ(j_flags, state_.cpu.flags & kMask) << st.name << " n=" << n << " cond=" << cond << std::hex << " x0=" << x0 << " x1=" << x1;
++            EXPECT_EQ(j_x3, state_.cpu.x[3]) << st.name << " n=" << n << " cond=" << cond;
++            EXPECT_EQ(j_x2, state_.cpu.x[2]) << st.name << " n=" << n << " cond=" << cond;
++          }
++        }
++      }
++    }
++  }
++}
++
+ // Memory-backed GP load/store differential fuzzer with WRITEBACK. The Skia
+ // rasterizer advances row/source pointers with post/pre-indexed loads and stores
+ // (`ldrb w,[src],#1`, `str ...,[dst],#stride`); a wrong writeback or address
