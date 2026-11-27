@@ -1,0 +1,72 @@
+--- a/base/config_globals.cc
++++ b/base/config_globals.cc
+@@ -253,6 +253,20 @@
+   return value;
+ }
+ 
++uint32_t GetGearSwitchThreshold() {
++  static const uint32_t value = []() -> uint32_t {
++    static ConfigStr var("BERBERIS_GEAR_THRESHOLD", "berberis.gear_threshold");
++    const char* str = var.get();
++    if (str) {
++      char* end = nullptr;
++      unsigned long parsed = strtoul(str, &end, 10);
++      if (end != str && *end == '\0' && parsed > 0 && parsed < 0xffffffffUL) return static_cast<uint32_t>(parsed);
++    }
++    return config::kGearSwitchThreshold;
++  }();
++  return value;
++}
++
+ const char* GetProfilingConfig() {
+   static ConfigStr var("BERBERIS_PROFILING", "berberis.profiling");
+   return var.get();
+--- a/base/include/berberis/base/config_globals.h
++++ b/base/include/berberis/base/config_globals.h
+@@ -46,6 +46,8 @@
+ const char* GetTranslationModeConfig();
+ 
+ const char* GetProfilingConfig();
++// apklayer patch (0088): executions of a lite region before it gears up (BERBERIS_GEAR_THRESHOLD / berberis.gear_threshold), default config::kGearSwitchThreshold
++uint32_t GetGearSwitchThreshold();
+ 
+ uintptr_t GetEntryPointOverride();
+ 
+--- a/cpu_emulation/lite_translator/include/berberis/lite_translator/lite_translate_region.h
++++ b/cpu_emulation/lite_translator/include/berberis/lite_translator/lite_translate_region.h
+@@ -21,6 +21,7 @@
+ 
+ #include "berberis/assembler/machine_code.h"
+ #include "berberis/base/config.h"
++#include "berberis/base/config_globals.h"
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/runtime_library/runtime_library.h"
+ #include "berberis/runtime_primitives/host_code.h"
+@@ -39,7 +40,7 @@
+   // hotness counter at the region start must count every iteration.
+   bool allow_in_region_loops = false;
+   uint32_t* counter_location = nullptr;
+-  uint32_t counter_threshold = config::kGearSwitchThreshold;
++  uint32_t counter_threshold = GetGearSwitchThreshold();
+   HostCode counter_threshold_callback =
+       AsHostCode(berberis::berberis_entry_HandleLiteCounterThresholdReached);
+ };
+--- a/runtime_primitives/translation_cache.cc
++++ b/runtime_primitives/translation_cache.cc
+@@ -23,6 +23,7 @@
+ 
+ #include "berberis/base/checks.h"
+ #include "berberis/base/config.h"
++#include "berberis/base/config_globals.h"
+ #include "berberis/base/forever_alloc.h"
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/runtime_library/runtime_library.h"
+@@ -331,7 +332,7 @@
+       // Lite translator may update the counter non-atomically for efficiency, but here
+       // we can be more strict.
+       auto* counter = std::bit_cast<std::atomic<uint32_t>*>(&entry.invocation_counter);
+-      *counter = config::kGearSwitchThreshold;
++      *counter = GetGearSwitchThreshold();
+     }
+   }
+ }
