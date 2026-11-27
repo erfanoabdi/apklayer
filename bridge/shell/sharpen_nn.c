@@ -32,16 +32,31 @@ static const char *CS_HEAD =
     "layout(std430, binding = 0) readonly buffer W { vec4 w[]; };\n"
     "layout(rgba16f, binding = 1) writeonly uniform image2DArray dst;\n"
     "uniform int mbase, bbase, nin4, ow, oh;\n";
-static const char *CS_CONV =
+static const char *CS_CONV =  /* 8x8 threads, each 2x2 pixels x 4 output layers; the input tile (16x16 + a 1 pixel border) of one input layer is staged in shared memory */
     "uniform sampler2DArray src;\n"
+    "shared vec4 tile[18 * 18];\n"
     "void main() {\n"
-    "  ivec2 p = ivec2(gl_GlobalInvocationID.xy); int o = int(gl_GlobalInvocationID.z); if (p.x >= ow || p.y >= oh) return;\n"
-    "  vec4 acc = w[bbase + o];\n"
-    "  for (int t = 0; t < 9; t++) {\n"
-    "    ivec2 q = p + ivec2(t % 3, t / 3); int idx = mbase + (o * 9 + t) * nin4 * 4;\n"
-    "    for (int i = 0; i < nin4; i++) { vec4 v = texelFetch(src, ivec3(q, i), 0); acc += mat4(w[idx], w[idx + 1], w[idx + 2], w[idx + 3]) * v; idx += 4; }\n"
+    "  ivec2 org = ivec2(gl_WorkGroupID.xy) * 16; ivec2 lt = ivec2(gl_LocalInvocationID.xy); int lid = int(gl_LocalInvocationIndex);\n"
+    "  int o0 = int(gl_WorkGroupID.z) * 4; ivec2 tsz = textureSize(src, 0).xy;\n"
+    "  vec4 acc[16];\n"
+    "  for (int ob = 0; ob < 4; ob++) { vec4 b = w[bbase + o0 + ob]; for (int p = 0; p < 4; p++) acc[ob * 4 + p] = b; }\n"
+    "  for (int i = 0; i < nin4; i++) {\n"
+    "    barrier();\n"
+    "    for (int k = lid; k < 324; k += 64) tile[k] = texelFetch(src, ivec3(min(org + ivec2(k % 18, k / 18), tsz - 1), i), 0);\n"
+    "    barrier();\n"
+    "    for (int t = 0; t < 9; t++) {\n"
+    "      int tx = t % 3, ty = t / 3; vec4 v0 = tile[(lt.y * 2 + ty) * 18 + lt.x * 2 + tx], v1 = tile[(lt.y * 2 + ty) * 18 + lt.x * 2 + tx + 1];\n"
+    "      vec4 v2 = tile[(lt.y * 2 + ty + 1) * 18 + lt.x * 2 + tx], v3 = tile[(lt.y * 2 + ty + 1) * 18 + lt.x * 2 + tx + 1];\n"
+    "      for (int ob = 0; ob < 4; ob++) {\n"
+    "        int idx = mbase + (((o0 + ob) * 9 + t) * nin4 + i) * 4; mat4 m = mat4(w[idx], w[idx + 1], w[idx + 2], w[idx + 3]);\n"
+    "        acc[ob * 4] += m * v0; acc[ob * 4 + 1] += m * v1; acc[ob * 4 + 2] += m * v2; acc[ob * 4 + 3] += m * v3;\n"
+    "      }\n"
+    "    }\n"
     "  }\n"
-    "  imageStore(dst, ivec3(p, o), max(acc, acc * 0.1));\n"  /* LeakyReLU 0.1 */
+    "  for (int ob = 0; ob < 4; ob++) for (int p = 0; p < 4; p++) {\n"
+    "    ivec2 q = org + lt * 2 + ivec2(p % 2, p / 2); vec4 a = acc[ob * 4 + p];\n"
+    "    if (q.x < ow && q.y < oh) imageStore(dst, ivec3(q, o0 + ob), max(a, a * 0.1));\n"
+    "  }\n"
     "}\n";
 static const char *CS_CONV0 =  /* the picture itself: RGBA8, reads clamped (the reference's replicate padding of 7) */
     "uniform sampler2D src0;\n"
@@ -210,7 +225,7 @@ int nn_run(struct nn *c, GLuint (*rt_ensure)(struct rt *, int, int), GLuint src,
         if (l == 0) { glBindTexture(GL_TEXTURE_2D, c->blit_tex); glUniform1i(glGetUniformLocation(prog, "src0"), 0); }
         else { glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[(l - 1) & 1]); glUniform1i(glGetUniformLocation(prog, "src"), 0); }
         c->bind_image(1, c->tex[l & 1], 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
-        c->dispatch((cw + 7) / 8, (ch + 7) / 8, NOUT4[l]);
+        if (l == 0) c->dispatch((cw + 7) / 8, (ch + 7) / 8, NOUT4[l]); else c->dispatch((cw + 15) / 16, (ch + 15) / 16, NOUT4[l] / 4);
         c->barrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
     }
     /* the transposed convolution: the last map is tex[(NL-1)&1], (w+2) x (h+2) */
