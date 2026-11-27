@@ -70,13 +70,18 @@ static const char *CS_CONV0 =  /* the picture itself: RGBA8, reads clamped (repl
     "  imageStore(dst, ivec3(p, o), max(acc, acc * slope));\n"
     "}\n";
 static const char *CS_SHUFFLE =  /* pixel shuffle of the 12 channels (layer c = colour c, component 2i+j = row i, column j of the 2x2 block) + the bilinear 2x of the input (the blit texture is LINEAR) */
-    "uniform sampler2DArray src; uniform sampler2D lin;\n"
+    "uniform sampler2DArray src; uniform sampler2D lin; uniform float cm;\n"
     "void main() {\n"
     "  ivec2 o = ivec2(gl_GlobalInvocationID.xy); if (o.x >= ow || o.y >= oh) return;\n"
     "  ivec2 h = o >> 1; int k = (o.y & 1) * 2 + (o.x & 1);\n"
     "  vec3 r = vec3(texelFetch(src, ivec3(h, 0), 0)[k], texelFetch(src, ivec3(h, 1), 0)[k], texelFetch(src, ivec3(h, 2), 0)[k]);\n"
-    "  vec3 b = texture(lin, (vec2(o) + 0.5) / vec2(ow, oh)).rgb;\n"
-    "  imageStore(dst, ivec3(o, 0), vec4(clamp(b + r, 0.0, 1.0), 1.0));\n"
+    "  vec3 b = texture(lin, (vec2(o) + 0.5) / vec2(ow, oh)).rgb; vec3 v = b + r;\n"
+    "  if (cm >= 0.0) {\n"   /* apklayer patch: clamp to the min/max of the 3x3 source pixels around this one (+ margin cm): no halos */
+    "    ivec2 sz = textureSize(lin, 0) - 1; vec3 lo = vec3(1.0), hi = vec3(0.0);\n"
+    "    for (int t = 0; t < 9; t++) { vec3 s = texelFetch(lin, clamp(h + ivec2(t % 3 - 1, t / 3 - 1), ivec2(0), sz), 0).rgb; lo = min(lo, s); hi = max(hi, s); }\n"
+    "    v = clamp(v, lo - cm, hi + cm);\n"
+    "  }\n"
+    "  imageStore(dst, ivec3(o, 0), vec4(clamp(v, 0.0, 1.0), 1.0));\n"
     "}\n";
 static const char *FS_RESAMPLE =  /* Catmull-Rom, widened by the shrink factor f (2x picture -> output: 1..2): the reference's bicubic with antialias */
     "precision highp float;\n"
@@ -266,6 +271,7 @@ int nn_run(struct nn *c, int snap, GLuint dst, int ow, int oh, GLuint vbo)
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, sntex);
     glUniform1i(glGetUniformLocation(c->shuffle, "lin"), 1);
+    { const char *e = getenv("APKLAYER_NN_CLAMP"); glUniform1f(glGetUniformLocation(c->shuffle, "cm"), e ? (float)atof(e) : 0.0f); }  /* the margin of the clamp to the source 3x3 min/max (0: hard, as FSR 1's own clamp); a negative value turns it off (test knob) */
     glActiveTexture(GL_TEXTURE0);
     c->bind_image(1, c->out2x, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
     c->dispatch((2 * w + 7) / 8, (2 * h + 7) / 8, 1);
