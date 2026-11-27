@@ -1,0 +1,38 @@
+--- a/runtime_primitives/host_function_wrapper_impl.cc
++++ b/runtime_primitives/host_function_wrapper_impl.cc
+@@ -22,6 +22,8 @@
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/runtime_primitives/checks.h"
+ #include "berberis/runtime_primitives/code_pool.h"
++#include <string.h>
++
+ #include "berberis/runtime_primitives/host_code.h"
+ #include "berberis/runtime_primitives/translation_cache.h"
+ 
+@@ -50,7 +52,10 @@
+   TranslationCache* cache = TranslationCache::GetInstance();
+   GuestCodeEntry* entry = cache->AddAndLockForWrapping(pc);
+   if (entry) {
+-    if (&WrapHostCallForGuestErrno != nullptr) {  // apklayer patch: also the proxy libraries' stubs (not is_host_func)
++    // apklayer patch (0087): pthread_* functions return their error code and never touch errno, and __errno only returns the guest's
++    // errno address: wrapping them (a records lookup and two errno swaps per call) was ~15% of Endfield's load (pthread_getspecific).
++    const bool keeps_errno = name && (strncmp(name, "pthread_", 8) == 0 || strcmp(name, "__errno") == 0);
++    if (&WrapHostCallForGuestErrno != nullptr && !keeps_errno) {  // apklayer patch: also the proxy libraries' stubs (not is_host_func)
+       WrapHostCallForGuestErrno(&func, &arg);
+     }
+     MachineCode mc;
+--- a/guest_os_primitives/guest_thread.cc
++++ b/guest_os_primitives/guest_thread.cc
+@@ -609,9 +609,10 @@
+ void RunHostCallWithGuestErrno(HostCode arg, ThreadState* state) {
+   auto* call = static_cast<const HostCallWithGuestErrno*>(arg);
+   int& guest_errno = static_cast<pthread_internal_t*>(GetGuestThread(*state)->GlibcHostRecords())->errno_value;
+-  errno = guest_errno;
++  int* host_errno = &errno;  // one __errno_location call (apklayer patch 0087), not two
++  *host_errno = guest_errno;
+   call->func(call->arg, state);
+-  guest_errno = errno;
++  guest_errno = *host_errno;
+ }
+ 
+ }  // namespace

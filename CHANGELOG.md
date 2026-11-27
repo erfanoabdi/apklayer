@@ -1,11 +1,20 @@
 # Changelog
 
+## 2026-11-27: game loading: berberis host-call overhead (binary_translation 0087, build running, not yet measured)
+
+- Build log: `m libberberis_arm64` in ~/los24 (gsi_x86_64) on the Mac, started 16:2x.
+- Profile of Endfield's cold load (own instance `endfield-load`, 30 GB data copy, `berberis.profiling`, `perf record -g`, 60 s): 54% translated code, 19% libberberis_arm64, 7.4% glibc, 3.8% proxy libc. Top symbols: `GuestThread::GlibcHostRecords()` 5.5%, `pthread_getspecific` 5.0%, `__errno_location` + `bionic___errno` + their PLT stubs ~3.5%: the errno swap every wrapped host call does (0003), also for `pthread_*` (return their code, never set errno) and `__errno`.
+- 0087: no errno swap for `pthread_*` and `__errno`; one `__errno_location` call instead of two in the swap. Next: measure the load time before/after in `endfield-load`, then look at the guest-side cost of the trampoline.
+
 ## 2026-11-25: The AOT cache was never rebuilt after a runtime update (CdsDump.trainSpare)
 
 - Cause: `trainSpare` returned when ANY `*.aot.log` existed in the instance's cds directory ("one attempt per instance"). The cache key hashes the runtime build, so after the first cache (an old `78d5...aot.log` from 2026-11-18) every later key found a log and never trained: spares ran in `-XX:AOTMode=record` for nothing (each wrote a 100-300 MB `.aotconf.*`; 8.8 GB piled up in one test session), took about 9 s to prepare, and cold starts ran without the cache.
 - Fix: the guard looks for this key's own log (`<cache>.log`) only. Tried on the NVIDIA PC with a host-classes.jar that has the one class replaced (a new key): the spare trained once and the cache was made (141 MB, the stale one removed by the create step).
 - Aurora Store, first frame, before -> after: cold stack 5.3 s -> 4.9 s (app loader 1.05 s -> 0.83 s); relaunch right after a stop 4.3-4.6 s -> 3.9 s (the spare is ready after about 1 s instead of 9 s; the target arrived 1.2 s after the launch instead of 1.9 s). Spare ready and idle: 2.2 s as before.
 - Not changed: spares of different packages still replace each other (a spare is one app's), so a stack start with many components keeps starting and ending spares until it settles; each ended recording spare leaves its `.aotconf.*` until the next one removes it (10 minutes).
+
+## 2026-11-27: berberis CPU = Pixel 8 (Tensor G3)
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24 via `ssh erfanabdi@100.85.219.120`): patch 0086 applied to the tree (clean, offsets only), `APKLAYER_NATIVE_BRIDGE=arm64 breakfast gsi_x86_64 userdebug && m libberberis_arm64` (existing module). Why: make /proc/cpuinfo and MIDR_EL1 agree with the Pixel 8 default profile.
 
 ## 2026-11-27: YouTube check after the Memory shadow
 - `tests/vm/youtube-gear.py` in own instance ytcheck: the description panel now draws with text, channel, stats and the linked-video card (screenshot shot8). Likes/views digits are clipped vertically (rolling-number view). Instance stopped, nothing left running.
