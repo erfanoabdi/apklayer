@@ -1,0 +1,24 @@
+From: apklayer
+Subject: [PATCH] The upstream 2-4 GiB code window (0063) is on by default; berberis.code_window=off restores the old allocation (0090)
+
+On request of the owner (2026-11-27), to match DigitalisX64 android17 e680eae6. Risk: the reservation is a ~2 GiB PROT_NONE line in the guest maps (ACE reads them).
+Module libberberis_arm64.
+
+--- a/runtime/arm64/init_guest_arch.cc
++++ b/runtime/arm64/init_guest_arch.cc
+@@ -24,11 +24,11 @@
+ namespace berberis {
+ 
+ void InitGuestArch() {
+-  // apklayer patch (0063): kuloPo's code window (e680eae6) reserves the whole 2-4 GiB range PROT_NONE, a ~2 GiB line in the guest's
+-  // maps no device has; off unless berberis.code_window=on (BERBERIS_CODE_WINDOW) until an A/B with ACE (PGR) and acediff passes.
+-  // Off, code allocation stays as before (kMmapBerberis32Bit, no guest mapping refusals).
++  // apklayer patch (0063, default flipped by 0090): kuloPo's code window (e680eae6) reserves the whole 2-4 GiB range PROT_NONE, a ~2 GiB line
++  // in the guest's maps no device has. On by default like upstream's; berberis.code_window=off (BERBERIS_CODE_WINDOW=off) restores the
++  // old allocation (kMmapBerberis32Bit, no guest mapping refusals).
+   static const ConfigStr code_window("BERBERIS_CODE_WINDOW", "berberis.code_window");
+-  if (code_window.get() != nullptr && strcmp(code_window.get(), "on") == 0) {
++  if (code_window.get() == nullptr || strcmp(code_window.get(), "off") != 0) {
+     EnableCodeWindow();
+   }
+ }
