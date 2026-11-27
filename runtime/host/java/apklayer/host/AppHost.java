@@ -503,7 +503,7 @@ public final class AppHost implements Runnable {
         try {
             String p = System.getProperty("apklayer.renderscale");  // the launch's own option (a spare's environment is older than the launch)
             int v = Integer.parseInt(p != null ? p : System.getenv("APKLAYER_RENDER_SCALE"));
-            return v > 200 || v <= 0 ? 100 : Math.max(v, 65);
+            return v > 200 || v <= 0 ? 100 : Math.max(v, 40);  // 40: the neural filter's minimum (cli/run.cpp reads a lower value as 65 for FSR 1)
         } catch (RuntimeException e) {
             return 100;
         }

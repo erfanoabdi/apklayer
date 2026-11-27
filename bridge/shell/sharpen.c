@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "sharpen_down.h"
@@ -66,7 +67,8 @@ struct sharpen {
     struct tmpl *tmpl;                            /* the temporal pass, NULL where it does not build or APKLAYER_SHARPEN_TEMPORAL=off (a test knob) */
     struct rt t0;                                 /* the filter's output before SMAA / CMAA2 on it */
     int tmp_off;
-    int nn_want, nn_want_env, nn_tried;                        /* sharpen_set_neural; the network is made at the first frame that wants it */
+    int nn_want, nn_want_env, nn_tried, nn_slow;  /* nn_slow: frames in a row over the budget; at 12 the pass is switched off for this window */
+    double nn_ms;                                 /* moving average of a neural frame, ms */                        /* sharpen_set_neural; the network is made at the first frame that wants it */
     struct nn *nn;                                /* the neural upscale pass (sharpen_nn.c), NULL unless APKLAYER_SHARPEN_NN=1 and ES 3.1 compute and the weights are there */
     int aa_off, aa_smaa;                          /* APKLAYER_SHARPEN_AA=off|smaa: test knobs (FSR 1 alone; SMAA ultra where CMAA2 would run), not settings */
 #ifdef HAVE_SHARPEN_VK
@@ -522,12 +524,30 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     if (s->nn_want && !s->nn && !s->nn_tried) {
         char pb[600];
         s->nn_tried = 1;
+        struct timespec c0, c1;
+        clock_gettime(CLOCK_MONOTONIC, &c0);
         s->nn = nn_create(program, nn_weights(pb, sizeof pb));
+        clock_gettime(CLOCK_MONOTONIC, &c1);
+        if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[sharpen] neural network made in %.0f ms\n", (double)(c1.tv_sec - c0.tv_sec) * 1000 + (double)(c1.tv_nsec - c0.tv_nsec) / 1e6);
         if (!s->nn) fprintf(stderr, "[sharpen] neural upscaler unavailable: FSR 1 runs\n");
     }
-    if (s->nn && s->nn_want && up) {  /* the neural pass: the network's 2x picture resampled straight into the output (no anti-aliasing, RCAS or temporal pass) */
+    if (s->nn && s->nn_want && up && s->nn_slow < 12) {
+        static int said_nn_on;
+        if (!said_nn_on++) fprintf(stderr, "[sharpen] neural pass: %dx%d -> %dx%d\n", s->in[buf].w, s->in[buf].h, ow, oh);  /* the neural pass: the network's 2x picture resampled straight into the output (no anti-aliasing, RCAS or temporal pass) */
+        struct timespec t0, t1;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
         if (nn_run(s->nn, rt_ensure, s->in[buf].tex, s->in[buf].w, s->in[buf].h, o->fbo, ow, oh, s->vbo) == 0) {
             gpu_wait(s);
+            clock_gettime(CLOCK_MONOTONIC, &t1);
+            static int n_nn; static double sum_nn;
+            double ms = (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6;
+            sum_nn += ms;
+            /* the shell's main thread waits for every frame: a pass that takes more than 25 ms (a big window, a GPU busy with a game) would freeze every window, so it ends for this one */
+            s->nn_ms = s->nn_ms ? s->nn_ms * 0.8 + ms * 0.2 : ms;
+            s->nn_slow = s->nn_ms > 25.0 ? s->nn_slow + 1 : 0;
+            if (s->nn_slow >= 12) fprintf(stderr, "[sharpen] the neural pass takes %.0f ms per frame at %dx%d -> %dx%d: FSR 1 runs for this window\n", s->nn_ms, s->in[buf].w, s->in[buf].h, ow, oh);
+            if (getenv("APKLAYER_RUNTIME_DEBUG") && n_nn < 10) fprintf(stderr, "[sharpen] neural frame %d: %.1f ms\n", n_nn, (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6);
+            if (getenv("APKLAYER_RUNTIME_DEBUG") && ++n_nn % 30 == 0) { fprintf(stderr, "[sharpen] neural pass: %.1f ms per frame (last 30)\n", sum_nn / 30); sum_nn = 0; }
             o->busy = 1;
             o->used = ++s->tick;
             s->last = k;

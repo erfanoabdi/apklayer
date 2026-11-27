@@ -95,7 +95,7 @@ static void reply(struct apklayer_display *d, uint32_t type, uint32_t len, const
          * the window's pixels; the shell shows the buffer over the whole window (its viewport). Here, per launch, not in the shell: the shell is shared
          * by the instances and outlives an upgrade, so an app restart is enough for a changed setting. The Java host scales its side (AppHost). */
         static int render_pct;
-        if (!render_pct) { const char *e = getenv("APKLAYER_RENDER_SCALE"); int v = e ? atoi(e) : 100; render_pct = v > 200 || v <= 0 ? 100 : v < 65 ? 65 : v; }  /* 65..200: a stored value below 65 (the old minimums were 25, then 60) is read as 65 */
+        if (!render_pct) { const char *e = getenv("APKLAYER_RENDER_SCALE"); int v = e ? atoi(e) : 100; render_pct = v > 200 || v <= 0 ? 100 : v < 40 ? 40 : v; }  /* 40..200: cli/run.cpp already reads a value below 65 as 65 unless the render filter is neural (40 is its minimum) */
         int32_t scale = render_pct == 100 ? body[3] : (int32_t)(((int64_t)body[3] * render_pct + 50) / 100);
         if (scale < 1) scale = 1;
         /* apklayer patch: a frame budget (the same rule in AppHost.hostResize): a render scale of 200 on a HiDPI desktop is 4x per axis, 16x the pixels of the
