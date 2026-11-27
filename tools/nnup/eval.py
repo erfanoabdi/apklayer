@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 from nnup import Net
 from pretrained import Pre, Waifu
+from distill import Student
 W, H = 1280, 720
 def ssim(a, b):  # N,3,H,W in 0..1, gaussian 11x11
     g = torch.exp(-((torch.arange(11) - 5.0) ** 2) / (2 * 1.5 ** 2)); g = (g / g.sum()); k = (g[:, None] * g[None]).expand(3, 1, 11, 11).to(a.device)
@@ -26,6 +27,10 @@ pre = {n: Pre(n).to('cuda') for n in ('ESPCN_x2', 'FSRCNN_x2', 'FSRCNN-small_x2'
 files = [f for f in sorted(glob.glob(os.path.expanduser(os.environ.get('NNUP_DATA', '~/Pictures/Schermafdrukken')) + '/*.png')) if min(Image.open(f).size) >= 400][-3:]
 wf = {n: Waifu(os.path.expanduser('~/apklayer-nnup-work/w/up7_%s.json' % n)).to('cuda') for n in ('art', 'photo')}  # 10 MB each, fetched from nagadomi/waifu2x models/upconv_7 (not in the repo)
 wf = {'waifu2x-' + k: v for k, v in wf.items()}
+stu = {}
+for p in os.environ.get('NNUP_STUDENTS', '').split(','):
+    if p:
+        d = torch.load(p); m = Student(d['ch']).cuda(); m.load_state_dict(d['sd']); m.eval(); stu['student-' + os.path.basename(p).replace('.pt', '')] = m
 res = {}
 for f in files:
     im = Image.open(f).convert('RGB'); 
@@ -38,6 +43,8 @@ for f in files:
             for n, p in pre.items():
                 with torch.no_grad(): outs[n] = Image.fromarray((p(T(small), (H, W))[0].permute(1, 2, 0).cpu().numpy() * 255 + .5).astype(np.uint8))
             for n, p in wf.items():
+                with torch.no_grad(): outs[n] = Image.fromarray((p(T(small), (H, W))[0].permute(1, 2, 0).cpu().numpy() * 255 + .5).astype(np.uint8))
+            for n, p in stu.items():
                 with torch.no_grad(): outs[n] = Image.fromarray((p(T(small), (H, W))[0].permute(1, 2, 0).cpu().numpy() * 255 + .5).astype(np.uint8))
             for k, o in outs.items():
                 r = res.setdefault((s, k), []); r.append((psnr(T(o), T(hr)), ssim(T(o), T(hr))))

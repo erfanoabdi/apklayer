@@ -1,5 +1,5 @@
-/* The neural upscale pass (apklayer patch; docs/PLAN.md "Neural upscaler"): waifu2x upconv_7 (nagadomi/waifu2x, MIT) as OpenGL ES 3.1 compute, a 2x network whose
- * result is resampled (Catmull-Rom) to the output size, so any render scale from 50 to 100 % works. Weights: tools/nnup/export_waifu.py. sharpen_nn.c. */
+/* The neural upscale pass (apklayer patch; docs/PLAN.md "Neural upscaler"): a small 2x network distilled from waifu2x upconv_7 (nagadomi/waifu2x, MIT) as OpenGL ES 3.1 compute, whose
+ * result is resampled (Catmull-Rom) to the output size, so any render scale from 50 to 100 % works. Weights: tools/nnup/export_student.py. sharpen_nn.c. */
 #ifndef APKLAYER_SHARPEN_NN_H
 #define APKLAYER_SHARPEN_NN_H
 #include "sharpen_smaa.h"

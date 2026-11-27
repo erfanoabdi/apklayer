@@ -1,6 +1,7 @@
 /* The neural upscale pass: see sharpen_nn.h. Feature maps are RGBA16F texture arrays (four channels per layer) kept at the size the valid 3x3 convolutions
  * leave (the input is replicate padded by 7: the first layer clamps its reads), so the result equals the reference's. One thread computes one pixel of
- * one four-channel output layer; the weights are mat4s in a storage buffer (tools/nnup/export_waifu.py). First version: no tiling, no half-precision maths. */
+ * one four-channel output layer; the weights are mat4s in a storage buffer. The network is a distilled student of waifu2x upconv_7 (tools/nnup/distill.py,
+ * export_student.py): n valid 3x3 convolutions, the last with 12 channels, pixel shuffle, added to a bilinear 2x of the input. No half-precision maths yet. */
 #include "sharpen_nn.h"
 
 #include <EGL/egl.h>
@@ -10,14 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NL 6   /* 3x3 convolutions; then the 4x4 transposed one */
-static const int NIN4[NL] = { 1, 4, 8, 16, 32, 32 }, NOUT4[NL] = { 4, 8, 16, 32, 32, 64 };
-
+#define MAXL 12
 struct nn {
-    GLuint conv0, conv, deconv, resample, blit_ext;
+    GLuint conv0, conv[3], shuffle, resample, blit_ext;   /* conv[k]: 4 >> k output layers per thread */
     GLuint wbuf, tex[2], out2x, blit_fbo, blit_tex;
     int w, h;                       /* the source size the textures were made for */
-    int boff[NL + 1], moff[NL + 1]; /* offsets in vec4s: matrices and biases of each layer; [NL] the transposed conv */
+    int n, in4[MAXL], out4[MAXL], moff[MAXL], boff[MAXL], maxout4;  /* layers; offsets in vec4s: matrices and biases of each layer */
     void (*dispatch)(GLuint, GLuint, GLuint);
     void (*bind_image)(GLuint, GLuint, GLint, GLboolean, GLint, GLenum, GLenum);
     void (*barrier)(GLbitfield);
@@ -31,15 +30,15 @@ static const char *CS_HEAD =
     "layout(local_size_x = 8, local_size_y = 8) in;\n"
     "layout(std430, binding = 0) readonly buffer W { vec4 w[]; };\n"
     "layout(rgba16f, binding = 1) writeonly uniform image2DArray dst;\n"
-    "uniform int mbase, bbase, nin4, ow, oh;\n";
-static const char *CS_CONV =  /* 8x8 threads, each 2x2 pixels x 4 output layers; the input tile (16x16 + a 1 pixel border) of one input layer is staged in shared memory */
+    "uniform int mbase, bbase, nin4, ow, oh; uniform float slope;\n";
+static const char *CS_CONV =  /* 8x8 threads, each 2x2 pixels x OB output layers (a define: 4, 2 or 1); the input tile (16x16 + a 1 pixel border) of one input layer is staged in shared memory */
     "uniform sampler2DArray src;\n"
     "shared vec4 tile[18 * 18];\n"
     "void main() {\n"
     "  ivec2 org = ivec2(gl_WorkGroupID.xy) * 16; ivec2 lt = ivec2(gl_LocalInvocationID.xy); int lid = int(gl_LocalInvocationIndex);\n"
-    "  int o0 = int(gl_WorkGroupID.z) * 4; ivec2 tsz = textureSize(src, 0).xy;\n"
-    "  vec4 acc[16];\n"
-    "  for (int ob = 0; ob < 4; ob++) { vec4 b = w[bbase + o0 + ob]; for (int p = 0; p < 4; p++) acc[ob * 4 + p] = b; }\n"
+    "  int o0 = int(gl_WorkGroupID.z) * OB; ivec2 tsz = textureSize(src, 0).xy;\n"
+    "  vec4 acc[OB * 4];\n"
+    "  for (int ob = 0; ob < OB; ob++) { vec4 b = w[bbase + o0 + ob]; for (int p = 0; p < 4; p++) acc[ob * 4 + p] = b; }\n"
     "  for (int i = 0; i < nin4; i++) {\n"
     "    barrier();\n"
     "    for (int k = lid; k < 324; k += 64) tile[k] = texelFetch(src, ivec3(min(org + ivec2(k % 18, k / 18), tsz - 1), i), 0);\n"
@@ -47,39 +46,36 @@ static const char *CS_CONV =  /* 8x8 threads, each 2x2 pixels x 4 output layers;
     "    for (int t = 0; t < 9; t++) {\n"
     "      int tx = t % 3, ty = t / 3; vec4 v0 = tile[(lt.y * 2 + ty) * 18 + lt.x * 2 + tx], v1 = tile[(lt.y * 2 + ty) * 18 + lt.x * 2 + tx + 1];\n"
     "      vec4 v2 = tile[(lt.y * 2 + ty + 1) * 18 + lt.x * 2 + tx], v3 = tile[(lt.y * 2 + ty + 1) * 18 + lt.x * 2 + tx + 1];\n"
-    "      for (int ob = 0; ob < 4; ob++) {\n"
+    "      for (int ob = 0; ob < OB; ob++) {\n"
     "        int idx = mbase + (((o0 + ob) * 9 + t) * nin4 + i) * 4; mat4 m = mat4(w[idx], w[idx + 1], w[idx + 2], w[idx + 3]);\n"
     "        acc[ob * 4] += m * v0; acc[ob * 4 + 1] += m * v1; acc[ob * 4 + 2] += m * v2; acc[ob * 4 + 3] += m * v3;\n"
     "      }\n"
     "    }\n"
     "  }\n"
-    "  for (int ob = 0; ob < 4; ob++) for (int p = 0; p < 4; p++) {\n"
+    "  for (int ob = 0; ob < OB; ob++) for (int p = 0; p < 4; p++) {\n"
     "    ivec2 q = org + lt * 2 + ivec2(p % 2, p / 2); vec4 a = acc[ob * 4 + p];\n"
-    "    if (q.x < ow && q.y < oh) imageStore(dst, ivec3(q, o0 + ob), max(a, a * 0.1));\n"
+    "    if (q.x < ow && q.y < oh) imageStore(dst, ivec3(q, o0 + ob), max(a, a * slope));\n"
     "  }\n"
     "}\n";
-static const char *CS_CONV0 =  /* the picture itself: RGBA8, reads clamped (the reference's replicate padding of 7) */
-    "uniform sampler2D src0;\n"
+static const char *CS_CONV0 =  /* the picture itself: RGBA8, reads clamped (replicate padding by the number of layers) */
+    "uniform sampler2D src0; uniform int pad;\n"
     "void main() {\n"
     "  ivec2 p = ivec2(gl_GlobalInvocationID.xy); int o = int(gl_GlobalInvocationID.z); if (p.x >= ow || p.y >= oh) return;\n"
     "  ivec2 sz = textureSize(src0, 0) - 1; vec4 acc = w[bbase + o];\n"
     "  for (int t = 0; t < 9; t++) {\n"
-    "    ivec2 q = clamp(p + ivec2(t % 3, t / 3) - 7, ivec2(0), sz); int idx = mbase + (o * 9 + t) * 4; vec4 v = vec4(texelFetch(src0, q, 0).rgb, 0.0);\n"
+    "    ivec2 q = clamp(p + ivec2(t % 3, t / 3) - pad, ivec2(0), sz); int idx = mbase + (o * 9 + t) * 4; vec4 v = vec4(texelFetch(src0, q, 0).rgb, 0.0);\n"
     "    acc += mat4(w[idx], w[idx + 1], w[idx + 2], w[idx + 3]) * v;\n"
     "  }\n"
-    "  imageStore(dst, ivec3(p, o), max(acc, acc * 0.1));\n"
+    "  imageStore(dst, ivec3(p, o), max(acc, acc * slope));\n"
     "}\n";
-static const char *CS_DECONV =  /* out[o] = sum_i in[i] * W[o + 3 - 2i], 4x4 taps, two of which meet each axis; writes the 2x picture (a plain 2D image) */
-    "uniform sampler2DArray src;\n"
+static const char *CS_SHUFFLE =  /* pixel shuffle of the 12 channels (layer c = colour c, component 2i+j = row i, column j of the 2x2 block) + the bilinear 2x of the input (the blit texture is LINEAR) */
+    "uniform sampler2DArray src; uniform sampler2D lin;\n"
     "void main() {\n"
     "  ivec2 o = ivec2(gl_GlobalInvocationID.xy); if (o.x >= ow || o.y >= oh) return;\n"
-    "  ivec2 isz = textureSize(src, 0).xy; vec4 acc = w[bbase];\n"
-    "  for (int ky = 0; ky < 4; ky++) { int ty = o.y + 3 - ky; if ((ty & 1) != 0 || ty < 0 || ty / 2 >= isz.y) continue;\n"
-    "    for (int kx = 0; kx < 4; kx++) { int tx = o.x + 3 - kx; if ((tx & 1) != 0 || tx < 0 || tx / 2 >= isz.x) continue;\n"
-    "      int idx = mbase + (ky * 4 + kx) * 4;\n"
-    "      for (int i = 0; i < 64; i++) { vec4 v = texelFetch(src, ivec3(tx / 2, ty / 2, i), 0); acc += mat4(w[idx + i * 64], w[idx + i * 64 + 1], w[idx + i * 64 + 2], w[idx + i * 64 + 3]) * v; }\n"
-    "    } }\n"
-    "  imageStore(dst, ivec3(o, 0), vec4(acc.rgb, 1.0));\n"
+    "  ivec2 h = o >> 1; int k = (o.y & 1) * 2 + (o.x & 1);\n"
+    "  vec3 r = vec3(texelFetch(src, ivec3(h, 0), 0)[k], texelFetch(src, ivec3(h, 1), 0)[k], texelFetch(src, ivec3(h, 2), 0)[k]);\n"
+    "  vec3 b = texture(lin, (vec2(o) + 0.5) / vec2(ow, oh)).rgb;\n"
+    "  imageStore(dst, ivec3(o, 0), vec4(clamp(b + r, 0.0, 1.0), 1.0));\n"
     "}\n";
 static const char *FS_RESAMPLE =  /* Catmull-Rom, widened by the shrink factor f (2x picture -> output: 1..2): the reference's bicubic with antialias */
     "precision highp float;\n"
@@ -96,12 +92,12 @@ static const char *FS_RESAMPLE =  /* Catmull-Rom, widened by the shrink factor f
     "  gl_FragColor = vec4(clamp(acc / ws, 0.0, 1.0), 1.0);\n"
     "}\n";
 
-static GLuint compute(const char *body, const char *name)
+static GLuint compute(const char *body, const char *name, int ob)
 {
-    size_t n = strlen(CS_HEAD) + strlen(body) + 1;
+    size_t n = strlen(CS_HEAD) + strlen(body) + 64;
     char *t = malloc(n);
     if (!t) return 0;
-    snprintf(t, n, "%s%s", CS_HEAD, body);
+    snprintf(t, n, "%s#define OB %d\n%s", CS_HEAD, ob, body);
     GLuint s = glCreateShader(GL_COMPUTE_SHADER), p = 0;
     const char *src = t;
     glShaderSource(s, 1, &src, NULL);
@@ -135,31 +131,39 @@ struct nn *nn_create(GLuint (*prog)(const char *fs), const char *dflt)
     if (!f) { fprintf(stderr, "[sharpen] neural weights not found (%s)\n", path ? path : "no path"); return NULL; }
     fseek(f, 0, SEEK_END); long len = ftell(f); fseek(f, 0, SEEK_SET);
     struct nn *c = calloc(1, sizeof *c);
+    unsigned hd[2 + 2 * MAXL];
     float *wt = malloc((size_t)len);
-    int off = 0;  /* vec4s */
-    for (int l = 0; l < NL; l++) { c->moff[l] = off; off += NOUT4[l] * 9 * NIN4[l] * 4; c->boff[l] = off; off += NOUT4[l]; }
-    c->moff[NL] = off; off += 64 * 16 * 4; c->boff[NL] = off; off += 1;
-    if (!c || !wt || len != (long)off * 16 || fread(wt, 1, (size_t)len, f) != (size_t)len) {
-        fprintf(stderr, "[sharpen] neural weights %s: wrong size (%ld, want %d)\n", path, len, off * 16);
-        fclose(f); free(wt); free(c); return NULL;
+    int off = 0, ok = c && wt && fread(hd, 4, 2, f) == 2 && hd[0] == 0x3153534e && hd[1] >= 2 && hd[1] <= MAXL && fread(hd + 2, 4, 2 * hd[1], f) == 2 * hd[1];
+    if (ok) {
+        c->n = (int)hd[1];
+        for (int l = 0; l < c->n; l++) {
+            c->in4[l] = (int)hd[2 + 2 * l]; c->out4[l] = (int)hd[3 + 2 * l];
+            c->moff[l] = off; off += c->out4[l] * 9 * c->in4[l] * 4; c->boff[l] = off; off += c->out4[l];
+            if (c->out4[l] > c->maxout4) c->maxout4 = c->out4[l];
+            if (l && c->in4[l] != c->out4[l - 1]) ok = 0;
+        }
+        if (c->out4[c->n - 1] != 3 || c->in4[0] != 1) ok = 0;
+        long hl = 8 + 8 * (long)c->n;
+        ok = ok && len - hl == (long)off * 16 && fread(wt, 1, (size_t)len - (size_t)hl, f) == (size_t)len - (size_t)hl;
     }
     fclose(f);
+    if (!ok) { fprintf(stderr, "[sharpen] neural weights %s: not a valid network file\n", path); free(wt); free(c); return NULL; }
     c->dispatch = (void *)eglGetProcAddress("glDispatchCompute");
     c->bind_image = (void *)eglGetProcAddress("glBindImageTexture");
     c->barrier = (void *)eglGetProcAddress("glMemoryBarrier");
     c->tex_storage3 = (void *)eglGetProcAddress("glTexStorage3D");
     c->tex_storage2 = (void *)eglGetProcAddress("glTexStorage2D");
     c->bind_base = (void *)eglGetProcAddress("glBindBufferBase");
-    char *conv = malloc(strlen(CS_CONV) + 1);
-    strcpy(conv, CS_CONV);
-    c->conv0 = compute(CS_CONV0, "conv0"); c->conv = compute(conv, "conv"); c->deconv = compute(CS_DECONV, "deconv"); free(conv);
+    c->conv0 = compute(CS_CONV0, "conv0", 1);
+    for (int k = 0; k < 3; k++) c->conv[k] = compute(CS_CONV, "conv", 4 >> k);
+    c->shuffle = compute(CS_SHUFFLE, "shuffle", 1);
     c->resample = prog(FS_RESAMPLE);
     c->blit_ext = prog("#extension GL_OES_EGL_image_external : require\nprecision highp float; uniform samplerExternalOES tex; varying vec2 uv; void main() { gl_FragColor = vec4(texture2D(tex, uv).rgb, 1.0); }");
     glGenBuffers(1, &c->wbuf);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, c->wbuf);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, len, wt, GL_STATIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr)off * 16, wt, GL_STATIC_DRAW);
     free(wt);
-    if (!c->dispatch || !c->bind_image || !c->barrier || !c->tex_storage3 || !c->tex_storage2 || !c->bind_base || !c->conv0 || !c->conv || !c->deconv || !c->resample || !c->blit_ext || glGetError() != GL_NO_ERROR) {
+    if (!c->dispatch || !c->bind_image || !c->barrier || !c->tex_storage3 || !c->tex_storage2 || !c->bind_base || !c->conv0 || !c->conv[0] || !c->conv[1] || !c->conv[2] || !c->shuffle || !c->resample || !c->blit_ext || glGetError() != GL_NO_ERROR) {
         free(c);
         return NULL;
     }
@@ -181,11 +185,12 @@ static int ensure(struct nn *c, int w, int h)
     if (c->tex[0]) { glDeleteTextures(2, c->tex); glDeleteTextures(1, &c->out2x); glDeleteTextures(1, &c->blit_tex); glDeleteFramebuffers(1, &c->blit_fbo); }
     c->w = c->h = 0;
     glGenTextures(2, c->tex);
-    for (int i = 0; i < 2; i++) { glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[i]); c->tex_storage3(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA16F, w + 14, h + 14, 64); param(c->tex[i], GL_TEXTURE_2D_ARRAY); }
+    for (int i = 0; i < 2; i++) { glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[i]); c->tex_storage3(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA16F, w + 2 * c->n, h + 2 * c->n, c->maxout4); param(c->tex[i], GL_TEXTURE_2D_ARRAY); }
     glGenTextures(1, &c->out2x);
     glBindTexture(GL_TEXTURE_2D, c->out2x); c->tex_storage2(GL_TEXTURE_2D, 1, GL_RGBA16F, 2 * w, 2 * h); param(c->out2x, GL_TEXTURE_2D);
     glGenTextures(1, &c->blit_tex);
     glBindTexture(GL_TEXTURE_2D, c->blit_tex); c->tex_storage2(GL_TEXTURE_2D, 1, GL_RGBA8, w, h); param(c->blit_tex, GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glGenFramebuffers(1, &c->blit_fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, c->blit_fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, c->blit_tex, 0);
@@ -211,32 +216,36 @@ int nn_run(struct nn *c, GLuint (*rt_ensure)(struct rt *, int, int), GLuint src,
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     c->bind_base(GL_SHADER_STORAGE_BUFFER, 0, c->wbuf);
-    int cw = w + 14, ch = h + 14;
-    for (int l = 0; l < NL; l++) {
+    int cw = w + 2 * c->n, ch = h + 2 * c->n;
+    for (int l = 0; l < c->n; l++) {
         cw -= 2; ch -= 2;
-        GLuint prog = l == 0 ? c->conv0 : c->conv;
+        int ob = l == 0 ? 1 : c->out4[l] % 4 == 0 ? 4 : c->out4[l] % 2 == 0 ? 2 : 1;
+        GLuint prog = l == 0 ? c->conv0 : c->conv[ob == 4 ? 0 : ob == 2 ? 1 : 2];
         glUseProgram(prog);
         glUniform1i(glGetUniformLocation(prog, "mbase"), c->moff[l]);
         glUniform1i(glGetUniformLocation(prog, "bbase"), c->boff[l]);
-        glUniform1i(glGetUniformLocation(prog, "nin4"), NIN4[l]);
+        glUniform1i(glGetUniformLocation(prog, "nin4"), c->in4[l]);
         glUniform1i(glGetUniformLocation(prog, "ow"), cw);
         glUniform1i(glGetUniformLocation(prog, "oh"), ch);
+        glUniform1f(glGetUniformLocation(prog, "slope"), l == c->n - 1 ? 1.0f : 0.1f);  /* LeakyReLU 0.1 on every layer but the last (max(a, a * 1) = a) */
         glActiveTexture(GL_TEXTURE0);
-        if (l == 0) { glBindTexture(GL_TEXTURE_2D, c->blit_tex); glUniform1i(glGetUniformLocation(prog, "src0"), 0); }
+        if (l == 0) { glBindTexture(GL_TEXTURE_2D, c->blit_tex); glUniform1i(glGetUniformLocation(prog, "src0"), 0); glUniform1i(glGetUniformLocation(prog, "pad"), c->n); }
         else { glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[(l - 1) & 1]); glUniform1i(glGetUniformLocation(prog, "src"), 0); }
         c->bind_image(1, c->tex[l & 1], 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
-        if (l == 0) c->dispatch((cw + 7) / 8, (ch + 7) / 8, NOUT4[l]); else c->dispatch((cw + 15) / 16, (ch + 15) / 16, NOUT4[l] / 4);
+        if (l == 0) c->dispatch((cw + 7) / 8, (ch + 7) / 8, c->out4[0]); else c->dispatch((cw + 15) / 16, (ch + 15) / 16, c->out4[l] / ob);
         c->barrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
     }
-    /* the transposed convolution: the last map is tex[(NL-1)&1], (w+2) x (h+2) */
-    glUseProgram(c->deconv);
-    glUniform1i(glGetUniformLocation(c->deconv, "mbase"), c->moff[NL]);
-    glUniform1i(glGetUniformLocation(c->deconv, "bbase"), c->boff[NL]);
-    glUniform1i(glGetUniformLocation(c->deconv, "ow"), 2 * w);
-    glUniform1i(glGetUniformLocation(c->deconv, "oh"), 2 * h);
+    /* pixel shuffle + the bilinear 2x of the input */
+    glUseProgram(c->shuffle);
+    glUniform1i(glGetUniformLocation(c->shuffle, "ow"), 2 * w);
+    glUniform1i(glGetUniformLocation(c->shuffle, "oh"), 2 * h);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[(NL - 1) & 1]);
-    glUniform1i(glGetUniformLocation(c->deconv, "src"), 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[(c->n - 1) & 1]);
+    glUniform1i(glGetUniformLocation(c->shuffle, "src"), 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, c->blit_tex);
+    glUniform1i(glGetUniformLocation(c->shuffle, "lin"), 1);
+    glActiveTexture(GL_TEXTURE0);
     c->bind_image(1, c->out2x, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
     c->dispatch((2 * w + 7) / 8, (2 * h + 7) / 8, 1);
     c->barrier(GL_TEXTURE_FETCH_BARRIER_BIT);
