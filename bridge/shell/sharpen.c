@@ -22,6 +22,7 @@
 #include "sharpen_smaa.h"  /* struct rt, SMAA 1x */
 #include "sharpen_cmaa.h"  /* CMAA2 (GLES 3.1 compute) */
 #include "sharpen_temporal.h"  /* the temporal stabiliser (apklayer patch) */
+#include "sharpen_nn.h"  /* the neural upscaler, waifu2x on compute (apklayer patch) */
 #ifdef HAVE_SHARPEN_VK
 #include "sharpen_vk.h"
 #endif
@@ -65,6 +66,7 @@ struct sharpen {
     struct tmpl *tmpl;                            /* the temporal pass, NULL where it does not build or APKLAYER_SHARPEN_TEMPORAL=off (a test knob) */
     struct rt t0;                                 /* the filter's output before SMAA / CMAA2 on it */
     int tmp_off;
+    struct nn *nn;                                /* the neural upscale pass (sharpen_nn.c), NULL unless APKLAYER_SHARPEN_NN=1 and ES 3.1 compute and the weights are there */
     int aa_off, aa_smaa;                          /* APKLAYER_SHARPEN_AA=off|smaa: test knobs (FSR 1 alone; SMAA ultra where CMAA2 would run), not settings */
 #ifdef HAVE_SHARPEN_VK
     struct svk *vk;  /* the Vulkan backend, when it took over (sharpen_vk.h) */
@@ -262,6 +264,7 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         fprintf(stderr, "[sharpen] %s; SMAA %s, CMAA2 %s\n", glGetString(GL_VERSION), s->smaa ? "ready" : "unavailable", s->cmaa ? "ready" : "unavailable (needs OpenGL ES 3.1 compute)");
         s->blit_prog = program(FS_BLIT);
         s->tmpl = s->tmp_off ? NULL : tmpl_create(program);
+        { const char *e = getenv("APKLAYER_SHARPEN_NN"); s->nn = e && !strcmp(e, "1") ? nn_create(program, NULL) : NULL; if (e && !s->nn) fprintf(stderr, "[sharpen] neural upscaler unavailable: FSR 1 runs\n"); }
         s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is shrunk by EASU's own `down` branch */
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
@@ -496,6 +499,19 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
     int up = ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: SMAA / CMAA2 run on the app's buffer before EASU */
+    if (s->nn && up) {  /* the neural pass: the network's 2x picture resampled straight into the output (no anti-aliasing, RCAS or temporal pass) */
+        if (nn_run(s->nn, rt_ensure, s->in[buf].tex, s->in[buf].w, s->in[buf].h, o->fbo, ow, oh, s->vbo) == 0) {
+            gpu_wait(s);
+            o->busy = 1;
+            o->used = ++s->tick;
+            s->last = k;
+            *slot = k;
+            return 0;
+        }
+        static int said_nn;
+        if (!said_nn++) fprintf(stderr, "[sharpen] the neural pass failed (gl error 0x%x): FSR 1 runs\n", glGetError());
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
     int aa = s->aa_off ? 0 : s->cmaa && !s->aa_smaa ? 2 : s->smaa ? 1 : 0;
     static int said_aa, said_cmaa;
     if (!s->aa_off && !s->cmaa && s->smaa && !said_cmaa++) fprintf(stderr, "[sharpen] CMAA2 needs OpenGL ES 3.1 compute, not available here: SMAA ultra runs\n");
@@ -624,6 +640,7 @@ void sharpen_close(struct sharpen *s)
     }
     free(s->smaa);
     cmaa_free(s->cmaa);
+    nn_free(s->nn);
     tmpl_free(s->tmpl);
     free(s);
 }

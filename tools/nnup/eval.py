@@ -31,7 +31,7 @@ for f in files:
     im = Image.open(f).convert('RGB'); 
     for cx, cy in ((0.2, 0.2), (0.6, 0.5)):
         x0, y0 = int((im.width - W) * cx), int((im.height - H) * cy); hr = im.crop((x0, y0, x0 + W, y0 + H))
-        for s in (0.75, 0.6):
+        for s in [float(x) for x in os.environ.get('NNUP_SCALES', '0.75,0.6').split(',')]:
             small = hr.resize((round(W * s), round(H * s)), Image.BOX)
             outs = {'bilinear': small.resize((W, H), Image.BILINEAR), 'fsr1': fsr(sys.argv[2], small, False), 'fsr1+cmaa2': fsr(sys.argv[2], small, True)}
             with torch.no_grad(): outs['net'] = Image.fromarray((net(T(small), (H, W))[0].permute(1, 2, 0).cpu().numpy() * 255 + .5).astype(np.uint8))
