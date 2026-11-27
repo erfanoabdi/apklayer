@@ -15,6 +15,7 @@
 #include <sys/un.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -563,7 +564,29 @@ static int other_package_path(const char *path)
  * Android/data/<pkg>/files) see them. The spellings listed (/storage/emulated/0, /storage/self/primary, /sdcard, /data/media/0 and Android's /mnt/user, /mnt/runtime, /mnt/pass_through forms; ".." and "." are collapsed first) are judged textually, any other path by other_scoped_resolved (relative paths against the cwd, symlinks). shortcut: a symlink is followed only in a process that made a symlink itself (or a child of it); a link made by an earlier process and a path relative to a directory fd are not; upgrade with a fd-based check. */
 static bool mapped_path(char **path);
 static int symlinks_made;
-void apklayer_note_symlink(void) { __atomic_store_n(&symlinks_made, 1, __ATOMIC_RELEASE); }  /* paths_preload.c: the process made a symlink (the flag is per process, children inherit it) */
+/* apklayer patch: the links this process made, by their absolute path, so that only a path through one of them is resolved (every process makes a symlink at start-up,
+ * and the old process-wide flag sent every path call of PGR's engine start through realpath: 17% of its 8.7 s); a link of another spelling (relative, or by a directory fd),
+ * or more than LINKS of them, falls back to the flag */
+#define LINKS 32
+static char link_paths[LINKS][512]; static int link_count, links_unknown;
+static pthread_mutex_t links_lock = PTHREAD_MUTEX_INITIALIZER;
+void apklayer_note_symlink(const char *linkpath)  /* paths_preload.c: the process made a symlink (the flag is per process, children inherit it) */
+{
+    __atomic_store_n(&symlinks_made, 1, __ATOMIC_RELEASE);
+    if (!linkpath || linkpath[0] != '/' || strlen(linkpath) >= sizeof link_paths[0]) { __atomic_store_n(&links_unknown, 1, __ATOMIC_RELEASE); return; }
+    pthread_mutex_lock(&links_lock);
+    int n = link_count;
+    if (n < LINKS) { strcpy(link_paths[n], linkpath); __atomic_store_n(&link_count, n + 1, __ATOMIC_RELEASE); }
+    else __atomic_store_n(&links_unknown, 1, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&links_lock);
+}
+static int may_cross_made_link(const char *path)
+{
+    if (__atomic_load_n(&links_unknown, __ATOMIC_ACQUIRE)) return 1;
+    int n = __atomic_load_n(&link_count, __ATOMIC_ACQUIRE);
+    for (int i = 0; i < n; i++) { size_t k = strlen(link_paths[i]); if (!strncmp(path, link_paths[i], k) && (!path[k] || path[k] == '/')) return 1; }
+    return 0;
+}
 
 /* The same check for what the path names once resolved: a relative path against the process's working directory, a path through a symlink the process made
  * (Android's kernel resolves both, FUSE answers for the target). Judged on the instance's host storage directory, the real spelling after the kernel's resolution. */
@@ -573,6 +596,13 @@ static int other_scoped_resolved(const char *path)
     static char base[PATH_MAX]; static size_t base_len; static int known;
     char abs[PATH_MAX], real[PATH_MAX], tail[NAME_MAX + 1] = "";
     if (!storage_env[0] || busy) return 0;
+    if (!strncmp(path, "/proc/", 6)) {  /* apklayer patch: of /proc only its magic links lead anywhere (cwd, root, exe, fd/N, map_files, ns): maps, status, stat... are no
+                                         * link; resolving each (a readlink per component) was 17% of PGR's engine start-up */
+        static const char *const magic[] = { "/cwd", "/root", "/exe", "/fd", "/map_files", "/ns", "/.." , NULL };
+        int any = 0;
+        for (int i = 0; magic[i] && !any; i++) any = strstr(path + 5, magic[i]) != NULL;
+        if (!any) return 0;
+    }
     if (!__atomic_load_n(&known, __ATOMIC_ACQUIRE)) {
         char tmp[PATH_MAX];
         busy = 1;  /* realpath is a wrapper of this layer too */
@@ -589,7 +619,7 @@ static int other_scoped_resolved(const char *path)
         size_t n = strlen(abs);
         if (n + 1 + strlen(path) >= sizeof abs) return 0;
         snprintf(abs + n, sizeof abs - n, "/%s", path);
-    } else if ((!__atomic_load_n(&symlinks_made, __ATOMIC_ACQUIRE) && strncmp(path, "/proc/", 6)) || strlen(path) >= sizeof abs) return 0;  /* /proc/self/cwd and the like are links the kernel follows */
+    } else if ((!may_cross_made_link(path) && strncmp(path, "/proc/", 6)) || strlen(path) >= sizeof abs) return 0;  /* /proc/self/cwd and the like are links the kernel follows */
     else strcpy(abs, path);
     char *m = abs;
     busy = 1;

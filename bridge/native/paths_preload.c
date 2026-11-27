@@ -177,8 +177,8 @@ WRAP(int, statvfs64, (const char *path, struct statvfs64 *s), (const char *, str
 WRAP(int, statfs, (const char *path, struct statfs *s), (const char *, struct statfs *), m, s)
 WRAP(int, statfs64, (const char *path, struct statfs64 *s), (const char *, struct statfs64 *), m, s)
 /* a link to another process's /proc entry would be followed by the kernel past the path layer: not made (the target is no path of this app's view) */
-void apklayer_note_symlink(void);
-int symlink(const char *target, const char *path) { apklayer_note_symlink(); if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } MAP(m, path); int r = ((int (*)(const char *, const char *))REAL(symlink))(target, m);
+void apklayer_note_symlink(const char *linkpath);
+int symlink(const char *target, const char *path) { apklayer_note_symlink(path); if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } MAP(m, path); int r = ((int (*)(const char *, const char *))REAL(symlink))(target, m);
     r = apklayer_broker_change("symlink", AT_FDCWD, m, AT_FDCWD, target, 0, r); DONE(m); return r; }
 int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     void *f = REAL(fstatat64); int r = f ? ((int (*)(int, const char *, struct stat64 *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
@@ -316,7 +316,7 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { PROC_GONE
 /* the fortified spellings (Android code built with FORTIFY: Berberis's guest readlink): the buffer is at least n here */
 ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlinkat(dirfd, path, buf, n); }
 ssize_t __readlink_chk(const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlink(path, buf, n); }
-int symlinkat(const char *target, int dirfd, const char *path) { apklayer_note_symlink(); if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(const char *, int, const char *))REAL(symlinkat))(target, dirfd, use); DONE(m); return r; }
+int symlinkat(const char *target, int dirfd, const char *path) { apklayer_note_symlink(dirfd == AT_FDCWD ? path : NULL); if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(const char *, int, const char *))REAL(symlinkat))(target, dirfd, use); DONE(m); return r; }
 /* extended attributes: refused to the app's uid on the user's files in the granted home (user.* needs the file's permissions): apklayerd does them */
 #define XSET(name, nf) int name(const char *path, const char *n, const void *v, size_t sz, int f) { MAP(m, path); \
     int r = ((int (*)(const char *, const char *, const void *, size_t, int))REAL(name))(m, n, v, sz, f); r = (int)apklayer_broker_xattr("setxattr", m, n, v, NULL, sz, f, nf, r); DONE(m); return r; }
@@ -489,7 +489,7 @@ long syscall(long nr, ...)
     int link = nr == SYS_symlinkat, first = nr == SYS_truncate || nr == SYS_statfs;
     const char *path = at ? (const char *)a[1] : link ? (const char *)a[2] : first ? (const char *)a[0] : NULL, *path2 = two ? (const char *)a[3] : NULL;
     if (at) PROC_GONE((int)a[0], path);
-    if (link) { apklayer_note_symlink(); PROC_GONE((int)a[1], path); }
+    if (link) { apklayer_note_symlink((int)a[1] == AT_FDCWD ? path : NULL); PROC_GONE((int)a[1], path); }
     if (two) PROC_GONE((int)a[2], path2);
     char *m = (path && path[0] == '/') ? (char *)path : NULL;  /* raw syscalls come from a native bridge's guest: Android's view */
     bool m_alloc = m && apklayer_guest_path_overrides(&m);
