@@ -48,7 +48,7 @@ struct swin {
     pthread_mutex_t wm;
     pthread_cond_t wc;
     int wstarted, wquit, wstate;
-    int jbuf, jow, joh, jrc, jslot, jfresh, jdead;
+    int jbuf, jow, joh, jrc, jslot, jfresh, jdead, jkeep;
     float jsh;
     int queued;                     /* the newest frame that arrived while a job ran (-1: none) */
 };
@@ -68,8 +68,9 @@ static void give_back(struct window *w, int buf, const char *why)
 static void slot_released(void *data, struct wl_buffer *b)
 {
     struct swin *sw = data;
+    static int n_rel;
     for (int i = 0; i < OUT_SLOTS; i++)
-        if (sw->wl[i] == b) sharpen_slot_release(sw->s, i);
+        if (sw->wl[i] == b) { sharpen_slot_release(sw->s, i); if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[shell] %s: render filter: compositor released slot %d (%d)\n", sw->win->title, i, ++n_rel); }
     if (sw->pending >= 0) {  /* the newest frame waited for a free output buffer: draw it now (as the app's own if the pass cannot) */
         int buf = sw->pending;
         sw->pending = -1;
@@ -144,13 +145,13 @@ static void worker_stop(struct swin *sw)
 static void job_post(struct swin *sw, int buf, int ow, int oh, float sh)
 {
     pthread_mutex_lock(&sw->wm);
-    sw->jbuf = buf; sw->jow = ow; sw->joh = oh; sw->jsh = sh; sw->jdead = 0; sw->wstate = 1;
+    sw->jbuf = buf; sw->jow = ow; sw->joh = oh; sw->jsh = sh; sw->jdead = 0; sw->jkeep = sw->keep; sw->wstate = 1;  /* keep: the buffer shown again is the compositor's already, never given back */
     pthread_cond_signal(&sw->wc);
     pthread_mutex_unlock(&sw->wm);
 }
 
 /* the output slot `slot` holds the filtered frame of app buffer `buf`: its wl_buffer is made (a new slot) and shown, then the app's buffer goes back */
-static void commit_slot(struct window *w, struct swin *sw, int buf, int slot, int fresh, int ow, int oh)
+static void commit_slot(struct window *w, struct swin *sw, int buf, int slot, int fresh, int ow, int oh, int keep)
 {
     if (fresh || !sw->wl[slot]) {
         struct sharpen_out o;
@@ -174,7 +175,21 @@ static void commit_slot(struct window *w, struct swin *sw, int buf, int slot, in
     surface_damage(w->surface, 0, 0, ow, oh);
     wl_surface_commit(w->surface);
     if (sw->pending == buf) sw->pending = -1;
-    if (!sw->keep) give_back(w, buf, "drawn");  /* the pass is done: it no longer reads the app's buffer (the sink holds six acquired buffers at most) */
+    static int n_commit;
+    if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[shell] %s: render filter: commit %d (buffer %d, slot %d, %s)\n", w->title, ++n_commit, buf, slot, keep ? "kept" : "given back");
+    if (getenv("APKLAYER_SHARPEN_DUMP") && (n_commit <= 3 || n_commit % 25 == 0)) {  /* a test aid: what the compositor was given (PPM) */
+        char path[300];
+        unsigned char *px = malloc((size_t)ow * oh * 4);
+        snprintf(path, sizeof path, "%s/commit-%04d.ppm", getenv("APKLAYER_SHARPEN_DUMP"), n_commit);
+        FILE *f = px && sharpen_readback(sw->s, slot, px) == 0 ? fopen(path, "wb") : NULL;
+        if (f) {
+            fprintf(f, "P6\n%d %d\n255\n", ow, oh);
+            for (int y = 0; y < oh; y++) for (int x = 0; x < ow; x++) fwrite(px + ((size_t)y * ow + x) * 4, 1, 3, f);
+            fclose(f);
+        }
+        free(px);
+    }
+    if (!keep) give_back(w, buf, "drawn");  /* the pass is done: it no longer reads the app's buffer (the sink holds six acquired buffers at most) */
 }
 
 /* a finished job of the render thread (main loop) */
@@ -182,7 +197,7 @@ static void job_done(struct window *w, struct swin *sw)
 {
     static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
     pthread_mutex_lock(&sw->wm);
-    int buf = sw->jbuf, ow = sw->jow, oh = sw->joh, rc = sw->jrc, slot = sw->jslot, fresh = sw->jfresh, dead = sw->jdead;
+    int buf = sw->jbuf, ow = sw->jow, oh = sw->joh, rc = sw->jrc, slot = sw->jslot, fresh = sw->jfresh, dead = sw->jdead, keep = sw->jkeep;
     sw->wstate = 0;
     pthread_mutex_unlock(&sw->wm);
     if (dead) {  /* the app destroyed the buffer meanwhile: nothing to show or give back */
@@ -198,7 +213,7 @@ static void job_done(struct window *w, struct swin *sw)
         if (!sw->said_ok++) fprintf(stderr, "[shell] %s: render filter: %dx%d -> %dx%d\n", w->title, sw->w[buf], sw->h[buf], ow, oh);
         sw->ok_n++;
         if (getenv("APKLAYER_RUNTIME_DEBUG") && (sw->ok_n + sw->fail_n) % 50 == 0) fprintf(stderr, "[shell] %s: render filter: %d frames filtered, %d shown as they are\n", w->title, sw->ok_n, sw->fail_n);
-        commit_slot(w, sw, buf, slot, fresh, ow, oh);
+        commit_slot(w, sw, buf, slot, fresh, ow, oh, keep);
     }
     if (sw->queued >= 0) {  /* the newest frame that came in meanwhile */
         int b = sw->queued;
@@ -354,7 +369,7 @@ int sharpen_win_show(struct window *w, int buf)
     if (!sw->said_ok++) fprintf(stderr, "[shell] %s: render filter: %dx%d -> %dx%d\n", w->title, sw->w[buf], sw->h[buf], ow, oh);
     sw->ok_n++;
     if (getenv("APKLAYER_RUNTIME_DEBUG") && (sw->ok_n + sw->fail_n) % 50 == 0) fprintf(stderr, "[shell] %s: render filter: %d frames filtered, %d shown as they are\n", w->title, sw->ok_n, sw->fail_n);
-    commit_slot(w, sw, buf, slot, fresh, ow, oh);
+    commit_slot(w, sw, buf, slot, fresh, ow, oh, sw->keep);
     return 1;
 }
 
