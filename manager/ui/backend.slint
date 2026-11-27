@@ -125,6 +125,7 @@ export global Backend {
     in property <string> app-render-sharpness-setting;  // the selected app's sharpness (render-sharpness.<package>): "" medium, "off", "low", "medium", "high"
     in property <string> app-render-filter-setting;  // the selected app's render filter (render-filter.<package>): "sharp" FSR 1 (also what an empty stored value reads as), "off" the compositor's plain stretch
     in property <string> app-render-scale-setting;  // the selected app's render scale (render-scale.<package>, percent): "" full size; a fullscreen game renders at that share of the window
+    in property <float> render-scale-min: 65;  // the slider's minimum: 65 for FSR 1, 40 with the neural filter
     in-out property <float> app-render-scale-pct: 100;  // the render scale as a number for the slider
     callback preview-render-scale(int);  // the slider moves: the resolution text follows without saving
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance

@@ -490,7 +490,7 @@ public final class AppHost implements Runnable {
      * screen capture comes out at the pixel size w x scale and the shell client rebuffers the window to match (ShellClient.present).
      * navPx: the shell's navigation bar over the window's bottom (mobile style), the display's navigation bar inset.
      */
-    /** The app's render scale (`apklayer settings` render-scale, 65..200 percent, a stored value below 65 reads as 65; cli/run.cpp puts it in the launch's environment): the app's display is that
+    /** The app's render scale (`apklayer settings` render-scale, 40..200 percent (cli/run.cpp reads a value below 65 as 65 unless the filter is neural); cli/run.cpp puts it in the launch's environment): the app's display is that
      *  share of the window's pixels with the density scaled alike (the dp size and layout stay); the shell shows it over the whole window. */
     private static int renderScalePct = 0;  // read at the first resize of a launch: a spare JVM is up before the launch that carries the setting
 

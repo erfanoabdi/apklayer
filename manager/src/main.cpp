@@ -310,7 +310,9 @@ private:
     void showResolution(int preview = -1) {
         auto [w, h] = windowPx_[current_];
         int pct = preview > 0 ? preview : appScales_[current_].empty() ? 100 : std::atoi(appScales_[current_].c_str());
-        pct = std::max(pct, appFilters_[current_] == "neural" ? 40 : 65);  // the minimum: 65 (FSR 1; the run reads a lower value as 65), 40 with the neural filter
+        int minPct = appFilters_[current_] == "neural" ? 40 : 65;  // the minimum: 65 (FSR 1; the run reads a lower value as 65), 40 with the neural filter
+        ui_->global<Backend>().set_render_scale_min((float)minPct);
+        pct = std::max(pct, minPct);
         if (preview <= 0) ui_->global<Backend>().set_app_render_scale_pct(pct);
         std::string text;
         if (w <= 0 || h <= 0) text = "Start the app once to see its resolution here.";
@@ -571,7 +573,7 @@ private:
         b.on_preview_render_scale([this](int pct) { showResolution(pct); });
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
             if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
-            if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = filterName(std::string(v)); ui_->global<Backend>().set_app_render_filter_setting(slint::SharedString(filterName(std::string(v)))); }
+            if (std::string(k).rfind("render-filter.", 0) == 0) { appFilters_[std::string(k).substr(14)] = filterName(std::string(v)); ui_->global<Backend>().set_app_render_filter_setting(slint::SharedString(filterName(std::string(v)))); showResolution(); }
             if (std::string(k).rfind("render-sharpness.", 0) == 0) { appSharp_[std::string(k).substr(17)] = std::string(v); ui_->global<Backend>().set_app_render_sharpness_setting(v); }
             if (std::string(k).rfind("render-scale.", 0) == 0) { appScales_[std::string(k).substr(13)] = std::string(v); ui_->global<Backend>().set_app_render_scale_setting(v); showResolution(); }
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
