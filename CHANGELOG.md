@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27: Endfield profile with the fused lite tier; the libHGP loop is not on the critical path (correction)
+
+- `perf record -F 999` (20 s, with 0089 + 0090, deb preload without the paths.c fix), samples by thread: the thread that runs the `libHGP.so` loop (tid named "UnityMain", a second thread with the creator's name) is 27.6% of all samples, 99% in translated code, 82% in the two loop regions: a background scan thread that spins one core. It is NOT the thread that loads the game: the earlier reading ("UnityMain spends 82% of its time in this loop") confused the two threads of that name. That is why fusing its cmp + b.cond gained only ~3% of load time.
+- The real main thread (UnityMain 648894, 27.9% of samples): 58% translated code (flat: the top region is 10.7%, then il2cpp regions at 2-3%), ~20% kernel (syscalls, page faults), ~10% libberberis (AddAndLockForTranslation, MachineCode::PerformRelocations/Grow, ExitRegion: translating regions), ~6% libc. "Sync Present Thread" (25%) runs libunity regions, also off the load's critical path. Next levers by this split: general lite code quality (flat, so only broad changes pay: fewer memory round trips of ARM registers across region exits, TBI mask, chaining), the ~10% translation cost (a persisted translation cache), the kernel 20% (needs kernel symbols: perf needs root for kptr_restrict; the paths.c fix is not in the deb yet, so these runs still had the realpath chains).
+
 ## 2026-11-27: upstream JIT window on by default (binary_translation 0090, owner's request)
 
 - Build log: `m libberberis_arm64 berberis_code_window_tests` (gsi_x86_64, Mac VM): init_guest_arch.cc enables the 2-4 GiB code window (DigitalisX64 e680eae6, our 0063) unless `berberis.code_window=off`. Risk the owner accepted: the reservation is a ~2 GiB PROT_NONE line in the guest's maps (PGR's ACE reads it); `apklayer prop set berberis.code_window off` restores the old allocation.
