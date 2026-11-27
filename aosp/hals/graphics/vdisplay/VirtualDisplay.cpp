@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -211,10 +212,27 @@ class Sink : public ConsumerBase::FrameAvailableListener {
                 mQueued--;
             }
             BufferItem item;
+            status_t acquired;
             {
                 std::lock_guard<std::mutex> lock(mLock);
                 // The default also waits for the fence. Do that once, outside the release callback's lock.
-                if (mConsumer->acquireBuffer(&item, 0, /*waitForFence=*/false) != OK) continue;
+                acquired = mConsumer->acquireBuffer(&item, 0, /*waitForFence=*/false);
+            }
+            if (acquired == INVALID_OPERATION && mAcquireRetries < 200) {
+                // apklayer patch: "max acquired buffer count reached" (the shell has not given enough frames back yet, e.g. during a start-up burst). The frame
+                // stays queued, and nothing else would wake this loop for it when the app goes idle after the burst: the last frame was never shown (a window
+                // frozen on an older picture; AIDA64 with the neural filter under load). Put the wake-up back and wait for a release (onReleased) or 25 ms.
+                mAcquireRetries++;
+                std::unique_lock<std::mutex> lock(mQueueLock);
+                mQueued++;
+                uint64_t gen = mReleaseGen;
+                mQueueCv.wait_for(lock, std::chrono::milliseconds(25), [&] { return mReleaseGen != gen; });
+                continue;
+            }
+            mAcquireRetries = 0;
+            if (acquired != OK) continue;
+            {
+                std::lock_guard<std::mutex> lock(mLock);
                 // Return pre-resize frames with their acquire fence so the producer can reuse them
                 // when ready. There is no need to wait on the GPU for a frame we won't display.
                 const auto& buffer = item.mGraphicBuffer;
@@ -321,6 +339,11 @@ class Sink : public ConsumerBase::FrameAvailableListener {
             self->mHeld[slot] = BufferItem();
         }
         self->mBusy[slot] = false;
+        {
+            std::lock_guard<std::mutex> ql(self->mQueueLock);
+            self->mReleaseGen++;
+            self->mQueueCv.notify_one();
+        }
     }
 
     // the window changed size or turn: the display follows
@@ -353,6 +376,8 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     std::mutex mQueueLock;  // frames SurfaceFlinger queued that the present thread has not acquired yet
     std::condition_variable mQueueCv;
     int mQueued = 0;
+    uint64_t mReleaseGen = 0;  // bumped by onReleased: the present loop retries a refused acquire after it
+    int mAcquireRetries = 0;
     uint32_t mStack = 0, mWidth = 0, mHeight = 0;
     int32_t mTurn = 0;  // degrees the app's layer stack is turned in the window (onConfigure)
     BufferItem mHeld[kSlots];

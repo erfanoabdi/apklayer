@@ -14,7 +14,8 @@
 #define MAXL 12
 struct nn {
     GLuint conv0, conv[3], shuffle, resample, blit_ext;   /* conv[k]: 4 >> k output layers per thread */
-    GLuint wbuf, tex[2], out2x, blit_fbo, blit_tex;
+    GLuint wbuf, tex[2], out2x;
+    struct { GLuint tex, fbo; int w, h; } snap[2];  /* RGBA8 copies of the app's frame (nn_capture): the app's buffer is free as soon as the copy is done */
     int w, h;                       /* the source size the textures were made for */
     int n, in4[MAXL], out4[MAXL], moff[MAXL], boff[MAXL], maxout4;  /* layers; offsets in vec4s: matrices and biases of each layer */
     void (*dispatch)(GLuint, GLuint, GLuint);
@@ -182,29 +183,34 @@ static void param(GLuint t, GLenum tgt)
 static int ensure(struct nn *c, int w, int h)
 {
     if (c->w == w && c->h == h) return 1;
-    if (c->tex[0]) { glDeleteTextures(2, c->tex); glDeleteTextures(1, &c->out2x); glDeleteTextures(1, &c->blit_tex); glDeleteFramebuffers(1, &c->blit_fbo); }
+    if (c->tex[0]) { glDeleteTextures(2, c->tex); glDeleteTextures(1, &c->out2x); }
     c->w = c->h = 0;
     glGenTextures(2, c->tex);
     for (int i = 0; i < 2; i++) { glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[i]); c->tex_storage3(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA16F, w + 2 * c->n, h + 2 * c->n, c->maxout4); param(c->tex[i], GL_TEXTURE_2D_ARRAY); }
     glGenTextures(1, &c->out2x);
     glBindTexture(GL_TEXTURE_2D, c->out2x); c->tex_storage2(GL_TEXTURE_2D, 1, GL_RGBA16F, 2 * w, 2 * h); param(c->out2x, GL_TEXTURE_2D);
-    glGenTextures(1, &c->blit_tex);
-    glBindTexture(GL_TEXTURE_2D, c->blit_tex); c->tex_storage2(GL_TEXTURE_2D, 1, GL_RGBA8, w, h); param(c->blit_tex, GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glGenFramebuffers(1, &c->blit_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, c->blit_fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, c->blit_tex, 0);
     if (glGetError() != GL_NO_ERROR) return 0;
     c->w = w; c->h = h;
     return 1;
 }
 
-int nn_run(struct nn *c, GLuint (*rt_ensure)(struct rt *, int, int), GLuint src, int w, int h, GLuint dst, int ow, int oh, GLuint vbo)
+/* the app's external image into snapshot `snap` (a plain RGBA8 texture, LINEAR): after the GPU has run this the app's buffer is no longer read */
+int nn_capture(struct nn *c, GLuint src, int w, int h, int snap, GLuint vbo)
 {
-    (void)rt_ensure;
-    if (!c || !ensure(c, w, h)) return -1;
-    /* the external image into a plain RGBA8 texture */
-    glBindFramebuffer(GL_FRAMEBUFFER, c->blit_fbo);
+    if (!c || snap < 0 || snap > 1 || w <= 0 || h <= 0) return -1;
+    if (c->snap[snap].w != w || c->snap[snap].h != h) {
+        if (c->snap[snap].tex) { glDeleteTextures(1, &c->snap[snap].tex); glDeleteFramebuffers(1, &c->snap[snap].fbo); }
+        c->snap[snap].w = c->snap[snap].h = 0;
+        glGenTextures(1, &c->snap[snap].tex);
+        glBindTexture(GL_TEXTURE_2D, c->snap[snap].tex); c->tex_storage2(GL_TEXTURE_2D, 1, GL_RGBA8, w, h); param(c->snap[snap].tex, GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glGenFramebuffers(1, &c->snap[snap].fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, c->snap[snap].fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, c->snap[snap].tex, 0);
+        if (glGetError() != GL_NO_ERROR) return -1;
+        c->snap[snap].w = w; c->snap[snap].h = h;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, c->snap[snap].fbo);
     glViewport(0, 0, w, h);
     glUseProgram(c->blit_ext);
     glActiveTexture(GL_TEXTURE0);
@@ -215,6 +221,21 @@ int nn_run(struct nn *c, GLuint (*rt_ensure)(struct rt *, int, int), GLuint src,
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+    return glGetError() == GL_NO_ERROR ? 0 : -1;
+}
+
+int nn_snap_size(struct nn *c, int snap, int *w, int *h)
+{
+    if (!c || snap < 0 || snap > 1 || c->snap[snap].w <= 0) return -1;
+    *w = c->snap[snap].w; *h = c->snap[snap].h;
+    return 0;
+}
+
+int nn_run(struct nn *c, int snap, GLuint dst, int ow, int oh, GLuint vbo)
+{
+    int w, h;
+    if (nn_snap_size(c, snap, &w, &h) < 0 || !ensure(c, w, h)) return -1;
+    GLuint sntex = c->snap[snap].tex;
     c->bind_base(GL_SHADER_STORAGE_BUFFER, 0, c->wbuf);
     int cw = w + 2 * c->n, ch = h + 2 * c->n;
     for (int l = 0; l < c->n; l++) {
@@ -229,7 +250,7 @@ int nn_run(struct nn *c, GLuint (*rt_ensure)(struct rt *, int, int), GLuint src,
         glUniform1i(glGetUniformLocation(prog, "oh"), ch);
         glUniform1f(glGetUniformLocation(prog, "slope"), l == c->n - 1 ? 1.0f : 0.1f);  /* LeakyReLU 0.1 on every layer but the last (max(a, a * 1) = a) */
         glActiveTexture(GL_TEXTURE0);
-        if (l == 0) { glBindTexture(GL_TEXTURE_2D, c->blit_tex); glUniform1i(glGetUniformLocation(prog, "src0"), 0); glUniform1i(glGetUniformLocation(prog, "pad"), c->n); }
+        if (l == 0) { glBindTexture(GL_TEXTURE_2D, sntex); glUniform1i(glGetUniformLocation(prog, "src0"), 0); glUniform1i(glGetUniformLocation(prog, "pad"), c->n); }
         else { glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[(l - 1) & 1]); glUniform1i(glGetUniformLocation(prog, "src"), 0); }
         c->bind_image(1, c->tex[l & 1], 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
         if (l == 0) c->dispatch((cw + 7) / 8, (ch + 7) / 8, c->out4[0]); else c->dispatch((cw + 15) / 16, (ch + 15) / 16, c->out4[l] / ob);
@@ -243,7 +264,7 @@ int nn_run(struct nn *c, GLuint (*rt_ensure)(struct rt *, int, int), GLuint src,
     glBindTexture(GL_TEXTURE_2D_ARRAY, c->tex[(c->n - 1) & 1]);
     glUniform1i(glGetUniformLocation(c->shuffle, "src"), 0);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, c->blit_tex);
+    glBindTexture(GL_TEXTURE_2D, sntex);
     glUniform1i(glGetUniformLocation(c->shuffle, "lin"), 1);
     glActiveTexture(GL_TEXTURE0);
     c->bind_image(1, c->out2x, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
@@ -269,6 +290,7 @@ int nn_run(struct nn *c, GLuint (*rt_ensure)(struct rt *, int, int), GLuint src,
 void nn_free(struct nn *c)
 {
     if (!c) return;
-    if (c->tex[0]) { glDeleteTextures(2, c->tex); glDeleteTextures(1, &c->out2x); glDeleteTextures(1, &c->blit_tex); glDeleteFramebuffers(1, &c->blit_fbo); }
+    if (c->tex[0]) { glDeleteTextures(2, c->tex); glDeleteTextures(1, &c->out2x); }
+    for (int i = 0; i < 2; i++) if (c->snap[i].tex) { glDeleteTextures(1, &c->snap[i].tex); glDeleteFramebuffers(1, &c->snap[i].fbo); }
     free(c);
 }

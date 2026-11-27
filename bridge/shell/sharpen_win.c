@@ -48,7 +48,8 @@ struct swin {
     pthread_mutex_t wm;
     pthread_cond_t wc;
     int wstarted, wquit, wstate;
-    int jbuf, jow, joh, jrc, jslot, jfresh, jdead, jkeep;
+    int jbuf, jnocap, jow, joh, jrc, jslot, jfresh, jdead, jkeep, jcaptured, jgave;  /* jnocap: draw the snapshot already taken (no app buffer); jcaptured: the GPU has copied the app's buffer, jgave: it went back to the app */
+    int snap_wait, snap_retry, swow, swoh;  /* a captured frame waits for a free output buffer (all are with the compositor); retry: a slot was freed while a job ran */
     float jsh;
     int queued;                     /* the newest frame that arrived while a job ran (-1: none) */
 };
@@ -65,12 +66,18 @@ static void give_back(struct window *w, int buf, const char *why)
     send_msg(w->client, MSG_DMABUF_RELEASE, (int32_t[]){ w->id, buf }, 2);
 }
 
+static void job_post(struct swin *sw, int buf, int nocap, int ow, int oh, float sh);
+
 static void slot_released(void *data, struct wl_buffer *b)
 {
     struct swin *sw = data;
     static int n_rel;
     for (int i = 0; i < OUT_SLOTS; i++)
         if (sw->wl[i] == b) { sharpen_slot_release(sw->s, i); if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[shell] %s: render filter: compositor released slot %d (%d)\n", sw->win->title, i, ++n_rel); }
+    if (sw->snap_wait && sw->wstarted) {  /* a captured frame waits for an output buffer */
+        if (sw->wstate == 0) { sw->snap_wait = 0; job_post(sw, -1, 1, sw->swow, sw->swoh, 0); }
+        else sw->snap_retry = 1;
+    }
     if (sw->pending >= 0) {  /* the newest frame waited for a free output buffer: draw it now (as the app's own if the pass cannot) */
         int buf = sw->pending;
         sw->pending = -1;
@@ -108,11 +115,15 @@ static void *render_thread(void *arg)
         while (!sw->wquit && sw->wstate != 1) pthread_cond_wait(&sw->wc, &sw->wm);
         if (sw->wquit) break;
         sw->wstate = 2;
-        int buf = sw->jbuf, ow = sw->jow, oh = sw->joh;
+        int buf = sw->jbuf, nocap = sw->jnocap, ow = sw->jow, oh = sw->joh;
         float sh = sw->jsh;
         pthread_mutex_unlock(&sw->wm);
-        int slot = -1, fresh = 0;
-        int rc = sharpen_render(sw->s, buf, ow, oh, sh, &slot, &fresh);
+        int slot = -1, fresh = 0, rc;
+        if (nocap) rc = sharpen_render_snapshot(sw->s, 0, ow, oh, &slot, &fresh);
+        else if (sharpen_neural_capture(sw->s, buf, ow, oh, 0) == 0) {  /* the app's buffer is copied: the main loop gives it back before the network runs */
+            __atomic_store_n(&sw->jcaptured, 1, __ATOMIC_RELEASE);
+            rc = sharpen_render_snapshot(sw->s, 0, ow, oh, &slot, &fresh);
+        } else rc = sharpen_render(sw->s, buf, ow, oh, sh, &slot, &fresh);  /* the neural pass cannot take this frame: the usual pass, with the buffer held */
         pthread_mutex_lock(&sw->wm);
         sw->jrc = rc; sw->jslot = slot; sw->jfresh = fresh;
         sw->wstate = 3;
@@ -142,10 +153,10 @@ static void worker_stop(struct swin *sw)
     sw->wstarted = 0;
 }
 
-static void job_post(struct swin *sw, int buf, int ow, int oh, float sh)
+static void job_post(struct swin *sw, int buf, int nocap, int ow, int oh, float sh)
 {
     pthread_mutex_lock(&sw->wm);
-    sw->jbuf = buf; sw->jow = ow; sw->joh = oh; sw->jsh = sh; sw->jdead = 0; sw->jkeep = sw->keep; sw->wstate = 1;  /* keep: the buffer shown again is the compositor's already, never given back */
+    sw->jbuf = buf; sw->jnocap = nocap; sw->jow = ow; sw->joh = oh; sw->jsh = sh; sw->jdead = 0; sw->jkeep = nocap ? 1 : sw->keep; sw->jcaptured = 0; sw->jgave = 0; sw->snap_wait = 0; sw->wstate = 1;  /* keep: the buffer shown again is the compositor's already, never given back */
     pthread_cond_signal(&sw->wc);
     pthread_mutex_unlock(&sw->wm);
 }
@@ -197,11 +208,15 @@ static void job_done(struct window *w, struct swin *sw)
 {
     static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
     pthread_mutex_lock(&sw->wm);
-    int buf = sw->jbuf, ow = sw->jow, oh = sw->joh, rc = sw->jrc, slot = sw->jslot, fresh = sw->jfresh, dead = sw->jdead, keep = sw->jkeep;
+    int buf = sw->jbuf, ow = sw->jow, oh = sw->joh, rc = sw->jrc, slot = sw->jslot, fresh = sw->jfresh, dead = sw->jdead, keep = sw->jkeep, captured = sw->jcaptured, gave = sw->jgave;
     sw->wstate = 0;
     pthread_mutex_unlock(&sw->wm);
     if (dead) {  /* the app destroyed the buffer meanwhile: nothing to show or give back */
         if (rc == 0) sharpen_slot_release(sw->s, slot);
+    } else if (rc == -2 && captured) {  /* the frame is a snapshot: it waits for a free output buffer, the app's buffer is not needed any more */
+        if (!gave && !keep) give_back(w, buf, "captured");
+        sw->snap_wait = 1; sw->swow = ow; sw->swoh = oh;
+        if (sw->snap_retry) { sw->snap_retry = 0; sw->snap_wait = 0; job_post(sw, -1, 1, ow, oh, 0); return; }
     } else if (rc == -2) {  /* all output buffers are with the compositor: this frame is drawn at the next release */
         if (sw->pending != buf) sw->pending_ms = now_ms();
         sw->pending = buf;
@@ -213,7 +228,8 @@ static void job_done(struct window *w, struct swin *sw)
         if (!sw->said_ok++) fprintf(stderr, "[shell] %s: render filter: %dx%d -> %dx%d\n", w->title, sw->w[buf], sw->h[buf], ow, oh);
         sw->ok_n++;
         if (getenv("APKLAYER_RUNTIME_DEBUG") && (sw->ok_n + sw->fail_n) % 50 == 0) fprintf(stderr, "[shell] %s: render filter: %d frames filtered, %d shown as they are\n", w->title, sw->ok_n, sw->fail_n);
-        commit_slot(w, sw, buf, slot, fresh, ow, oh, keep);
+        commit_slot(w, sw, buf, slot, fresh, ow, oh, keep || (captured && gave));
+        if (captured && !gave && !keep) { /* given back by commit_slot: keep == 0 here */ }
     }
     if (sw->queued >= 0) {  /* the newest frame that came in meanwhile */
         int b = sw->queued;
@@ -262,6 +278,7 @@ void sharpen_win_poll(void)
     for (int i = 0; i < MAX_WINDOWS; i++) {
         struct window *w = &windows[i];
         struct swin *sw = w->client ? w->sharp : NULL;
+        if (sw && sw->wstarted && !sw->jgave && !sw->jkeep && __atomic_load_n(&sw->jcaptured, __ATOMIC_ACQUIRE) && __atomic_load_n(&sw->wstate, __ATOMIC_ACQUIRE) >= 2 && !sw->jdead) { give_back(w, sw->jbuf, "captured"); sw->jgave = 1; }
         if (sw && sw->wstarted && __atomic_load_n(&sw->wstate, __ATOMIC_ACQUIRE) == 3) job_done(w, sw);
         /* watchdog: a frame waiting for a free output buffer for over 100 ms (the compositor releases late or not at all) is shown as the app's own, so the app never stalls */
         if (sw && sw->state == S_READY && sw->pending >= 0 && w->configured && now_ms() - sw->pending_ms > 100) {
@@ -355,7 +372,7 @@ int sharpen_win_show(struct window *w, int buf)
         if (sw->wstate != 0) {  /* a job is running: only the newest frame waits */
             if (sw->queued >= 0 && sw->queued != buf) give_back(w, sw->queued, "replaced while the pass runs");
             sw->queued = buf;
-        } else job_post(sw, buf, ow, oh, sh);
+        } else job_post(sw, buf, 0, ow, oh, sh);
         return 1;
     }
     sharpen_set_neural(sw->s, w->neural);

@@ -477,9 +477,102 @@ static const char *nn_weights(char *buf, size_t n)
     return inst;
 }
 
+/* the neural pass from snapshot `snap` into output slot k: timed, and ended for this window when it is too slow (the guard) */
+static int neural_frame(struct sharpen *s, int snap, struct slot *o, int k, int ow, int oh, int *slot)
+{
+    static int said_nn_on;
+    int iw = 0, ih = 0;
+    nn_snap_size(s->nn, snap, &iw, &ih);
+    if (!said_nn_on++) fprintf(stderr, "[sharpen] neural pass: %dx%d -> %dx%d\n", iw, ih, ow, oh);
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    if (nn_run(s->nn, snap, o->fbo, ow, oh, s->vbo) != 0) return -1;
+    gpu_wait(s);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    static int n_nn; static double sum_nn;
+    double ms = (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6;
+    sum_nn += ms;
+    /* a pass over 25 ms a frame (a big window, a GPU busy with a game) is no use: FSR 1 runs for this window */
+    s->nn_ms = s->nn_ms ? s->nn_ms * 0.8 + ms * 0.2 : ms;
+    s->nn_slow = s->nn_ms > 25.0 ? s->nn_slow + 1 : 0;
+    if (s->nn_slow == 12) fprintf(stderr, "[sharpen] the neural pass takes %.0f ms per frame at %dx%d -> %dx%d: FSR 1 runs for this window\n", s->nn_ms, iw, ih, ow, oh);
+    if (getenv("APKLAYER_RUNTIME_DEBUG") && n_nn < 10) fprintf(stderr, "[sharpen] neural frame %d: %.1f ms\n", n_nn, ms);
+    if (getenv("APKLAYER_RUNTIME_DEBUG") && ++n_nn % 30 == 0) { fprintf(stderr, "[sharpen] neural pass: %.1f ms per frame (last 30)\n", sum_nn / 30); sum_nn = 0; }
+    o->busy = 1;
+    o->used = ++s->tick;
+    s->last = k;
+    *slot = k;
+    return 0;
+}
+
+static int pick_slot(struct sharpen *s, int ow, int oh, int *fresh);
+
+/* the network, made at the first frame that wants it */
+static int nn_available(struct sharpen *s)
+{
+    if (!s->nn_want || s->nn_slow >= 12) return 0;
+    if (!s->nn && !s->nn_tried) {
+        char pb[600];
+        s->nn_tried = 1;
+        struct timespec c0, c1;
+        clock_gettime(CLOCK_MONOTONIC, &c0);
+        s->nn = nn_create(program, nn_weights(pb, sizeof pb));
+        clock_gettime(CLOCK_MONOTONIC, &c1);
+        if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[sharpen] neural network made in %.0f ms\n", (double)(c1.tv_sec - c0.tv_sec) * 1000 + (double)(c1.tv_nsec - c0.tv_nsec) / 1e6);
+        if (!s->nn) fprintf(stderr, "[sharpen] neural upscaler unavailable: FSR 1 runs\n");
+    }
+    return s->nn != NULL;
+}
+
+/* snapshot `snap` of app buffer `buf` for the neural pass (render thread, sharpen_win.c): 0 when taken and the GPU has copied it (the app's buffer is free to go back at
+ * once); -1 when the neural pass cannot take this frame (not wanted, unavailable, too slow, no upscale): the caller shows it the usual way */
+static int capture_impl(struct sharpen *s, int buf, int ow, int oh, int snap)
+{
+    if (!s || !s->ready || buf < 0 || buf >= BUFS || !s->in[buf].image || ow <= 0 || oh <= 0) return -1;
+    eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
+    if (!nn_available(s) || !(ow > s->in[buf].w && oh > s->in[buf].h)) return -1;
+    if (nn_capture(s->nn, s->in[buf].tex, s->in[buf].w, s->in[buf].h, snap, s->vbo) != 0) return -1;
+    gpu_wait(s);
+    return 0;
+}
+
+/* a frame from snapshot `snap` into an output slot */
+static int render_snap_impl(struct sharpen *s, int snap, int ow, int oh, int *slot, int *fresh)
+{
+    if (!s || !s->ready || !s->nn || ow <= 0 || oh <= 0) return -1;
+    eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
+    int k = pick_slot(s, ow, oh, fresh);
+    if (k < 0) return k;
+    glBindBuffer(GL_ARRAY_BUFFER, s->vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glDisable(GL_BLEND);
+    return neural_frame(s, snap, &s->out[k], k, ow, oh, slot);
+}
+
+/* the least recently used free output slot, its dmabuf made for ow x oh; -2: all are with the compositor, -1: no buffer could be made */
+static int pick_slot(struct sharpen *s, int ow, int oh, int *fresh)
+{
+    static int said_busy;
+    int k = -1;
+    for (int i = 0; i < SLOTS; i++) if (!s->out[i].busy && (k < 0 || s->out[i].used < s->out[k].used)) k = i;  /* not the slot just released: the compositor may still read it */
+    if (k < 0) {  /* the compositor holds them all: the newest frame waits for a release */
+        if (!said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SLOTS);
+        return -2;
+    }
+    struct slot *o = &s->out[k];
+    *fresh = 0;
+    if (!o->bo || o->w != ow || o->h != oh) {
+        if (slot_make(s, o, ow, oh) < 0) { slot_free(s, o); fprintf(stderr, "[sharpen] no output buffer %dx%d (%d modifiers offered, gl error 0x%x)\n", ow, oh, s->accept_n, glGetError()); return -1; }
+        *fresh = 1;
+    }
+    return k;
+}
+
 static int render_impl(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
     static int said_in, said_busy;
+    (void)said_busy;
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) {
         static int said_vkaa;
@@ -494,18 +587,9 @@ static int render_impl(struct sharpen *s, int buf, int ow, int oh, float sharpne
         return -1;
     }
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
-    int k = -1;
-    for (int i = 0; i < SLOTS; i++) if (!s->out[i].busy && (k < 0 || s->out[i].used < s->out[k].used)) k = i;  /* not the slot just released: the compositor may still read it */
-    if (k < 0) {  /* the compositor holds all three: show the app's own buffer this once */
-        if (!said_busy++) fprintf(stderr, "[sharpen] all %d output buffers are held by the compositor: the newest frame waits for a release\n", SLOTS);
-        return -2;
-    }
+    int k = pick_slot(s, ow, oh, fresh);
+    if (k < 0) return k;
     struct slot *o = &s->out[k];
-    *fresh = 0;
-    if (!o->bo || o->w != ow || o->h != oh) {
-        if (slot_make(s, o, ow, oh) < 0) { slot_free(s, o); fprintf(stderr, "[sharpen] no output buffer %dx%d (%d modifiers offered, gl error 0x%x)\n", ow, oh, s->accept_n, glGetError()); return -1; }
-        *fresh = 1;
-    }
     if (s->mid_w != ow || s->mid_h != oh) {  /* the intermediate (upscaled, unsharpened) picture */
         if (s->mid_fbo) glDeleteFramebuffers(1, &s->mid_fbo);
         if (s->mid_tex) glDeleteTextures(1, &s->mid_tex);
@@ -526,39 +610,9 @@ static int render_impl(struct sharpen *s, int buf, int ow, int oh, float sharpne
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
     int up = ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: SMAA / CMAA2 run on the app's buffer before EASU */
-    if (s->nn_want && !s->nn && !s->nn_tried) {
-        char pb[600];
-        s->nn_tried = 1;
-        struct timespec c0, c1;
-        clock_gettime(CLOCK_MONOTONIC, &c0);
-        s->nn = nn_create(program, nn_weights(pb, sizeof pb));
-        clock_gettime(CLOCK_MONOTONIC, &c1);
-        if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[sharpen] neural network made in %.0f ms\n", (double)(c1.tv_sec - c0.tv_sec) * 1000 + (double)(c1.tv_nsec - c0.tv_nsec) / 1e6);
-        if (!s->nn) fprintf(stderr, "[sharpen] neural upscaler unavailable: FSR 1 runs\n");
-    }
+    nn_available(s);
     if (s->nn && s->nn_want && up && s->nn_slow < 12) {
-        static int said_nn_on;
-        if (!said_nn_on++) fprintf(stderr, "[sharpen] neural pass: %dx%d -> %dx%d\n", s->in[buf].w, s->in[buf].h, ow, oh);  /* the neural pass: the network's 2x picture resampled straight into the output (no anti-aliasing, RCAS or temporal pass) */
-        struct timespec t0, t1;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        if (nn_run(s->nn, rt_ensure, s->in[buf].tex, s->in[buf].w, s->in[buf].h, o->fbo, ow, oh, s->vbo) == 0) {
-            gpu_wait(s);
-            clock_gettime(CLOCK_MONOTONIC, &t1);
-            static int n_nn; static double sum_nn;
-            double ms = (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6;
-            sum_nn += ms;
-            /* the pass runs on the window's own render thread (sharpen_win.c), but a pass over 25 ms a frame (a big window, a GPU busy with a game) is no use: FSR 1 runs for this window */
-            s->nn_ms = s->nn_ms ? s->nn_ms * 0.8 + ms * 0.2 : ms;
-            s->nn_slow = s->nn_ms > 25.0 ? s->nn_slow + 1 : 0;
-            if (s->nn_slow == 12) fprintf(stderr, "[sharpen] the neural pass takes %.0f ms per frame at %dx%d -> %dx%d: FSR 1 runs for this window\n", s->nn_ms, s->in[buf].w, s->in[buf].h, ow, oh);
-            if (getenv("APKLAYER_RUNTIME_DEBUG") && n_nn < 10) fprintf(stderr, "[sharpen] neural frame %d: %.1f ms\n", n_nn, (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6);
-            if (getenv("APKLAYER_RUNTIME_DEBUG") && ++n_nn % 30 == 0) { fprintf(stderr, "[sharpen] neural pass: %.1f ms per frame (last 30)\n", sum_nn / 30); sum_nn = 0; }
-            o->busy = 1;
-            o->used = ++s->tick;
-            s->last = k;
-            *slot = k;
-            return 0;
-        }
+        if (nn_capture(s->nn, s->in[buf].tex, s->in[buf].w, s->in[buf].h, 0, s->vbo) == 0 && neural_frame(s, 0, o, k, ow, oh, slot) == 0) return 0;
         static int said_nn;
         if (!said_nn++) fprintf(stderr, "[sharpen] the neural pass failed (gl error 0x%x): FSR 1 runs\n", glGetError());
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -695,6 +749,22 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     int rc = -1;
     if (!s) return -1;
     LOCKED(s, rc = render_impl(s, buf, ow, oh, sharpness, slot, fresh));
+    return rc;
+}
+
+int sharpen_neural_capture(struct sharpen *s, int buf, int ow, int oh, int snap)
+{
+    int rc = -1;
+    if (!s) return -1;
+    LOCKED(s, rc = capture_impl(s, buf, ow, oh, snap));
+    return rc;
+}
+
+int sharpen_render_snapshot(struct sharpen *s, int snap, int ow, int oh, int *slot, int *fresh)
+{
+    int rc = -1;
+    if (!s) return -1;
+    LOCKED(s, rc = render_snap_impl(s, snap, ow, oh, slot, fresh));
     return rc;
 }
 

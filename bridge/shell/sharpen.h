@@ -40,6 +40,10 @@ void sharpen_forget(struct sharpen *s, int buf);
 int sharpen_render(struct sharpen *s, int buf, int out_w, int out_h, float sharpness, int *slot, int *fresh);
 /* The neural upscaler (sharpen_nn.c) instead of FSR 1 on an upscale; FSR 1 where it cannot run (ES 3.1 compute or the weights missing). Before sharpen_render, every frame. */
 void sharpen_set_neural(struct sharpen *s, int on);
+/* The neural pass without holding the app's buffer: snapshot `snap` (0 or 1) takes a copy of app buffer `buf` (0: the GPU has made it, `buf` may go back at once; -1: the neural pass cannot
+ * take this frame, draw it with sharpen_render), sharpen_render_snapshot draws a snapshot into output slot *slot (0, -1 nothing drawn, -2 all output buffers held). */
+int sharpen_neural_capture(struct sharpen *s, int buf, int out_w, int out_h, int snap);
+int sharpen_render_snapshot(struct sharpen *s, int snap, int out_w, int out_h, int *slot, int *fresh);
 int sharpen_slot_info(struct sharpen *s, int slot, struct sharpen_out *out);
 void sharpen_slot_release(struct sharpen *s, int slot);   /* the compositor is done with it */
 /* test aid: the pixels of the last rendered slot (out_w * out_h * 4, XRGB little endian) */
