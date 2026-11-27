@@ -168,6 +168,7 @@ if not arm32_only and host_machine.cpu_family() == 'aarch64'
   endif
 endif
 install_data('bridge/native/apklayer.prop', 'bridge/native/bionic_translation.cfg', install_dir: share_dir / 'bridge/native')
+install_data('bridge/native/nn/student.bin', install_dir: share_dir / 'bridge/native/nn')  # the neural upscaler's network (tools/nnup)
 install_data('bridge/native/profiles/pixel5.prop', 'bridge/native/profiles/pixel5-extra.prop', 'bridge/native/profiles/pixel8.prop', 'bridge/native/profiles/pixel8-extra.prop', 'bridge/native/profiles/desktop.prop', install_dir: share_dir / 'bridge/native/profiles')  # tools/device-profile.sh
 # (its links to the libraries are copied as links: Meson's install_subdir fails on a link whose target is missing when it installs again)
 meson.add_install_script('sh', '-c', 'mkdir -p "$MESON_INSTALL_DESTDIR_PREFIX/$1" && cp -r --remove-destination "$2" "$MESON_INSTALL_DESTDIR_PREFIX/$1/"', 'sh',

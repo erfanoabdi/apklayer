@@ -323,7 +323,7 @@ int apklayer_display_present(struct apklayer_display *d, int slot, const struct 
     int32_t m[21] = { 0 };
     /* apklayer patch: the render filter (`apklayer settings` render-filter sharp, cli/run.cpp): a flags word after the damage; a shell that does not know
      * it (len 80) ignores it, one that does resamples a buffer that is not the window's pixels with the upscale pass (bridge/shell/sharpen.c) */
-    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && !strcmp(e, "off") ? 0 : 1;  /* bit 0: FSR 1 on (on unless the value is off: an empty or unset one is FSR 1 too; the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1);
+    { static int filter = -1; if (filter < 0) { const char *e = getenv("APKLAYER_RENDER_FILTER"); filter = e && !strcmp(e, "off") ? 0 : e && !strcmp(e, "neural") ? 1 | (1 << 18) : 1;  /* bit 18: the neural upscaler (sharpen_nn.c) instead of FSR 1;   /* bit 0: FSR 1 on (on unless the value is off: an empty or unset one is FSR 1 too; the removed filters nis, sgsr, lanczos, anime4k, auto read as FSR 1);
          * bits 1-10 and 14-17 are unused (once render-text, render-aa, render-calm: those settings are gone, anti-aliasing is always CMAA2 ultra) and bits 3-6 too (the mode and the phases) */
         const char *sh = getenv("APKLAYER_RENDER_SHARPNESS");  /* bits 11-13: 1 off, 2 low, 3 medium, 4 high (0: medium) */
         if (sh) filter |= (!strcmp(sh, "off") ? 1 : !strcmp(sh, "low") ? 2 : !strcmp(sh, "medium") ? 3 : !strcmp(sh, "high") ? 4 : 0) << 11;

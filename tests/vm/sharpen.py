@@ -97,3 +97,29 @@ for (iw, ih, ow, oh) in ((3840, 2160, 1920, 1080), (6880, 2768, 3440, 1384), (76
             assert run.returncode == 0, '%dx%d -> %dx%d %s: sharpen-test failed (rc %d): %s' % (iw, ih, ow, oh, aa, run.returncode, run.stderr)
             assert os.path.getsize(raw_out) == ow * oh * 4, '%dx%d -> %dx%d %s: output of %d bytes' % (iw, ih, ow, oh, aa, os.path.getsize(raw_out))
     print('PASS %dx%d -> %dx%d (render scale 200): every level' % (iw, ih, ow, oh))
+
+# The neural upscaler (sharpen_nn.c, APKLAYER_SHARPEN_NN=1; the network is bridge/native/nn/student.bin): skipped where the GLES backend or ES 3.1 compute is missing (the pass then
+# runs FSR 1 and says "neural upscaler unavailable"). At the render scales 75, 60, 50 and 40 % it must give a picture at least as close to the original as FSR 1's (0.3 dB slack) and
+# at least as sharp as bilinear.
+weights = ROOT / 'bridge/native/nn/student.bin'
+if os.environ.get('SHARPEN_BACKEND') == 'vulkan' or not weights.exists():
+    print('SKIP neural: %s' % ('Vulkan backend' if os.environ.get('SHARPEN_BACKEND') == 'vulkan' else 'no weights file'))
+else:
+    for pct in (75, 60, 50, 40):
+        sm = ref.resize((round(W * pct / 100), round(H * pct / 100)), Image.BOX); res = {}
+        for name, extra in (('fsr1', {}), ('neural', {'APKLAYER_SHARPEN_NN': '1', 'APKLAYER_NN_WEIGHTS': str(weights)})):
+            with tempfile.TemporaryDirectory(prefix='apklayer-sharpen-') as tmp:
+                raw_in, raw_out = os.path.join(tmp, 'in.raw'), os.path.join(tmp, 'out.raw')
+                Path(raw_in).write_bytes(sm.convert('RGBA').tobytes())
+                run = subprocess.run([exe, raw_in, str(sm.width), str(sm.height), raw_out, str(W), str(H), '0.8706'] + ([os.environ['SHARPEN_MODIFIER']] if os.environ.get('SHARPEN_MODIFIER') else []),
+                                     capture_output=True, text=True, timeout=120, env=dict(os.environ, APKLAYER_SHARPEN_AA='off', APKLAYER_SHARPEN_BACKEND='gles', **extra))
+                assert run.returncode == 0, 'neural %d%%: sharpen-test failed (rc %d): %s' % (pct, run.returncode, run.stderr)
+                if name == 'neural' and 'neural upscaler unavailable' in run.stderr:
+                    print('SKIP neural: unavailable here (%s)' % run.stderr.strip().splitlines()[-1]); break
+                res[name] = Image.frombytes('RGBA', (W, H), Path(raw_out).read_bytes()).convert('RGB')
+        else:
+            bil = sm.resize((W, H), Image.BILINEAR)
+            pf, pn = psnr(res['fsr1'], ref), psnr(res['neural'], ref)
+            assert pn >= pf - 0.3, 'neural %d%%: %.2f dB against FSR 1 %.2f dB' % (pct, pn, pf)
+            assert edges(res['neural']) >= edges(bil), 'neural %d%%: not as sharp as bilinear' % pct
+            print('PASS neural %d%%: %.2f dB (FSR 1 %.2f, %+.2f), edge strength x%.2f of FSR 1' % (pct, pn, pf, pn - pf, edges(res['neural']) / edges(res['fsr1'])))

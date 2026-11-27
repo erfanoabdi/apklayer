@@ -35,7 +35,7 @@ namespace {
 
 
 // a stored render-filter value as the buttons name it: FSR 1 ("sharp", also for an empty value and the removed filters nis, sgsr, lanczos, anime4k, auto) or "off"
-std::string filterName(const std::string& v) { return v == "off" ? v : "sharp"; }
+std::string filterName(const std::string& v) { return v == "off" || v == "neural" ? v : "sharp"; }
 
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
 
@@ -310,7 +310,7 @@ private:
     void showResolution(int preview = -1) {
         auto [w, h] = windowPx_[current_];
         int pct = preview > 0 ? preview : appScales_[current_].empty() ? 100 : std::atoi(appScales_[current_].c_str());
-        pct = std::max(pct, 65);  // the minimum: a stored value below 65 reads as 65
+        pct = std::max(pct, appFilters_[current_] == "neural" ? 40 : 65);  // the minimum: 65 (FSR 1; the run reads a lower value as 65), 40 with the neural filter
         if (preview <= 0) ui_->global<Backend>().set_app_render_scale_pct(pct);
         std::string text;
         if (w <= 0 || h <= 0) text = "Start the app once to see its resolution here.";

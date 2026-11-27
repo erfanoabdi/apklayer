@@ -38,6 +38,8 @@ void sharpen_forget(struct sharpen *s, int buf);
 /* Draws buffer `buf` into output slot `*slot` (0..7, the least recently used free one) of out_w x out_h; sharpness 0..1, FSR 1's RCAS constant exp2(-stops) (1: 0 stops, the sharpest; 0.87: the reference default 0.2 stops; 0: no sharpening). Returns 0 and the
  * slot, with *fresh set when the slot's dmabuf is new (the caller makes its wl_buffer from sharpen_slot_info), -1 when nothing could be drawn, -2 when all output buffers are held (draw it again after a sharpen_slot_release). */
 int sharpen_render(struct sharpen *s, int buf, int out_w, int out_h, float sharpness, int *slot, int *fresh);
+/* The neural upscaler (sharpen_nn.c) instead of FSR 1 on an upscale; FSR 1 where it cannot run (ES 3.1 compute or the weights missing). Before sharpen_render, every frame. */
+void sharpen_set_neural(struct sharpen *s, int on);
 int sharpen_slot_info(struct sharpen *s, int slot, struct sharpen_out *out);
 void sharpen_slot_release(struct sharpen *s, int slot);   /* the compositor is done with it */
 /* test aid: the pixels of the last rendered slot (out_w * out_h * 4, XRGB little endian) */

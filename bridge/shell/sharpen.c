@@ -66,6 +66,7 @@ struct sharpen {
     struct tmpl *tmpl;                            /* the temporal pass, NULL where it does not build or APKLAYER_SHARPEN_TEMPORAL=off (a test knob) */
     struct rt t0;                                 /* the filter's output before SMAA / CMAA2 on it */
     int tmp_off;
+    int nn_want, nn_want_env, nn_tried;                        /* sharpen_set_neural; the network is made at the first frame that wants it */
     struct nn *nn;                                /* the neural upscale pass (sharpen_nn.c), NULL unless APKLAYER_SHARPEN_NN=1 and ES 3.1 compute and the weights are there */
     int aa_off, aa_smaa;                          /* APKLAYER_SHARPEN_AA=off|smaa: test knobs (FSR 1 alone; SMAA ultra where CMAA2 would run), not settings */
 #ifdef HAVE_SHARPEN_VK
@@ -264,7 +265,7 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         fprintf(stderr, "[sharpen] %s; SMAA %s, CMAA2 %s\n", glGetString(GL_VERSION), s->smaa ? "ready" : "unavailable", s->cmaa ? "ready" : "unavailable (needs OpenGL ES 3.1 compute)");
         s->blit_prog = program(FS_BLIT);
         s->tmpl = s->tmp_off ? NULL : tmpl_create(program);
-        { const char *e = getenv("APKLAYER_SHARPEN_NN"); s->nn = e && !strcmp(e, "1") ? nn_create(program, NULL) : NULL; if (e && !s->nn) fprintf(stderr, "[sharpen] neural upscaler unavailable: FSR 1 runs\n"); }
+        { const char *e = getenv("APKLAYER_SHARPEN_NN"); s->nn_want = s->nn_want_env = e && !strcmp(e, "1"); }  /* a test knob; the setting arrives through sharpen_set_neural */
         s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is shrunk by EASU's own `down` branch */
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
         glGenBuffers(1, &s->vbo);
@@ -450,6 +451,25 @@ static void post_run(struct sharpen *s, GLuint out_fbo, int w, int h, float rati
     if (aa_run(s, 0, s->t0.tex, w, h, aa, ratio, out_fbo) < 0) { post_tex(s->blit_prog, 0, "tex", s->t0.tex); post_draw(s, s->blit_prog, out_fbo, w, h); }
 }
 
+void sharpen_set_neural(struct sharpen *s, int on)
+{
+    if (s) s->nn_want = on || s->nn_want_env;
+}
+
+/* the weights: $APKLAYER_NN_WEIGHTS, the installed copy, or beside the shell in a build tree */
+static const char *nn_weights(char *buf, size_t n)
+{
+    static const char inst[] = "/usr/share/apklayer/bridge/native/nn/student.bin";
+    char exe[512];
+    ssize_t r = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (r > 0) {
+        exe[r] = 0;
+        char *sl = strrchr(exe, '/');
+        if (sl) { *sl = 0; snprintf(buf, n, "%s/../../../share/apklayer/bridge/native/nn/student.bin", exe); if (access(buf, R_OK) == 0) return buf; snprintf(buf, n, "%s/../../bridge/native/nn/student.bin", exe); if (access(buf, R_OK) == 0) return buf; }
+    }
+    return inst;
+}
+
 int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
     static int said_in, said_busy;
@@ -499,7 +519,13 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glDisable(GL_BLEND);
     int up = ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: SMAA / CMAA2 run on the app's buffer before EASU */
-    if (s->nn && up) {  /* the neural pass: the network's 2x picture resampled straight into the output (no anti-aliasing, RCAS or temporal pass) */
+    if (s->nn_want && !s->nn && !s->nn_tried) {
+        char pb[600];
+        s->nn_tried = 1;
+        s->nn = nn_create(program, nn_weights(pb, sizeof pb));
+        if (!s->nn) fprintf(stderr, "[sharpen] neural upscaler unavailable: FSR 1 runs\n");
+    }
+    if (s->nn && s->nn_want && up) {  /* the neural pass: the network's 2x picture resampled straight into the output (no anti-aliasing, RCAS or temporal pass) */
         if (nn_run(s->nn, rt_ensure, s->in[buf].tex, s->in[buf].w, s->in[buf].h, o->fbo, ow, oh, s->vbo) == 0) {
             gpu_wait(s);
             o->busy = 1;

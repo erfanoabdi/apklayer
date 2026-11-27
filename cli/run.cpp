@@ -261,8 +261,14 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
             if (!scaleOwn.empty() || !scale.empty()) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = scaleOwn.empty() ? scale : scaleOwn;
             std::string chosen = filterOwn.empty() ? filter : filterOwn;
             if (!shOwn.empty() || !shS.empty()) ne.env["APKLAYER_RENDER_SHARPNESS"] = nj.env["APKLAYER_RENDER_SHARPNESS"] = shOwn.empty() ? shS : shOwn;
-            if (chosen != "off") chosen = "sharp";  // FSR 1 or off: an empty value and the removed filters (nis, sgsr, lanczos, anime4k, auto) read as FSR 1
+            if (chosen != "off" && chosen != "neural") chosen = "sharp";  // FSR 1 or off: an empty value and the removed filters (nis, sgsr, lanczos, anime4k, auto) read as FSR 1
             ne.env["APKLAYER_RENDER_FILTER"] = nj.env["APKLAYER_RENDER_FILTER"] = chosen;
+            {  // the render scale below 65 is for the neural filter only (the minimum is 40, the network upscales exactly 2x at 50): FSR 1 reads it as 65
+                std::string rs = scaleOwn.empty() ? scale : scaleOwn;
+                int pct = rs.empty() ? 100 : std::atoi(rs.c_str());
+                if (chosen != "neural" && pct < 65) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = "65";
+                else if (pct < 40) ne.env["APKLAYER_RENDER_SCALE"] = nj.env["APKLAYER_RENDER_SCALE"] = "40";
+            }
         }
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};

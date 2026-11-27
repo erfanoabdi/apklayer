@@ -171,7 +171,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         struct window *w = len >= 80 ? window_find(c, v[0]) : NULL;
         int nplanes = len >= 80 ? v[5] : 0;
         if (nplanes < 0 || nplanes > 4 || nplanes > c->nfds) nplanes = 0;
-        if (w) { w->filter = len >= 84 && (v[20] & 1);  /* FSR 1; bits 1-10 and 14-17 are unused (once render-text, render-aa and render-calm: ignored) */ w->sharpl = len >= 84 ? (v[20] >> 11) & 7 : 0; window_dmabuf_frame(w, v, c->fds, nplanes); }
+        if (w) { w->filter = len >= 84 && (v[20] & 1); w->neural = len >= 84 && ((v[20] >> 18) & 1);  /* FSR 1; bits 1-10 and 14-17 are unused (once render-text, render-aa and render-calm: ignored) */ w->sharpl = len >= 84 ? (v[20] >> 11) & 7 : 0; window_dmabuf_frame(w, v, c->fds, nplanes); }
         for (int i = 0; i < nplanes; i++) close(c->fds[i]); /* the shell kept its own dup, if it needed one */
         memmove(c->fds, c->fds + nplanes, (size_t)(c->nfds - nplanes) * sizeof(int));
         c->nfds -= nplanes;

@@ -114,7 +114,7 @@ component AppDetail {
                         spacing: MaterialStyleMetrics.spacing_16;
                         alignment: stretch;
                         scale-slider := DragSlider {
-                            minimum: 65;
+                            minimum: 40;
                             maximum: 200;
                             step: 5;
                             value <=> Backend.app-render-scale-pct;
@@ -137,7 +137,7 @@ component AppDetail {
                     HorizontalLayout {
                         alignment: start;
                         spacing: MaterialStyleMetrics.spacing_8;
-                        for choice in [{ label: "FSR 1", value: "sharp" }, { label: "Off", value: "off" }] : HorizontalLayout {
+                        for choice in [{ label: "FSR 1", value: "sharp" }, { label: "Neural (beta)", value: "neural" }, { label: "Off", value: "off" }] : HorizontalLayout {
                             if Backend.app-render-filter-setting == choice.value : FilledButton { text: choice.label; }
                             if Backend.app-render-filter-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("render-filter." + root.app.package, choice.value); } }
                         }
