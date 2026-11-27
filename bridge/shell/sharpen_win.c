@@ -5,7 +5,11 @@
  * The pass is prepared in a helper thread (EGL, shaders: ~100 ms): an app sends a burst of frames when it starts and the display sink, which holds
  * six acquired buffers at most, wedges for good if the shell does not hand buffers back during it ("max acquired buffer count reached"). So the first
  * frames take the normal path and the app's dmabufs are kept (dups) until the helper is done; sharpen_win_poll (the main loop) then imports them and
- * shows the current frame through the pass. */
+ * shows the current frame through the pass.
+ *
+ * A window on the neural pass renders on its own thread (apklayer patch): the pass takes milliseconds and the shell's main thread serves every window and
+ * the input, so sharpen_win_show only posts the frame (the newest waiting one replaces an older waiting one, which goes back to the app) and
+ * sharpen_win_poll commits the finished output. The app's buffer goes back to the app only when its frame is done. */
 #include <pthread.h>
 #include <string.h>
 #include <unistd.h>
@@ -39,6 +43,14 @@ struct swin {
     int pending;                    /* an app buffer waiting for a free output buffer (-1: none; held back until it is drawn) */
     int keep;                       /* the buffer being shown again is the compositor's already: not given back here */
     struct window *win;
+    /* the neural window's render thread: one job at a time (wstate: 0 idle, 1 posted, 2 running, 3 done) */
+    pthread_t wthread;
+    pthread_mutex_t wm;
+    pthread_cond_t wc;
+    int wstarted, wquit, wstate;
+    int jbuf, jow, joh, jrc, jslot, jfresh, jdead;
+    float jsh;
+    int queued;                     /* the newest frame that arrived while a job ran (-1: none) */
 };
 
 static void kept_close(struct kept *k)
@@ -87,6 +99,114 @@ static int import_kept(struct swin *sw, int buf)
     return rc;
 }
 
+static void *render_thread(void *arg)
+{
+    struct swin *sw = arg;
+    pthread_mutex_lock(&sw->wm);
+    for (;;) {
+        while (!sw->wquit && sw->wstate != 1) pthread_cond_wait(&sw->wc, &sw->wm);
+        if (sw->wquit) break;
+        sw->wstate = 2;
+        int buf = sw->jbuf, ow = sw->jow, oh = sw->joh;
+        float sh = sw->jsh;
+        pthread_mutex_unlock(&sw->wm);
+        int slot = -1, fresh = 0;
+        int rc = sharpen_render(sw->s, buf, ow, oh, sh, &slot, &fresh);
+        pthread_mutex_lock(&sw->wm);
+        sw->jrc = rc; sw->jslot = slot; sw->jfresh = fresh;
+        sw->wstate = 3;
+    }
+    pthread_mutex_unlock(&sw->wm);
+    return NULL;
+}
+
+static int worker_start(struct swin *sw)
+{
+    if (sw->wstarted) return 0;
+    pthread_mutex_init(&sw->wm, NULL);
+    pthread_cond_init(&sw->wc, NULL);
+    if (pthread_create(&sw->wthread, NULL, render_thread, sw) != 0) return -1;
+    sw->wstarted = 1;
+    return 0;
+}
+
+static void worker_stop(struct swin *sw)
+{
+    if (!sw->wstarted) return;
+    pthread_mutex_lock(&sw->wm);
+    sw->wquit = 1;
+    pthread_cond_signal(&sw->wc);
+    pthread_mutex_unlock(&sw->wm);
+    pthread_join(sw->wthread, NULL);
+    sw->wstarted = 0;
+}
+
+static void job_post(struct swin *sw, int buf, int ow, int oh, float sh)
+{
+    pthread_mutex_lock(&sw->wm);
+    sw->jbuf = buf; sw->jow = ow; sw->joh = oh; sw->jsh = sh; sw->jdead = 0; sw->wstate = 1;
+    pthread_cond_signal(&sw->wc);
+    pthread_mutex_unlock(&sw->wm);
+}
+
+/* the output slot `slot` holds the filtered frame of app buffer `buf`: its wl_buffer is made (a new slot) and shown, then the app's buffer goes back */
+static void commit_slot(struct window *w, struct swin *sw, int buf, int slot, int fresh, int ow, int oh)
+{
+    if (fresh || !sw->wl[slot]) {
+        struct sharpen_out o;
+        if (sharpen_slot_info(sw->s, slot, &o) < 0) { sharpen_slot_release(sw->s, slot); fprintf(stderr, "[shell] %s: render filter: no output dmabuf\n", w->title); static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX }; window_dmabuf_attach(w, buf, whole); return; }
+        if (sw->wl[slot]) wl_buffer_destroy(sw->wl[slot]);
+        struct zwp_linux_buffer_params_v1 *p = zwp_linux_dmabuf_v1_create_params(dmabuf_mgr);
+        uint64_t modifier = o.modifier;
+        if (modifier == 0) {  /* as dmabuf.c: an explicit LINEAR the compositor did not list fails the import */
+            int ok = 0;
+            for (int i = 0; i < dmabuf_linear_n; i++) ok |= dmabuf_linear[i] == DRM_FORMAT_XRGB8888;
+            if (!ok) modifier = 0x00ffffffffffffffull;
+        }
+        zwp_linux_buffer_params_v1_add(p, o.fd, 0, o.offset, o.stride, (uint32_t)(modifier >> 32), (uint32_t)modifier);
+        sw->wl[slot] = zwp_linux_buffer_params_v1_create_immed(p, o.w, o.h, DRM_FORMAT_XRGB8888, 0);
+        zwp_linux_buffer_params_v1_destroy(p);
+        close(o.fd);
+        wl_buffer_add_listener(sw->wl[slot], &slot_listener, sw);
+    }
+    w->framed = 1;
+    wl_surface_attach(w->surface, sw->wl[slot], 0, 0);
+    surface_damage(w->surface, 0, 0, ow, oh);
+    wl_surface_commit(w->surface);
+    if (sw->pending == buf) sw->pending = -1;
+    if (!sw->keep) give_back(w, buf, "drawn");  /* the pass is done: it no longer reads the app's buffer (the sink holds six acquired buffers at most) */
+}
+
+/* a finished job of the render thread (main loop) */
+static void job_done(struct window *w, struct swin *sw)
+{
+    static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
+    pthread_mutex_lock(&sw->wm);
+    int buf = sw->jbuf, ow = sw->jow, oh = sw->joh, rc = sw->jrc, slot = sw->jslot, fresh = sw->jfresh, dead = sw->jdead;
+    sw->wstate = 0;
+    pthread_mutex_unlock(&sw->wm);
+    if (dead) {  /* the app destroyed the buffer meanwhile: nothing to show or give back */
+        if (rc == 0) sharpen_slot_release(sw->s, slot);
+    } else if (rc == -2) {  /* all output buffers are with the compositor: this frame is drawn at the next release */
+        if (sw->pending != buf) sw->pending_ms = now_ms();
+        sw->pending = buf;
+    } else if (rc < 0) {
+        sw->fail_n++;
+        if (!sw->said_fail++) fprintf(stderr, "[shell] %s: render filter: the pass could not draw %dx%d -> %dx%d (shown as it is)\n", w->title, sw->w[buf], sw->h[buf], ow, oh);
+        if (w->configured) window_dmabuf_attach(w, buf, whole);
+    } else {
+        if (!sw->said_ok++) fprintf(stderr, "[shell] %s: render filter: %dx%d -> %dx%d\n", w->title, sw->w[buf], sw->h[buf], ow, oh);
+        sw->ok_n++;
+        if (getenv("APKLAYER_RUNTIME_DEBUG") && (sw->ok_n + sw->fail_n) % 50 == 0) fprintf(stderr, "[shell] %s: render filter: %d frames filtered, %d shown as they are\n", w->title, sw->ok_n, sw->fail_n);
+        commit_slot(w, sw, buf, slot, fresh, ow, oh);
+    }
+    if (sw->queued >= 0) {  /* the newest frame that came in meanwhile */
+        int b = sw->queued;
+        sw->queued = -1;
+        if (!sharpen_win_show(w, b) && w->configured) window_dmabuf_attach(w, b, whole);
+    }
+}
+
 void sharpen_win_import(struct window *w, int buf, const int32_t *m, const int *fds, int nfds)
 {
     if (!w->filter || !dmabuf_mgr || nfds < 1 || buf < 0 || buf >= DBUF_MAX) return;
@@ -96,6 +216,7 @@ void sharpen_win_import(struct window *w, int buf, const int32_t *m, const int *
         if (!sw) return;
         sw->win = w;
         sw->pending = -1;
+        sw->queued = -1;
         sw->s = sharpen_open();
         if (!sw->s) { sw->state = S_OFF; return; }
         sharpen_accept(sw->s, dmabuf_xrgb_mods, dmabuf_xrgb_n);
@@ -126,6 +247,7 @@ void sharpen_win_poll(void)
     for (int i = 0; i < MAX_WINDOWS; i++) {
         struct window *w = &windows[i];
         struct swin *sw = w->client ? w->sharp : NULL;
+        if (sw && sw->wstarted && __atomic_load_n(&sw->wstate, __ATOMIC_ACQUIRE) == 3) job_done(w, sw);
         /* watchdog: a frame waiting for a free output buffer for over 100 ms (the compositor releases late or not at all) is shown as the app's own, so the app never stalls */
         if (sw && sw->state == S_READY && sw->pending >= 0 && w->configured && now_ms() - sw->pending_ms > 100) {
             static const int32_t whole[4] = { 0, 0, INT32_MAX, INT32_MAX };
@@ -172,6 +294,8 @@ void sharpen_win_poll(void)
 int sharpen_win_timeout(void)
 {
     for (int i = 0; i < MAX_WINDOWS; i++)
+        if (windows[i].client && windows[i].sharp && ((struct swin *)windows[i].sharp)->wstate != 0) return 2;  /* a render thread job is in flight: look again soon */
+    for (int i = 0; i < MAX_WINDOWS; i++)
         if (windows[i].client && windows[i].sharp && (((struct swin *)windows[i].sharp)->state == S_PREPARING || ((struct swin *)windows[i].sharp)->pending >= 0)) return 25;
     return -1;
 }
@@ -211,6 +335,14 @@ int sharpen_win_show(struct window *w, int buf)
     /* the sharpness: FSR 1's RCAS constant exp2(-stops) of the app's render-sharpness: off 0 (no sharpening), low 1 stop (0.5), medium 0.2 stops (0.87, the reference's default), high 0 stops (1, the sharpest the reference allows) */
     static const float lvl[5] = { 0.8706f, 0.0f, 0.5f, 0.8706f, 1.0f };
     float sh = lvl[w->sharpl >= 0 && w->sharpl <= 4 ? w->sharpl : 0];
+    if (w->neural && worker_start(sw) == 0) {  /* the neural pass: off the main thread. The pass itself falls back to FSR 1 where the network is unavailable. */
+        sharpen_set_neural(sw->s, 1);
+        if (sw->wstate != 0) {  /* a job is running: only the newest frame waits */
+            if (sw->queued >= 0 && sw->queued != buf) give_back(w, sw->queued, "replaced while the pass runs");
+            sw->queued = buf;
+        } else job_post(sw, buf, ow, oh, sh);
+        return 1;
+    }
     sharpen_set_neural(sw->s, w->neural);
     int rc = sharpen_render(sw->s, buf, ow, oh, sh, &slot, &fresh);
     if (rc == -2) { if (sw->pending != buf) sw->pending_ms = now_ms(); sw->pending = buf; return 1; }  /* all output buffers are with the compositor: this frame is drawn at the next release */
@@ -222,29 +354,7 @@ int sharpen_win_show(struct window *w, int buf)
     if (!sw->said_ok++) fprintf(stderr, "[shell] %s: render filter: %dx%d -> %dx%d\n", w->title, sw->w[buf], sw->h[buf], ow, oh);
     sw->ok_n++;
     if (getenv("APKLAYER_RUNTIME_DEBUG") && (sw->ok_n + sw->fail_n) % 50 == 0) fprintf(stderr, "[shell] %s: render filter: %d frames filtered, %d shown as they are\n", w->title, sw->ok_n, sw->fail_n);
-    if (fresh || !sw->wl[slot]) {
-        struct sharpen_out o;
-        if (sharpen_slot_info(sw->s, slot, &o) < 0) { sharpen_slot_release(sw->s, slot); fprintf(stderr, "[shell] %s: render filter: no output dmabuf\n", w->title); return 0; }
-        if (sw->wl[slot]) wl_buffer_destroy(sw->wl[slot]);
-        struct zwp_linux_buffer_params_v1 *p = zwp_linux_dmabuf_v1_create_params(dmabuf_mgr);
-        uint64_t modifier = o.modifier;
-        if (modifier == 0) {  /* as dmabuf.c: an explicit LINEAR the compositor did not list fails the import */
-            int ok = 0;
-            for (int i = 0; i < dmabuf_linear_n; i++) ok |= dmabuf_linear[i] == DRM_FORMAT_XRGB8888;
-            if (!ok) modifier = 0x00ffffffffffffffull;
-        }
-        zwp_linux_buffer_params_v1_add(p, o.fd, 0, o.offset, o.stride, (uint32_t)(modifier >> 32), (uint32_t)modifier);
-        sw->wl[slot] = zwp_linux_buffer_params_v1_create_immed(p, o.w, o.h, DRM_FORMAT_XRGB8888, 0);
-        zwp_linux_buffer_params_v1_destroy(p);
-        close(o.fd);
-        wl_buffer_add_listener(sw->wl[slot], &slot_listener, sw);
-    }
-    w->framed = 1;
-    wl_surface_attach(w->surface, sw->wl[slot], 0, 0);
-    surface_damage(w->surface, 0, 0, ow, oh);
-    wl_surface_commit(w->surface);
-    if (sw->pending == buf) sw->pending = -1;
-    if (!sw->keep) give_back(w, buf, "drawn");  /* glFinish is done: the pass no longer reads it (the sink holds six acquired buffers at most) */
+    commit_slot(w, sw, buf, slot, fresh, ow, oh);
     return 1;
 }
 
@@ -255,6 +365,8 @@ void sharpen_win_forget(struct window *w, int buf)
     struct swin *sw = w->sharp;
     if (!sw || buf < 0 || buf >= DBUF_MAX) return;
     if (sw->pending == buf) sw->pending = -1;
+    if (sw->queued == buf) sw->queued = -1;
+    if (sw->wstarted && sw->wstate != 0 && sw->jbuf == buf) sw->jdead = 1;  /* its job is in flight: the result is dropped */
     kept_close(&sw->kept[buf]);
     if (sw->state == S_READY) { sharpen_forget(sw->s, buf); sw->w[buf] = sw->h[buf] = 0; }
 }
@@ -264,6 +376,7 @@ void sharpen_win_destroy(struct window *w)
     struct swin *sw = w->sharp;
     if (!sw) return;
     if (sw->state == S_PREPARING) { pthread_join(sw->thread, NULL); kept_close(&sw->sample); }
+    worker_stop(sw);
     for (int i = 0; i < DBUF_MAX; i++) kept_close(&sw->kept[i]);
     for (int i = 0; i < OUT_SLOTS; i++) if (sw->wl[i]) wl_buffer_destroy(sw->wl[i]);
     if (sw->s) sharpen_close(sw->s);

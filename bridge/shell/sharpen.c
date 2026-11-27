@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <gbm.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +45,7 @@ struct slot {
 
 
 struct sharpen {
+    pthread_mutex_t lock;                         /* recursive: the neural window renders on its own thread (sharpen_win.c) while the main thread imports and forgets buffers; the context is bound only inside a locked call */
     int drm_fd;
     struct gbm_device *gbm;
     EGLDisplay dpy;
@@ -140,6 +142,7 @@ static GLuint program_2d(const char *fs)
 struct sharpen *sharpen_open(void)
 {
     struct sharpen *s = calloc(1, sizeof *s);
+    if (s) { pthread_mutexattr_t a; pthread_mutexattr_init(&a); pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE); pthread_mutex_init(&s->lock, &a); pthread_mutexattr_destroy(&a); }
     if (s) { const char *t = getenv("APKLAYER_SHARPEN_TEMPORAL"); s->tmp_off = t && !strcmp(t, "off"); }
     if (s) { const char *a = getenv("APKLAYER_SHARPEN_AA"); s->aa_off = a && !strcmp(a, "off"); s->aa_smaa = a && !strcmp(a, "smaa"); s->drm_fd = -1; for (int i = 0; i < SLOTS; i++) s->out[i].fd = -1; }
     return s;
@@ -286,13 +289,14 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
     return s->ready ? 0 : -1;
 }
 
-int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod)
+static void forget_impl(struct sharpen *s, int buf);
+static int import_impl(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod)
 {
     if (!s || buf < 0 || buf >= BUFS || n < 1) return -1;
     if (!s->ready && !SHARPEN_HAS_VK(s) && sharpen_prepare(s, fourcc, w, h, n, fds, strides, offsets, mod) < 0) return -1;
     VK_OR(svk_import(s->vk, buf, fourcc, w, h, n, fds, strides, offsets, mod));
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
-    sharpen_forget(s, buf);
+    forget_impl(s, buf);
     EGLImage image = make_image(s, fourcc, w, h, n, fds, strides, offsets, mod);
     if (image == EGL_NO_IMAGE_KHR) return -1;
     s->in[buf].image = image; s->in[buf].w = w; s->in[buf].h = h; s->in[buf].fourcc = fourcc;
@@ -301,7 +305,7 @@ int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, in
     return 0;
 }
 
-void sharpen_forget(struct sharpen *s, int buf)
+static void forget_impl(struct sharpen *s, int buf)
 {
 #ifdef HAVE_SHARPEN_VK
     if (s && s->vk) { svk_forget(s->vk, buf); return; }
@@ -473,7 +477,7 @@ static const char *nn_weights(char *buf, size_t n)
     return inst;
 }
 
-int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
+static int render_impl(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
 {
     static int said_in, said_busy;
 #ifdef HAVE_SHARPEN_VK
@@ -543,21 +547,10 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
             static int n_nn; static double sum_nn;
             double ms = (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6;
             sum_nn += ms;
-            /* the shell's main thread waits for every frame: a pass that takes more than 25 ms (a big window, a GPU busy with a game) would freeze every window, so it ends for this one */
+            /* the pass runs on the window's own render thread (sharpen_win.c), but a pass over 25 ms a frame (a big window, a GPU busy with a game) is no use: FSR 1 runs for this window */
             s->nn_ms = s->nn_ms ? s->nn_ms * 0.8 + ms * 0.2 : ms;
             s->nn_slow = s->nn_ms > 25.0 ? s->nn_slow + 1 : 0;
             if (s->nn_slow == 12) fprintf(stderr, "[sharpen] the neural pass takes %.0f ms per frame at %dx%d -> %dx%d: FSR 1 runs for this window\n", s->nn_ms, s->in[buf].w, s->in[buf].h, ow, oh);
-            /* the duty cycle: an app that draws at the display's rate (180 Hz here) keeps the single-threaded shell in the pass for most of every second, and every window's input and frames wait behind it: over 60 % of a second ends the pass for this window */
-            double now = (double)t1.tv_sec * 1000 + (double)t1.tv_nsec / 1e6;
-            if (s->nn_t0 == 0) s->nn_t0 = now;
-            s->nn_busy += ms;
-            if (now - s->nn_t0 >= 1000.0) {
-                if (s->nn_slow < 12 && s->nn_busy > 0.6 * (now - s->nn_t0)) {
-                    s->nn_slow = 12;
-                    fprintf(stderr, "[sharpen] the neural pass kept the shell busy %.0f%% of the last second (%.1f ms per frame, %dx%d -> %dx%d): FSR 1 runs for this window\n", 100.0 * s->nn_busy / (now - s->nn_t0), s->nn_ms, s->in[buf].w, s->in[buf].h, ow, oh);
-                }
-                s->nn_t0 = now; s->nn_busy = 0;
-            }
             if (getenv("APKLAYER_RUNTIME_DEBUG") && n_nn < 10) fprintf(stderr, "[sharpen] neural frame %d: %.1f ms\n", n_nn, (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6);
             if (getenv("APKLAYER_RUNTIME_DEBUG") && ++n_nn % 30 == 0) { fprintf(stderr, "[sharpen] neural pass: %.1f ms per frame (last 30)\n", sum_nn / 30); sum_nn = 0; }
             o->busy = 1;
@@ -670,7 +663,7 @@ void sharpen_slot_release(struct sharpen *s, int slot)
     if (s && slot >= 0 && slot < SLOTS) s->out[slot].busy = 0;
 }
 
-int sharpen_readback(struct sharpen *s, int slot, void *rgba)
+static int readback_impl(struct sharpen *s, int slot, void *rgba)
 {
     VK_OR(svk_readback(s->vk, slot, rgba));
     if (!s || !s->ready || slot < 0 || slot >= SLOTS || !s->out[slot].fbo) return -1;
@@ -678,6 +671,39 @@ int sharpen_readback(struct sharpen *s, int slot, void *rgba)
     glBindFramebuffer(GL_FRAMEBUFFER, s->out[slot].fbo);
     glReadPixels(0, 0, s->out[slot].w, s->out[slot].h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     return glGetError() == GL_NO_ERROR ? 0 : -1;
+}
+
+/* the public calls: one at a time, the context released at the end so another thread can bind it */
+#define LOCKED(s, call) do { pthread_mutex_lock(&(s)->lock); call; if ((s)->ready && !SHARPEN_HAS_VK(s)) eglMakeCurrent((s)->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); pthread_mutex_unlock(&(s)->lock); } while (0)
+
+int sharpen_import(struct sharpen *s, int buf, uint32_t fourcc, int w, int h, int n, const int *fds, const uint32_t *strides, const uint32_t *offsets, uint64_t mod)
+{
+    int rc = -1;
+    if (!s) return -1;
+    LOCKED(s, rc = import_impl(s, buf, fourcc, w, h, n, fds, strides, offsets, mod));
+    return rc;
+}
+
+void sharpen_forget(struct sharpen *s, int buf)
+{
+    if (!s) return;
+    LOCKED(s, forget_impl(s, buf));
+}
+
+int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, int *slot, int *fresh)
+{
+    int rc = -1;
+    if (!s) return -1;
+    LOCKED(s, rc = render_impl(s, buf, ow, oh, sharpness, slot, fresh));
+    return rc;
+}
+
+int sharpen_readback(struct sharpen *s, int slot, void *rgba)
+{
+    int rc = -1;
+    if (!s) return -1;
+    LOCKED(s, rc = readback_impl(s, slot, rgba));
+    return rc;
 }
 
 void sharpen_close(struct sharpen *s)
@@ -688,7 +714,7 @@ void sharpen_close(struct sharpen *s)
 #endif
     if (s->ready) {
         eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
-        for (int i = 0; i < BUFS; i++) sharpen_forget(s, i);
+        for (int i = 0; i < BUFS; i++) forget_impl(s, i);
         for (int i = 0; i < SLOTS; i++) slot_free(s, &s->out[i]);
         eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         eglDestroyContext(s->dpy, s->ctx);
