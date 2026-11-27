@@ -4,6 +4,7 @@
 
 - Build log: `m libberberis_arm64` in ~/los24 (gsi_x86_64) on the Mac, started 16:2x.
 - Profile of Endfield's cold load (own instance `endfield-load`, 30 GB data copy, `berberis.profiling`, `perf record -g`, 60 s): 54% translated code, 19% libberberis_arm64, 7.4% glibc, 3.8% proxy libc. Top symbols: `GuestThread::GlibcHostRecords()` 5.5%, `pthread_getspecific` 5.0%, `__errno_location` + `bionic___errno` + their PLT stubs ~3.5%: the errno swap every wrapped host call does (0003), also for `pthread_*` (return their code, never set errno) and `__errno`.
+- Build done (`libberberis_arm64` 58cec244, gsi_x86_64). Measured on PGR (own instance `pgrload`, data copied, stopped at the update dialog/login, no taps): both libraries show the Kuro logo at 13-17 s and the update dialog at 29-31 s, so 0087 shows no difference at 4 s screenshot resolution; the dialog then waits on the network for 3 s (new) or ~85 s (stock), which is not load time. Endfield's fresh instance had a terms dialog in one run only. Needs a finer metric (in-process mark times, or CPU time to a fixed milestone) before judging 0087; instances deleted.
 - 0087: no errno swap for `pthread_*` and `__errno`; one `__errno_location` call instead of two in the swap. Next: measure the load time before/after in `endfield-load`, then look at the guest-side cost of the trampoline.
 
 ## 2026-11-25: The AOT cache was never rebuilt after a runtime update (CdsDump.trainSpare)
