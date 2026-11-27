@@ -68,7 +68,8 @@ struct sharpen {
     struct rt t0;                                 /* the filter's output before SMAA / CMAA2 on it */
     int tmp_off;
     int nn_want, nn_want_env, nn_tried, nn_slow;  /* nn_slow: frames in a row over the budget; at 12 the pass is switched off for this window */
-    double nn_ms;                                 /* moving average of a neural frame, ms */                        /* sharpen_set_neural; the network is made at the first frame that wants it */
+    double nn_ms;                                 /* moving average of a neural frame, ms */
+    double nn_busy, nn_t0;                        /* ms spent in neural frames since nn_t0 (ms, CLOCK_MONOTONIC): the duty-cycle guard */                        /* sharpen_set_neural; the network is made at the first frame that wants it */
     struct nn *nn;                                /* the neural upscale pass (sharpen_nn.c), NULL unless APKLAYER_SHARPEN_NN=1 and ES 3.1 compute and the weights are there */
     int aa_off, aa_smaa;                          /* APKLAYER_SHARPEN_AA=off|smaa: test knobs (FSR 1 alone; SMAA ultra where CMAA2 would run), not settings */
 #ifdef HAVE_SHARPEN_VK
@@ -545,7 +546,18 @@ int sharpen_render(struct sharpen *s, int buf, int ow, int oh, float sharpness, 
             /* the shell's main thread waits for every frame: a pass that takes more than 25 ms (a big window, a GPU busy with a game) would freeze every window, so it ends for this one */
             s->nn_ms = s->nn_ms ? s->nn_ms * 0.8 + ms * 0.2 : ms;
             s->nn_slow = s->nn_ms > 25.0 ? s->nn_slow + 1 : 0;
-            if (s->nn_slow >= 12) fprintf(stderr, "[sharpen] the neural pass takes %.0f ms per frame at %dx%d -> %dx%d: FSR 1 runs for this window\n", s->nn_ms, s->in[buf].w, s->in[buf].h, ow, oh);
+            if (s->nn_slow == 12) fprintf(stderr, "[sharpen] the neural pass takes %.0f ms per frame at %dx%d -> %dx%d: FSR 1 runs for this window\n", s->nn_ms, s->in[buf].w, s->in[buf].h, ow, oh);
+            /* the duty cycle: an app that draws at the display's rate (180 Hz here) keeps the single-threaded shell in the pass for most of every second, and every window's input and frames wait behind it: over 60 % of a second ends the pass for this window */
+            double now = (double)t1.tv_sec * 1000 + (double)t1.tv_nsec / 1e6;
+            if (s->nn_t0 == 0) s->nn_t0 = now;
+            s->nn_busy += ms;
+            if (now - s->nn_t0 >= 1000.0) {
+                if (s->nn_slow < 12 && s->nn_busy > 0.6 * (now - s->nn_t0)) {
+                    s->nn_slow = 12;
+                    fprintf(stderr, "[sharpen] the neural pass kept the shell busy %.0f%% of the last second (%.1f ms per frame, %dx%d -> %dx%d): FSR 1 runs for this window\n", 100.0 * s->nn_busy / (now - s->nn_t0), s->nn_ms, s->in[buf].w, s->in[buf].h, ow, oh);
+                }
+                s->nn_t0 = now; s->nn_busy = 0;
+            }
             if (getenv("APKLAYER_RUNTIME_DEBUG") && n_nn < 10) fprintf(stderr, "[sharpen] neural frame %d: %.1f ms\n", n_nn, (double)(t1.tv_sec - t0.tv_sec) * 1000 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6);
             if (getenv("APKLAYER_RUNTIME_DEBUG") && ++n_nn % 30 == 0) { fprintf(stderr, "[sharpen] neural pass: %.1f ms per frame (last 30)\n", sum_nn / 30); sum_nn = 0; }
             o->busy = 1;
