@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-28: Mesa's ASTC decoder removed; gfxstream's decoders only
+
+- Owner's decision: reverted ff277ca1, f0f22959 and cbc290f9 (TextureAstcMesa.cpp, mesa_astc/, the LUT library, the CompressedImageInfo hooks, the meson entries). The Vulkan HAL's ASTC emulation is gfxstream's again: per-pixel shader by default, `APKLAYER_VULKAN_ASTC_DECODER=old` the per-block one. Not built or run: needs `m vulkan.apklayer` (gsi_x86_64, gsi_arm64) with the enumeration fix of the entry above, then the Endfield check on RADV. The 2026-11-23 entries below stay as history.
+
 ## 2026-11-28: Vulkan device enumeration on a 1 MB stack (Asphalt 9 crashed in the host loader)
 
 - Asphalt 9 on the laptop (deb 0.5.7, AMD 840M, two Vulkan devices) died ~10 s after launch: SIGSEGV in `vkEnumeratePhysicalDevices` (libvulkan.so.1 + device_select), the stack probe of a ~47 KB loader frame on a game thread that had already used ~117 KB (core in `coredumpctl`, pid 47871). `aosp/hals/graphics/vulkan/DeviceSelect.h` now runs the host enumeration (devices and groups) on a pthread with a 1 MB stack and waits for it; no thread, then as before.

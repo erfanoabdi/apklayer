@@ -400,7 +400,7 @@ void CompressedImageInfo::createCompressedMipmapImages(VulkanDispatch* vk,
     // Note: if you change the flags here, you must also change both versions of
     // on_vkGetPhysicalDeviceImageFormatProperties in VkDecoderGlobalState
     // TODO(gregschlom): Remove duplicated logic.
-    createInfoCopy.usage |= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;  // apklayer patch: SAMPLED for the Mesa decoder
+    createInfoCopy.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
     createInfoCopy.flags &= ~VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT;
     createInfoCopy.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     createInfoCopy.mipLevels = 1;
@@ -608,10 +608,7 @@ VkImageCopy2 CompressedImageInfo::getCompressedMipmapsImageCopy(const VkImageCop
     return region;
 }
 
-MesaAstcHooks gMesaAstcHooks;  // apklayer patch
-
 void CompressedImageInfo::destroy(VulkanDispatch* vk) {
-    if (gMesaAstcHooks.forget) gMesaAstcHooks.forget(this);  // apklayer patch
     for (const auto& image : mCompressedMipmaps) {
         vk->vkDestroyImage(mDevice, image, nullptr);
     }
@@ -746,9 +743,6 @@ VkResult CompressedImageInfo::initializeDecompressionPipeline(VulkanDispatch* vk
 
 void CompressedImageInfo::decompress(VulkanDispatch* vk, VkCommandBuffer commandBuffer,
                                      const VkImageSubresourceRange& range) {
-    if (isAstc() && GpuDecompressionPipelineManager::astcDecoder() == AstcDecoder::Mesa && mExtent.depth == 1 && gMesaAstcHooks.decode &&
-        gMesaAstcHooks.decode(this, vk, commandBuffer, range))
-        return;  // apklayer patch
     vk->vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           mDecompPipeline->pipeline());
     uint32_t dispatchZ = mExtent.depth == 1 ? range.layerCount : mExtent.depth;

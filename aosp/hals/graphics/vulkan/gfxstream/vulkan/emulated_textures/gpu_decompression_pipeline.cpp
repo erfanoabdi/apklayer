@@ -41,7 +41,7 @@ static AstcDecoder initialAstcDecoder() {
 #else
     const char* e = std::getenv("APKLAYER_VULKAN_ASTC_DECODER");
 #endif
-    return e && !strcmp(e, "old") ? AstcDecoder::Old : e && !strcmp(e, "new") ? AstcDecoder::NewRgb : AstcDecoder::Mesa;  // the default is Mesa's decoder
+    return e && !strcmp(e, "old") ? AstcDecoder::Old : AstcDecoder::NewRgb;
 }
 static AstcDecoder activeAstcDecoder = initialAstcDecoder();
 
@@ -109,7 +109,6 @@ const ShaderGroup* getShaderGroup(VkFormat format) {
                 case AstcDecoder::Old:
                     return &kShaderAstc;
                 case AstcDecoder::NewRgb:
-                case AstcDecoder::Mesa:  // apklayer patch: the shader the Mesa decoder falls back to (3D images, setup failure)
                     return &kShaderAstcToRgb;
                 case AstcDecoder::NewBc3:
                     return &kShaderAstcToBc3;
@@ -166,8 +165,6 @@ const char* string_AstcDecoder(AstcDecoder decoder) {
             return "NewRgb";
         case AstcDecoder::NewBc3:
             return "NewBc3";
-        case AstcDecoder::Mesa:
-            return "Mesa";
     }
     return "Unknown";
 }
