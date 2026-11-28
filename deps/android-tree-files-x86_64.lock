@@ -523,7 +523,7 @@ cbe82f96ca5cddbbfc9ab2832e690b972db522d8491c44371c282e3fcfa2f764 86744 x86_64/an
 718d156296b7e50fed20f6a0ef004b863a485c3196a46bc6785f4a1b3c9bad07 35720 x86_64/android-libs/lib64/shared-file-region-aidl-cpp.so out/target/product/generic_x86_64/system/lib64/shared-file-region-aidl-cpp.so same
 772e0ed351430207fe70d3a7145d3c3b5956be93f73be8c25dd3029b19733e24 101904 x86_64/android-libs/lib64/spatializer-aidl-cpp.so out/target/product/generic_x86_64/system/lib64/spatializer-aidl-cpp.so same
 6ce83063712314fc0f9e8dc0b2c487375e923f01b0bc5b244fdb47d84f59e9b8 51872 x86_64/android-libs/lib64/volumegroupcallback-aidl-cpp.so out/target/product/generic_x86_64/system/lib64/volumegroupcallback-aidl-cpp.so same
-9a6871566a939ca2e5e0d6f25639b3f8ede342e453fa906d6128ebb24498111d 1087128 x86_64/android-libs/lib64/vulkan.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/vulkan/vulkan.apklayer/android_x86_64_shared/vulkan.apklayer.so apklayer
+86077736d44fd072be790c221c81a99c08609184d4125a7654180772f8bbb739 1103784 x86_64/android-libs/lib64/vulkan.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/vulkan/vulkan.apklayer/android_x86_64_shared/vulkan.apklayer.so apklayer
 c3dbf5c9d141c466fc18189458e119cde1fcd81b5ff068ae2966fa896dea2c6f 36696 x86_64/android-root/apex/com.android.art/lib64/libart.so (staged from the tree's build outputs, see CHANGELOG.md) same
 41a711319e141ef185031258e1757ebdf250bb5803fc60ad50e966ebfd35df1e 1619 x86_64/android-root/apex/com.android.i18n/etc/aconfig_flags.pb (staged from the tree's build outputs, see CHANGELOG.md) same
 b5f86375fba25eed594a019cc7d3a9c569a95837e6296be9c9e3acefd73ea226 42 x86_64/android-root/apex/com.android.i18n/etc/flag.info (staged from the tree's build outputs, see CHANGELOG.md) same
