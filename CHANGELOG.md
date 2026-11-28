@@ -3,7 +3,7 @@
 ## 2026-11-28: Vulkan device enumeration on a 1 MB stack (Asphalt 9 crashed in the host loader)
 
 - Asphalt 9 on the laptop (deb 0.5.7, AMD 840M, two Vulkan devices) died ~10 s after launch: SIGSEGV in `vkEnumeratePhysicalDevices` (libvulkan.so.1 + device_select), the stack probe of a ~47 KB loader frame on a game thread that had already used ~117 KB (core in `coredumpctl`, pid 47871). `aosp/hals/graphics/vulkan/DeviceSelect.h` now runs the host enumeration (devices and groups) on a pthread with a 1 MB stack and waits for it; no thread, then as before.
-- Build log: `APKLAYER_ARCH=x86_64 tools/lib/orb-build-vulkan.py` (gsi_x86_64, Mac VM, `vulkan.apklayer`; why: the only way to change the library the runtime bundle ships). Result below.
+- Build log: `APKLAYER_ARCH=x86_64 tools/lib/orb-build-vulkan.py` (gsi_x86_64, Mac VM, `vulkan.apklayer`; why: the only way to change the library the runtime bundle ships). Built while another `m berberis_arm64_host_tests` held the lock (owner: "build it anyway"; this replay does not use soong): `vulkan.apklayer.so` x86_64 sha256 9296c103..., staged in `~/apklayer-vulkan-stage-x86_64` on the Mac. Tested on the laptop in a throwaway instance with only this library swapped (own copy of android-libs): Asphalt 9 ran past 2 min at its Gameloft splash with no core dump (before: SIGSEGV after ~10 s); I did not confirm from /proc/maps that the patched file was the one loaded, and did not get past the splash. Not yet in the runtime bundle or prebuilts.
 
 ## 2026-11-28: data movable from drive to drive; manager Settings "Data location"
 
