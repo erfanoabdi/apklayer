@@ -188,7 +188,7 @@ static void commit_slot(struct window *w, struct swin *sw, int buf, int slot, in
     if (sw->pending == buf) sw->pending = -1;
     static int n_commit;
     if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[shell] %s: render filter: commit %d (buffer %d, slot %d, %s)\n", w->title, ++n_commit, buf, slot, keep ? "kept" : "given back");
-    if (getenv("APKLAYER_SHARPEN_DUMP") && (n_commit <= 3 || n_commit % 25 == 0)) {  /* a test aid: what the compositor was given (PPM) */
+    if (getenv("APKLAYER_SHARPEN_DUMP") && !getenv("APKLAYER_SHARPEN_DUMP_SEQ") && (n_commit <= 3 || n_commit % 25 == 0)) {  /* a test aid: what the compositor was given (PPM) */
         char path[300];
         unsigned char *px = malloc((size_t)ow * oh * 4);
         snprintf(path, sizeof path, "%s/commit-%04d.ppm", getenv("APKLAYER_SHARPEN_DUMP"), n_commit);

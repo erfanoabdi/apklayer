@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-28: shimmer measured on real PGR lobby frames (consecutive capture)
+
+- `APKLAYER_SHARPEN_DUMP=<dir> APKLAYER_SHARPEN_DUMP_SEQ=N` plus the file `<dir>/go`: the next N captures are written one after the other (`seq-NNNN.ppm`, the app's own frames); no output dumps. PGR lobby at 40 % (1376x576 source), 150 consecutive frames, the first 40 through the offline pass to 2752x1152 (sharpen-test caps at about 40 frames in separate buffers: "cannot map the buffer" at 90). Luma, no ground truth: sd2 = mean |O[t+1] - 2 O[t] + O[t-1]| (oscillation that smooth motion lacks), flip = % of pixels that jump more than 4 levels one way and back the next frame, as ratios to a bilinear stretch of the same frames:
+
+  | config | sd2/bil | flip/bil |
+  |---|---|---|
+  | FSR 1 | 0.93 | 0.73 |
+  | neural, as before (no AA, no temporal) | 1.29 | 1.17 |
+  | neural + CMAA2 only | 1.25 | 1.23 |
+  | neural + temporal only | 0.99 | 0.74 |
+  | neural + CMAA2 + temporal (shipped) | 0.94 | 0.74 |
+
+  The old neural pass shimmered more than FSR 1 on the real lobby (29 % over the source's own change, 17 % more flipping pixels), which is what the owner saw; the temporal pass brings it to FSR 1's level (0.94 / 0.74); CMAA2 does not change flicker, it removes the stair edges (seen on the horn and hair crops of the same frames).
+- Not measured: 50 % against 40 % on real frames.
+
 ## 2026-11-28: PGR freeze reproduced and fixed by the vdisplay present-loop retry; deb with both fixes
 
 - PGR (owner's default instance, shell from this tree, `APKLAYER_SHARPEN_DUMP`, 40 %, neural): with the old libapklayer_vdisplay the window stopped at commit 280 about a minute after start (`acquireBuffer: max acquired buffer count reached: 7 (max 6)`, `Error acquiring buffer -38`, no more dmabuf frames, the shell idle in poll): the stale-window wedge. With the rebuilt library (gsi_x86_64, sha256 0399c9b2...; the arm64 one was built too) the same run drove 11998 commits in 300 s, 8 refused acquires absorbed by the retry, no stall. Run stopped at the login screen (no tap), render-scale of PGR set back to 65, nothing left running.

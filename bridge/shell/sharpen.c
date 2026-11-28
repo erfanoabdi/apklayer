@@ -548,7 +548,19 @@ static int capture_impl(struct sharpen *s, int buf, int ow, int oh, int snap)
     if (!nn_available(s) || !(ow > s->in[buf].w && oh > s->in[buf].h)) return -1;
     if (nn_capture(s->nn, s->in[buf].tex, s->in[buf].w, s->in[buf].h, snap, s->vbo) != 0) return -1;
     nn_aa(s, snap, ow);
-    if (getenv("APKLAYER_SHARPEN_DUMP")) {  /* a test aid: the app's own frames (PPM) every 25th capture, for tuning on real content */
+    if (getenv("APKLAYER_SHARPEN_DUMP") && getenv("APKLAYER_SHARPEN_DUMP_SEQ")) {  /* a test aid: once the file <dir>/go exists, the next N captures one after the other (seq-NNNN.ppm), to measure shimmer on real content */
+        static int n_seq;
+        char path[300];
+        int w, h;
+        snprintf(path, sizeof path, "%s/go", getenv("APKLAYER_SHARPEN_DUMP"));
+        if (n_seq < atoi(getenv("APKLAYER_SHARPEN_DUMP_SEQ")) && access(path, F_OK) == 0 && nn_snap_size(s->nn, snap, &w, &h) == 0) {
+            unsigned char *px = malloc((size_t)w * h * 4);
+            snprintf(path, sizeof path, "%s/seq-%04d.ppm", getenv("APKLAYER_SHARPEN_DUMP"), n_seq++);
+            FILE *f = px && nn_snap_read(s->nn, snap, px) == 0 ? fopen(path, "wb") : NULL;
+            if (f) { fprintf(f, "P6\n%d %d\n255\n", w, h); for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) fwrite(px + ((size_t)y * w + x) * 4, 1, 3, f); fclose(f); }
+            free(px);
+        }
+    } else if (getenv("APKLAYER_SHARPEN_DUMP")) {  /* a test aid: the app's own frames (PPM) every 25th capture, for tuning on real content */
         static int n_cap;
         int w, h;
         if ((++n_cap <= 3 || n_cap % 25 == 0) && nn_snap_size(s->nn, snap, &w, &h) == 0) {
