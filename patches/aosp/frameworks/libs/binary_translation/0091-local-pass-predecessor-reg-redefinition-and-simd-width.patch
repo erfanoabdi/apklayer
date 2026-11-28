@@ -1,0 +1,37 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] apklayer patch: local guest-context pass: invalidate PredecessorReg mappings on redefinition, no wide-to-narrow SIMD forward
+
+The local pass forwarded a GET from a mapping inherited from the predecessor block (PredecessorReg) after the successor had redefined that
+vreg in place (the ARM64 frontend is not SSA), and forwarded a 128-bit mapping to a 64-bit MOVSD get as a plain Copy (keeps lanes 2-3,
+MOVSD zeroes them). Both found by code audit only (PGR home scene noise, passes still off by 0081); no generated test reproduces them.
+Module libberberis_arm64.
+
+diff --git a/cpu_emulation/backend/x86_64/local_guest_context_optimizer.cc b/cpu_emulation/backend/x86_64/local_guest_context_optimizer.cc
+@@ -100,8 +100,12 @@
+     }
+     MachineReg def_reg = insn->RegAt(i);
+     for (auto& mapping : mem_reg_map) {
+-      if (mapping.has_value() && std::holds_alternative<MachineReg>(mapping.value().value) &&
+-          std::get<MachineReg>(mapping.value().value) == def_reg) {
++      if (!mapping.has_value()) continue;
++      const auto& value = mapping.value().value;
++      // apklayer patch (0091): a mapping inherited from the predecessor (PredecessorReg) names the same vreg; the ARM64
++      // frontend redefines vregs in place in the successor (after a recovery split), so it is stale too.
++      if ((std::holds_alternative<MachineReg>(value) && std::get<MachineReg>(value) == def_reg) ||
++          (std::holds_alternative<PredecessorReg>(value) && std::get<PredecessorReg>(value).reg == def_reg)) {
+         mapping = std::nullopt;
+       }
+     }
+@@ -271,8 +275,11 @@
+   // same slot needs. Forwarding it silently zeroed a vector register's upper half
+   // (seen as a wrong bcrypt key expansion with no crash), so re-map instead.
+   auto access = GetContextAccess(*insn_it);
++  // apklayer patch (0091): also a wider mapping cannot serve a narrower SIMD read: a MOVSD get zeroes lanes 2-3, a Copy of
++  // the 128-bit register keeps them (RecoverySplitGetForwarder emits MovqXRegXReg for this); reload it instead.
+   if (!mem_reg_map[disp].has_value() || mem_reg_map[disp].value().access.size < access.size ||
+-      mem_reg_map[disp].value().access.is_simd != access.is_simd) {
++      mem_reg_map[disp].value().access.is_simd != access.is_simd ||
++      (access.is_simd && mem_reg_map[disp].value().access.size != access.size)) {
+     mem_reg_map[disp] = {dst, {}, access};
+   // endregion
+     return std::nullopt;
