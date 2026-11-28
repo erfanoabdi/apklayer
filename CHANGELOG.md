@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-28: prebuilts `b692d7dc` with the vdisplay fix; runtime 0.5.7
+
+- prebuilts branch: libapklayer_vdisplay (arm64 sha256 2e0ad111..., x86_64 0399c9b2...) built from main 15fdeb25's VirtualDisplay.cpp (present loop retries a refused acquire: the stale-window freeze, reproduced on PGR and gone with it, entry above); pushed on top of 57dd5a4a. `deps/android-tree-files{,-x86_64}.lock` carry the two new hashes; `tools/release/versions` runtime 0.5.6 -> 0.5.7 (0.5.6 was released from e8904ab0; the next tag must use the new prebuilts tip). Not tagged, not released.
+
 ## 2026-11-28: shimmer measured on real PGR lobby frames (consecutive capture)
 
 - `APKLAYER_SHARPEN_DUMP=<dir> APKLAYER_SHARPEN_DUMP_SEQ=N` plus the file `<dir>/go`: the next N captures are written one after the other (`seq-NNNN.ppm`, the app's own frames); no output dumps. PGR lobby at 40 % (1376x576 source), 150 consecutive frames, the first 40 through the offline pass to 2752x1152 (sharpen-test caps at about 40 frames in separate buffers: "cannot map the buffer" at 90). Luma, no ground truth: sd2 = mean |O[t+1] - 2 O[t] + O[t-1]| (oscillation that smooth motion lacks), flip = % of pixels that jump more than 4 levels one way and back the next frame, as ratios to a bilinear stretch of the same frames:
