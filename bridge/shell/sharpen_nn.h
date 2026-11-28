@@ -17,6 +17,7 @@ int nn_snap_size(struct nn *n, int snap, int *w, int *h);
 GLuint nn_snap_aa_fbo(struct nn *n, int snap);
 void nn_snap_aa(struct nn *n, int snap, int on);
 GLuint nn_snap_tex(struct nn *n, int snap);
+int nn_snap_read(struct nn *n, int snap, void *rgba);  /* test aid */
 /* One frame from snapshot `snap`: the network, then the 2x picture drawn at ow x oh into the framebuffer dst. 0 or -1 (nothing drawn). */
 int nn_run(struct nn *n, int snap, GLuint dst, int ow, int oh, GLuint vbo);
 void nn_free(struct nn *n);

@@ -247,6 +247,15 @@ GLuint nn_snap_aa_fbo(struct nn *c, int snap)
     return glGetError() == GL_NO_ERROR ? c->snap[snap].aafbo : 0;
 }
 void nn_snap_aa(struct nn *c, int snap, int on) { if (c && snap >= 0 && snap < 2) c->snap[snap].aaon = on; }
+/* the raw snapshot as RGBA bytes (a test aid: APKLAYER_SHARPEN_DUMP); 0 or -1 */
+int nn_snap_read(struct nn *c, int snap, void *rgba)
+{
+    if (!c || snap < 0 || snap > 1 || c->snap[snap].w <= 0) return -1;
+    glBindFramebuffer(GL_FRAMEBUFFER, c->snap[snap].fbo);
+    glReadPixels(0, 0, c->snap[snap].w, c->snap[snap].h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return glGetError() == GL_NO_ERROR ? 0 : -1;
+}
 GLuint nn_snap_tex(struct nn *c, int snap) { return c && snap >= 0 && snap < 2 ? c->snap[snap].tex : 0; }
 
 int nn_snap_size(struct nn *c, int snap, int *w, int *h)
