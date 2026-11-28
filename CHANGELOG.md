@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-28: berberis cc38a2ce (0087-0090) in the owner's runtime; Endfield load re-measured; persistent translation cache dropped
+
+- The owner's runtime 0.5.6 got `libberberis_arm64.so` cc38a2ce (single-file swap, old one kept as `libberberis_arm64.so.b59d5c1f.bak` beside it; `setup --bundle` skips an installed version, so a bundle of the same number cannot replace it). Not tested with PGR/ACE under the default-on code window (`apklayer prop set berberis.code_window off` is the escape hatch).
+- Endfield asset-load marks, old b59d5c1f vs new cc38a2ce, 3 alternating cold runs each (own instance, 30 GB copy, deleted): unity.ver 6.05 -> 5.49 s, mscorlib resource 11.60 -> 10.81 s, index_initial 16.24 -> 16.41 s, Default.json 20.92 -> 21.66 s. Spread of about 2 s per run (YouTube and another game ran in the default instance meanwhile), so no gain is resolvable at this size; the ~3% from the fused branches is below the noise here.
+- Kernel share of an Endfield start at 40 s: system time 5-9% of the game process's CPU (437 vs 6359 user ticks warm, 801 vs 8779 cold), 20-35 major faults, 220-310 MB read from disk, 0.55-0.9 M minor faults. The game is not waiting on disk, so pre-reading files into the page cache would gain nothing. Dropped.
+- Persistent translation cache: dropped (owner, "not worth it"). Region translation is about 10% of the main thread, so 10% is the ceiling; the generated code embeds guest addresses (randomised per run) and host helper addresses as immediates, so a cache would need relocation records at every such site plus invalidation. A timing counter added to `TryLiteTranslateRegion` to measure the ceiling was reverted before it built.
+- Left open: lite-tier register/chaining work (est. 5-10% of translated code), which needs a benchmark that counts instructions or cycles, since wall time here varies by about 10%.
+
 ## 2026-11-28: prebuilts `b692d7dc` with the vdisplay fix; runtime 0.5.7
 
 - prebuilts branch: libapklayer_vdisplay (arm64 sha256 2e0ad111..., x86_64 0399c9b2...) built from main 15fdeb25's VirtualDisplay.cpp (present loop retries a refused acquire: the stale-window freeze, reproduced on PGR and gone with it, entry above); pushed on top of 57dd5a4a. `deps/android-tree-files{,-x86_64}.lock` carry the two new hashes; `tools/release/versions` runtime 0.5.6 -> 0.5.7 (0.5.6 was released from e8904ab0; the next tag must use the new prebuilts tip). Not tagged, not released.
