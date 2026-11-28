@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-28: PGR freeze reproduced and fixed by the vdisplay present-loop retry; deb with both fixes
+
+- PGR (owner's default instance, shell from this tree, `APKLAYER_SHARPEN_DUMP`, 40 %, neural): with the old libapklayer_vdisplay the window stopped at commit 280 about a minute after start (`acquireBuffer: max acquired buffer count reached: 7 (max 6)`, `Error acquiring buffer -38`, no more dmabuf frames, the shell idle in poll): the stale-window wedge. With the rebuilt library (gsi_x86_64, sha256 0399c9b2...; the arm64 one was built too) the same run drove 11998 commits in 300 s, 8 refused acquires absorbed by the retry, no stall. Run stopped at the login screen (no tap), render-scale of PGR set back to 65, nothing left running.
+- Build log: `m libapklayer_vdisplay` for gsi_arm64 and gsi_x86_64 (Mac VM), both succeeded. The library ships in the runtime BUNDLE (android-libs), not in the deb: the prebuilts' x86_64 copy was replaced locally (not pushed).
+- APKLAYER_SHARPEN_DUMP now also writes the app's own frames (`source-N.ppm`).
+
 ## 2026-11-28: neural upscaler: CMAA2 before the network and the temporal pass after it (PGR: stair-stepped edges and shimmer)
 
 - Cause: the neural path (render_impl branch, capture_impl/render_snap_impl on the render thread) skipped both the CMAA2 anti-aliasing FSR 1's path runs on the source and the temporal stabiliser (`sharpen_temporal.c`), so a game's aliased 3D edges and crawling hair were enlarged as they were and shimmered frame to frame (owner on PGR, 40 %).
