@@ -12,6 +12,11 @@ struct nn *nn_create(GLuint (*prog)(const char *fs), const char *dflt);
 /* The app's external image src (w x h) copied into snapshot `snap` (0 or 1): once the GPU has run the copy the app's buffer is free. 0 or -1. */
 int nn_capture(struct nn *n, GLuint src, int w, int h, int snap, GLuint vbo);
 int nn_snap_size(struct nn *n, int snap, int *w, int *h);
+/* Snapshot `snap`'s anti-aliased copy: the framebuffer to draw it into (0: cannot), then nn_snap_aa(.., 1) makes nn_run read it instead of the raw copy (0 turns it off);
+ * nn_snap_tex is the raw copy (the temporal pass's source). */
+GLuint nn_snap_aa_fbo(struct nn *n, int snap);
+void nn_snap_aa(struct nn *n, int snap, int on);
+GLuint nn_snap_tex(struct nn *n, int snap);
 /* One frame from snapshot `snap`: the network, then the 2x picture drawn at ow x oh into the framebuffer dst. 0 or -1 (nothing drawn). */
 int nn_run(struct nn *n, int snap, GLuint dst, int ow, int oh, GLuint vbo);
 void nn_free(struct nn *n);

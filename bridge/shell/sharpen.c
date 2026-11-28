@@ -66,6 +66,7 @@ struct sharpen {
     GLuint up2d_prog;                             /* EASU reading a GL_TEXTURE_2D: the anti-aliased source (SMAA / CMAA2 run before the upscale) */
     struct rt sm_src;                             /* their output: the source-sized picture before EASU, or the output-sized one before RCAS */
     GLuint blit_prog;                             /* a copy (FS_BLIT), where SMAA / CMAA2 fail */
+    struct tmpl *tmpl_nn;                         /* the temporal pass of the neural output (its source is the snapshot, a plain texture) */
     struct tmpl *tmpl;                            /* the temporal pass, NULL where it does not build or APKLAYER_SHARPEN_TEMPORAL=off (a test knob) */
     struct rt t0;                                 /* the filter's output before SMAA / CMAA2 on it */
     int tmp_off;
@@ -270,7 +271,8 @@ int sharpen_prepare(struct sharpen *s, uint32_t fourcc, int w, int h, int n, con
         s->cmaa = s->smaa ? cmaa_create(program) : NULL;
         fprintf(stderr, "[sharpen] %s; SMAA %s, CMAA2 %s\n", glGetString(GL_VERSION), s->smaa ? "ready" : "unavailable", s->cmaa ? "ready" : "unavailable (needs OpenGL ES 3.1 compute)");
         s->blit_prog = program(FS_BLIT);
-        s->tmpl = s->tmp_off ? NULL : tmpl_create(program);
+        s->tmpl = s->tmp_off ? NULL : tmpl_create(program, 0);
+        s->tmpl_nn = s->tmp_off ? NULL : tmpl_create(program, 1);
         { const char *e = getenv("APKLAYER_SHARPEN_NN"); s->nn_want = s->nn_want_env = e && !strcmp(e, "1"); }  /* a test knob; the setting arrives through sharpen_set_neural */
         s->down_prog = program(FS_DOWN);  /* optional: without it a larger source is shrunk by EASU's own `down` branch */
         static const GLfloat tri[] = { -1, -1, 3, -1, -1, 3 };
@@ -477,6 +479,18 @@ static const char *nn_weights(char *buf, size_t n)
     return inst;
 }
 
+/* CMAA2 on snapshot `snap` (the source, before the network, as FSR 1's path does): the game's aliased 3D edges would otherwise be enlarged as stairs. APKLAYER_NN_AA=off is a test knob */
+static void nn_aa(struct sharpen *s, int snap, int ow)
+{
+    int w, h, aa = s->aa_off ? 0 : s->cmaa && !s->aa_smaa ? 2 : s->smaa ? 1 : 0;
+    const char *e = getenv("APKLAYER_NN_AA");
+    nn_snap_aa(s->nn, snap, 0);
+    if (!aa || (e && !strcmp(e, "off")) || nn_snap_size(s->nn, snap, &w, &h) < 0) return;
+    GLuint f = nn_snap_aa_fbo(s->nn, snap);
+    if (f && aa_run(s, 0, nn_snap_tex(s->nn, snap), w, h, aa, (float)ow / (float)w, f) == 0) nn_snap_aa(s->nn, snap, 1);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 /* the neural pass from snapshot `snap` into output slot k: timed, and ended for this window when it is too slow (the guard) */
 static int neural_frame(struct sharpen *s, int snap, struct slot *o, int k, int ow, int oh, int *slot)
 {
@@ -487,6 +501,7 @@ static int neural_frame(struct sharpen *s, int snap, struct slot *o, int k, int 
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
     if (nn_run(s->nn, snap, o->fbo, ow, oh, s->vbo) != 0) return -1;
+    tmpl_run(s->tmpl_nn, rt_ensure, s->vbo, o->tex, o->fbo, ow, oh, nn_snap_tex(s->nn, snap), iw, ih, 0.0f);  /* the shimmer calming, from the raw snapshot */
     gpu_wait(s);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     static int n_nn; static double sum_nn;
@@ -532,6 +547,7 @@ static int capture_impl(struct sharpen *s, int buf, int ow, int oh, int snap)
     eglMakeCurrent(s->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, s->ctx);
     if (!nn_available(s) || !(ow > s->in[buf].w && oh > s->in[buf].h)) return -1;
     if (nn_capture(s->nn, s->in[buf].tex, s->in[buf].w, s->in[buf].h, snap, s->vbo) != 0) return -1;
+    nn_aa(s, snap, ow);
     gpu_wait(s);
     return 0;
 }
@@ -612,7 +628,7 @@ static int render_impl(struct sharpen *s, int buf, int ow, int oh, float sharpne
     int up = ow > s->in[buf].w && oh > s->in[buf].h;  /* an upscale: SMAA / CMAA2 run on the app's buffer before EASU */
     nn_available(s);
     if (s->nn && s->nn_want && up && s->nn_slow < 12) {
-        if (nn_capture(s->nn, s->in[buf].tex, s->in[buf].w, s->in[buf].h, 0, s->vbo) == 0 && neural_frame(s, 0, o, k, ow, oh, slot) == 0) return 0;
+        if (nn_capture(s->nn, s->in[buf].tex, s->in[buf].w, s->in[buf].h, 0, s->vbo) == 0 && (nn_aa(s, 0, ow), 1) && neural_frame(s, 0, o, k, ow, oh, slot) == 0) return 0;
         static int said_nn;
         if (!said_nn++) fprintf(stderr, "[sharpen] the neural pass failed (gl error 0x%x): FSR 1 runs\n", glGetError());
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -796,5 +812,6 @@ void sharpen_close(struct sharpen *s)
     cmaa_free(s->cmaa);
     nn_free(s->nn);
     tmpl_free(s->tmpl);
+    tmpl_free(s->tmpl_nn);
     free(s);
 }

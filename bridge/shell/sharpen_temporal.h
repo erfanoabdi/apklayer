@@ -6,7 +6,7 @@
 struct tmpl;
 
 /* The context current; `prog` is sharpen.c's shader builder. NULL when a shader does not build (then there is no temporal pass). */
-struct tmpl *tmpl_create(GLuint (*prog)(const char *fs));
+struct tmpl *tmpl_create(GLuint (*prog)(const char *fs), int src2d);  /* src2d: the source is a plain GL_TEXTURE_2D (the neural pass's snapshot), else the app's external image */
 /* Blends the previous output into the finished one (out_tex / out_fbo: the output slot, ow x oh) where the app's picture (the external texture `src`, sw x sh) changed little since the
  * last call, and keeps this output and this source for the next call. The history restarts when a size or `sharp` differs from the last call. `rt_ensure` makes the targets. */
 void tmpl_run(struct tmpl *t, GLuint (*rt_ensure)(struct rt *, int, int), GLuint vbo, GLuint out_tex, GLuint out_fbo, int ow, int oh, GLuint src, int sw, int sh, float sharp);

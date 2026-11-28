@@ -15,7 +15,7 @@
 struct nn {
     GLuint conv0, conv[3], shuffle, resample, blit_ext;   /* conv[k]: 4 >> k output layers per thread */
     GLuint wbuf, tex[2], out2x;
-    struct { GLuint tex, fbo; int w, h; } snap[2];  /* RGBA8 copies of the app's frame (nn_capture): the app's buffer is free as soon as the copy is done */
+    struct { GLuint tex, fbo, aatex, aafbo; int w, h, aaon, aaw, aah; } snap[2];  /* RGBA8 copies of the app's frame (nn_capture): the app's buffer is free as soon as the copy is done */
     int w, h;                       /* the source size the textures were made for */
     int n, in4[MAXL], out4[MAXL], moff[MAXL], boff[MAXL], maxout4;  /* layers; offsets in vec4s: matrices and biases of each layer */
     void (*dispatch)(GLuint, GLuint, GLuint);
@@ -205,7 +205,7 @@ int nn_capture(struct nn *c, GLuint src, int w, int h, int snap, GLuint vbo)
     if (!c || snap < 0 || snap > 1 || w <= 0 || h <= 0) return -1;
     if (c->snap[snap].w != w || c->snap[snap].h != h) {
         if (c->snap[snap].tex) { glDeleteTextures(1, &c->snap[snap].tex); glDeleteFramebuffers(1, &c->snap[snap].fbo); }
-        c->snap[snap].w = c->snap[snap].h = 0;
+        c->snap[snap].w = c->snap[snap].h = 0; c->snap[snap].aaon = 0;
         glGenTextures(1, &c->snap[snap].tex);
         glBindTexture(GL_TEXTURE_2D, c->snap[snap].tex); c->tex_storage2(GL_TEXTURE_2D, 1, GL_RGBA8, w, h); param(c->snap[snap].tex, GL_TEXTURE_2D);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -229,6 +229,26 @@ int nn_capture(struct nn *c, GLuint src, int w, int h, int snap, GLuint vbo)
     return glGetError() == GL_NO_ERROR ? 0 : -1;
 }
 
+/* the framebuffer of snapshot `snap`'s second picture (the anti-aliased copy, same size), made on first use; 0 when it cannot be made. nn_run reads it once nn_snap_aa(c, snap, 1) says so */
+GLuint nn_snap_aa_fbo(struct nn *c, int snap)
+{
+    if (!c || snap < 0 || snap > 1 || c->snap[snap].w <= 0) return 0;
+    if (c->snap[snap].aatex) {
+        if (c->snap[snap].aaw == c->snap[snap].w && c->snap[snap].aah == c->snap[snap].h) return c->snap[snap].aafbo;
+        glDeleteTextures(1, &c->snap[snap].aatex); glDeleteFramebuffers(1, &c->snap[snap].aafbo); c->snap[snap].aatex = 0;
+    }
+    glGenTextures(1, &c->snap[snap].aatex);
+    glBindTexture(GL_TEXTURE_2D, c->snap[snap].aatex); c->tex_storage2(GL_TEXTURE_2D, 1, GL_RGBA8, c->snap[snap].w, c->snap[snap].h); param(c->snap[snap].aatex, GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenFramebuffers(1, &c->snap[snap].aafbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, c->snap[snap].aafbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, c->snap[snap].aatex, 0);
+    c->snap[snap].aaw = c->snap[snap].w; c->snap[snap].aah = c->snap[snap].h;
+    return glGetError() == GL_NO_ERROR ? c->snap[snap].aafbo : 0;
+}
+void nn_snap_aa(struct nn *c, int snap, int on) { if (c && snap >= 0 && snap < 2) c->snap[snap].aaon = on; }
+GLuint nn_snap_tex(struct nn *c, int snap) { return c && snap >= 0 && snap < 2 ? c->snap[snap].tex : 0; }
+
 int nn_snap_size(struct nn *c, int snap, int *w, int *h)
 {
     if (!c || snap < 0 || snap > 1 || c->snap[snap].w <= 0) return -1;
@@ -240,7 +260,7 @@ int nn_run(struct nn *c, int snap, GLuint dst, int ow, int oh, GLuint vbo)
 {
     int w, h;
     if (nn_snap_size(c, snap, &w, &h) < 0 || !ensure(c, w, h)) return -1;
-    GLuint sntex = c->snap[snap].tex;
+    GLuint sntex = c->snap[snap].aaon && c->snap[snap].aatex ? c->snap[snap].aatex : c->snap[snap].tex;
     c->bind_base(GL_SHADER_STORAGE_BUFFER, 0, c->wbuf);
     int cw = w + 2 * c->n, ch = h + 2 * c->n;
     for (int l = 0; l < c->n; l++) {
@@ -297,6 +317,9 @@ void nn_free(struct nn *c)
 {
     if (!c) return;
     if (c->tex[0]) { glDeleteTextures(2, c->tex); glDeleteTextures(1, &c->out2x); }
-    for (int i = 0; i < 2; i++) if (c->snap[i].tex) { glDeleteTextures(1, &c->snap[i].tex); glDeleteFramebuffers(1, &c->snap[i].fbo); }
+    for (int i = 0; i < 2; i++) {
+        if (c->snap[i].tex) { glDeleteTextures(1, &c->snap[i].tex); glDeleteFramebuffers(1, &c->snap[i].fbo); }
+        if (c->snap[i].aatex) { glDeleteTextures(1, &c->snap[i].aatex); glDeleteFramebuffers(1, &c->snap[i].aafbo); }
+    }
     free(c);
 }

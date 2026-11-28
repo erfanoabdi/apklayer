@@ -11,6 +11,8 @@
 
 #include <GLES2/gl2ext.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 #define EXT "#extension GL_OES_EGL_image_external : require\n"
 #define LUMA "float L(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }\n"
@@ -66,17 +68,37 @@ static const char *FS_TMP =
     "}\n";
 
 struct tmpl {
+    GLenum tgt;  /* the source's target: GL_TEXTURE_EXTERNAL_OES (the app's buffer) or GL_TEXTURE_2D (the neural pass's snapshot) */
     GLuint tmp, copyx, blit, raw, osc;
     struct rt cur[2], cnt[2], hist, prev;  /* the filtered pictures (this frame's, the last) and the oscillation counters, alternating; the last output; the last source */
     int ok, flip, sw, sh;
     float sharp;
 };
 
-struct tmpl *tmpl_create(GLuint (*prog)(const char *fs))
+/* the shader with a plain sampler2D for the source (no external-image extension) */
+static GLuint mk(GLuint (*prog)(const char *fs), const char *fs, int s2d)
+{
+    if (!s2d) return prog(fs);
+    static const char ext[] = "#extension GL_OES_EGL_image_external : require\n", from[] = "samplerExternalOES";
+    char *o = malloc(strlen(fs) + 64), *w = o;
+    if (!o) return 0;
+    for (const char *r = fs; *r;) {
+        if (!strncmp(r, ext, sizeof ext - 1)) r += sizeof ext - 1;
+        else if (!strncmp(r, from, sizeof from - 1)) { w += sprintf(w, "sampler2D"); r += sizeof from - 1; }
+        else *w++ = *r++;
+    }
+    *w = 0;
+    GLuint g = prog(o);
+    free(o);
+    return g;
+}
+
+struct tmpl *tmpl_create(GLuint (*prog)(const char *fs), int src2d)
 {
     struct tmpl *t = calloc(1, sizeof *t);
     if (!t) return NULL;
-    t->tmp = prog(FS_TMP); t->copyx = prog(FS_COPYX); t->blit = prog(FS_BLIT); t->raw = prog(FS_RAW); t->osc = prog(FS_OSC);
+    t->tgt = src2d ? GL_TEXTURE_2D : GL_TEXTURE_EXTERNAL_OES;
+    t->tmp = mk(prog, FS_TMP, src2d); t->copyx = mk(prog, FS_COPYX, src2d); t->blit = prog(FS_BLIT); t->raw = prog(FS_RAW); t->osc = mk(prog, FS_OSC, src2d);
     if (!t->tmp || !t->copyx || !t->blit || !t->raw || !t->osc) { free(t); return NULL; }
     return t;
 }
@@ -113,7 +135,7 @@ void tmpl_run(struct tmpl *t, GLuint (*rt_ensure)(struct rt *, int, int), GLuint
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     if (t->ok) {
-        bind(1, GL_TEXTURE_2D, t->cur[a].tex); bind(2, GL_TEXTURE_2D, t->cnt[a].tex); bind(3, GL_TEXTURE_2D, t->prev.tex); bind(4, GL_TEXTURE_EXTERNAL_OES, src);
+        bind(1, GL_TEXTURE_2D, t->cur[a].tex); bind(2, GL_TEXTURE_2D, t->cnt[a].tex); bind(3, GL_TEXTURE_2D, t->prev.tex); bind(4, t->tgt, src);
         glUseProgram(t->raw); uni1i(t->raw, "cur", 0); uni1i(t->raw, "rawp", 1);
         draw(t->raw, vbo, t->cur[b].fbo, ow, oh);
         glUseProgram(t->osc);
@@ -135,7 +157,7 @@ void tmpl_run(struct tmpl *t, GLuint (*rt_ensure)(struct rt *, int, int), GLuint
     bind(0, GL_TEXTURE_2D, out_tex);  /* the history is this output, the previous source this source */
     glUseProgram(t->blit); uni1i(t->blit, "tex", 0);
     draw(t->blit, vbo, t->hist.fbo, ow, oh);
-    bind(0, GL_TEXTURE_EXTERNAL_OES, src);
+    bind(0, t->tgt, src);
     glUseProgram(t->copyx); uni1i(t->copyx, "tex", 0);
     draw(t->copyx, vbo, t->prev.fbo, sw, sh);
     glActiveTexture(GL_TEXTURE0);

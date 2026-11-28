@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-28: neural upscaler: CMAA2 before the network and the temporal pass after it (PGR: stair-stepped edges and shimmer)
+
+- Cause: the neural path (render_impl branch, capture_impl/render_snap_impl on the render thread) skipped both the CMAA2 anti-aliasing FSR 1's path runs on the source and the temporal stabiliser (`sharpen_temporal.c`), so a game's aliased 3D edges and crawling hair were enlarged as they were and shimmered frame to frame (owner on PGR, 40 %).
+- Now: the snapshot gets a second, CMAA2'd copy (`nn_snap_aa_fbo`/`nn_snap_aa`, SMAA where there is no ES 3.1) that the network reads (`nn_aa` in sharpen.c; `APKLAYER_NN_AA=off` turns it off, a test knob); after the 2x network the temporal pass runs on the output with the RAW snapshot as its source (`tmpl_create(prog, 1)`: the shaders get a plain sampler2D, `tmpl_nn`; `APKLAYER_SHARPEN_TEMPORAL=off` turns it off for both).
+- tests/vm/shimmer.py (aliased source, camera 0.25/0.125 px per frame, 12 frames, student m701515c, flick = the filter's own crawl, lower is better): 40 %: flick 31.67 -> 29.71 (-6 %), hair 34.7 -> 28.3 (-18 %), noise (still scene) 0.90 -> 0.77, RMS error 28.24 -> 28.08; 50 %: flick 27.85 -> 26.08 (-6 %), hair 32.0 -> 25.9 (-19 %). Temporal alone (AA off) is a free win (flick 30.5, noise 0.62, edge strength kept); CMAA2 costs about 27-30 % of the measured edge strength (it smooths the stair edges, which count as edge energy) and a little on foliage RMS. Game-like synthetic frames (gamegen, 0.4): PSNR 26.95 against 26.72 without (seed 3), 25.94 against 25.96 (seed 7); the crunchy blobs the network made of aliased foliage are gone. tests/vm/sharpen.py neural check unchanged (box-filtered text: CMAA2 has nothing to smooth, one frame has no history).
+- Not measured: real PGR frames, and the cost in ms of CMAA2 plus the temporal pass at 1080p (neural guard 25 ms).
+
+## 2026-11-28: neural upscaler: resample kernel ruled out; vdisplay present-loop fix built
+
+- GL-vs-torch gap of the shipped pass (49-54 dB): tried the shader's resample with bicubic a=-0.75 (torch's) instead of Catmull-Rom a=-0.5. No gain (0.5 identical, 0.6 and 0.4 point-sampled slightly worse), reverted. The gap is about one 8-bit level of rms error (fp16 features, 8-bit output), invisible; not worth more work.
+- Build log: `m libapklayer_vdisplay` (gsi_arm64, Mac VM) with the present-loop retry (VirtualDisplay.cpp, commit 15fdeb25); status below.
+
 ## 2026-11-27: Endfield profile with the fused lite tier; the libHGP loop is not on the critical path (correction)
 
 - `perf record -F 999` (20 s, with 0089 + 0090, deb preload without the paths.c fix), samples by thread: the thread that runs the `libHGP.so` loop (tid named "UnityMain", a second thread with the creator's name) is 27.6% of all samples, 99% in translated code, 82% in the two loop regions: a background scan thread that spins one core. It is NOT the thread that loads the game: the earlier reading ("UnityMain spends 82% of its time in this loop") confused the two threads of that name. That is why fusing its cmp + b.cond gained only ~3% of load time.
