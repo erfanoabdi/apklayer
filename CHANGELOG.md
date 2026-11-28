@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-28: Build log: `m vulkan.apklayer` (gsi_x86_64, then gsi_arm64)
+
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24 via ssh): `m vulkan.apklayer` (existing module). Why: it carries two changes that nothing else builds: host device enumeration on a 1 MB stack (Asphalt 9 crash) and the removal of Mesa's ASTC decoder (and its static library `libapklayer_astc_luts`). The earlier replay build was invalid (entry below). aosp/hals/graphics/vulkan synced into vendor/apklayer (commit a191a13 there); the Mac's uncommitted VirtualDisplay.cpp is not mine. Result below.
+
 ## 2026-11-28: Mesa's ASTC decoder removed; gfxstream's decoders only
 
 - Owner's decision: reverted ff277ca1, f0f22959 and cbc290f9 (TextureAstcMesa.cpp, mesa_astc/, the LUT library, the CompressedImageInfo hooks, the meson entries). The Vulkan HAL's ASTC emulation is gfxstream's again: per-pixel shader by default, `APKLAYER_VULKAN_ASTC_DECODER=old` the per-block one. Not built or run: needs `m vulkan.apklayer` (gsi_x86_64, gsi_arm64) with the enumeration fix of the entry above, then the Endfield check on RADV. The 2026-11-23 entries below stay as history.
