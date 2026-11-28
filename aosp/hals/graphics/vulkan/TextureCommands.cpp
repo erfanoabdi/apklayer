@@ -115,7 +115,7 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyBufferToImage(VkCommandBuffer buffer, VkBuffer
         VkBufferImageCopy region = info->getBufferImageCopy(regions[r]);
         if (dumping())
             dumpRecord(findDevice(info->device()), buffer, src, region.bufferOffset,
-                       (VkDeviceSize)region.imageExtent.width * region.imageExtent.height * region.imageExtent.depth * 16, 0,
+                       (VkDeviceSize)region.imageExtent.width * region.imageExtent.height * region.imageExtent.depth * 16, VK_FORMAT_UNDEFINED,
                        regions[r].imageExtent.width, regions[r].imageExtent.height);
         fn(buffer, src, info->compressedMipmap(regions[r].imageSubresource.mipLevel), layout, 1, &region);
     }
@@ -131,7 +131,7 @@ VKAPI_ATTR void VKAPI_CALL cmdCopyBufferToImage2(VkCommandBuffer buffer, const V
         VkBufferImageCopy2 region = info->getBufferImageCopy(copy->pRegions[r]);
         if (dumping())
             dumpRecord(c->device, buffer, copy->srcBuffer, region.bufferOffset,
-                       (VkDeviceSize)region.imageExtent.width * region.imageExtent.height * region.imageExtent.depth * 16, 0,
+                       (VkDeviceSize)region.imageExtent.width * region.imageExtent.height * region.imageExtent.depth * 16, VK_FORMAT_UNDEFINED,
                        copy->pRegions[r].imageExtent.width, copy->pRegions[r].imageExtent.height);
         VkCopyBufferToImageInfo2 one = *copy;
         one.dstImage = info->compressedMipmap(copy->pRegions[r].imageSubresource.mipLevel);
