@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-28: Version 0.5.8 (owner: "build the runtime bundle and release it")
+
+- Release v0.5.8: runtime bundle 0.5.8 from prebuilts 4a7d6542 (tag `prebuilts-v0.5.8`): vulkan.apklayer with the host device enumeration on a 1 MB stack (Asphalt 9 crash) and without Mesa's ASTC decoder. Built by the `release` workflow from the tags, not locally. Main also carries binary_translation 0091 (another session's commit, marked unverified; a patch file, not in the prebuilts). Result below.
+
 ## 2026-11-28: Runtime 0.5.8: prebuilts 4a7d6542 (vulkan.apklayer: enumeration on a 1 MB stack, no Mesa ASTC decoder)
 
 - `tools/release/versions` runtime=0.5.7 -> 0.5.8 (docs/RELEASES.md: bump when the prebuilts branch changes; 0.5.7 was released from b692d7dc, so check-runtime would refuse a release that keeps 0.5.7 on 4a7d6542). The lock rows for both vulkan.apklayer.so were updated in the entry below (x86_64 86077736, arm64 1bf74350). Package version unchanged (0.5.7 in meson.build); the next release picks the new runtime up. Not released and not tested as a bundle: `runtime-bundle.sh` was not run.
