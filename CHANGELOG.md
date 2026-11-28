@@ -2,7 +2,7 @@
 
 ## 2026-11-28: Build log: `m vulkan.apklayer` (gsi_x86_64, then gsi_arm64)
 
-- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24 via ssh): `m vulkan.apklayer` (existing module). Why: it carries two changes that nothing else builds: host device enumeration on a 1 MB stack (Asphalt 9 crash) and the removal of Mesa's ASTC decoder (and its static library `libapklayer_astc_luts`). The earlier replay build was invalid (entry below). aosp/hals/graphics/vulkan synced into vendor/apklayer (commit a191a13 there); the Mac's uncommitted VirtualDisplay.cpp is not mine. Result below.
+- Build log (`gsi_x86_64 userdebug`, incremental, `flock ~/los24-build.lock`, Mac ~/los24 via ssh): `m vulkan.apklayer` (existing module). Why: it carries two changes that nothing else builds: host device enumeration on a 1 MB stack (Asphalt 9 crash) and the removal of Mesa's ASTC decoder (and its static library `libapklayer_astc_luts`). The earlier replay build was invalid (entry below). aosp/hals/graphics/vulkan synced into vendor/apklayer (commit a191a13 there); the Mac's uncommitted VirtualDisplay.cpp is not mine. Result: attempt 1 (18:16-18:28) FAILED to compile: TextureCommands.cpp called dumpRecord with `0` for a VkFormat; my Mesa revert had undone that fix of cbc290f9 (restored in the repo and synced to vendor/apklayer, 68d46c3). Attempt 2 did not start: another user's `m berberis_arm64_host_tests` took the lock first (my `flock -n` exited silently). Still to build once the lock is free; no library was produced.
 
 ## 2026-11-28: Mesa's ASTC decoder removed; gfxstream's decoders only
 
