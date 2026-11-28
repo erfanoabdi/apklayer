@@ -29,14 +29,14 @@ def maven(coord, local=()):
     for d in local:  # an AAR beside the jars (the Flatpak's pinned sources: flatpak/deps-sources.json); its classes.jar is checked by the caller
         f = Path(d) / Path(rel).name
         if f.is_file(): return f.read_bytes()
-    for base in (MAVEN, 'https://maven.google.com'):  # androidx.test.* and other Google artifacts are only on Google's
+    for base in (MAVEN, 'https://maven.google.com', 'https://maven-central.storage-download.googleapis.com/maven2'):  # androidx.test.* and other Google artifacts are only on Google's; the last is Google's mirror of Central, for when Central rate-limits (429) a whole CI run
         for attempt in range(5):  # Maven Central answers 429 when parallel jobs fetch at once: back off and try again
             try:
                 with urllib.request.urlopen(base + '/' + rel) as r: return r.read()
             except (OSError, http.client.IncompleteRead) as e:  # a connection cut mid-file or before the answer is tried again too
                 print('fetch-dep: %s/%s: %s' % (base, rel, e), file=sys.stderr)
                 if not isinstance(e, (http.client.IncompleteRead, ConnectionError)) and getattr(e, 'code', None) not in (429, 500, 502, 503, 504): break
-                time.sleep(2 ** attempt)
+                time.sleep(3 * 2 ** attempt)
     raise SystemExit('fetch-dep: %s not found' % coord)
 
 
