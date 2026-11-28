@@ -64,6 +64,32 @@ export component SettingsPage {
                         }
                     }
                 }
+                FilledCard {
+                    VerticalLayout {
+                        padding: MaterialStyleMetrics.padding_16;
+                        spacing: MaterialStyleMetrics.spacing_8;
+                        MaterialText { text: "Data location"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
+                        MaterialText {
+                            text: "Apps, runtimes and instances are in " + Backend.data-location + ". Enter a folder on another drive to move them there (copied, then the old copy is removed; every instance is stopped first, so close your apps).";
+                            style: MaterialTypography.body_medium;
+                            color: MaterialPalette.on_surface;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: MaterialStyleMetrics.spacing_8;
+                            target := TextField {
+                                horizontal-stretch: 1;
+                                label: "New folder (absolute path, empty or new)";
+                                accessible-label: "New data folder";
+                            }
+                            FilledButton {
+                                text: "Move";
+                                enabled: !Backend.busy && target.text != "";
+                                clicked => { Backend.move-data(target.text); }
+                            }
+                        }
+                    }
+                }
                 ConfigRows { entries: Backend.config; app: ""; }
             }
         }

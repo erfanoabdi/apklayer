@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28: data movable from drive to drive; manager Settings "Data location"
+
+- `apklayer setup --move-data <dir>` now also works when the data was already moved once (the data home is a link): it copies from where the link points, repoints the link, rewrites absolute links inside the copy that pointed into the old location, and removes the old copy. Same target as now: "already a link". Not run against real data yet (compiled only).
+- Manager: Settings page card "Data location" shows where the data is and moves it to a typed folder (stops the stack first; the CLI refuses while another instance runs). Built, not clicked through.
+
 ## 2026-11-28: berberis cc38a2ce (0087-0090) in the owner's runtime; Endfield load re-measured; persistent translation cache dropped
 
 - The owner's runtime 0.5.6 got `libberberis_arm64.so` cc38a2ce (single-file swap, old one kept as `libberberis_arm64.so.b59d5c1f.bak` beside it; `setup --bundle` skips an installed version, so a bundle of the same number cannot replace it). PGR runs fine with the default-on code window (owner, 2026-11-28; `apklayer prop set berberis.code_window off` stays the escape hatch). Released as v0.5.7 (prebuilts b692d7dc).

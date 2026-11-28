@@ -131,6 +131,8 @@ export global Backend {
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
     in property <[ConfigEntry]> config;         // the Settings page
     in property <[ConfigEntry]> app-config;     // the selected app's own (those a setting can be given per app)
+    in property <string> data-location;     // where apklayer's data really is (the data home's link resolved)
+    callback move-data(string);            // `apklayer setup --move-data <dir>` after stopping the stack: runtimes, apps and instances to another drive
     callback set-config(string, string, string);  // package ("" global), key, value ("" unsets): `apklayer config set|unset`
     in property <[HwDomain]> hardware;
     callback set-provider(string, int);    // domain, index into its backends: `apklayer providers set|unset` with the options typed in

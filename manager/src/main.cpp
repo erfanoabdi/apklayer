@@ -233,6 +233,14 @@ public:
         if (hardware_) hardware_->show(s.providers);
         if (addons_) addons_->show(s.apps);
         b.set_config(manager::configModel(settings));
+        {
+            const char* xdg = getenv("XDG_DATA_HOME");
+            const char* home = getenv("HOME");
+            std::string link = (xdg && *xdg ? std::string(xdg) : std::string(home ? home : "") + "/.local/share") + "/apklayer";
+            char* real = realpath(link.c_str(), nullptr);
+            b.set_data_location(slint::SharedString(real ? real : link.c_str()));
+            free(real);
+        }
         if (!current_.empty() && s.detail) showDetail(*s.detail);
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
@@ -484,6 +492,13 @@ private:
         });
         b.on_set_drawer([this](slint::SharedString pkg, bool shown) {
             action(shown ? "Showing in the app drawer" : "Hiding from the app drawer", {"launcher", shown ? "show" : "hide", std::string(pkg)});
+        });
+        b.on_move_data([this](slint::SharedString dir) {
+            auto& b = ui_->global<Backend>();
+            b.set_busy(true);
+            b.set_busy_text("Moving apklayer's data (this can take a while)");
+            later([cli = cli_, dir = std::string(dir)] { cli.run({"stop"}); return cli.run({"setup", "--move-data", dir}); },
+                  [this](const Result& r) { ui_->global<Backend>().set_busy(false); message(summary(r)); refresh(); });
         });
         b.on_set_config([this](slint::SharedString pkg, slint::SharedString key, slint::SharedString value) {
             action("Saving", manager::configArgs(std::string(pkg), std::string(key), std::string(value)));
