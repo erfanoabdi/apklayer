@@ -10,11 +10,13 @@
 #include <vulkan/vulkan.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
+#include <pthread.h>
 
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <utility>
 
 namespace apklayer::vulkan {
 namespace detail {
@@ -27,6 +29,24 @@ inline bool hasDrmExtension(PFN_vkGetInstanceProcAddr gipa, VkInstance instance,
     if (fn(d, nullptr, &count, ext.data()) != VK_SUCCESS) return false;
     for (const auto& e : ext) if (!strcmp(e.extensionName, VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME)) return true;
     return false;
+}
+
+// The host Vulkan loader (with Mesa's device_select layer and two or more devices) needs well over 100 KB of stack in vkEnumeratePhysicalDevices.
+// A game's own thread can have less (Asphalt 9: a thread that had 117 KB in use overflowed in the loader's stack probe), so the host calls run on
+// a thread of ours with a 1 MB stack; the caller waits for it. If no thread can be made, the call runs on the caller's stack as before.
+template<class F> inline VkResult onBigStack(F fn) {
+    struct Job { F* fn; VkResult result; } job{&fn, VK_ERROR_INITIALIZATION_FAILED};
+    pthread_attr_t attr;
+    pthread_t t;
+    bool started = false;
+    if (pthread_attr_init(&attr) == 0) {
+        if (pthread_attr_setstacksize(&attr, 1 << 20) == 0)
+            started = pthread_create(&t, &attr, [](void* p) -> void* { auto* j = static_cast<Job*>(p); j->result = (*j->fn)(); return nullptr; }, &job) == 0;
+        pthread_attr_destroy(&attr);
+    }
+    if (!started) return fn();
+    pthread_join(t, nullptr);
+    return job.result;
 }
 
 template<class T> inline VkResult fill(const std::vector<T>& items, uint32_t* count, T* out) {
@@ -72,12 +92,20 @@ inline VkResult visibleDevices(PFN_vkGetInstanceProcAddr gipa, VkInstance instan
 }
 
 inline VkResult enumeratePhysicalDevices(PFN_vkGetInstanceProcAddr gipa, VkInstance instance, uint32_t* count, VkPhysicalDevice* out) {
-    std::vector<VkPhysicalDevice> visible;
-    VkResult r = visibleDevices(gipa, instance, &visible);
-    return r == VK_SUCCESS ? detail::fill(visible, count, out) : r;
+    return detail::onBigStack([&] {
+        std::vector<VkPhysicalDevice> visible;
+        VkResult r = visibleDevices(gipa, instance, &visible);
+        return r == VK_SUCCESS ? detail::fill(visible, count, out) : r;
+    });
 }
 
+inline VkResult enumerateGroups(PFN_vkGetInstanceProcAddr gipa, VkInstance instance, uint32_t* count, VkPhysicalDeviceGroupProperties* out);
+
 inline VkResult enumeratePhysicalDeviceGroups(PFN_vkGetInstanceProcAddr gipa, VkInstance instance, uint32_t* count, VkPhysicalDeviceGroupProperties* out) {
+    return detail::onBigStack([&] { return enumerateGroups(gipa, instance, count, out); });
+}
+
+inline VkResult enumerateGroups(PFN_vkGetInstanceProcAddr gipa, VkInstance instance, uint32_t* count, VkPhysicalDeviceGroupProperties* out) {
     auto enumerate = reinterpret_cast<PFN_vkEnumeratePhysicalDeviceGroups>(gipa(instance, "vkEnumeratePhysicalDeviceGroups"));
     std::vector<VkPhysicalDevice> visible;
     VkResult r = visibleDevices(gipa, instance, &visible);

@@ -2,7 +2,7 @@
 import { MenuItem } from "@material";
 
 // system: a system app (`apklayer install --system`); in-drawer: its launcher shows in the desktop's app drawer; translated: its native code
-// runs through the native bridge (info.properties nativeRoute bridge-*); lite: the bridge's lite translator only (the default berberis.mode; per app berberis.mode.<package>)
+// runs through the native bridge (info.properties nativeRoute bridge-*); lite: the bridge's lite translator only (per app berberis.mode.<package>)
 export struct AppEntry { package: string, label: string, version: string, icon: image, running: bool, system: bool, in-drawer: bool,
                          translated: bool, lite: bool }
 export struct InstanceEntry { id: string, running: bool, binder: bool, root: string, autostart: bool }

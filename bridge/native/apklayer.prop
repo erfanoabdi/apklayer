@@ -15,9 +15,8 @@ ro.zygote=zygote64
 # is `berberis.cpuinfo=pixel8` below (Tensor G3: A510/A715/X3 ids, binary_translation 0086) (the translator's /proc/cpuinfo and MIDR_EL1). `apklayer prop set` overrides any of them per instance; tools/device-profile.sh
 # off sets the instance back to the generic desktop (profiles/desktop.prop). ro.hardware stays "apklayer": the graphics and gralloc modules are chosen by it.
 berberis.cpuinfo=pixel8
-# The translator's default mode: lite translation, no heavy tier (it miscompiled PGR's home scene into block noise). One app goes back to the
-# upstream default with `apklayer prop set berberis.mode.<package> two-gear` (binary_translation 0008); BERBERIS_MODE still wins.
-berberis.mode=lite-translate-or-interpret
+# No berberis.mode here: the translator runs upstream's default (two-gear, with the heavy tier). One app that draws wrong can run lite with
+# `apklayer app <package> translation-mode lite` (berberis.mode.<package>, binary_translation 0008); BERBERIS_MODE still wins.
 ro.product.brand=google
 ro.product.manufacturer=Google
 ro.product.model=Pixel 8

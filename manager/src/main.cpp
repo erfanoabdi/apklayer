@@ -41,7 +41,7 @@ std::string field(const std::vector<std::string>& row, size_t i) { return i < ro
 
 // the native bridge's mode without the heavy tier (binary_translation 0008: the property berberis.mode.<package>)
 const char* const kLiteMode = "lite-translate-or-interpret";
-// upstream's default with the heavy tier; the instance default is kLiteMode (berberis.mode in bridge/native/apklayer.prop)
+// upstream's default with the heavy tier (the instance default: apklayer.prop sets no berberis.mode)
 const char* const kTwoGearMode = "two-gear";
 
 // What the selected app's detail shows besides the list's row: `info` and `permissions` (whose failure, an install older than the list, is a note there)
@@ -486,7 +486,7 @@ private:
         });
         b.on_set_lite([this](slint::SharedString pkg, bool lite) {
             std::string key = "berberis.mode." + std::string(pkg);
-            // lite is the default (apklayer.prop), set explicitly anyway: an instance may have changed berberis.mode; off is the app's own two-gear mode
+            // set explicitly either way: an instance may have its own berberis.mode; off is the app's own two-gear mode
             if (lite) action("Lite translation on (from its next start)", {"prop", "set", key, kLiteMode});
             else action("Lite translation off (from its next start)", {"prop", "set", key, kTwoGearMode});
         });

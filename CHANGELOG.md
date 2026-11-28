@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28: Vulkan device enumeration on a 1 MB stack (Asphalt 9 crashed in the host loader)
+
+- Asphalt 9 on the laptop (deb 0.5.7, AMD 840M, two Vulkan devices) died ~10 s after launch: SIGSEGV in `vkEnumeratePhysicalDevices` (libvulkan.so.1 + device_select), the stack probe of a ~47 KB loader frame on a game thread that had already used ~117 KB (core in `coredumpctl`, pid 47871). `aosp/hals/graphics/vulkan/DeviceSelect.h` now runs the host enumeration (devices and groups) on a pthread with a 1 MB stack and waits for it; no thread, then as before.
+- Build log: `APKLAYER_ARCH=x86_64 tools/lib/orb-build-vulkan.py` (gsi_x86_64, Mac VM, `vulkan.apklayer`; why: the only way to change the library the runtime bundle ships). Result below.
+
 ## 2026-11-28: data movable from drive to drive; manager Settings "Data location"
 
 - `apklayer setup --move-data <dir>` now also works when the data was already moved once (the data home is a link): it copies from where the link points, repoints the link, rewrites absolute links inside the copy that pointed into the old location, and removes the old copy. Same target as now: "already a link". Not run against real data yet (compiled only).
@@ -4953,3 +4958,7 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ## 2026-11-17: Build bionic host libraries for public prebuilts
 
 - Build log (before build): reuse the existing x86_64 Meson build on the NVIDIA PC, apply patches 0084–0086, rebuild bionic host `.so` libraries and run the bionic regression suite. If they pass, publish the outputs under `x86_64/bionic_translation/b` on the `prebuilts` branch.
+
+### 2026-11-28 build: libberberis_arm64 with BERBERIS_HEAVY_DUMP (0082's region dump, hunk for heavy_optimize_region.cc only)
+- Mac VM tree `~/los24` lacked the dump (the installed cc38a2ce has no BERBERIS_HEAVY_DUMP); applied that hunk, `m libberberis_arm64` (gsi_x86_64 userdebug, incremental). Goal: capture PGR's lobby regions for the replay test of the loop/local passes.
+- 2026-11-28 build: berberis_arm64_host_tests with the SIMD-wide loop fuzz (LoopRegionsSimdWide) and Arm64HeavyRegionReplay (uncommitted in the Mac tree), to reproduce PGR's loop/local pass noise
