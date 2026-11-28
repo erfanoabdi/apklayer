@@ -556,7 +556,7 @@ static int capture_impl(struct sharpen *s, int buf, int ow, int oh, int snap)
             char path[300];
             snprintf(path, sizeof path, "%s/source-%04d.ppm", getenv("APKLAYER_SHARPEN_DUMP"), n_cap);
             FILE *f = px && nn_snap_read(s->nn, snap, px) == 0 ? fopen(path, "wb") : NULL;
-            if (f) { fprintf(f, "P6\n%d %d\n255\n", w, h); for (int y = h - 1; y >= 0; y--) for (int x = 0; x < w; x++) fwrite(px + ((size_t)y * w + x) * 4, 1, 3, f); fclose(f); }
+            if (f) { fprintf(f, "P6\n%d %d\n255\n", w, h); for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) fwrite(px + ((size_t)y * w + x) * 4, 1, 3, f); fclose(f); }
             free(px);
         }
     }
